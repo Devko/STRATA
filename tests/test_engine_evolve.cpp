@@ -121,11 +121,37 @@ TEST(engine_evolve_config_clamps_a_damaged_command) {
     CHECK(eng().evolve_mode() == EvolveMode::orbit);
 }
 
-TEST(engine_evolve_stops_on_a_load) {
-    evolving(EvolveMode::orbit);
+TEST(engine_evolve_follows_the_file_on_a_load) {
+    // The settings are the project's (core/project.hpp): a change writes them, a load reads them.
+    evolving(EvolveMode::drift);
+    CHECK_EQ(int(eng().project().settings.evolve_period[0]), 1);
+    CHECK_EQ(int(eng().project().settings.evolve_mode), int(EvolveMode::drift));
+    CHECK_EQ(int(eng().project().settings.evolve_amount), 100);
+    FakeHost::the().set_running(false);
+    ProjectSettings &file = eng().project_for_load().settings;
+    file.evolve_period[0] = 0;
+    file.evolve_period[3] = 3;
+    file.evolve_mode = uint8_t(EvolveMode::orbit);
+    file.evolve_kind = uint8_t(Mutation::mix);
+    file.evolve_amount = 40;
+    const uint8_t loaded = eng().status().evolve_loaded.load(std::memory_order_relaxed);
     post(Cmd::project_loaded);
     pump();
     CHECK_EQ(int(eng().evolve_period(0)), 0);
+    CHECK_EQ(int(eng().evolve_period(3)), 3);
+    CHECK(eng().evolve_mode() == EvolveMode::orbit);
+    CHECK(eng().evolve_kind() == Mutation::mix);
+    CHECK_EQ(eng().evolve_amount(), 40);
+    CHECK_EQ(int(eng().status().evolve_loaded.load(std::memory_order_relaxed)),
+             int(uint8_t(loaded + 1)));
+}
+
+TEST(engine_evolve_kind_byte_is_the_mutation) {
+    // core/project.hpp keeps the saved kind as a number, since it cannot include core/mutate.
+    CHECK_EQ(int(kEvolveKindDefault), int(Mutation::velocity));
+    CHECK_EQ(int(kEvolveKindMax), int(Mutation::mix));
+    CHECK_EQ(int(kEvolveKindMax) + 1, int(Mutation::count));
+    CHECK_EQ(int(kEvolvePeriodMax) + 1, kEvolvePeriods);
 }
 
 TEST(engine_evolve_orbit_leaves_a_pattern_home_and_follows_to_the_next) {

@@ -285,6 +285,15 @@
                     int(engine_.status().live_bank.load(std::memory_order_relaxed)));
                 enaga::log("EVOLVE TURN");
             }
+            // A load set EVOLVE from the file: the screens' copies follow (Engine::
+            // evolve_from_settings). The mutation and amount are PERFORM's MUTATE setting too.
+            const uint8_t loaded = engine_.status().evolve_loaded.load(std::memory_order_acquire);
+            if (loaded != evolve_loaded_seen_) {
+                evolve_loaded_seen_ = loaded;
+                mutation_ = engine_.evolve_kind();
+                mutate_amount_ = engine_.evolve_amount();
+                evolve_mode_ui_ = engine_.evolve_mode();
+            }
         }
 
         // A count-in says its beats as it clicks them (`COUNT-IN 4` .. `1`), logged for

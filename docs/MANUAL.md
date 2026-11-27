@@ -435,7 +435,9 @@ replace the rhythm, the notes or both. Every press is a new part and one undo le
 amount PERFORM's MUTATE uses. In **ORBIT** each change starts again from the part as it was when
 EVOLVE went on (its HOME), so it varies around itself and never wanders off; in **DRIFT** the
 changes add up. **KEEP** stops it where it is, **HOME** stops it and puts the part back. What you
-edit while it runs is kept. EVOLVE is not saved; a save writes what plays.
+edit while it runs is kept. **MIX**, the last MUTATION, picks a different mutation every turn
+(and on the MUTATE pad every press). EVOLVE is saved with the project: it opens evolving again,
+from the part as it was saved.
 
 ### Kits
 

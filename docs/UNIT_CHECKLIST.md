@@ -4,7 +4,7 @@ Start with **the smoke test** (S1-S20, one hour): boot, the screen, load, and th
 most likely to break only on the hardware. If it passes, the walkthrough is worth its two hours;
 if an item fails, report that first.
 
-Then **the walkthrough** (W1-W52, about 165 minutes): everything merged since v0.1.0,
+Then **the walkthrough** (W1-W53, about 168 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -696,6 +696,12 @@ hit, a 44.1 kHz loop and a long stem (a minute or more). Beat stopped, A01.
   same line after a minute. Tap a step on T6 while it runs: the trig stays through later turns. `____`
 - MODE to DRIFT and wait a minute: it wanders off. HOME: `HOME: EVOLVE OFF`, the line from when
   EVOLVE went on, plus the trig you tapped. Read LOAD: no higher than without EVOLVE. `____`
+
+**W53. MIX, and EVOLVE saved (3 min).** Beat playing, A01, GRID.
+- Hold OK, EVOLVE on T1 every loop, MUTATION to `MIX` (after NOTES). Each pass the kick changes a
+  different way: shifted, thinner or fuller, softer, looser. MUTATE in PERFORM now also offers MIX. `____`
+- Set T6 to 2 LOOPS and MODE DRIFT. FUNC+HOME, SAVE, power cycle: T1 and T6 still evolve, DRIFT,
+  MIX; the track menu shows them. HOME on T6: the bass as it was saved. `____`
 
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.

@@ -579,6 +579,9 @@ struct Status {
     // side has to mark the bank dirty for a pattern edit no command made, and the scenario log
     // says EVOLVE. A wrap is harmless: the UI compares.
     std::atomic<uint8_t> evolve_turns{0};
+    // Bumped when a load set EVOLVE from the file: the UI's copies of the mutation, its amount
+    // and the mode (shared with PERFORM's MUTATE) follow. A wrap is harmless: the UI compares.
+    std::atomic<uint8_t> evolve_loaded{0};
 
     // M4. Per track, bumped by the audio side when it stops reading that track's sample. The
     // loader watches for the change before it releases the memory and loads over it -- the
@@ -757,6 +760,11 @@ struct Status {
     }
 
     // Audio context only, one writer, as bump_song_end.
+    void bump_evolve_loaded() {
+        evolve_loaded.store(uint8_t(evolve_loaded.load(std::memory_order_relaxed) + 1),
+                            std::memory_order_release);
+    }
+
     void bump_evolve_turns() {
         evolve_turns.store(uint8_t(evolve_turns.load(std::memory_order_relaxed) + 1),
                            std::memory_order_release);

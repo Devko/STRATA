@@ -8,6 +8,11 @@ the project file format or the controls.
 
 ### Added
 
+- **MIX, and EVOLVE is saved**: MIX, after NOTES in the MUTATE setting, draws a different
+  mutation each EVOLVE turn (and each MUTATE press). A project now saves each track's EVOLVE, the
+  mode, the mutation and the amount, in PROJECT.BIN's new optional section 7, and opens evolving
+  from the pattern as saved; an older project opens with nothing evolving (#200).
+
 - **Note repeat is recordable**: with REC on, a held NOTE RPT pad records one step, a roll over
   LEN at the repeat rate, its LEN from the hold (1/4T records a plain hit) (#187).
 
