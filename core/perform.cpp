@@ -220,6 +220,8 @@ int scene_count(const Scene &scene) {
 
 // --- the morph ------------------------------------------------------------
 
+static_assert(kKitParams <= 64, "scene_morph reads a track's stored bits as one 64-bit mask");
+
 void scene_morph(const Scene &a, const Scene &b, uint16_t position,
                  uint8_t out[kTracks][kKitParams]) {
     const int at = clamp_int(int(position), 0, int(kMorphScale));
@@ -235,11 +237,13 @@ void scene_morph(const Scene &a, const Scene &b, uint16_t position,
         // Both bitmasks for this track, read once. A track neither scene touches is the common
         // case in a performance -- a scene for the bass line says nothing about the drums -- and
         // skipping it whole is what keeps this cheap enough for control rate.
-        const uint32_t mask_a = uint32_t(a.stored[t][0]) | uint32_t(a.stored[t][1]) << 8 |
-                                uint32_t(a.stored[t][2]) << 16 | uint32_t(a.stored[t][3]) << 24;
-        const uint32_t mask_b = uint32_t(b.stored[t][0]) | uint32_t(b.stored[t][1]) << 8 |
-                                uint32_t(b.stored[t][2]) << 16 | uint32_t(b.stored[t][3]) << 24;
-        const uint32_t touched = mask_a | mask_b;
+        // Every stored byte, however many pages a track has (64 bits: format decision C).
+        uint64_t mask_a = 0, mask_b = 0;
+        for (int i = 0; i < kSceneStoredBytes; i++) {
+            mask_a = mask_a | uint64_t(a.stored[t][i]) << (8 * i);
+            mask_b = mask_b | uint64_t(b.stored[t][i]) << (8 * i);
+        }
+        const uint64_t touched = mask_a | mask_b;
         if (touched == 0) continue;
 
         for (int p = 0; p < kKitParams; p++) {
