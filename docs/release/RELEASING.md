@@ -86,10 +86,14 @@ What it does, refusing at the first thing that is wrong:
 - [ ] Update the README's "Status" section (current release and date) and, if the release changes
       the install steps or the Enaga version, the README's "Try it" and `docs/INSTALL.md`.
 - [ ] Check that [strata.einblick.dev](https://strata.einblick.dev) offers the release (within
-      ten minutes). Nothing to deploy: the card builder reads releases from GitHub, and the
-      Enaga version from a comment the script adds to the release body,
-      `<!-- strata-card: {"enaga":"X.Y.Z"} -->`. A release made by hand needs that line too
-      ([web/README.md](../../web/README.md)).
+      ten minutes). The card builder reads releases from GitHub, and the Enaga version from a
+      comment the script adds to the release body, `<!-- strata-card: {"enaga":"X.Y.Z"} -->`. A
+      release made by hand needs that line too ([web/README.md](../../web/README.md)).
+- [ ] Pin the release in `web/public/compat.json` (its zip's SHA-256, and the Enaga it needs
+      with that Enaga zip's and LICENSE's SHA-256), in a PR, and ask Roland to deploy the site.
+      Without a `GITHUB_TOKEN` on the site, GitHub's API often refuses it (the rate limit of
+      Cloudflare's shared IPs), and the site then offers only what `compat.json` pins: that is
+      why 0.5.0 was missing on its release day.
 - [ ] Optional, and worth it: download the zip from the release page, unzip it onto a freshly
       formatted card, install, and play A01.
 

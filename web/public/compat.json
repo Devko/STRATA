@@ -1,7 +1,13 @@
 {
   "schema": 1,
-  "about": "The pinned releases, for the card builder (lib/releases.js). New releases come from GitHub with the digest GitHub publishes and need no entry here. A release listed here keeps its pinned SHA-256 and Enaga version (and is refused if GitHub's digest ever disagrees), and this list is served as it is when GitHub's API cannot be reached. license_sha256 is Enaga's LICENSE at that tag.",
+  "about": "The pinned releases, for the card builder (lib/releases.js). New releases come from GitHub with the digest GitHub publishes; pin each one here too, since GitHub's API often refuses Cloudflare's shared IPs and this list is then all the site offers. A release listed here keeps its pinned SHA-256 and Enaga version (and is refused if GitHub's digest ever disagrees), and this list is served as it is when GitHub's API cannot be reached. license_sha256 is Enaga's LICENSE at that tag.",
   "enaga": {
+    "0.4.0": {
+      "tag": "v0.4.0",
+      "asset": "enaga-v0.4.0-smpltrek.zip",
+      "sha256": "1003d2e58240ce785169eeae45369d55e9311564b2c7182fd82208b9e6a813c9",
+      "license_sha256": "e7818a256b39b342d399082d9c905eaf4aa602f983706a59363e4e54cc3f1c21"
+    },
     "0.3.0": {
       "tag": "v0.3.0",
       "asset": "enaga-v0.3.0-smpltrek.zip",
@@ -16,6 +22,14 @@
     }
   },
   "strata": [
+    {
+      "version": "0.5.0",
+      "tag": "v0.5.0",
+      "date": "2026-11-27",
+      "asset": "STRATA-v0.5.0-smpltrek.zip",
+      "sha256": "597c193b6e26b646a7da75fd9fac5938c431c0ca6752a1e8ceeed1de8ca7df38",
+      "enaga": "0.4.0"
+    },
     {
       "version": "0.4.0",
       "tag": "v0.4.0",

@@ -10,9 +10,14 @@
 // hash wins, and a release whose GitHub digest disagrees with its pinned hash is not offered.
 // If GitHub's API cannot be reached, the pinned list is served as it is.
 //
-// Unauthenticated API calls are limited per IP, and Cloudflare's IPs are shared, so answers are
-// cached for ten minutes (Cloudflare's cache where there is one, else in memory). A GITHUB_TOKEN
-// in the environment, if set as a Pages secret, raises the limit; nothing needs one.
+// Unauthenticated API calls are limited to 60 an hour per IP, and the IPs a Pages Function
+// calls out from are shared with every other Cloudflare site, so that budget is often spent
+// before this site asks (2026-11-27: GitHub answered 403 and 0.5.0 was missing). So:
+//   - answers are cached for ten minutes (Cloudflare's cache where there is one, else memory);
+//   - the last good answer is also kept for a week, and served when GitHub refuses;
+//   - only then is public/compat.json served as it is, so pin each release there too.
+// A read-only GITHUB_TOKEN set as a Pages secret gives the site its own budget (5000 an hour)
+// and is the real fix for the limit.
 
 import pinned from "../public/compat.json" with { type: "json" };
 
@@ -22,6 +27,23 @@ const TTL_S = 600;
 const VERSION = /^\d+\.\d+\.\d+$/;
 const MARKER = /<!--\s*strata-card:\s*(\{[^}]*\})\s*-->/;
 const memory = new Map();
+
+const STALE_S = 7 * 24 * 3600;
+
+async function cachePut(cache, url, text, maxAge) {
+  await cache.put(url, new Response(text, {
+    headers: { "content-type": "application/json", "cache-control": `public, max-age=${maxAge}` },
+  }));
+}
+
+// The last good answer for `url`, however old (up to STALE_S), or null.
+async function lastGood(url, cache) {
+  const hit = memory.get(url);
+  if (hit) return hit.value;
+  if (!cache) return null;
+  const kept = await cache.match(`${url}#last-good`);
+  return kept ? kept.json() : null;
+}
 
 async function getJson(url, env, fetchImpl) {
   const now = Date.now();
@@ -34,15 +56,25 @@ async function getJson(url, env, fetchImpl) {
   }
   const headers = { "user-agent": "strata-card-builder", accept: "application/vnd.github+json" };
   if (env.GITHUB_TOKEN) headers.authorization = `Bearer ${env.GITHUB_TOKEN}`;
-  const r = await fetchImpl(url, { headers });
-  if (!r.ok) throw new Error(`GitHub API answered ${r.status} for ${url}`);
-  const text = await r.text();
+  let text;
+  try {
+    const r = await fetchImpl(url, { headers });
+    if (!r.ok) {
+      const left = r.headers.get("x-ratelimit-remaining");
+      const limit = left === "0" ? " (rate limit spent)" : "";
+      throw new Error(`GitHub API answered ${r.status}${limit} for ${url}`);
+    }
+    text = await r.text();
+  } catch (err) {
+    const stale = await lastGood(url, cache);
+    if (stale) return stale;
+    throw err;
+  }
   const value = JSON.parse(text);
   memory.set(url, { value, until: now + TTL_S * 1000 });
   if (cache) {
-    await cache.put(url, new Response(text, {
-      headers: { "content-type": "application/json", "cache-control": `public, max-age=${TTL_S}` },
-    }));
+    await cachePut(cache, url, text, TTL_S);
+    await cachePut(cache, `${url}#last-good`, text, STALE_S);
   }
   return value;
 }
