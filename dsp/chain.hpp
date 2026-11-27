@@ -125,6 +125,13 @@ public:
     // adds the result into `out`. Call prepare() first.
     void process(float *mono, int frames, const ChainOut &out);
 
+    // The same over a STEREO track's pair (WID, core/width.hpp; a POLY machine's
+    // render_add_stereo): drive, filter and lo-fi on each side with its own state, the duck on
+    // both, PAN as a balance at the same constant-power gains, and the sends and a bounce's tap
+    // from the pair's middle. Both buffers are consumed. A pair with the same block on both sides
+    // gives what process() gives that block, to the rounding of the middle.
+    void process_pair(float *left, float *right, int frames, const ChainOut &out);
+
     // Filter state, lo-fi hold and gain ramps back to zero. init()-time and kit changes.
     void reset();
     // Filter state and lo-fi hold only, leaving the gain ramps where they are: for a track whose
@@ -151,6 +158,7 @@ private:
     bool drive_on_ = false;
     float drive_pos_ = 1.0f, drive_neg_ = 1.0f;
     float dc_[2] = {0.0f, 0.0f};   // the DC blocker after the clip: last input, last output
+    float dc_r_[2] = {0.0f, 0.0f};  // and the right side's, for process_pair
 
     // filter
     FilterMode mode_ = FilterMode::off;
@@ -159,12 +167,14 @@ private:
     enaga::dsp::Svf::Output svf_output_ = enaga::dsp::Svf::low_pass;
     enaga::dsp::SvfCoefficients coefficients_{};
     enaga::dsp::Svf svf_a_{}, svf_b_{};
+    enaga::dsp::Svf svf_r_a_{}, svf_r_b_{};   // the right side's, for process_pair
 
     // lo-fi
     bool lofi_on_ = false;
     float lofi_step_ = 1.0f, lofi_levels_ = 1.0f;
     uint32_t lofi_increment_ = 0xFFFFFFFFu, lofi_phase_ = 0xFFFFFFFFu;
     float lofi_hold_ = 0.0f;
+    float lofi_hold_r_ = 0.0f;    // the right side's held sample; the clock is shared
 
     // duck
     float duck_depth_ = 0.0f;

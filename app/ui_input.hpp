@@ -327,6 +327,18 @@
             return;
         }
 
+        // The widths: push A-D on WID 1-4 or WID 5-8 steps that strip through OFF, a wide spread
+        // (48) and unison (96); turning sets it anywhere.
+        if ((key == ENAGA_KEY_PUSH_A || key == ENAGA_KEY_PUSH_B || key == ENAGA_KEY_PUSH_C ||
+             key == ENAGA_KEY_PUSH_D) &&
+            mode_ == Mode::mixer && mixer_width_page(mixer_bank_) && !shift_) {
+            const int slot = key == ENAGA_KEY_PUSH_A ? 0
+                             : key == ENAGA_KEY_PUSH_B ? 1
+                             : key == ENAGA_KEY_PUSH_C ? 2 : 3;
+            if (down) step_width((mixer_bank_ - kMixerWidthPage) * 4 + slot);
+            return;
+        }
+
         // The chorus sends: push A-D on CHO 1-4 or CHO 5-8 throws that strip's send between OFF
         // and half (64), and from any other amount back to OFF; turning sets it anywhere.
         if ((key == ENAGA_KEY_PUSH_A || key == ENAGA_KEY_PUSH_B || key == ENAGA_KEY_PUSH_C ||

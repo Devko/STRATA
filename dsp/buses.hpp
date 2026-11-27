@@ -281,6 +281,9 @@ public:
     // A mono scratch block for a machine to render into, big enough for kMaxFrames. The caller
     // clears it, the machine adds into it, add_track() consumes it in place.
     float *scratch() { return scratch_; }
+    // And the right side's, for a stereo track (WID): the machine renders into scratch() and
+    // scratch_right(), add_pair() consumes both.
+    float *scratch_right() { return scratch_r_; }
 
     // Clears the dry bus and the three sends and renders this block's duck curve.
     void begin_block(int frames);
@@ -290,6 +293,8 @@ public:
     // before the duck, the fader, the pan and the sends. A silent track writes nothing there, so
     // the caller clears it first.
     void add_track_tapped(int track, float *mono, float *tap);
+    // A stereo track's pair (InsertChain::process_pair); `tap` as add_track_tapped's, or nullptr.
+    void add_pair(int track, float *left, float *right, float *tap);
     // The three sends, the master chain, and the interleaved L R L R result for audio().
     void finish_block(float *out, int frames);
 
@@ -310,6 +315,9 @@ public:
     float kill_eq_wet() const { return eq_wet_; }
 
 private:
+    // add_track_tapped and add_pair: `right` nullptr for a mono track.
+    void add_any(int track, float *mono, float *right, float *tap);
+
     // Settings to coefficients, only when the settings have actually changed.
     void resolve_sends(const SendSettings &sends);
     void resolve_master(const MasterSettings &master_settings);
@@ -397,6 +405,7 @@ private:
     float wet_r_[kMaxFrames] = {};
     float duck_curve_[kMaxFrames] = {};
     float scratch_[kMaxFrames] = {};
+    float scratch_r_[kMaxFrames] = {};
 };
 
 }  // namespace strata

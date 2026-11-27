@@ -45,7 +45,7 @@ using namespace strata;
 // (12) and its 11 bytes, optional like the others. 429 since the chorus: its four send bytes on the
 // end of the mixer section.
 constexpr uint32_t kProjectFileBytes = 429;
-constexpr uint32_t kKitFileBytes = 1486;   // 1466 before the chorus sends (12 + 8), 1453 before the LFO layout (12 + 1), 1409 before the arp settings (12 + 32), 1389 before the choke groups (12 + 8), 1329 before the mod slots (12 + 48), 1309 before LFO TRIG (12 + 8), 1296 before the filter layout (12 + 1), 1076 before the LFO and arp (12 + 8 x 4 each), 1164 before SLC AUTO (12 + 8), 1184 before ASR (12 + 32), 1228 before the duck (12 + 12), 1252 before OSC (12 + 32)
+constexpr uint32_t kKitFileBytes = 1506;   // 1486 before the widths (12 + 8), 1466 before the chorus sends (12 + 8), 1453 before the LFO layout (12 + 1), 1409 before the arp settings (12 + 32), 1389 before the choke groups (12 + 8), 1329 before the mod slots (12 + 48), 1309 before LFO TRIG (12 + 8), 1296 before the filter layout (12 + 1), 1076 before the LFO and arp (12 + 8 x 4 each), 1164 before SLC AUTO (12 + 8), 1184 before ASR (12 + 32), 1228 before the duck (12 + 12), 1252 before OSC (12 + 32)
 
 // Room past the end of every file, filled with a sentinel, so that a writer going one byte long
 // is caught by value rather than by luck.
@@ -1506,9 +1506,16 @@ uint32_t fresh_kit_file() {
 // been (lfo_migrated()).
 void drop_lfo_layout_section();
 
-// g_kit_file as a build from before the chorus wrote it: the chorus sends' section, the last,
-// dropped.
+// g_kit_file as a build from before the widths wrote it: their section, the last, dropped.
+void drop_width_section() {
+    CHECK_EQ(drop_last_section(g_kit_file, g_kit_alt), 1486u);
+    for (uint32_t i = 0; i < 1486u; i++) g_kit_file[i] = g_kit_alt[i];
+}
+
+// g_kit_file as a build from before the chorus wrote it: the widths' section and the chorus
+// sends' dropped.
 void drop_chorus_section() {
+    drop_width_section();
     CHECK_EQ(drop_last_section(g_kit_file, g_kit_alt), 1466u);
     for (uint32_t i = 0; i < 1466u; i++) g_kit_file[i] = g_kit_alt[i];
 }
@@ -1645,7 +1652,7 @@ TEST(kit_write_refuses_a_buffer_one_byte_short_and_touches_nothing) {
              int(SerializeResult::ok));
     CHECK_EQ(written, kKitFileBytes);
     CHECK_EQ(int(peek_u16(g_kit_file, kVersionOffset)), int(kKitVersion));
-    CHECK_EQ(int(peek_u16(g_kit_file, 6)), 14);    // the tracks, the LFO, the arp, SLC AUTO, ASR, the duck, OSC, the filter layout, LFO TRIG, the mod slots, the choke groups, the arp settings, the LFO layout, the chorus sends
+    CHECK_EQ(int(peek_u16(g_kit_file, 6)), 15);    // the tracks, the LFO, the arp, SLC AUTO, ASR, the duck, OSC, the filter layout, LFO TRIG, the mod slots, the choke groups, the arp settings, the LFO layout, the chorus sends, the widths
 }
 
 TEST(kit_a_parameter_a_file_cannot_hold_is_clamped_to_127) {
@@ -2843,6 +2850,39 @@ TEST(kit_mod_slots_round_trip_and_an_older_file_loads_every_slot_off) {
     for (int t = 0; t < kTracks; t++) {
         for (int s = 0; s < kModSlots; s++) g_kit_source.tracks[t].mod[s] = KitModSlot{};
     }
+}
+
+TEST(kit_widths_round_trip_and_an_older_file_is_mono) {
+    // The widths (kSectionKitWidth): one byte a track, 0-127.
+    fresh_kit_file();
+    for (int t = 0; t < kTracks; t++) g_kit_source.tracks[t].width = uint8_t(t * 18);
+    uint32_t written = 0;
+    CHECK_EQ(int(kit_write(g_kit_source, g_kit_file, kKitFileBytes, &written)),
+             int(SerializeResult::ok));
+    CHECK_EQ(written, kKitFileBytes);
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
+    for (int t = 0; t < kTracks; t++) CHECK_EQ(int(g_kit_loaded.tracks[t].width), t * 18);
+
+    // Past 127 is damage and reads as 127.
+    const uint32_t at = section_at(g_kit_file, kSectionKitWidth);
+    CHECK_EQ(int(g_kit_file[at + 3]), 54);
+    g_kit_file[at + 2] = 0xC0;
+    refresh_crc(g_kit_file);
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
+    CHECK_EQ(int(g_kit_loaded.tracks[2].width), 127);
+
+    // A KIT.BIN from before the widths loads every track mono, the chorus sends kept.
+    for (int t = 0; t < kTracks; t++) g_kit_source.tracks[t].chorus = uint8_t(t + 1);
+    CHECK_EQ(int(kit_write(g_kit_source, g_kit_file, kKitFileBytes, &written)),
+             int(SerializeResult::ok));
+    drop_width_section();
+    g_kit_loaded.tracks[6].width = 99;
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, 1486u)), int(SerializeResult::ok));
+    for (int t = 0; t < kTracks; t++) {
+        CHECK_EQ(int(g_kit_loaded.tracks[t].width), 0);
+        CHECK_EQ(int(g_kit_loaded.tracks[t].chorus), t + 1);
+    }
+    for (int t = 0; t < kTracks; t++) g_kit_source.tracks[t].chorus = 0;
 }
 
 TEST(kit_chorus_sends_round_trip_and_an_older_file_sends_nothing) {

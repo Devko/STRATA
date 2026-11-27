@@ -5,7 +5,7 @@ On a unit that still runs Enaga 0.3.0, update it to 0.4.0 first and do **the Ena
 most likely to break only on the hardware. If it passes, the walkthrough is worth its two hours;
 if an item fails, report that first.
 
-Then **the walkthrough** (W1-W58, about 186 minutes): everything merged since v0.1.0,
+Then **the walkthrough** (W1-W59, about 190 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -772,6 +772,16 @@ to reach `GUARD4` here at a 40-60% top line.
   B (DEP) to 0: the chorus goes still. D (C>R) up: the chorus reaches the reverb. The top line
   with three tracks sending reads `____ %`. `____`
 - Save, power cycle, open: the sends and the CHO knobs are as left. `____`
+
+**W59. Stereo width (4 min).** Beat playing, A01, headphones on.
+- MIXER, SELECT_RIGHT six times: `WID 5-8`. Push C (track 7, the chords): `T7 WIDTH 48`. The
+  chord's notes now come from the middle, the left and the right. Push C again: `T7 UNISON 96`,
+  every note wide and thick, a slow beating between the sides. Push again: OFF, mono. `____`
+- Turn C slowly from 0 to 127: the chord widens, then at 64 turns into unison; no click at the
+  zone edge, and notes already playing keep their place until the next chord. `____`
+- Push D (track 8, SAMPLE): `T8 WIDTH: POLY ONLY`, the strip shows `---`. `____`
+- With T7 in unison, the top line reads `____ %`; MAX after a minute `____ %`. Save, power
+  cycle, open: WID is kept. `____`
 
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.

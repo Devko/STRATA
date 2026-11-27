@@ -348,7 +348,7 @@ condition result), NEI / NOT NEI (the track to the left's), 1ST / NOT 1ST (first
 **MIXER pages:** TRK 1-4, TRK 5-8 (levels; push A-D steps the track's choke group OFF, 1-4, shown
 as `C1`-`C4` under the strip: a note cuts the other tracks of its group) · DCK 1-4, DCK 5-8: each track's sidechain duck depth,
 OFF-100% (SRC: the source, never ducked) · DUCK: SRC source track, ATK attack 1-50 ms, HLD hold
-0-500 ms, REL release 10-1000 ms (saved in the kit) · DLY: TIM time (1/32 ... 1/1, T triplet, D dotted),
+0-500 ms, REL release 10-1000 ms (saved in the kit) · WID 1-4, WID 5-8: each POLY track's stereo width, OFF, 1-63 spread (chord notes fanned, a lone note centred), 64-127 `UNI` unison (two voices a note, hard L and R, 6-40 cents apart; 3 notes a track); push A-D: OFF, 48, 96 (saved in the kit; PLY WPL FM4 only) · DLY: TIM time (1/32 ... 1/1, T triplet, D dotted),
 FBK feedback, TON tone, LVL · DLY+: TYP CLAS/LONG (push A flips it), MUL X1-X8 (LONG: time x MUL,
 up to 12 s), WOW tape wobble, DIF diffusion · REV: DEC decay, DMP damping, HPF high-pass, LVL ·
 REV+: TYP ROOM/HALL (push A), SIZ size, MOD sweep, SHM octave-up shimmer · ROUTE: PNG ping-pong,

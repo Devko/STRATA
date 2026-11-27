@@ -180,6 +180,10 @@ enum class Cmd : uint8_t {
     // on the audio side as set_choke's step is. MIXER's CHO 1-4 / 5-8. A kit setting, so a kit
     // save keeps it.
     set_chorus,        // track, b: int8 delta; or c = 1: toggle
+    // A track's stereo width (KitTrack::width, core/width.hpp): b: an int8 encoder delta onto the
+    // 0-127 byte, clamped; or c = 1: a push, stepping OFF, kWidthSpreadStep, kWidthUnisonStep,
+    // OFF. MIXER's WID 1-4 / 5-8. A kit setting; only the POLY machines read it.
+    set_width,         // track, b: int8 delta; or c = 1: step
     // A track pad's pressure, for a mod slot on PRS: a: 0-127, 0 when the pad is let go. Played,
     // not stored.
     set_pressure,      // track, a: pressure

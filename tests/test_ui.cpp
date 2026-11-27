@@ -2945,8 +2945,8 @@ TEST(ui_the_mixer_pages_walk_the_faders_the_sends_and_the_master) {
     CHECK_EQ(UiProbe::mode(app), int(Mode::mixer));
 
     // The selection keys page through: two pages of faders, two of duck depths and the duck's
-    // own page, then DLY, DLY+, REV, REV+, ROUTE, the chorus's three, MST and EQ.
-    CHECK_EQ(kMixerPageCount, 15);
+    // own page, the widths' two, then DLY, DLY+, REV, REV+, ROUTE, the chorus's three, MST and EQ.
+    CHECK_EQ(kMixerPageCount, 17);
     for (int i = 1; i < kMixerPageCount; i++) {
         app.on_key(ENAGA_KEY_SELECT_RIGHT, true);
         app.on_key(ENAGA_KEY_SELECT_RIGHT, false);
@@ -2966,6 +2966,58 @@ TEST(ui_the_mixer_pages_walk_the_faders_the_sends_and_the_master) {
 void press_key(Strata &app, int code) {
     app.on_key(code, true);
     app.on_key(code, false);
+}
+
+// WID 1-4 / 5-8: each POLY track's width, turned one count a click or pushed through OFF, a
+// spread and unison, said and logged; a track that cannot use it says so.
+TEST(ui_the_width_pages_set_each_tracks_width) {
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+    FakeHost &host = FakeHost::the();
+    for (int t = 0; t < kTracks; t++) {
+        Command command;
+        command.cmd = Cmd::set_width;
+        command.track = uint8_t(t);
+        command.b = uint8_t(int8_t(-127));
+        engine.commands().post(command);
+    }
+    pump(2);
+
+    // WID 5-8: C is track 7, the factory chord track (VA POLY).
+    mixer_page(app, kMixerWidthPage + 1);
+    CHECK(std::strcmp(kMixerPages[kMixerWidthPage + 1].name, "WID 5-8") == 0);
+    CHECK(machine_is_poly(engine.machine_id(6)));
+    app.on_encoder(2, +40);
+    pump(2);
+    CHECK_EQ(int(engine.project().kit.tracks[6].width), 40);
+    CHECK(std::strcmp(UiProbe::notice(app), "T7 WIDTH 40") == 0);
+    CHECK(app_storage().dirty());
+    app.on_encoder(2, +30);
+    pump(2);
+    CHECK(std::strcmp(UiProbe::notice(app), "T7 UNISON 70") == 0);
+    app.on_encoder(2, -127);
+    pump(2);
+    CHECK_EQ(int(engine.project().kit.tracks[6].width), 0);
+
+    // A push steps it, and logs it for tests/scenario_width.sh.
+    press_key(app, ENAGA_KEY_PUSH_C);
+    pump(2);
+    CHECK(host.logged("T7 WIDTH 48"));
+    press_key(app, ENAGA_KEY_PUSH_C);
+    pump(2);
+    CHECK(host.logged("T7 UNISON 96"));
+    CHECK_EQ(int(engine.project().kit.tracks[6].width), int(kWidthUnisonStep));
+    press_key(app, ENAGA_KEY_PUSH_C);
+    pump(2);
+    CHECK(host.logged("T7 WIDTH OFF"));
+
+    // Track 8 is the SAMPLE: the byte moves, the strip says it does nothing there.
+    press_key(app, ENAGA_KEY_PUSH_D);
+    pump(2);
+    CHECK(host.logged("T8 WIDTH: POLY ONLY"));
+    press_key(app, ENAGA_KEY_PUSH_D);
+    press_key(app, ENAGA_KEY_PUSH_D);
+    pump(2);
 }
 
 // The chorus, send C: CHO 1-4 / 5-8 turn and push each track's send (a kit byte), CHO turns the

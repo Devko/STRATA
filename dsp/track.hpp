@@ -24,11 +24,11 @@
 // written mono: VA POLY spreads by voice DETUNE rather than stereo width, and GRAIN spreads
 // position and pitch.
 //
-// Adding it is a real option, not a closed door -- but the cost is not the virtual. `InsertChain`
-// is mono, so a stereo track doubles that track's insert-chain work, and it would do so on the
-// two most expensive machines in the project while the CPU budget is still unmeasured on
-// hardware. docs/UNIT_CHECKLIST.md carries it as a decision to take after a measurement rather
-// than before one.
+// It came on 2026-11-27 for the POLY machines only, and not here: PolyMachine::render_add_stereo
+// (dsp/polypool.hpp), used while a track's WID is up (core/width.hpp), into a stereo insert
+// chain (InsertChain::process_pair) that runs only on such a track. Every other machine, and
+// every POLY track at WID 0, is mono as this file says; docs/BUDGET.md "Stereo width" has what
+// the stereo path costs.
 #pragma once
 
 #include <cstdint>

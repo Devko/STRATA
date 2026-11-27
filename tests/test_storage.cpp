@@ -500,6 +500,7 @@ const Expect kTable[] = {
     {Cmd::set_mod_slot, kDirtyKit, "set_mod_slot"},
     {Cmd::set_choke, kDirtyKit, "set_choke"},
     {Cmd::set_chorus, kDirtyKit, "set_chorus"},
+    {Cmd::set_width, kDirtyKit, "set_width"},
     // The metronome and a count-in are the player's, not the project's: nothing on the card.
     {Cmd::set_click, 0u, "set_click"},
     {Cmd::count_in, 0u, "count_in"},
@@ -809,8 +810,8 @@ TEST(storage_every_file_of_a_project_round_trips_through_the_card) {
     // card protocol: a file that came out a different size means the two have drifted apart.
     CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN")), 429);
     CHECK_EQ(project_bytes(), 429u);
-    CHECK_EQ(host.file_bytes(card_path("KIT.BIN")), 1486);
-    CHECK_EQ(kit_bytes(), 1486u);
+    CHECK_EQ(host.file_bytes(card_path("KIT.BIN")), 1506);
+    CHECK_EQ(kit_bytes(), 1506u);
     CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN")), 5121);
     CHECK_EQ(perform_bytes(), 5121u);
     for (int b = 0; b < kBanks; b++) {
@@ -1098,7 +1099,7 @@ TEST(storage_damage_is_reported_in_one_fixed_order) {
     CHECK(pump_until_idle());
     CHECK(storage().last_error() == nullptr);
     keep_pristine(kit);
-    CHECK_EQ(g_pristine_bytes, 1486u);
+    CHECK_EQ(g_pristine_bytes, 1506u);
 
     // A sanity pass first: the pristine file loads.
     CHECK(reload_now());
@@ -1721,7 +1722,7 @@ TEST(storage_an_autosave_writes_every_file_and_leaves_the_project_dirty) {
         CHECK(host.has_file(card_path(kFiles[i], true)));
     }
     CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN", true)), 429);
-    CHECK_EQ(host.file_bytes(card_path("KIT.BIN", true)), 1486);
+    CHECK_EQ(host.file_bytes(card_path("KIT.BIN", true)), 1506);
     CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN", true)), 5121);
 
     // Eleven files and SETTINGS.TXT, which carries the counter a later start compares.

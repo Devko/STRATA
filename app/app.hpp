@@ -158,6 +158,10 @@ constexpr MixerPage kMixerPages[] = {
     {"DCK 1-4", false, {-1, -1, -1, -1}},
     {"DCK 5-8", false, {-1, -1, -1, -1}},
     {"DUCK", false, {-1, -1, -1, -1}},
+    // The stereo width of each POLY track (KitTrack::width, core/width.hpp): kit bytes, handled on
+    // their own like the duck's depths.
+    {"WID 1-4", false, {-1, -1, -1, -1}},
+    {"WID 5-8", false, {-1, -1, -1, -1}},
     {"DLY", false, {int8_t(SendField::delay_seconds), int8_t(SendField::delay_feedback),
                     int8_t(SendField::delay_tone), int8_t(SendField::delay_level)}},
     // The ambient modes (dsp/ambient.hpp), each beside its send: TYP switches the mode, and the
@@ -196,8 +200,16 @@ constexpr int kMixerDuckPage = kMixerDuckDepthPage + 2;
 static_assert(kMixerPages[kMixerDuckPage].name[0] == 'D' && kMixerPages[kMixerDuckPage].name[1] == 'U',
               "kMixerDuckPage no longer names the duck's page");
 
+// The widths' two pages, after the duck's.
+constexpr int kMixerWidthPage = kMixerDuckPage + 1;
+static_assert(kMixerPages[kMixerWidthPage].name[0] == 'W' && kMixerPages[kMixerWidthPage].name[4] == '1',
+              "kMixerWidthPage no longer names WID 1-4");
+constexpr bool mixer_width_page(int page) {
+    return page == kMixerWidthPage || page == kMixerWidthPage + 1;
+}
+
 // The delay's two pages, which show the delay's time in milliseconds.
-constexpr int kMixerDelayPage = kMixerDuckPage + 1;
+constexpr int kMixerDelayPage = kMixerWidthPage + 2;
 
 // The ambient modes' pages, whose push A throws the mode switch (TYP) like turning it does.
 constexpr int kMixerLongPage = kMixerDelayPage + 1;

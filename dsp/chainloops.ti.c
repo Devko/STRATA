@@ -58,3 +58,23 @@ float strata_choke_fade(float *restrict mono, int n, float gain, float step) {
     }
     return gain;
 }
+
+void strata_ramp_pair_add(const float *restrict left, const float *restrict right,
+                          float *restrict out_l, float *restrict out_r, int n, float *gain_l,
+                          float *gain_r, float step_l, float step_r) {
+    float l = *gain_l, r = *gain_r;
+    int i;
+    for (i = 0; i < n; i++) {
+        l += step_l;
+        r += step_r;
+        out_l[i] += left[i] * l;
+        out_r[i] += right[i] * r;
+    }
+    *gain_l = l;
+    *gain_r = r;
+}
+
+void strata_pair_mid(float *restrict left, const float *restrict right, int n) {
+    int i;
+    for (i = 0; i < n; i++) left[i] = 0.5f * (left[i] + right[i]);
+}

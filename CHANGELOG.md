@@ -8,6 +8,13 @@ the project file format or the controls.
 
 ### Added
 
+- **Stereo width on the POLY machines.** VA POLY, WAVE POLY and FM4 can spread their chords
+  across the stereo field or play each note in unison: two voices panned hard left and right,
+  detuned 6 to 40 cents apart. One knob per track on two new MIXER pages, WID 1-4 and WID 5-8
+  (after DUCK): 0 mono, 1-63 spread, 64-127 unison; a push steps OFF, spread, unison. Unison
+  holds three notes a track and counts two voices a note against the shared 12. Saved in the kit,
+  in a new optional KIT.BIN section; older kits open mono. MIXER's DLY to EQ pages are two
+  further on. New emulator scenario `width`.
 - **A chorus, the third send.** MIXER has three new pages after ROUTE: CHO 1-4 and CHO 5-8 set
   how much of each track goes to the chorus (push a knob for OFF or half), and CHO sets its sweep
   rate, depth, return and how much of it feeds the reverb. One stereo chorus serves every track

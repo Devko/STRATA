@@ -64,6 +64,44 @@
         enaga::log(notice_buffer_);
     }
 
+    // The widths (KitTrack::width) on WID 1-4 and WID 5-8: an encoder is a track's WID, one count
+    // a click so the zone edge at 64 can be found, said as "T7 WIDTH 40" or "T7 UNISON 96".
+    void edit_width(int page, int slot, int delta) {
+        if (!mixer_width_page(page) || slot < 0 || slot >= 4) return;
+        const int track = (page - kMixerWidthPage) * 4 + slot;
+        post_delta(Cmd::set_width, track, 0, 0, delta);
+        const int now = int(engine_.project().kit.tracks[track].width) + delta;
+        width_notice(track, now < 0 ? 0 : (now > int(kWidthMax) ? int(kWidthMax) : now));
+    }
+
+    void step_width(int track) {
+        if (track < 0 || track >= kTracks) return;
+        const uint8_t now = engine_.project().kit.tracks[track].width;
+        post(Cmd::set_width, uint8_t(track), 0, 0, 0, 1);
+        width_notice(track, now < kWidthSpreadStep ? kWidthSpreadStep
+                                                   : (now < kWidthUnisonStep ? kWidthUnisonStep : 0));
+    }
+
+    // "T7 WIDTH 40", "T7 UNISON 96" or "T7 WIDTH OFF"; "T1 WIDTH: POLY ONLY" on a track whose
+    // machine does not read it (the byte is kept for when it does). Logged too: the emulator
+    // cannot read the screen (tests/scenario_width.sh).
+    void width_notice(int track, int value) {
+        char *out = notice_buffer_;
+        append(out, "T");
+        append_number(out, uint32_t(track + 1));
+        if (!machine_is_poly(engine_.machine_id(track))) {
+            append(out, " WIDTH: POLY ONLY");
+        } else if (value == 0) {
+            append(out, " WIDTH OFF");
+        } else {
+            append(out, value >= int(kWidthUnison) ? " UNISON " : " WIDTH ");
+            append_number(out, uint32_t(value));
+        }
+        *out = 0;
+        notice(notice_buffer_);
+        enaga::log(notice_buffer_);
+    }
+
     // The duck's pages: on DCK 1-4 and DCK 5-8 an encoder is a track's depth, on DUCK the four
     // are the source, attack, hold and release. One click is one step of each: a percent, a
     // track, a millisecond, five milliseconds.
