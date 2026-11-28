@@ -66,10 +66,11 @@ if [ "$PAD" -eq 1 ]; then
     ARM=1200000000
     UNF=3400000000
 fi
-menu_ok() {   # FUNC + HOME opens the menu on its first row, UP wraps to LOAD DEMO (the last row),
-              # then LOOP LEN, then FREEZE; OK at $1. Each key is released 20 M after it.
+menu_ok() {   # FUNC + HOME opens the menu on its first row, UP wraps to JAM REC (the last row),
+              # then LOAD DEMO, LOOP LEN, FREEZE; OK at $1. Each key is released 20 M after it.
     KEYS+=(--key 19@$(($1 - 150000000)) --key 27@$(($1 - 145000000))
-           --key 17@$(($1 - 110000000)) --key 17@$(($1 - 75000000)) --key 17@$(($1 - 40000000))
+           --key 17@$(($1 - 115000000)) --key 17@$(($1 - 85000000)) --key 17@$(($1 - 55000000))
+           --key 17@$(($1 - 25000000))
            --key 23@$1)
 }
 menu_ok "$ARM"
