@@ -27,9 +27,9 @@ static_assert(kArpMaxCycle <= 255, "a cycle's length is a byte in the engine");
 
 // ## The arp's kit settings: VAR, RHYTHM, ACCENT, RATCHET
 //
-// Four more choices per track that are NOT parameters, for LFO TRIG's reason (docs/HANDOFF.md):
-// all 32 bytes a track has are spoken for and the lock mask is 32 bits, so no lock, scene, morph
-// or macro reaches these. They are kit settings like TRIG and the mod slots -- `KitTrack::arp`,
+// Four more choices per track that are NOT parameters, for LFO TRIG's reason (docs/DESIGN_NOTES.md,
+// "LFO"): all 32 parameter bytes a track has are spoken for, so no lock, scene, morph or macro
+// reaches these. They are kit settings like TRIG and the mod slots -- `KitTrack::arp`,
 // KIT.BIN's optional section 12 -- each an index into a fixed table in core/arp.cpp, pushed
 // round on the ARP page (push MOD, RAT, OCT, GAT) or set all at once by an ARPS preset
 // (core/arppresets.hpp). All four 0 is the arp exactly as it was before them, which is what a

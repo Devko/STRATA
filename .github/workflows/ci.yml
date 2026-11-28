@@ -4,7 +4,7 @@
 # toolchain (~30 min to build) and, for the real figures, TI cl6x, whose installer needs an
 # interactive licence click and exists only on Roland's PC. The emulator scenarios
 # (tools/scenarios.sh) and every load figure in docs/BUDGET.md depend on that build. Those stay
-# manual: see README.md, "Continuous integration".
+# manual: see docs/BUILDING.md, "Checks".
 name: CI
 
 on:
@@ -104,9 +104,7 @@ jobs:
         id: changes
         run: tools/ci_changes.sh "${{ github.event_name }}" >> "$GITHUB_OUTPUT"
 
-      # A compiler cache across runs: most PRs touch a few files, so most objects come back from
-      # the cache instead of being rebuilt. One cache per job (the two jobs build with different
-      # flags); a PR reads main's cache and keeps its own.
+      # The compiler cache, as in host-tests.
       - name: Compiler cache
         if: steps.changes.outputs.code == 'true'
         uses: hendrikmuhs/ccache-action@v1.2

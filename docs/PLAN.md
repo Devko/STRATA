@@ -47,7 +47,7 @@ otherwise.
 | v0.3 | **released** 2026-11-23 | [v0.3.0](https://github.com/Devko/STRATA/releases/tag/v0.3.0) (the performance mixer and looper, the VA OSC page, WAVE, FM4, the stock SmplTrek folders) and [v0.3.1](https://github.com/Devko/STRATA/releases/tag/v0.3.1) (the GRAIN rework). v0.3.1 boots and plays on the unit |
 | v0.4 | **released** 2026-11-26 | [v0.4.0](https://github.com/Devko/STRATA/releases/tag/v0.4.0), an early beta for Enaga 0.3.0, PRs #137-#177: the backlog's Phases 1-5 so far (LOCK, macro learn by turning, MOD slots, LFO TRIG, play modes, step stutter, LIVE RND, sample audition, one synth filter) and every screen redrawn. The zip no longer carries Enaga. Not yet checked on the unit |
 | v0.5 | **released**: the release candidate for 1.0 | [v0.5.0](https://github.com/Devko/STRATA/releases/tag/v0.5.0), for Enaga 0.4.0, PRs #180-#208: GEN and EVOLVE, chords recorded note for note, CLICK and COUNT-IN, choke groups, ratchets over LEN, recorded rolls, arp depth and ARPS, 40 more sounds, format decision C, sound and review fixes, cheaper VA, delay, HALL, hats, WAVE and KICK. Not yet checked on the unit: [Release candidate](#release-candidate-v050-planned-2026-11-27) below has the checks and the way to 1.0 |
-| after v0.5.0 | on `main` | Fixes, measurements and docs only (the freeze) |
+| after v0.5.0 | on `main` | The CPU guard fix (#211), 16th-note triplets, stereo width and the chorus send (#213-#216), docs. `CHANGELOG.md` "Unreleased" lists them |
 
 ## Release candidate: v0.5.0 (planned 2026-11-27)
 
