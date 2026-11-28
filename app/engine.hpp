@@ -196,6 +196,8 @@ public:
     // LIVE RND (core/liverand.hpp): the unit (0 OFF) and the armed tracks.
     uint8_t live_rnd_unit() const { return perform_.rnd_unit; }
     uint8_t live_rnd_armed() const { return perform_.rnd_armed; }
+    // ENERGY (core/energy.hpp): -64 .. +64, 0 is rest.
+    int8_t energy() const { return perform_.energy; }
     AutoFill auto_fill() const { return auto_fill_; }
     // EVOLVE (core/evolve.hpp): a track's period index (0 OFF) and the shared settings.
     uint8_t evolve_period(int track) const {
