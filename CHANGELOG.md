@@ -19,7 +19,7 @@ the project file format or the controls.
   the card with STRATA: ten starter projects to open and jam on (TECHNO, DEEP, DUB, DRIFT,
   ELECTRO, NIGHT, BREAKS, STEEL, SMASH, CHAOS; for 0.5.0 and newer), a sample pack of 105
   one-shots and chords rendered by STRATA's own machines in `/SAMPLES/STRATA`, and a one-page
-  quick start, `STRATA-QUICKSTART.txt`. Each is a tick box; nothing in the app changed. The
+  quick start, `STRATA-QUICKSTART.txt`, all behind one tick box; nothing in the app changed. The
   projects live in `content/starter/` and a host test opens every one on each build.
 - **Nine showcase projects beyond techno** (`tools/showcases/`): DEEP (deep house), DUB (dub
   techno), DRIFT (ambient), ELECTRO, BREAKS, CHAOS, SMASH, NIGHT (breakbeat over synthwave) and

@@ -41,21 +41,17 @@
         Something to play from the first minute, all made with STRATA's own machines: projects to
         open and jam on, a sample pack for the SAMPLE machine, and a one-page quick start.
       </p>
-      <p id="starter-note" class="small" hidden></p>
-      <fieldset class="choice" id="starter-projects-box">
-        <legend>Starter projects <span class="small">(about 8 KB each)</span></legend>
-        <label class="all"><input type="checkbox" id="starter-all" checked>
-          <span><strong>All projects</strong></span></label>
-        <div id="starter-projects" class="projects"></div>
-        <p class="small">A project on your card with the same name is replaced when you copy.</p>
-      </fieldset>
-      <fieldset class="choice">
-        <legend>Also</legend>
-        <label><input type="checkbox" id="starter-samples" checked>
-          <span><strong>Sample pack</strong>: <span id="starter-samples-info"></span>, in <code>/SAMPLES/STRATA</code></span></label>
-        <label id="starter-qs-row"><input type="checkbox" id="starter-quickstart" checked>
-          <span><strong>Quick start</strong>: one page, <code>STRATA-QUICKSTART.txt</code>
-          (<a href="starter/QUICKSTART.txt" target="_blank" rel="noopener">read it</a>)</span></label>
+      <fieldset class="choice" aria-label="Starter content">
+        <label><input type="checkbox" id="starter-on" checked>
+          <span><strong>Include starter and demo files</strong> <span class="small" id="starter-size"></span></span></label>
+        <ul class="small starter-list" id="starter-list">
+          <li id="starter-projects-row"><strong>Projects</strong> to open and jam on: <span id="starter-projects"></span>.
+            A project on your card with the same name is replaced when you copy.</li>
+          <li><strong>Sample pack</strong>: <span id="starter-samples-info"></span>, in <code>/SAMPLES/STRATA</code>.</li>
+          <li id="starter-qs-row"><strong>Quick start</strong>: one page, <code>STRATA-QUICKSTART.txt</code>
+            (<a href="starter/QUICKSTART.txt" target="_blank" rel="noopener">read it</a>).</li>
+        </ul>
+        <p id="starter-note" class="small" hidden></p>
       </fieldset>
     </section>
 
