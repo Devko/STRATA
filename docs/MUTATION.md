@@ -197,7 +197,7 @@ What was missing, and is now pinned:
 wanted least recently and waits two audio blocks before writing its slot, but on every step
 while it waited it took out another unwanted table. All of them went, and the new table landed
 in the lowest slot rather than the least recently wanted one, so turning back to a table played
-a moment ago built it again (CHANGELOG, unit checklist W65). It waits now without taking out more.
+a moment ago built it again (CHANGELOG, unit checklist W83). It waits now without taking out more.
 The new slot test (tests/test_wavetable.cpp) fails on the old code.
 
 Equivalent, and why, beyond the classes above:
