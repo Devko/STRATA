@@ -379,6 +379,20 @@
             return;
         }
 
+        // The line input: push A on IN or IN+ turns it on and off, push D on IN+ steps its GAIN.
+        // B and C have no push there, as on most MIXER pages.
+        if ((key == ENAGA_KEY_PUSH_A || key == ENAGA_KEY_PUSH_D) && mode_ == Mode::mixer &&
+            mixer_input_page(mixer_bank_) && !shift_) {
+            if (key == ENAGA_KEY_PUSH_A) {
+                if (down) toggle_input();
+                return;
+            }
+            if (mixer_bank_ == kMixerInputPage + 1) {
+                if (down) step_input_gain();
+                return;
+            }
+        }
+
         // The ambient modes: push A on DLY+ or REV+ throws that send's mode, CLAS to LONG or
         // ROOM to HALL and back. A switch is a push as much as a turn, and a push is what the
         // emulator can press (tests/scenario_ambient.sh).

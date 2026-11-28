@@ -115,19 +115,20 @@ check(bool(screens), "the screen was logged at all", f"log={log}")
 # whole screen was drawn on the C674x without faulting -- which is the claim this scenario makes
 # and the one a host test cannot make.
 # Walked LEFT from TRK 1-4, wrapping to EQ, since the duck's three pages came between the faders
-# and the sends: ten presses reach DLY since the chorus's three pages came after ROUTE. The log
-# ring (16 lines) then no longer holds TRK 1-4, the first; scenario_choke draws it.
+# and the sends: ten presses reached DLY until the line input's two pages came before MST, and
+# now end on REV. The log ring (16 lines) has no room for more presses; scenario_ambient walks
+# through DLY to DLY+ and checks DLY+, the same picture, and scenario_choke draws TRK 1-4.
 wanted = [
     "scr MIXER EQ",
-    "scr MIXER DLY",
-    "scr MIXER DLY+",
-    "scr MIXER REV",
-    "scr MIXER REV+",
-    "scr MIXER ROUTE",
     "scr MIXER MST",
+    "scr MIXER IN+",
+    "scr MIXER IN",
     "scr MIXER CHO",
     "scr MIXER CHO 5-8",
     "scr MIXER CHO 1-4",
+    "scr MIXER ROUTE",
+    "scr MIXER REV+",
+    "scr MIXER REV",
     "scr PROJECT SETUP",
 ]
 for name in wanted:

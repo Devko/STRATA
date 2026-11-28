@@ -473,6 +473,7 @@ void Engine::forget_prepared() {
         machine_prepared_for_[t] = nullptr;
         chain_prepared_valid_[t] = false;
     }
+    input_prepared_scale_ = -1.0f;
 }
 
 void Engine::prepare_machine(int track) {
@@ -518,6 +519,55 @@ void Engine::prepare_chain(int track) {
     chain_prepared_mix_[track] = mix;
     chain_prepared_valid_[track] = true;
     chain_prepared_tone_[track] = tone;
+}
+
+// The line input's strip as an insert chain: TON alone (D8, the chain's `tone` mode, so drive is
+// off and the filter is one knob, flat at 64), PAN, the delay and reverb sends from the same
+// slots a track's are read from, and the fader, the duck and the chorus in the ChainMix. Only
+// when a byte or the MUTE BUS moved: the tone's exp2 and the pan's sine are not per block work.
+void Engine::prepare_input(bool on) {
+    const uint8_t *bytes = project_.settings.input;
+    const float scale = on ? perf_plan_.tracks : 0.0f;
+    if (prepare_memo_ && input_prepared_on_ == on && input_prepared_scale_ == scale &&
+        __builtin_memcmp(input_prepared_, bytes, sizeof input_prepared_) == 0) {
+        return;
+    }
+    TrackParams params{};
+    const int fltr = page_first(Page::fltr);
+    const int fx = page_first(Page::fx);
+    params.v[fltr + 1] = bytes[int(InputField::tone)];
+    params.v[fx + 1] = bytes[int(InputField::pan)];
+    params.v[fx + 2] = bytes[int(InputField::delay)];
+    params.v[fx + 3] = bytes[int(InputField::reverb)];
+    // The fader: square law on the byte over kInputLevelUnity, so 100 is 0 dB, 127 about +4 dB
+    // and the bottom of the travel thins out as a fader's does.
+    const float u = float(bytes[int(InputField::level)]) * (1.0f / float(kInputLevelUnity));
+    ChainMix mix;
+    mix.level = u * u * scale;
+    const uint8_t depth = bytes[int(InputField::duck)];
+    mix.duck = float(depth > kDuckDepthMax ? kDuckDepthMax : depth) / 100.0f;
+    mix.chorus = float(bytes[int(InputField::chorus)] > 127 ? 127 : bytes[int(InputField::chorus)]) *
+                 (1.0f / 127.0f);
+    mixer_.input_chain().prepare(params, mix, true);
+    __builtin_memcpy(input_prepared_, bytes, sizeof input_prepared_);
+    input_prepared_scale_ = scale;
+    input_prepared_on_ = on;
+}
+
+void Engine::run_input(const float *in, uint32_t frames) {
+    const bool on = project_.settings.input[int(InputField::on)] != 0;
+    if (!on && !input_live_) return;
+    if (on && !input_live_) {
+        // From rest: no filter state from the last time, and the gain ramps from 0, so turning
+        // the input on fades it in over one block instead of clicking.
+        mixer_.input_chain().reset();
+        input_prepared_scale_ = -1.0f;
+        input_live_ = true;
+    }
+    // Off: one more block, prepared at level 0, so the ramp takes it down to silence.
+    prepare_input(on);
+    if (in != nullptr) mixer_.add_input(in, int(frames));
+    if (!on) input_live_ = false;
 }
 
 void Engine::apply(const Command &command) {
@@ -1494,6 +1544,38 @@ bool Engine::apply_mixer(const Command &command, int track, int) {
                                  int(int8_t(command.b)));
             apply_mixer_bytes();
             break;
+
+        case Cmd::set_input: {
+            if (command.a >= uint8_t(kInputFields)) {
+                status_.bump_refused();
+                break;
+            }
+            uint8_t &byte = project_.settings.input[command.a];
+            const InputField field = InputField(command.a);
+            if (command.c == 1) {
+                // A push: ON over, SRC and GAIN one round on; nothing else has a push.
+                if (field == InputField::on) {
+                    byte = byte != 0 ? 0 : 1;
+                } else if (field == InputField::source) {
+                    byte = uint8_t(byte + 1 < kInputSources ? byte + 1 : 0);
+                } else if (field == InputField::gain) {
+                    byte = uint8_t(byte + 1 < kInputGains ? byte + 1 : 0);
+                } else {
+                    status_.bump_refused();
+                }
+                break;
+            }
+            int next = int(byte) + int(int8_t(command.b));
+            // The two choices stop at their ends rather than wrap, as every encoder does here.
+            const int top = field == InputField::on       ? 1
+                            : field == InputField::duck   ? int(kDuckDepthMax)
+                            : field == InputField::source ? int(kInputSources) - 1
+                            : field == InputField::gain   ? int(kInputGains) - 1
+                                                          : 127;
+            next = next < 0 ? 0 : (next > top ? top : next);
+            byte = input_field_sanitized(command.a, uint8_t(next));
+            break;
+        }
 
         case Cmd::eq_kill: {
             if (command.a >= uint8_t(kKillBands) || command.b > 2) {
@@ -4347,6 +4429,9 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
         if (choked) mixer_.chain(t).clear_state();
         voices++;
     }
+
+    // The line input's strip, after the tracks: both scratch blocks are free again.
+    run_input(in, frames);
 
     mixer_.finish_block(out, int(frames));
 

@@ -95,6 +95,7 @@ Pictures by page and machine:
 | ROUTE | TRK into DLY and REV, both into OUT; D>R's wire as bright as it sends; ping-pong's L R; LONG's low cut; dots running along the wires while the beat plays |
 | CHO 1-4, CHO 5-8 | the desk with each track's chorus send standing up from the bottom of its strip, `OFF` or the amount under it |
 | CHO | knob line; the two sweeps over two seconds, L bright and R dim a quarter turn apart, as deep as DEP and as many as RAT turns, running while the beat plays; C>R as a bar beside `REV`; `TRACKS SEND ON CHO 1-4 5-8` |
+| IN, IN+ | knob line; the input's meter before the fader (every other row, the top 36 dB) beside the fader's slot, its cap and a unity tick; the jack and gain, `ON` or `OFF`, the pan as a tick on a line, DLY REV CHO as bars, the duck depth hanging from the top and dipping with the source; dim while off; `IN ON` / `IN OFF`, `PUSH A: ON` / `OFF`, `PUSH A ON/OFF D GAIN` |
 | MST | the draft: knob line (DJ CMP LIM); the spectrum, 24 bands of 5 px (4 lit) in rows 26-59, every other row, bright at the top, peaks held 12 frames; 100 / 1K / 10K at y 63; the vectorscope 42 x 42 at (0, 70), mid up and side across, afterglow; CMP's reduction and LIM falling from the top of two bars (x 50, 68; rows 72-109); GR and LUFS (momentary, K-weighted, 400 ms, from the scope history at 24 kHz) at x 88; LVL at (88, 106) |
 | EQ | FLT's frame with the kill EQ's curve (a shelf under 250 Hz, a bell, a shelf over 2.5 kHz; KILL 30 dB down), A B C on it, a lit `KILL` over a thrown band |
 
