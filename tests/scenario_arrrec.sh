@@ -8,7 +8,7 @@
 #   FUNC + MIXER                -> PERFORM
 #   FUNC + turn C -2            -> "ENERGY -4", inside the take's second pass
 #   STOP                        -> "ARR 2 SECTIONS" (the first pass, cut in early, is kept whole)
-#   FUNC + HOME, UP x9, OK      -> ARR UNDO: "ARR UNDONE"
+#   FUNC + HOME, UP to ARR UNDO, OK -> ARR UNDO: "ARR UNDONE"
 #
 # What each pass writes, the half rule and the X16 split are tests/test_arrrec.cpp's and
 # tests/test_engine.cpp's (engine_arr_*); this proves the path runs on the C674x, with the
@@ -52,10 +52,13 @@ keys+=(--key 19@560000000 --key 21@565000000)
 keys+=(--key 19@1300000000 --turn 2:-2@1302000000)
 keys+=(--key 29@2600000000)
 keys+=(--key 19@2800000000 --key 27@2805000000)
-for i in 0 1 2 3 4 5 6 7 8; do
+# UP from SAVE, round the bottom, to ARR UNDO: counted from the FUNC menu's own order
+# (app/ui_perfmix.hpp, MenuItem; tools/menu_rows.py), so a row added there does not move it.
+ups=$(python3 -B tools/menu_rows.py app/ui_perfmix.hpp MenuItem arr_undo --up)
+for ((i = 0; i < ups; i++)); do
     keys+=(--key "17@$((2840000000 + i * 40000000))")
 done
-keys+=(--key 23@3240000000)
+keys+=(--key "23@$((2840000000 + ups * 40000000 + 40000000))")
 
 echo "running the emulator for $CYCLES cycles: ARR REC on the factory beat, STOP, ARR UNDO ..."
 python3 -B tools/enaga_cached.py emulate "$STAGE" --cycles "$CYCLES" "${keys[@]}" \

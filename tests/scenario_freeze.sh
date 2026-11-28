@@ -3,8 +3,8 @@
 # plays:
 #
 #   PLAY, DOWN x6                          -> track 7 selected (the CHORD, VA POLY: the dearest)
-#   hold OK, UP, UP, OK                    -> the track menu, round from GENERATE past RELOAD
-#                                             SAMPLE to FREEZE: 1 bar armed (the menu stays open)
+#   hold OK, UP to FREEZE, OK              -> the track menu, round from GENERATE past CAPTURE
+#                                             and RELOAD SAMPLE to FREEZE: 1 bar armed (the menu stays open)
 #   ...one bar later                       -> `frz 64`: track 7 plays its loop from RAM
 #
 # The menu opens on OK held 500 ms, longer than emulate.py's --key holds, so this drives the
@@ -60,7 +60,7 @@ rc=0
 python3 -B - "$STAGE" "$CYCLES" "$BASELINE" "$PAD" > "$LOG" 2>&1 <<'PY' || rc=$?
 import re, sys
 sys.path.insert(0, "tools")
-from emu_drive import Drive, M, PLAY, OK, UP, DOWN, F3, step_key  # noqa: E402
+from emu_drive import Drive, M, PLAY, OK, UP, DOWN, F3, step_key, track_menu_up  # noqa: E402
 
 cycles = int(sys.argv[2])
 baseline = sys.argv[3] == "1"
@@ -84,8 +84,8 @@ if pad:                              # queue A05 PAD
 d.track_menu()
 d.check(d.index("TRACK T7") >= 0, "a held OK in GRID opened the track menu on T7",
         f"log={d.log[-12:]}")
-d.tap(UP)
-d.tap(UP)
+for _ in range(track_menu_up("freeze")):   # round past CAPTURE and RELOAD SAMPLE
+    d.tap(UP)
 d.go_to(arm)
 d.tap(OK)
 if baseline:
