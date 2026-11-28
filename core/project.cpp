@@ -69,6 +69,8 @@
 //         2   1  depth, -127..127 as a two's-complement byte
 //     choke (id 11), 8 x 1 byte: KitTrack::choke, 0 none or a group 1-4
 //     arp ext (id 12), 8 x 4 bytes: KitTrack::arp, VAR RHYTHM ACCENT RATCHET (core/arp.hpp)
+//     lfo layout (id 13), chorus (id 14), width (id 15): see core/project.hpp
+//     scn (id 16), 8 x 4 bytes: the SCN page's parameters, 40-43 (absent: kKitScnDefault)
 //
 // BANK_x.BIN, one section holding 16 patterns, each one `pattern_write`'s own container back to
 // back. The patterns are the section's bytes, so the bank's CRC covers them as well as its own
@@ -337,7 +339,10 @@ constexpr uint32_t kProjectLiveOffset = kProjectMixerOffset + kProjectMixerBytes
 // Song mode: the SONG switch, then each chain entry's mute recall.
 constexpr uint32_t kProjectSongBytes = 1 + uint32_t(kChainEntries);
 constexpr uint32_t kProjectSongOffset = kProjectLiveOffset + kProjectLiveBytes;
-constexpr uint32_t kProjectMidiBytes = uint32_t(kTracks);   // MIDI OUT channel per track
+// The MIDI section: each track's MIDI OUT channel, then PROG CHG OUT (2026-11-28) on the end. A
+// section that stops after the channels is a file from before it, which sent no program changes.
+constexpr uint32_t kProjectMidiBytesV1 = uint32_t(kTracks);   // MIDI OUT channel per track
+constexpr uint32_t kProjectMidiBytes = kProjectMidiBytesV1 + 1;
 constexpr uint32_t kProjectMidiOffset = kProjectSongOffset + kProjectSongBytes;
 // EVOLVE: each track's period, then mode, mutation and amount.
 constexpr uint32_t kProjectEvolveBytes = uint32_t(kTracks) + 3;
@@ -372,13 +377,13 @@ static_assert(kProjectMixerBytes == sizeof(ProjectSettings::sends) +
 
 // --- KIT.BIN sizes --------------------------------------------------------
 
-constexpr uint32_t kKitSections = 15;
+constexpr uint32_t kKitSections = 16;
 // The second to eleventh, the LFO, the arp, SLC AUTO, the ASR page, the duck, the OSC page, the
 // filter layout, LFO TRIG, the mod slots, the choke groups, the arp's settings, the LFO layout,
-// the chorus sends and the widths, are optional
+// the chorus sends, the widths and the SCN page, are optional
 // on read: see
 // kSectionKitLfo.
-constexpr uint32_t kKitOptionalSections = 14;
+constexpr uint32_t kKitOptionalSections = 15;
 constexpr uint32_t kKitTrackBytes =
     uint32_t(kKitSoundParams) + 1 + 2 + uint32_t(kSamplePathBytes);
 constexpr uint32_t kKitTracksBytes = kKitTrackBytes * uint32_t(kTracks);
@@ -413,7 +418,9 @@ constexpr uint32_t kKitChorusBytes = uint32_t(kTracks);
 constexpr uint32_t kKitChorusOffset = kKitLfoLayoutOffset + kKitLfoLayoutBytes;
 constexpr uint32_t kKitWidthBytes = uint32_t(kTracks);
 constexpr uint32_t kKitWidthOffset = kKitChorusOffset + kKitChorusBytes;
-constexpr uint32_t kKitTotalBytes = kHeaderBytes + kKitWidthOffset + kKitWidthBytes;
+constexpr uint32_t kKitScnBytes = uint32_t(kKitScnParams) * uint32_t(kTracks);
+constexpr uint32_t kKitScnOffset = kKitWidthOffset + kKitWidthBytes;
+constexpr uint32_t kKitTotalBytes = kHeaderBytes + kKitScnOffset + kKitScnBytes;
 static_assert(kKitSoundParams == 16, "KIT.BIN's track section has carried 16 parameters since M4");
 
 // --- BANK_x.BIN sizes -----------------------------------------------------
@@ -451,6 +458,9 @@ void kit_clear(Kit &kit) {
         kit.tracks[t].machine = uint8_t(kDefaultMachines[t]);
         // A zero TON is the darkest low-pass, not "off" (D8): a blank synth track starts flat.
         if (machine_has_voice_filter(kit.tracks[t].machine)) kit.tracks[t].params[kSlotTone] = kToneFlat;
+        // SCN as a kit from before it loads: no scan, but END and SPD where a turn of MOD is
+        // heard at once.
+        for (int p = 0; p < kKitScnParams; p++) kit.tracks[t].params[kKitScnFirst + p] = kKitScnDefault[p];
     }
 }
 
@@ -562,6 +572,7 @@ SerializeResult project_write(const Project &project, uint8_t *buffer, uint32_t 
         w.u8(project.chain_extra[i].cap != 0 ? uint8_t(0) : project.chain[i].mutes);
     }
     for (int t = 0; t < kTracks; t++) w.u8(s.midi_out[t]);
+    w.u8(s.program_out ? 1 : 0);
     for (int t = 0; t < kTracks; t++) w.u8(s.evolve_period[t]);
     w.u8(s.evolve_mode);
     w.u8(s.evolve_kind);
@@ -658,7 +669,7 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
     if (offset[4] != 0 && length[4] < kProjectSongBytes) {
         return refuse(SerializeResult::malformed);
     }
-    if (offset[5] != 0 && length[5] < kProjectMidiBytes) {
+    if (offset[5] != 0 && length[5] < kProjectMidiBytesV1) {
         return refuse(SerializeResult::malformed);
     }
     if (offset[6] != 0 && length[6] < kProjectEvolveBytes) {
@@ -797,12 +808,16 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
     // The MIDI OUT channels: absent is an older file, where no track sent MIDI. A byte past 16
     // is damage and turns that track's MIDI out off rather than onto some channel nobody chose.
     for (int t = 0; t < kTracks; t++) s.midi_out[t] = kMidiOutOff;
+    s.program_out = false;
     if (offset[5] != 0) {
         if (!r.seek(kHeaderBytes + offset[5])) return refuse(SerializeResult::malformed);
         for (int t = 0; t < kTracks; t++) {
             const uint8_t channel = r.u8();
             s.midi_out[t] = channel <= kMidiChannels ? channel : kMidiOutOff;
         }
+        // PROG CHG OUT: only 1 is on, so damage leaves it off rather than sending program
+        // changes to gear nobody asked to have them.
+        s.program_out = length[5] >= kProjectMidiBytes && r.u8() == 1;
         if (!r.ok()) return refuse(SerializeResult::truncated);
     }
 
@@ -938,6 +953,7 @@ SerializeResult kit_write(const Kit &kit, uint8_t *buffer, uint32_t capacity, ui
         {kSectionKitLfoLayout, kKitLfoLayoutOffset, kKitLfoLayoutBytes},
         {kSectionKitChorus, kKitChorusOffset, kKitChorusBytes},
         {kSectionKitWidth, kKitWidthOffset, kKitWidthBytes},
+        {kSectionKitScn, kKitScnOffset, kKitScnBytes},
     };
 
     Writer w(buffer, capacity);
@@ -966,7 +982,7 @@ SerializeResult kit_write(const Kit &kit, uint8_t *buffer, uint32_t capacity, ui
     w.u8(kit.duck.hold);
     w.u8(kit.duck.release);
     for (int t = 0; t < kTracks; t++) {
-        for (int p = kKitAsrEnd; p < kKitParams; p++) w.u8(kit.tracks[t].params[p]);
+        for (int p = kKitAsrEnd; p < kKitOscEnd; p++) w.u8(kit.tracks[t].params[p]);
     }
     w.u8(kKitFilterLayout);
     for (int t = 0; t < kTracks; t++) w.u8(kit.tracks[t].lfo_trig);
@@ -985,6 +1001,9 @@ SerializeResult kit_write(const Kit &kit, uint8_t *buffer, uint32_t capacity, ui
     w.u8(kLfoLayoutNumbers);
     for (int t = 0; t < kTracks; t++) w.u8(chorus_send_sanitized(kit.tracks[t].chorus));
     for (int t = 0; t < kTracks; t++) w.u8(width_sanitized(kit.tracks[t].width));
+    for (int t = 0; t < kTracks; t++) {
+        for (int p = kKitScnFirst; p < kKitParams; p++) w.u8(kit.tracks[t].params[p]);
+    }
 
     if (!w.ok() || w.size() != kKitTotalBytes) return SerializeResult::buffer_too_small;
     return finish_container(w, buffer, kKitTotalBytes, written);
@@ -1001,7 +1020,7 @@ SerializeResult kit_read(Kit &kit, const uint8_t *buffer, uint32_t size) {
                                            kSectionKitOsc, kSectionKitFilter, kSectionKitLfoTrig,
                                            kSectionKitMod, kSectionKitChoke, kSectionKitArpExt,
                                            kSectionKitLfoLayout, kSectionKitChorus,
-                                           kSectionKitWidth};
+                                           kSectionKitWidth, kSectionKitScn};
     uint32_t offset[kKitSections] = {};
     uint32_t length[kKitSections] = {};
     const SerializeResult found = find_sections(buffer, size, kKitVersion, wanted, kKitSections,
@@ -1023,6 +1042,7 @@ SerializeResult kit_read(Kit &kit, const uint8_t *buffer, uint32_t size) {
     if (offset[12] != 0 && length[12] < kKitLfoLayoutBytes) return refuse(SerializeResult::malformed);
     if (offset[13] != 0 && length[13] < kKitChorusBytes) return refuse(SerializeResult::malformed);
     if (offset[14] != 0 && length[14] < kKitWidthBytes) return refuse(SerializeResult::malformed);
+    if (offset[15] != 0 && length[15] < kKitScnBytes) return refuse(SerializeResult::malformed);
 
     Reader r(buffer, size);
     if (!r.seek(kHeaderBytes + offset[0])) return refuse(SerializeResult::malformed);
@@ -1106,7 +1126,7 @@ SerializeResult kit_read(Kit &kit, const uint8_t *buffer, uint32_t size) {
     if (offset[6] != 0) {
         if (!r.seek(kHeaderBytes + offset[6])) return refuse(SerializeResult::malformed);
         for (int t = 0; t < kTracks; t++) {
-            for (int p = kKitAsrEnd; p < kKitParams; p++) {
+            for (int p = kKitAsrEnd; p < kKitOscEnd; p++) {
                 kit.tracks[t].params[p] = clamp_u8(r.u8(), 0, kParamMax);
             }
         }
@@ -1216,6 +1236,25 @@ SerializeResult kit_read(Kit &kit, const uint8_t *buffer, uint32_t size) {
     if (offset[14] != 0) {
         if (!r.seek(kHeaderBytes + offset[14])) return refuse(SerializeResult::malformed);
         for (int t = 0; t < kTracks; t++) kit.tracks[t].width = width_sanitized(r.u8());
+        if (!r.ok()) return refuse(SerializeResult::truncated);
+    }
+
+    // The SCN page. Absent is a kit from before it: no scan (kKitScnDefault), set explicitly for
+    // the reason the LFO's section gives. MOD past the last mode is damage, read as the last. The
+    // hole between OSC and SCN is never stored and always 0.
+    for (int t = 0; t < kTracks; t++) {
+        for (int p = kKitOscEnd; p < kKitScnFirst; p++) kit.tracks[t].params[p] = 0;
+        for (int p = 0; p < kKitScnParams; p++) {
+            kit.tracks[t].params[kKitScnFirst + p] = kKitScnDefault[p];
+        }
+    }
+    if (offset[15] != 0) {
+        if (!r.seek(kHeaderBytes + offset[15])) return refuse(SerializeResult::malformed);
+        for (int t = 0; t < kTracks; t++) {
+            for (int p = kKitScnFirst; p < kKitParams; p++) {
+                kit.tracks[t].params[p] = clamp_u8(r.u8(), 0, kit_param_max(p));
+            }
+        }
         if (!r.ok()) return refuse(SerializeResult::truncated);
     }
     return SerializeResult::ok;

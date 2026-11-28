@@ -322,7 +322,11 @@
 
     // The same for any track: a macro's target names its parameter on its own track's machine.
     const char *track_param_name_on(int track, int index) const {
-        if (index < 0 || index >= kTrackParams) return "---";
+        if (!track_param_real(index)) return "---";
+        if (index >= kScnFirst) {
+            if (!machine_reads_scn(engine_.machine_id(track))) return "---";
+            return kScnNames[index - kScnFirst];
+        }
         if (index >= kOscFirst) return osc_param_name(index - kOscFirst);
         if (index >= kAsrFirst) {
             if (!machine_reads_asr_slot(engine_.machine_id(track), index - kAsrFirst)) return "---";
@@ -377,6 +381,19 @@
                 } else {
                     *out++ = 'D';
                     append_number(out, uint32_t(va_wave_detune_cents(value) + 0.5f));
+                }
+                return true;
+            // SCN (dsp/va.cpp): MOD by name, CRV signed around its straight 64. SPD reads as the
+            // LFO's RAT (append_param_value) and END as a byte, like POS.
+            case kScnFirst + 0:
+                append(out, va_scan_mode_name(va_scan_mode(value)));
+                return true;
+            case kScnFirst + 3:
+                if (value == 64) {
+                    append(out, "LIN");
+                } else {
+                    *out++ = value > 64 ? '+' : '-';
+                    append_number(out, uint32_t(value > 64 ? value - 64 : 64 - value));
                 }
                 return true;
             default:
@@ -523,6 +540,7 @@
             case kLfoWave:
                 append(out, lfo_wave_name(lfo_wave(value)));
                 return;
+            case kScnFirst + 1:     // the WAVE pair's SPD: the LFO's RAT scale
             case kLfoRate:
                 if (value >= kLfoSyncFirst) {
                     append(out, lfo_sync_name(value));

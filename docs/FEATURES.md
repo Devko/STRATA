@@ -71,7 +71,7 @@ UNIT_CHECKLIST.md's ~550 boxes, 4 are ticked.
 | HOME = GRID, HOME twice = KEYS | v0.1.0 | ◐ | |
 | Lit, self-naming performance pads; mode keys green/red by screen | v0.1.0 | ○ (W8, W20c) | Upper pads are printed TRK 1-7 but are performance pads (Roland's choice) |
 | Arrow-key navigation model (UP/DOWN rows, LEFT/RIGHT sideways, OK picks, CLR back) | v0.1.0 | ○ (5, "Arrow keys") | |
-| Screens: GRID, step page, EDIT (6 pages, 8 on the VA, WAVE, FM4 and GRAIN machines), MACHINE, KIT, SOUNDS, KEYS, MIXER (17 pages; UP/DOWN jump a group), PERFORM, PROJECT (5 pages), SAMPLES, RESAMPLE, menu | v0.1.0 | ◐ (4) | |
+| Screens: GRID, step page, EDIT (6 pages, 8 on the VA, FM4 and GRAIN machines, 9 on WAVE), MACHINE, KIT, SOUNDS, KEYS, MIXER (17 pages; UP/DOWN jump a group), PERFORM, PROJECT (5 pages), SAMPLES, RESAMPLE, menu | v0.1.0 | ◐ (4) | |
 | Fixes: the FUNC menu never shows a MUTATE verdict OK would not give; OK in RESAMPLE no longer retargets a take being written | #84 | ○ | |
 
 ## Engines (machines)
@@ -98,7 +98,8 @@ FM4 and GRAIN machines.
 | **Held notes on the VAs: ENV page** (ATK SUS REL FSU, seventh EDIT page; named ASR until #174); with SUS up a note holds while the key is held or for its step's LEN (up to 64 steps) | #90 | ○ (13k) | Held voices count against the 12-voice POLY budget for as long as they hold; MONO counts LEN only once SUS is up |
 | **VA sound rework: OSC page** (WAV OS2 SUB DRV, eighth EDIT page): saw or pulse width, a detuned or hard-synced OSC 2, sub level, drive into the filter; RES self-oscillates near the top, LP24 squelches like LP12 | #118 | ○ (13p, W22) | Older projects lose the old fixed synced pulse (load `SAW OFF 102 000`). No key tracking to the filter |
 | **One filter on the synths (D8)**: on the VA and WAVE machines FLTR is the voice's own filter (CUT RES ENV FDE; FDE its own decay, or 0.55 x DEC at 0), the insert filter one TON knob; **velocity opens the filter (D15)**; **cutoff floor (D9)**: a swept cutoff stops at about 100 Hz | #139, #147 | ○ (13q, 13e) | Older projects' insert filter on these tracks loads as the nearest TON, without its drive and resonance |
-| **WAVE MONO and WAVE POLY**: the VA voice with a wavetable (16 built-in tables of 16 frames: TBL POS, MOT envelope to position, WRP phase bend, DET second reader), 8 + 7 factory sounds | #122 | ○ (W23) | CPU per voice is a host estimate until the emulator and the unit measure it (BUDGET "WAVE"); a table is built when a track first sounds it (8 slots, 1.25 MiB; the sub plays alone for a moment). No user tables from the card yet, though the slots leave room for them |
+| **WAVE MONO and WAVE POLY**: the VA voice with a wavetable (16 built-in tables of 16 frames: TBL POS, MOT envelope to position, WRP phase bend, DET second reader), 14 + 14 factory sounds | #122 | ○ (W23) | CPU per voice is a host estimate until the emulator and the unit measure it (BUDGET "WAVE"); a table is built when a track first sounds it (8 slots, 1.25 MiB; the sub plays alone for a moment). No user tables from the card yet, though the slots leave room for them |
+| **WAVE scan: the SCAN page** (MOD SPD END CRV, ninth EDIT page on WAVE MONO and WAVE POLY): the position moves from POS towards END with each note: OFF FWD REV LOOP LREV PING RET SINE RAND DRFT, SPD free or synced as the LFO's RAT, CRV the curve; 2 + 2 scanning factory sounds | #246 | ○ (W73) | Control rate (2-6% of a WAVE voice on the host, BUDGET "WAVE scan"); not an LFO or mod-slot target; lockable, scene and macro. Older projects load it OFF. No user wavetables yet |
 | **FM4**: four-operator FM, eight algorithms, operator 4 feedback, an index envelope, six voices with chords in the shared 12-voice POLY budget; 8 factory sounds | #126 | ○ (W24) | CPU per voice is a host estimate (about 1.7x a VA POLY voice) until the unit measures it; the emulator shows no peak above the factory beat (BUDGET "FM4", E15). High notes at high IDX are capped for the whole operator chain so they do not alias (#189; W54). |
 | MID: plays an outboard synth over MIDI; SRC/AMP knobs send CC 74/71/73/72, 70/75/76/77 | v0.1.0 | ○ (8d) | No sound or CPU of its own; no scale fold |
 | Key and scale per pattern (15 scales), fold for the VA, WAVE and FM4 machines, GRAIN and unsliced SAMPLE; sharps everywhere | v0.1.0 | ○ (7) | |
@@ -144,7 +145,7 @@ FM4 and GRAIN machines.
 | Chain of up to 64 entries, repeats X1-X16 | v0.1.0 | ○ (3b, 12) | |
 | **Song mode**: per-entry mute recall, SONG plays once and stops | v0.1.0 | ○ (13i) | |
 | **Song sections**: a chain entry's SCN, MRP (SNAP, RIDE, BACK, SNAP A), NRG, BPM and MUT CAP, applied as it starts; the SECTION view (push A on CHAIN) with quick fill (hold OK); saved in PROJECT.BIN section 10 | Unreleased | ○ (W71), E (scenario_sections.sh) | BPM is skipped under an outside clock. Quick fill writes SNAP or SNAP A, whichever side the morph is nearer. No kit per section (byte 7 reserved) |
-| **ARR REC**: a jam written into the chain a pass at a time (a repeat when nothing changed, a new section entry with MUT CAP, SCN, MRP SNAP/SNAP A, NRG, BPM when something did; X16 split; 64 entries); ARR UNDO swaps the chain from before back in, one level | Unreleased | ○ (W72), E (scenario_arrrec.sh) | A pass is what played at its start (12 ticks of grace); a cut pass counts from half. No BPM under an outside clock. Track Launch is not captured yet (next step) |
+| **ARR REC**: a jam written into the chain a pass at a time (a repeat when nothing changed, a new section entry with MUT CAP, SCN, MRP SNAP/SNAP A, NRG, BPM when something did; X16 split; 64 entries); ARR UNDO swaps the chain from before back in, one level | Unreleased | ○ (W74), E (scenario_arrrec.sh) | A pass is what played at its start (12 ticks of grace); a cut pass counts from half. No BPM under an outside clock. Track Launch is not captured yet (next step) |
 | Restart (FUNC+PLAY) and stop-and-reset (FUNC+STOP, also resets the chain) | v0.1.0 | ○ (11) | |
 
 ## Performance
@@ -219,11 +220,14 @@ FM4 and GRAIN machines.
 | Feature | Since | Unit | Known limits / notes |
 | --- | --- | --- | --- |
 | Follows the unit's clock: internal, MIDI clock, SYNC IN; refuses tempo/transport under external clock | v0.1.0 | ○ (M7) | STRATA cannot set CLOCK SRC (Enaga has no setter). SYNC polarity not selectable (Enaga) |
+| Tap tempo on VALUE, nudge on FUNC + push VALUE + turn | Unreleased | ○ (W72) | Internal clock only; the nudge is 4% for 250 ms a detent |
 | MIDI OUT per track (OFF/1-16): steps, chords, ratchets, arp, note repeat, pads, KEYS, MIDI IN | v0.1.0 | ○ (8d) | **On Enaga 0.2.0 (v0.1.0-v0.3.1):** with USB connected to a computer not reading, DIN out stalls; unplug USB. Fixed in Enaga 0.3.0, which `main` needs |
 | Every note gets its note-off; second STOP sends All Notes Off | v0.1.0 | ○ (8d) | Slide is not sent as legato |
 | MIDI IN notes (ch 1-8 = tracks, others = selected), held to note-off | v0.1.0 | ○ (8d) | No pitch bend or aftertouch |
 | MIDI IN CC 16-31 = track parameters, CC 120/123 release | v0.1.0 | ○ (8d) | |
 | MIDI IN program change queues a pattern | v0.1.0 | ○ (8d) | |
+| MIDI IN song position pointer: chain entry and pass, or the pattern from the top | Unreleased | ○ (W72) | MIDI clock only; Enaga takes an SPP only while stopped |
+| PROG CHG OUT: each pattern change sends a program change on MIDI CH | Unreleased | ○ (W72) | Off by default; saved with the project |
 | Sending MIDI clock | — | — | Enaga's CLOCK OUT does it, not STRATA |
 
 ## Storage, projects and kits

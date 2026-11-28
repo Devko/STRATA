@@ -297,6 +297,56 @@ bool chain_current(const Project &project, const ChainPlayer &player, uint8_t &b
     return true;
 }
 
+bool chain_locate(const Project &project, uint32_t tick, ChainPlayer &player, uint32_t &origin,
+                  bool &over) {
+    over = false;
+    origin = 0;
+    const int length = chain_length(project);
+    if (length <= 0) {
+        player = ChainPlayer{};
+        return false;
+    }
+    // One pass through the chain, in ticks. At most 64 entries x 255 repeats x 64 steps x 24
+    // ticks, about 25 million: no overflow.
+    uint32_t total = 0;
+    for (int i = 0; i < length; i++) {
+        const ChainEntry &entry = project.chain[i];
+        const Pattern &pattern = project.patterns[entry.bank][entry.slot];
+        total += uint32_t(entry.repeats) * uint32_t(master_loop_ticks(pattern));
+    }
+    player.active = true;
+    player.orphaned = false;
+    player.entry = 0;
+    player.played = 0;
+    if (project.settings.chain_song && tick >= total) {
+        over = true;
+        origin = total;
+        return true;
+    }
+    // A looping chain: the position inside this time round, and where this time round began.
+    // One division, once per locate: not a hot path.
+    const uint32_t within = tick % total;
+    const uint32_t round = tick - within;
+
+    uint32_t at = 0, run = 0;
+    for (int i = 0; i < length; i++) {
+        const ChainEntry &entry = project.chain[i];
+        const uint32_t loop = uint32_t(master_loop_ticks(project.patterns[entry.bank][entry.slot]));
+        const uint32_t span = uint32_t(entry.repeats) * loop;
+        const bool same = i > 0 && entry.bank == project.chain[i - 1].bank &&
+                          entry.slot == project.chain[i - 1].slot;
+        if (!same) run = at;
+        if (within < at + span) {
+            player.entry = uint8_t(i);
+            player.played = uint8_t((within - at) / loop);
+            origin = round + run;
+            return true;
+        }
+        at += span;
+    }
+    return true;   // not reached: `within` is below `total`
+}
+
 // --- editing a chain -----------------------------------------------------------
 
 namespace {

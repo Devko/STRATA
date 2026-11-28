@@ -203,6 +203,24 @@ seed, track, step, pass and parameter. The scheduler looks ahead for a slid step
 before the LFOs. Hold STEP + FUNC + push no longer clears a lock: it toggles the slide.
 `scenario_locks` walks both gestures; UNIT_CHECKLIST W37.
 
+## WAVE scan (the SCAN page)
+
+CyDrums' S1. The page is MOD SPD END CRV at parameter ids **40-43**, not 32-35: ids 32-36 are
+taken as lock ids by a step's extra chord notes (core/stepnotes.hpp), and a lock id is a
+parameter index, so 32-39 is a hole that no parameter, scene bit, macro target or file byte uses
+(`track_param_real`, `kit_param_real`; kTrackParams and kKitParams are 44, kKitRealParams 36).
+The EDIT pages follow: `Page::scn` is 10, pages 8 and 9 are skipped like any dead page. The KIT
+section (16) and the PERFORM section (9) hold only the four real bytes; an older file loads MOD
+OFF. MOD is a number 0-9 (format decision C), clamped on the way in.
+
+The scan is per voice, restarted in `gate_on` unless the note slid, and runs at control rate: the
+shape (mode, then CRV as u^c) is worked out every fourth control step and ramped between, which
+took its cost from 12-24% of a WAVE voice to 2-6% on the host (the power and the cosine were the
+cost, not the reader). SPD is the LFO's RAT; a synced SPD needs the tempo, which reaches the
+machine through `Machine::set_tick_frames` (Engine::run_lfos sends it when it or the machine
+changes). RAND and DRFT draw from their own LCG, so the noise stream and the golden renders are
+unchanged. The SCN bytes are not LFO or mod-slot destinations (those stop at OSC).
+
 ## Track Launch
 
 `core/launch.hpp` has the design and Roland's decisions (2026-11-27). The scheduler plays each
@@ -215,6 +233,33 @@ guard, listing every track-edit command. CAPTURE copies every lane's part and co
 pool into one free slot, then switches to it keeping each lane's origin, so nothing restarts.
 LAUNCH is PROJECT's last page so the page walks in older tests and scenarios stay valid.
 `tests/scenario_launch.sh` drives it in the emulator; CAPTURE and held pads are host-tested only.
+
+## Tap tempo, the nudge, PROG CHG OUT and song position in
+
+The arithmetic is `core/taptempo.hpp` (taps, nudge) and `core/queue.hpp`'s `chain_locate`.
+**Tap tempo** hangs off `value_reset`: a VALUE tap that resets nothing, where `value_on_tempo()`
+says VALUE turns the tempo, is a tap, stamped at the press (`value_down_ms_`). It sets the tempo
+the way a VALUE turn does (`set_tempo`, `post_tempo`, `adopted_tempo_centi_`). **The nudge** is
+main context only: FUNC + push VALUE + turn sets the clock to `nudged_bpm` and `update()` puts
+`tempo_tenths_` back once `nudge_due`; nothing is posted, so the project's tempo and the
+tempo-synced delay never see it. FUNC + turn VALUE without the push is VariSpeed; the nudge and the end of it go through VariSpeed's ratio (the release through `set_clock_tempo`), and tap tempo sets the clock through `set_clock_tempo` as a turn does.
+
+**PROG CHG OUT** is sent from `Engine::switch_pattern`, so every path that changes the live
+pattern sends it, a program change IN included (same channel, same number: a MIDI loop back into
+STRATA lands on the pattern already playing, which `switch_pattern` ignores). The user's MIDI CH
+is read in the main context and posted as `Cmd::set_midi_channel` when it changes; a refused send
+is kept in `program_pending_` and retried each block. The byte sits on the end of PROJECT.BIN's
+MIDI section (section 6, 9 bytes), so a v0.5.0 build reads the eight channels and skips it.
+
+**Song position in.** Enaga does the MIDI parsing (`firmware/kernel/clock.c`): under CLOCK SRC
+MIDI an SPP while stopped sets the clock to `16ths x 24` and raises `ENAGA_TRANSPORT_LOCATE`; the
+CONTINUE that follows resumes there. `on_transport` posts `Cmd::locate` only when the source is
+MIDI, because under the internal clock LOCATE is STRATA's own restart (`locate(0)`), which
+`Cmd::restart` handles. `Engine::locate` walks the chain from tick 0 (`chain_locate`: entry, pass,
+and the start of the run of entries on the same pattern, since `chain_advance` keeps the origin
+across a repeated pattern), sets `origin_` and every lane origin to it and `tick_` to the
+position, so `resolve_tick` sees no jump. A pending queue lands at once (no chain) or is dropped
+(chain). The emulator cannot send MIDI in, so only the host suite and the unit (W72) cover it.
 
 ## Your own sounds and copy / paste in SOUNDS
 

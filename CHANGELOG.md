@@ -20,6 +20,25 @@ the project file format or the controls.
   END, swaps the chain from before the take back in, and again swaps the take back. While a take
   runs the live strip reads `ARR7` and the REC key blinks as for JAM REC. Under an outside clock
   the sections carry no BPM. Independent of JAM REC. New emulator scenario `arrrec`.
+- **WAVE scan modes: the SCAN page.** WAVE MONO and WAVE POLY have a ninth EDIT page, SCAN:
+  MOD moves the wavetable position from POS towards END with each note (OFF, FWD, REV, LOOP,
+  LREV, PING, RET, SINE, RAND, DRFT), SPD sets the speed free or synced like the LFO's RAT, END
+  where it heads and CRV the curve. The page draws the path. A slid note carries on its scan; a
+  chord scans together. Locks, scenes and macros reach it; LFOs and mod slots do not. SOUNDS gains
+  SCANLD and WOBBLE (WAVE MONO) and DRIFT and SWIRL (WAVE POLY). Projects saved before it load
+  with MOD OFF and sound as they did; the kit and the performance files gain an optional section.
+  New emulator scenario `wavescan`.
+- **Tap tempo and nudge.** Tap VALUE in time, twice or more, wherever VALUE turns the tempo
+  (`TAP 128.0`); the tempo follows the last four taps. FUNC + push VALUE + turn nudges: 4% faster
+  or slower for a quarter of a second a detent, then back to the set tempo, to line STRATA up by
+  ear with something that sends no clock.
+- **MIDI song position pointer.** Under MIDI clock, a master that moves its song position while
+  stopped puts STRATA's chain on the entry and pass that position falls in (with the chain off,
+  the pattern runs from the top of the song), so a CONTINUE from the middle of a song plays the
+  right section.
+- **PROG CHG OUT.** A FUNC menu row: every pattern change sends the pattern's number as a program
+  change on your MIDI CH, so a second STRATA or a sequencer follows. Off in a new project; saved
+  on the end of PROJECT.BIN's MIDI section (451 bytes), which older builds skip.
 - **Song sections on the chain.** Push A on a CHAIN entry opens its SECTION view: besides the
   pattern, repeats and mute state, an entry can put a scene on morph side B (SCN), jump the morph to
   B or A, or ride it there over the whole entry (MRP SNAP, SNAP A, RIDE, BACK), set ENERGY (NRG) and the

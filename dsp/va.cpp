@@ -70,6 +70,7 @@
 // docs/BUDGET.md has what it was worth. There is no hand-written loop left in this file.
 #include "va.hpp"
 
+#include "lfo.hpp"         // SCN's SPD is the LFO's RAT: lfo_free_hz, lfo_sync_ticks
 #include "wavetable.hpp"
 
 #include "tihints.h"
@@ -273,6 +274,26 @@ constexpr uint32_t kGateMax = 14400000u;
 //  31  DRV  drive: a soft clip before the filter, 0.7 x 2^(3.1 x drv) into the clip, plus up to
 //           60% more post-filter drive. The output is trimmed by 0.45 x drv^2 so turning it
 //           thickens the sound rather than just making it louder. 0 skips the pre-filter clip.
+//
+// SCN -- the WAVE pair's wavetable scan, the ninth page, at 40 past a hole (dsp/track.hpp). Each
+// note moves its own position from POS towards END, with no LFO and no envelope: the voice keeps
+// a phase in cycles that gate_on() restarts (not on a slid WAVE MONO note, which carries on), and
+// every control step turns it into a travel u, 0-1, and the position into POS + (END - POS) x u,
+// before MOT adds the filter envelope. A chord's voices start together and so scan together.
+// An older kit loads MOD 0, SPD 28, END 127, CRV 64 (core/project.hpp, kKitScnDefault).
+//  40  MOD  the mode, a number 0-9 (ScanMode): OFF FWD REV LOOP LREV PING RET SINE RAND DRFT.
+//           OFF is the page away: nothing below is computed and the voice is the one it was.
+//  41  SPD  one cycle's length, as the LFO's RAT: 0-63 free, 16 s to 31 ms (0.0625 to 32 Hz);
+//           64-127 synced to the clock, 8 bars down to a 1/32. A one-shot mode's sweep is one
+//           cycle; PING and RET go there and back in one.
+//  42  END  where the scan heads, frames 0-15 as POS. END below POS scans downwards.
+//  43  CRV  the travel's curve, u^c with c = 8^((crv - 64) / 64): 64 straight, down to 0 a fast
+//           start that slows into END, up to 127 a slow start that rushes there.
+//
+// Control rate only: a phase add, a compare or two and at most an exp2 and a log2 for CRV per
+// voice per control step. The per-sample loop reads the frames it read before, so the scan
+// costs the same as turning POS by hand, which a moving position already did cheaply
+// (waveloops.h: the crossfade ramps across the slice).
 
 float va_attack_seconds(uint8_t value) {
     return value == 0 ? kAttackS : kAttackS * exp2(kAttackOctaves * float(value) * (1.0f / 127.0f));
@@ -326,6 +347,68 @@ float va_wave_motion(uint8_t value) {
 float va_wave_detune_cents(uint8_t value) {
     const float u = float(value) * (1.0f / 127.0f);
     return 100.0f * kDetuneMaxSemis * u * u;
+}
+
+static_assert(kScanModes == kKitScanModes, "core/project.hpp counts the scan modes too");
+
+const char *va_scan_mode_name(ScanMode mode) {
+    switch (mode) {
+        case ScanMode::fwd: return "FWD";
+        case ScanMode::rev: return "REV";
+        case ScanMode::loop: return "LOOP";
+        case ScanMode::loop_rev: return "LREV";
+        case ScanMode::ping: return "PING";
+        case ScanMode::ret: return "RET";
+        case ScanMode::sine: return "SINE";
+        case ScanMode::random: return "RAND";
+        case ScanMode::drift: return "DRFT";
+        default: return "OFF";
+    }
+}
+
+float va_scan_end(uint8_t value) { return va_wave_position(value); }
+
+float va_scan_curve(uint8_t value) {
+    return value == 64 ? 1.0f : exp2(3.0f * (float(value) - 64.0f) * (1.0f / 64.0f));
+}
+
+float va_scan_travel(ScanMode mode, float phase, float curve) {
+    const float whole = float(int(phase));
+    const float t = phase - whole;
+    const auto tri = [](float x) { return x < 0.5f ? 2.0f * x : 2.0f - 2.0f * x; };
+    // The random modes' picture: a fixed frame a cycle, from a hash of the cycle's number.
+    const auto frame = [](float cycle) {
+        uint32_t h = uint32_t(int(cycle)) * 2654435761u + 0x9E3779B9u;
+        h ^= h >> 15;
+        h *= 2246822519u;
+        h ^= h >> 13;
+        return float(h >> 8) * (1.0f / 16777216.0f);
+    };
+    float u = 0.0f;
+    switch (mode) {
+        case ScanMode::fwd: u = phase < 1.0f ? phase : 1.0f; break;
+        case ScanMode::rev: u = phase < 1.0f ? 1.0f - phase : 0.0f; break;
+        case ScanMode::loop: u = t; break;
+        case ScanMode::loop_rev: u = 1.0f - t; break;
+        case ScanMode::ping: u = tri(t); break;
+        case ScanMode::ret: u = phase >= 1.0f ? 0.0f : tri(t); break;
+        case ScanMode::sine: u = 0.5f - 0.5f * enaga::dsp::cos_turns(t); break;
+        case ScanMode::random: u = frame(whole); break;
+        case ScanMode::drift: {
+            const float a = frame(whole - 1.0f), b = frame(whole);
+            u = a + (b - a) * (t * t * (3.0f - 2.0f * t));
+            break;
+        }
+        default: break;
+    }
+    if (curve != 1.0f && u > 0.0f && u < 1.0f) u = exp2(curve * enaga::dsp::log2(u));
+    return u;
+}
+
+float va_scan_increment(uint8_t value, float inv_rate, float tick_frames) {
+    const uint32_t ticks = lfo_sync_ticks(value);
+    if (ticks == 0) return lfo_free_hz(value) * inv_rate;
+    return tick_frames > 0.0f ? reciprocal(float(ticks) * tick_frames) : 0.0f;
 }
 
 VaMode va_mode_from(uint8_t value) {
@@ -447,6 +530,16 @@ VaSettings VaSettings::make_wave(const TrackParams &params, float rate, float in
     s.warp.k2 = 0.5f * reciprocal(1.0f - knee);
     s.warp_speed = s.warp.k1 > s.warp.k2 ? s.warp.k1 : s.warp.k2;
 
+    // SCN. A synced SPD leaves scan_inc for the machine, which knows the tempo.
+    s.scan = va_scan_mode(params.get(Page::scn, 0));
+    if (s.scan != ScanMode::off) {
+        const uint8_t spd = params.get(Page::scn, 1);
+        s.scan_sync_ticks = lfo_sync_ticks(spd);
+        s.scan_inc = s.scan_sync_ticks == 0 ? lfo_free_hz(spd) * inv_rate : 0.0f;
+        s.scan_end = va_scan_end(params.get(Page::scn, 2));
+        s.scan_curve = va_scan_curve(params.get(Page::scn, 3));
+    }
+
     // DET: a second reader of the same frames, the pair split around the pitch.
     const uint8_t det = params.get(Page::osc, 1);
     const float makeup = 1.0f - 0.3f * params.unit(3);
@@ -467,6 +560,10 @@ void VaVoice::reset_phases() {
     wave_phase1_ = 0;
     wave_phase2_ = 0;
     wave_pos_ = -1.0f;
+    scan_phase_ = 0.0f;
+    scan_u_ = 0.0f;
+    scan_to_ = -1.0f;
+    scan_left_ = -1;
     osc1_.reset();
     osc2_.reset();
     sub_.reset();
@@ -505,6 +602,92 @@ void VaVoice::gate_on() {
     choke_left_ = 0;       // a choked voice taken for a new note is a new note, not a fade
     amp_.gate_on();        // from the level it is at: resetting it under a note is a click
     fenv_.gate_on(true);   // the sweep always starts from closed, however loud the old note was
+    // SCN starts again from POS, unless the note slid: then it is the old note carrying on.
+    if (!slide_) {
+        scan_phase_ = 0.0f;
+        scan_u_ = 0.0f;
+        scan_from_ = 0.0f;
+        scan_to_ = -1.0f;      // the random modes draw their first frame on the first step
+        scan_left_ = -1;       // and every mode works its shape out afresh
+    }
+}
+
+// SCN's shape at `phase`, 0-1, after CRV (va.cpp's header, "SCN"). The random modes draw from
+// their own generator, never the noise's, so a scan leaves the noise stream as it was; they draw
+// as the phase passes each whole cycle, so `phase` only ever moves forward between notes.
+float VaVoice::scan_shape(const VaSettings &s, float phase) {
+    const float whole = float(int(phase));
+    const float t = phase - whole;                 // where in this cycle
+    float u = 0.0f;
+    if (s.scan == ScanMode::random || s.scan == ScanMode::drift) {
+        // A new frame each cycle: scan_to_ is the frame this cycle heads for (RAND jumps to it at
+        // once, DRFT glides from scan_from_ over the cycle), scan_from_ the one before.
+        // scan_cycle_ counts the cycles drawn, and scan_to_ < 0 is a fresh note.
+        const auto draw = [this]() {
+            scan_seed_ = scan_seed_ * 1664525u + 1013904223u;
+            return float(scan_seed_ >> 8) * (1.0f / 16777216.0f);
+        };
+        if (scan_to_ < 0.0f) {
+            scan_from_ = draw();
+            scan_to_ = scan_from_;
+            scan_cycle_ = whole;
+        }
+        while (scan_cycle_ < whole) {
+            scan_from_ = scan_to_;
+            scan_to_ = draw();
+            scan_cycle_ += 1.0f;
+        }
+        if (s.scan == ScanMode::random) {
+            u = scan_to_;
+        } else {
+            const float e = t * t * (3.0f - 2.0f * t);     // smoothstep: no corner at a cycle
+            u = scan_from_ + (scan_to_ - scan_from_) * e;
+        }
+    } else {
+        u = va_scan_travel(s.scan, phase, 1.0f);
+    }
+    if (s.scan_curve != 1.0f && u > 0.0f && u < 1.0f) {
+        u = exp2(s.scan_curve * enaga::dsp::log2(u));
+    }
+    return u;
+}
+
+// `phase` moved on by `by` cycles. The one-shot modes stop counting at their end; the others are
+// held below 2^20 cycles, so a note held for days keeps its float resolution.
+float VaVoice::scan_advance(const VaSettings &s, float phase, float by) const {
+    float next = phase + by;
+    if (s.scan == ScanMode::fwd || s.scan == ScanMode::rev || s.scan == ScanMode::ret) {
+        return next > 1.0f ? 1.0f : next;
+    }
+    return next;
+}
+
+// SCN's travel for this control step, 0-1, and the phase moved on by the slice. The shape is
+// worked out at the start of each stretch of kScanEvery steps and where the phase will be at its
+// end, and ramped between: a block's worth of scan costs two shapes, not four. Any change -- a
+// knob, a jump of RAND, LOOP going round -- is at most one stretch (1.3 ms) late and is ramped
+// over it.
+float VaVoice::scan_travel_step(const VaSettings &s, int n) {
+    if (scan_left_ <= 0) {
+        // A fresh note starts from its shape now; a running one (a slid note too) from where the
+        // last stretch ended, so the ramp never jumps.
+        const float now = scan_left_ < 0 ? scan_shape(s, scan_phase_) : scan_key_ + scan_slope_ * kScanEvery;
+        const float ahead = scan_advance(s, scan_phase_, s.scan_inc * float(kControl * kScanEvery));
+        scan_key_ = now;
+        scan_slope_ = (scan_shape(s, ahead) - now) * (1.0f / float(kScanEvery));
+        scan_left_ = kScanEvery;
+    }
+    const float u = scan_key_ + scan_slope_ * float(kScanEvery - scan_left_);
+    scan_left_--;
+    float next = scan_advance(s, scan_phase_, s.scan_inc * float(n));
+    if (next >= 1048576.0f) {
+        const float whole = float(int(scan_phase_));
+        next -= whole;
+        scan_cycle_ -= whole;
+    }
+    scan_phase_ = next;
+    scan_u_ = u;
+    return u;
 }
 
 void VaVoice::run(const VaSettings &s, float *out, int n, float *work, float *env,
@@ -704,10 +887,13 @@ void VaVoice::render_wave(const VaSettings &s, float *work, int n, float fenv, f
     // No library, or the table not built yet (it is built on demand, Engine::step_waves): the
     // sub and the noise alone. The slot is read once, so the whole slice reads one mapping.
     const int slot = lib != nullptr ? lib->slot_of(s.table) : -1;
+    // SCN moves on whether or not the table is in yet, so the scan keeps time with the note.
+    float from = s.position;
+    if (s.scan != ScanMode::off) from += (s.scan_end - s.position) * scan_travel_step(s, n);
     if (slot < 0) return;
 
     const float top = float(kWaveFrames - 1);
-    const float end = clamp(s.position + s.motion * fenv, 0.0f, top);
+    const float end = clamp(from + s.motion * fenv, 0.0f, top);
     const float start = wave_pos_ < 0.0f ? end : wave_pos_;
     wave_pos_ = end;
     const float low = start < end ? start : end;
@@ -803,6 +989,19 @@ void VaMono::prepare(const TrackParams &params) {
     glide_s_ = kGlideScaleS * (exp2(kGlideOctaves * gld) - 1.0f);
     settings_.glide_coef = to_target(glide_s_, control_rate_);
     settings_.slide_coef = to_target(kSlideFloorS, control_rate_);
+    // A synced SCN SPD, at the tempo the engine last gave.
+    if (settings_.scan_sync_ticks != 0) {
+        settings_.scan_inc = reciprocal(float(settings_.scan_sync_ticks) * tick_frames_);
+        if (tick_frames_ <= 0.0f) settings_.scan_inc = 0.0f;
+    }
+}
+
+void VaMono::set_tick_frames(float frames) {
+    tick_frames_ = frames;
+    if (settings_.scan_sync_ticks != 0) {
+        settings_.scan_inc =
+            frames > 0.0f ? reciprocal(float(settings_.scan_sync_ticks) * frames) : 0.0f;
+    }
 }
 
 void VaMono::trigger(const Trig &trig) {

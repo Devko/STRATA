@@ -1174,6 +1174,7 @@ scene or knob really did move: those prepare as before.
 | E12 | The ASR page | `tests/scenario_asr.sh`, then the held-chord `factory_kit` edit in "The ASR page" above, `scenario_factory.sh`, both compilers; revert | **done 2026-11-23:** off = A01 (26.15% / 49.32%); held +3.60 cl6x / +4.71 GCC (see "The ASR page") |
 | E13 | The OSC page and the VA rework | `tests/scenario_osc.sh` against `scenario_factory.sh` before it, then the worst-case `factory_kit` edit in "The OSC page" below, both compilers; revert | **done 2026-11-28:** `osc` = the beat (23.62% / 45.36%); worst case +2.22 cl6x / +8.92 GCC (see "The owed figures") |
 | E14 | WAVE MONO and WAVE POLY | `tests/scenario_wave.sh` (tracks 6 and 7 switched to WMN and WPL on keys) against `scenario_factory.sh` on the same commit, both compilers; and the time from the switch to `wav FM1` (the first table ready) | **done 2026-11-28:** +2.56 cl6x / +4.67 GCC over the beat; the time to the first table not taken |
+| E18 | WAVE scan | `tests/scenario_wavescan.sh` (track 6 to WMN, WOBBLE, the SCAN page) against `tests/scenario_wave.sh` on the same commit, both compilers | done 2026-11-28: `scenario_wavescan` 25.65% cl6x, 45.52% GCC (`scenario_wave` 26.40% / 50.44%, `scenario_factory` 23.80% / 45.51%); scan within noise, see "WAVE scan" below |
 | E15 | FM4 | `tests/scenario_fm.sh` (track 7 switched to FM4 on keys) against `scenario_factory.sh` on the same commit, both compilers; and `tools/ti_loops.py` for `strata_fm_add` and `strata_fm_add_free` | **done 2026-11-27, again 2026-11-28:** +1.06 cl6x / +4.38 GCC over the beat; `ti_loops.py` not run |
 | E16 | The GRAIN rework | `tests/scenario_grain.sh` (track 8 switched to GRAIN, SHIMMR loaded on keys) against `scenario_factory.sh` on the same commit, both compilers | **done 2026-11-28:** +0.75 cl6x / +6.68 GCC over the beat |
 | E5 | Load time of a 15 s 96 kHz stereo WAV (30 s of the file now loads too: `kSrcFrames` is 30 s of 96 kHz frames since 2026-11-22) | through the emulator's card, cl6x vs GCC | wall time to playable; screen should not stall |
@@ -1645,6 +1646,40 @@ FM and STRING, which follow, allocate under 0.1 MiB.
 | `scenario_factory.sh`, same commit (2026-11-28, `db96b69`) | 23.62% | 45.36% |
 | `scenario_wave.sh` (WMN bass, WPL chord) | 26.18% | 50.03% |
 | cycles to `strata ready`, before / after | not taken | not taken |
+
+### WAVE scan (2026-11-28, host only)
+
+The SCAN page moves each WAVE voice's position at control rate: the reader loop is the same, it
+only reads another frame pair. Host, x86 GCC -O2, a six-note held chord on WAVE POLY (HARMONICS,
+POS 20 to END 120, SPD 3.3 Hz, CRV 90), nanoseconds per voice per 64-frame block, best of nine:
+
+| MOD | one reader | DET (two readers) |
+| --- | --- | --- |
+| OFF | 1,278 (1.00) | 1,481 (1.00) |
+| FWD (holds at END) | 1,264 (0.99) | 1,498 (1.01) |
+| LOOP | 1,306 (1.02) | 1,553 (1.05) |
+| SINE | 1,328 (1.04) | 1,568 (1.06) |
+| DRFT | 1,308 (1.02) | 1,557 (1.05) |
+
+The first version worked the shape out every control step and cost 12-24% of a voice with CRV
+off 64: CRV's power and SINE's cosine, four a block. It is now worked out every fourth step and
+ramped between, two a block. So a scanning voice costs up to about 6% more than a still one:
+scaled from the WAVE estimate above, about 0.15 points a voice with cl6x, under 2 points for all
+12 POLY voices scanning. MOD OFF costs nothing.
+
+**E18, emulator on Roland's PC (2026-11-28, `68ff9dd`), peak load, all passed:**
+
+| Build | cl6x | GCC only |
+| --- | --- | --- |
+| `scenario_factory.sh`, same commit (bass and chord on VA) | 23.80% | 45.51% |
+| `scenario_wave.sh`, same commit (WMN bass, WPL chord) | 26.40% | 50.44% |
+| `scenario_wavescan.sh` (WMN WOBBLE scanning, SCAN page drawn) | 25.65% | 45.52% |
+
+`scenario_wavescan` switches only the bass to WAVE, and the chord stays on VA POLY. So its
+like-for-like baseline is `scenario_factory`, not `scenario_wave`. Against it, one scanning WMN
+voice and the SCAN page cost +1.85 points with cl6x and +0.01 GCC-only, and that includes WAVE
+in place of VA on the bass. That fits the host estimate of at most ~0.15 points for the scan
+itself. The worst case is still `scenario_wave` at 50.44% GCC-only, under the 60% target.
 
 ### FM4 (2026-11-23, host only)
 

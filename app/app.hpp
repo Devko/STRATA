@@ -47,6 +47,7 @@
 #include "stepnotes.hpp"    // a chord step's extra notes: counted on the step page, not as locks
 #include "storage.hpp"      // projects, autosave and the sample loader: the card side
 #include "tuning.hpp"       // TUN and PIT as notes: the NOTE view
+#include "taptempo.hpp"     // tap tempo on VALUE, the nudge on FUNC + push VALUE + turn
 
 #include <enaga/app.hpp>
 #include <enaga/clock.hpp>
@@ -534,6 +535,7 @@ const char *page_name(Page page) {
         case Page::arp:  return "ARP";
         case Page::asr:  return "ENV";      // the whole envelope (Roland, 2026-11-26)
         case Page::osc:  return "OSC";
+        case Page::scn:  return "SCAN";
         default:         return "?";
     }
 }
@@ -543,12 +545,18 @@ const char *page_name(Page page) {
 constexpr const char *kAsrNames[kAsrParams] = {"ATK", "SUS", "REL", "FSU"};
 // And their OSC page's (dsp/va.cpp): OSC 1's wave, what OSC 2 does, the sub, the drive.
 constexpr const char *kOscNames[kOscParams] = {"WAV", "OS2", "SUB", "DRV"};
+// And the WAVE pair's SCN page (dsp/va.cpp): the scan's mode, speed, end frame and curve.
+constexpr const char *kScnNames[kScnParams] = {"MOD", "SPD", "END", "CRV"};
 
 // EDIT's pages: the four of sound, then the track's LFO (dsp/lfo.hpp), its arpeggiator
-// (core/arp.hpp), the VA machines' note envelope, ASR, and their oscillators, OSC (dsp/va.cpp).
-// The selection keys walk all eight; everywhere else a page is still four encoders over four
+// (core/arp.hpp), the VA machines' note envelope, ASR, and their oscillators, OSC (dsp/va.cpp),
+// then the WAVE pair's scan, SCAN. Pages 8 and 9 are the hole between OSC and SCN
+// (dsp/track.hpp): no knob on them is live on any machine, so the selection keys step over them
+// as they step over a drum's ENV. Everywhere else a page is still four encoders over four
 // parameters.
-constexpr int kEditPages = kPages + 4;
+constexpr int kEditPages = int(Page::scn) + 1;
+constexpr bool edit_page_hole(int page) { return page * kParamsPerPage >= kOscEnd &&
+                                                 page * kParamsPerPage < kScnFirst; }
 
 // Encoder counts per click: one zone on the arp's MOD RAT OCT, one shape or destination on the
 // LFO's WAV and DST, one count everywhere else (ASR and OSC included).
@@ -1310,6 +1318,12 @@ private:
 
     LedShadow leds_;
     uint32_t tempo_tenths_ = 1300;
+    // Tap tempo (a VALUE tap while VALUE is on the tempo) and the nudge (FUNC + push VALUE + turn),
+    // core/taptempo.hpp.
+    TapTempo tap_;
+    Nudge nudge_;
+    // The MIDI CH last posted to the engine, -1 before the first.
+    int posted_midi_channel_ = -1;
 
     bool logged_running_ = false;
     int logged_source_ = -1;

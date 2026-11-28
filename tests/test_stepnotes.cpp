@@ -25,9 +25,11 @@ Pattern &blank() {
 }  // namespace
 
 TEST(stepnotes_the_ids_start_past_every_track_parameter) {
-    // The engine applies a lock only below kTrackParams, so a note lock can never be heard as a
-    // parameter -- and a build from before this skips them for the same reason.
-    CHECK(int(kLockNoteFirst) >= kTrackParams);
+    // The engine applies a lock only to a real track parameter, so a note lock can never be
+    // heard as a parameter -- and a build from before this skips them for the same reason. The
+    // note ids are the hole between OSC and SCN (dsp/track.hpp).
+    CHECK(int(kLockNoteFirst) >= kOscEnd);
+    for (int i = 0; i < kStepExtraNotes; i++) CHECK(!track_param_real(kLockNoteFirst + i));
     CHECK(int(kLockNoteFirst) + kStepExtraNotes <= int(kLockParamMask) + 1);
     CHECK(!lock_is_note(uint8_t(kLockNoteFirst - 1)));
     CHECK(lock_is_note(kLockNoteFirst));

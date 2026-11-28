@@ -49,7 +49,9 @@ TEST(mod_destinations_are_the_sound_asr_and_osc_never_the_lfo_or_arp) {
     // core/modslot.cpp's numbering against dsp's.
     for (int p = 0; p < kParams; p++) CHECK(mod_dest_allowed(p));
     for (int p = kParams; p < kAsrFirst; p++) CHECK(!mod_dest_allowed(p));
-    for (int p = kAsrFirst; p < kTrackParams; p++) CHECK(mod_dest_allowed(p));
+    for (int p = kAsrFirst; p < kOscEnd; p++) CHECK(mod_dest_allowed(p));
+    // Nor the hole, nor SCN: a scan is a movement of its own (core/modslot.cpp).
+    for (int p = kOscEnd; p < kTrackParams; p++) CHECK(!mod_dest_allowed(p));
     CHECK(!mod_dest_allowed(-1));
     CHECK(!mod_dest_allowed(kTrackParams));
     CHECK_EQ(kKitParams, kTrackParams);

@@ -231,7 +231,7 @@ TEST(lfo_off_by_default_and_with_either_byte_at_zero) {
     Engine &engine = fresh();
     for (int t = 0; t < kTracks; t++) {
         CHECK(!engine.lfo_on(t));
-        for (int p = kParams; p < kTrackParams; p++) CHECK_EQ(int(kit_value(t, p)), 0);
+        for (int p = kParams; p < kOscEnd; p++) CHECK_EQ(int(kit_value(t, p)), 0);
     }
     lfo(LfoWave::square, 63, 127, -1);               // full depth, nowhere to go
     CHECK(!engine.lfo_on(kTrack));

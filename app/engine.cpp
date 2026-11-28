@@ -71,6 +71,8 @@ static_assert(kFactorySrc == page_first(Page::src) && kFactoryFltr == page_first
 static_assert(kSoundAsrFirst == kAsrFirst, "core/sounds.hpp's ASR page and dsp/track.hpp's have diverged");
 static_assert(kSoundOscFirst == kOscFirst && kFactoryOsc == kOscFirst,
               "core/'s OSC page and dsp/track.hpp's have diverged");
+static_assert(kSoundScnFirst == kScnFirst && kKitScnFirst == kScnFirst && kKitOscEnd == kOscEnd,
+              "core/'s SCN page and dsp/track.hpp's have diverged");
 
 static_assert(kLfoTrigFree == uint8_t(LfoTrig::free) && kLfoTrigRetrig == uint8_t(LfoTrig::retrig) &&
                   kLfoTrigOneShot == uint8_t(LfoTrig::one_shot) &&
@@ -480,15 +482,17 @@ void Engine::prepare_machine(int track) {
     Machine *machine = machines_[track];
     if (machine == nullptr) return;
     const TrackParams &params = sounding(track);
-    // The sound's 16 and the ASR and OSC pages' 8: a VA reads all of them (dsp/track.hpp). The
+    // The sound's 16, the ASR and OSC pages' 8 and SCN's 4: a WAVE reads all of them (dsp/track.hpp). The
     // LFO and arp bytes between them are not compared, so turning an LFO knob does not re-prepare
     // a machine.
-    static_assert(kOscFirst == kAsrFirst + kAsrParams && kTrackParams == kOscFirst + kOscParams,
-                  "ASR and OSC are the last eight bytes, compared as one run");
+    static_assert(kOscFirst == kAsrFirst + kAsrParams && kTrackParams == kScnFirst + kScnParams,
+                  "ASR and OSC are eight bytes compared as one run, SCN the last four");
     if (prepare_memo_ && machine_prepared_for_[track] == machine &&
         __builtin_memcmp(machine_prepared_[track].v, params.v, kParams) == 0 &&
         __builtin_memcmp(machine_prepared_[track].v + kAsrFirst, params.v + kAsrFirst,
-                         kAsrParams + kOscParams) == 0) {
+                         kAsrParams + kOscParams) == 0 &&
+        __builtin_memcmp(machine_prepared_[track].v + kScnFirst, params.v + kScnFirst,
+                         kScnParams) == 0) {
         return;
     }
     machine->prepare(params);
@@ -606,7 +610,7 @@ void Engine::apply(const Command &command) {
 bool Engine::apply_sound(const Command &command, int track, int) {
     switch (command.cmd) {
         case Cmd::set_param:
-            if (command.a < kTrackParams) {
+            if (track_param_real(command.a)) {
                 uint8_t value = command.b;
                 if (command.c == kSemitoneFlag && tune_param(machine_id_[track]) == command.a) {
                     value = tune_step(machine_id_[track], params_[track].v[command.a],
@@ -855,7 +859,7 @@ bool Engine::apply_step_edit(const Command &command, int track, int step) {
             break;
 
         case Cmd::lock_range_delta: {
-            if (command.a >= kTrackParams) break;
+            if (!track_param_real(command.a)) break;
             const int width =
                 int(pattern_get_range(live(), track, step, command.a)) + int(int8_t(command.b));
             const uint8_t wanted = uint8_t(width < 0 ? 0 : (width > 127 ? 127 : width));
@@ -869,7 +873,7 @@ bool Engine::apply_step_edit(const Command &command, int track, int step) {
         }
 
         case Cmd::lock_slide: {
-            if (command.a >= kTrackParams) break;
+            if (!track_param_real(command.a)) break;
             const uint8_t param = command.a;
             uint8_t value = 0;
             if (!pattern_get_lock(live(), track, step, param, value)) {
@@ -898,7 +902,7 @@ bool Engine::apply_step_edit(const Command &command, int track, int step) {
             break;
 
         case Cmd::lock_delta: {
-            if (command.a >= kTrackParams) break;
+            if (!track_param_real(command.a)) break;
             const uint8_t param = command.a;
 
             // The base is the step's own lock if it has one, and the kit value if it does not --
@@ -1190,9 +1194,11 @@ bool Engine::apply_perform(const Command &command, int track, int step) {
             break;
 
         case Cmd::macro_assign:
-            // `b` past the twenty track parameters names a master EQ band: kTrackParams + 0-2.
+            // `b` past the track parameters names a master EQ band: kTrackParams + 0-2. One in the hole
+            // between OSC and SCN names nothing.
             // The track byte cannot carry it -- every command naming track 8 is refused at the top.
-            if (command.a >= kMacros || command.b >= kTrackParams + kMasterBands) {
+            if (command.a >= kMacros || command.b >= kTrackParams + kMasterBands ||
+                (command.b < kTrackParams && !track_param_real(command.b))) {
                 // Counted, like the "macro is full" refusal below it. Two refusals in one
                 // command reported two different ways is how a user concludes the box is broken.
                 status_.bump_refused();
@@ -1448,6 +1454,20 @@ bool Engine::apply_notes(const Command &command, int track, int) {
             cc_known_[track] = false;
             break;
         }
+
+        case Cmd::set_program_out:
+            project_.settings.program_out = command.a != 0;
+            // Turned off, a change still waiting to leave stays behind.
+            if (!project_.settings.program_out) program_pending_ = -1;
+            break;
+
+        case Cmd::set_midi_channel:
+            midi_channel_ = uint8_t(command.a & 0x0Fu);
+            break;
+
+        case Cmd::locate:
+            locate(command.u);
+            break;
 
         default:
             return false;
@@ -2942,6 +2962,12 @@ void Engine::switch_pattern(int bank, int slot) {
     const int old_slot = int(project_.slot);
     project_.bank = uint8_t(bank);
     project_.slot = uint8_t(slot);
+    // PROG CHG OUT: the new pattern's number, whoever changed it -- a press, a queue landing, a
+    // chain moving on, a program change in. Sent at once, ahead of the new pattern's first notes.
+    if (project_.settings.program_out) {
+        program_pending_ = int16_t(bank * kPatternsPerBank + slot);
+        send_program_pending();
+    }
     // Track Launch: unpinned lanes come home to the new pattern's parts and restart with it; a
     // pinned lane keeps what it plays, and its place. A lane that followed the pattern's start
     // and is kept gets that start as its own, since `origin_` is about to move.
@@ -3949,7 +3975,7 @@ void Engine::start_slides(int track, const StepEvent &event) {
     for (const Lock *lock = locks.begin(); lock != locks.end(); ++lock) {
         if (!lock_slides(lock->param)) continue;
         const uint8_t param = lock_param(lock->param);
-        if (param >= kTrackParams || slide_count_[track] >= kLocksPerStep) continue;
+        if (!track_param_real(param) || slide_count_[track] >= kLocksPerStep) continue;
         // What the step glided to will play: its lock and range, or the sound it starts from.
         uint8_t to = lock_resolve(pattern, track, int(event.glide_step), event.glide_loop,
                                   int(param), performed_[track][param]);
@@ -4033,7 +4059,7 @@ void Engine::fire(const StepEvent &event) {
     uint64_t ranged = 0;
     for (const Lock *lock = locks.begin(); lock != locks.end(); ++lock) {
         const uint8_t param = lock_param(lock->param);
-        if (param >= kTrackParams || applied >= kMaxLocksApplied) continue;
+        if (!track_param_real(param) || applied >= kMaxLocksApplied) continue;
         applied++;
         if (lock_is_range(lock->param)) {
             ranged = ranged | (uint64_t(1) << param);
@@ -4046,7 +4072,7 @@ void Engine::fire(const StepEvent &event) {
         const uint32_t seed = playing.seed;
         for (const Lock *lock = locks.begin(); lock != locks.end(); ++lock) {
             const uint8_t param = lock_param(lock->param);
-            if (!lock_is_range(lock->param) || param >= kTrackParams) continue;
+            if (!lock_is_range(lock->param) || !track_param_real(param)) continue;
             effective_[track].v[param] =
                 lock_spread(effective_[track].v[param], lock->value, seed, track,
                             int(event.step), event.loop, int(param));
@@ -4404,6 +4430,13 @@ void Engine::run_lfos(uint32_t frames, bool running, uint32_t position, float fr
             pitch_mod_machine_[t] = machine;
             sent_pitch_[t] = sent;
         }
+        // And the tempo, for a machine with a synced setting of its own (the WAVE pair's SCN
+        // SPD): when it changes, or when the track has a new machine. Two compares otherwise.
+        if (samples_per_tick_ != tick_frames_sent_[t] || machine != tick_frames_machine_[t]) {
+            if (machine != nullptr) machine->set_tick_frames(samples_per_tick_);
+            tick_frames_machine_[t] = machine;
+            tick_frames_sent_[t] = samples_per_tick_;
+        }
         pitch_mod_[t] = pitch_mod;
     }
 }
@@ -4476,6 +4509,8 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     // MIDI out's note-offs that fall in this block, and any a full queue refused earlier.
     // Before this block's trigs, so a note ending as the same pitch starts again is ended first.
     midi_out_.begin_block(midi_sink_, frames);
+    // A program change a full queue refused (switch_pattern), tried again each block.
+    send_program_pending();
 
     // The kit with the morph, the macros and any throw over it. Control rate, and only when one
     // of them has moved.
@@ -4920,6 +4955,56 @@ void Engine::drain_commands_for_shutdown() {
 void Engine::end_midi_for_shutdown() {
     midi_out_.release_all(midi_sink_);
     midi_all_notes_off();
+}
+
+void Engine::send_program_pending() {
+    if (program_pending_ < 0) return;
+    uint8_t bytes[2];
+    midi_program(bytes, uint8_t(midi_channel_ + 1u), uint8_t(program_pending_));
+    if (midi_sink_.send(bytes, 2)) program_pending_ = -1;
+}
+
+// An outside clock's song position pointer: Enaga moved the clock while it was stopped (it
+// locates only then) and the CONTINUE that follows resumes from `tick`. Everything STRATA counts
+// from a start is put where an uninterrupted run from 0 would have it at that tick: the chain's
+// entry and pass, the pattern's origin and so its steps and pass count, the bars. What was
+// waiting on the old position goes, as on a restart (Cmd::restart). With no chain the playing
+// pattern runs from 0, so its steps fall where the outside song's bars do.
+void Engine::locate(uint32_t tick) {
+    count_in_end_ = 0;
+    deferred_count_ = 0;
+    span_clear();
+    for (int t = 0; t < kTracks; t++) {
+        seq_arp_[t].on = false;
+        lane_queue_clear(lane_queue_[t]);
+    }
+    song_over_ = false;
+    uint32_t origin = 0;
+    if (chain_.active) {
+        bool over = false;
+        if (chain_locate(project_, tick, chain_, origin, over)) {
+            const ChainEntry &entry = project_.chain[chain_.entry];
+            switch_pattern(int(entry.bank), int(entry.slot));
+            chain_entry_started();
+            // Past a song's end: silent until the outside transport stops or starts again, as a
+            // song that played out is.
+            song_over_ = over;
+        }
+        queue_clear(queue_);          // the song position decides the pattern, not a queue
+    } else if (queue_.pending) {
+        // A change queued for a boundary of the old position: it happens now, as a jump back
+        // makes it (resolve_tick).
+        switch_pattern(int(queue_.bank), int(queue_.slot));
+        queue_clear(queue_);
+    }
+    origin_ = origin;
+    for (int t = 0; t < kTracks; t++) lane_origin_[t] = origin;
+    tick_ = tick;
+    // 1ST is true only if the position is in the pattern's first pass.
+    const uint32_t into = tick >= origin ? tick - origin : 0u;
+    scheduler_.reset(into < uint32_t(master_loop_ticks(live())));
+    boundary_known_ = false;
+    bar_known_ = false;
 }
 
 void Engine::midi_all_notes_off() {

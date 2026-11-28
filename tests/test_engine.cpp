@@ -2757,7 +2757,7 @@ TEST(engine_a_scene_capture_takes_the_knob_and_not_the_stored_kit) {
     post(Cmd::scene_erase, 0, 0, 5);
     post(Cmd::scene_capture, kMono, 0, 5, 1);
     pump();
-    CHECK_EQ(scene_count(engine.scenes().scenes[5]), kKitParams);
+    CHECK_EQ(scene_count(engine.scenes().scenes[5]), kKitRealParams);
     CHECK(scene_has(engine.scenes().scenes[5], kMono, kLvl));
     CHECK(!scene_has(engine.scenes().scenes[5], kPoly, kLvl));
 
@@ -4674,4 +4674,132 @@ TEST(engine_a_slid_lock_glides_to_the_next_playing_step) {
     pump();
     for (int block = 0; block < 20; block++) pump();
     CHECK_EQ(int(engine.sounding(kPoly).v[kDec]), 20);
+}
+
+// --- song position in ------------------------------------------------------------------------
+//
+// An outside sequencer's MIDI song position pointer makes Enaga locate its clock while stopped
+// (ENAGA_TRANSPORT_LOCATE under MIDI clock), and the app posts Cmd::locate with the position.
+
+void locate_to(uint32_t tick) {
+    Command command;
+    command.cmd = Cmd::locate;
+    command.u = tick;
+    CHECK(strata::test::engine().commands().post(command));
+    pump();
+}
+
+uint32_t pattern_origin() {
+    return strata::test::engine().status().pattern_origin.load(std::memory_order_relaxed);
+}
+
+// A01 x1, A02 x2, A03 x1, each 64 steps (1536 ticks): A02 runs 1536-4607, A03 4608-6143.
+Engine &chain_for_locate(bool song) {
+    Engine &engine = clean();
+    Project &incoming = engine.project_for_load();
+    incoming.settings.chain_length = 3;
+    incoming.chain[0] = ChainEntry{0, 0, 1, 0};
+    incoming.chain[1] = ChainEntry{0, 1, 2, 0};
+    incoming.chain[2] = ChainEntry{0, 2, 1, 0};
+    for (int i = 3; i < kChainEntries; i++) incoming.chain[i] = ChainEntry{};
+    incoming.settings.chain_song = song;
+    post(Cmd::project_loaded);
+    pump();
+    post(Cmd::set_chain, 0, 0, 1);
+    pump();
+    return engine;
+}
+
+TEST(engine_a_song_position_puts_the_chain_on_the_entry_and_pass_it_falls_in) {
+    Engine &engine = chain_for_locate(false);
+    CHECK_EQ(live_slot(), 0);
+    locate_to(1536 + 1536 + 96);                   // A02's second pass, step 5
+    CHECK_EQ(live_slot(), 1);
+    CHECK_EQ(int(engine.chain().entry), 1);
+    CHECK_EQ(int(engine.chain().played), 1);
+
+    // The CONTINUE: the pass runs from there, and A03 comes in where the outside song has it.
+    FakeHost::the().set_running(true);
+    tick_at(1536 + 1536 + 96);
+    CHECK_EQ(pattern_origin(), 1536u);
+    CHECK_EQ(playhead(0), 4);
+    tick_at(4607);
+    CHECK_EQ(live_slot(), 1);
+    tick_at(4608);
+    CHECK_EQ(live_slot(), 2);
+    CHECK_EQ(pattern_origin(), 4608u);
+
+    post(Cmd::set_chain, 0, 0, 0);
+    FakeHost::the().set_running(false);
+    pump();
+}
+
+TEST(engine_a_song_position_back_to_the_start_goes_back_to_entry_1) {
+    Engine &engine = chain_for_locate(false);
+    locate_to(5000);                               // A03
+    CHECK_EQ(live_slot(), 2);
+    locate_to(0);
+    CHECK_EQ(live_slot(), 0);
+    CHECK_EQ(int(engine.chain().entry), 0);
+    locate_to(6144 + 1600);                        // round again: A02's first pass
+    CHECK_EQ(live_slot(), 1);
+    CHECK_EQ(int(engine.chain().played), 0);
+    post(Cmd::set_chain, 0, 0, 0);
+    pump();
+}
+
+TEST(engine_a_song_position_past_the_end_of_a_song_is_silent) {
+    Engine &engine = chain_for_locate(true);
+    put_trig(kMono, 0);                            // A01, step 1
+    locate_to(6144 + 1536 * 4);                    // four patterns past the end
+    CHECK_EQ(live_slot(), 0);                      // back on entry 1 for the next PLAY
+    CHECK_EQ(int(engine.chain().entry), 0);
+    FakeHost::the().set_running(true);
+    CHECK_EQ(fired_on(kMono, 6144 + 1536 * 4), 0);
+    CHECK_EQ(fired_on(kMono, 6144 + 1536 * 5), 0);   // A01's step 1 again, and still silent
+    post(Cmd::set_chain, 0, 0, 0);
+    FakeHost::the().set_running(false);
+    pump();
+}
+
+TEST(engine_a_song_position_with_no_chain_plays_the_pattern_from_0) {
+    clean();
+    put_trig(kMono, 4);                            // step 5: tick 96 of each pass
+    // A queued pattern change landed at once while stopped: A02 from its own start.
+    post(Cmd::queue_pattern, 0, 0, 0, 1, uint8_t(QueueMode::immediate));
+    pump();
+    put_trig(kMono, 4);
+    FakeHost::the().set_running(true);
+    tick_at(0);
+    tick_at(700);                                  // somewhere in the pass
+    post(Cmd::stop, 0, 0, 0);
+    FakeHost::the().set_running(false);
+    pump();
+
+    locate_to(1536 * 3 + 96);                      // the fourth pass's step 5
+    FakeHost::the().set_running(true);
+    CHECK_EQ(fired_on(kMono, 1536 * 3 + 96), 1);
+    CHECK_EQ(pattern_origin(), 0u);
+    CHECK_EQ(playhead(kMono), 4);
+    FakeHost::the().set_running(false);
+    post(Cmd::stop, 0, 0, 0);
+    pump();
+}
+
+TEST(engine_a_song_position_lands_a_queued_change_at_once) {
+    clean();
+    post(Cmd::queue_pattern, 0, 0, 0, 3, uint8_t(QueueMode::end_of_pattern));
+    FakeHost::the().set_running(true);
+    tick_at(0);
+    tick_at(100);                                  // past the grace window after tick 0
+    post(Cmd::queue_pattern, 0, 0, 0, 5, uint8_t(QueueMode::end_of_pattern));
+    tick_at(110);
+    CHECK_EQ(live_slot(), 3);                      // A04 waits for the boundary
+    post(Cmd::stop, 0, 0, 0);
+    FakeHost::the().set_running(false);
+    pump();
+    locate_to(384);
+    CHECK_EQ(live_slot(), 5);                      // the old boundary is gone: A06 now
+    post(Cmd::stop, 0, 0, 0);
+    pump();
 }

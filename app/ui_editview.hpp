@@ -49,6 +49,7 @@
             case EditView::fm:       draw_fm_view(canvas); break;
             case EditView::ratios:   draw_ratio_view(canvas); break;
             case EditView::scan:     draw_scan_view(canvas); break;
+            case EditView::wave_scan: draw_wave_scan_view(canvas); break;
             case EditView::envelope: {
                 // ENV (the ASR page) draws the whole envelope: the amplitude's, DEC included, and
                 // on a synth with its own filter the filter's under it, FDE included.
@@ -83,8 +84,8 @@
     // --- which picture ------------------------------------------------------------------------
 
     enum class EditView : uint8_t {
-        sample, grain, table, hit, osc, fm, ratios, scan, envelope, chain_filter, voice_filter,
-        lfo, fx, arp, bars,
+        sample, grain, table, hit, osc, fm, ratios, scan, wave_scan, envelope, chain_filter,
+        voice_filter, lfo, fx, arp, bars,
     };
 
     EditView edit_view() const {
@@ -116,6 +117,8 @@
                     return EditView::osc;
                 }
                 return EditView::bars;
+            case Page::scn:
+                return machine_reads_scn(id) ? EditView::wave_scan : EditView::bars;
         }
         return EditView::bars;
     }
@@ -448,6 +451,17 @@
             }
             case Page::osc:
                 if (!machine_reads_osc(id)) add("NOT ON THIS MACHINE");
+                break;
+            case Page::scn:
+                if (!machine_reads_scn(id)) {
+                    add("NOT ON THIS MACHINE");
+                } else if (va_scan_mode(kit.v[kScnFirst]) == ScanMode::off) {
+                    add("SCAN OFF: TURN MOD");
+                } else if (kit.v[kScnFirst + 2] == kit.v[1]) {
+                    add("END = POS: NO TRAVEL");
+                } else {
+                    add("EACH NOTE: POS TO END");
+                }
                 break;
         }
         *out = 0;
@@ -882,6 +896,40 @@
     static void frame_rect(uint8_t *px, int x, int y, int w, int h, int grey) {
         for (int i = 0; i < w; i++) { paint::plot(px, x + i, y, grey); paint::plot(px, x + i, y + h - 1, grey); }
         for (int j = 0; j < h; j++) { paint::plot(px, x, y + j, grey); paint::plot(px, x + w - 1, y + j, grey); }
+    }
+
+    // SCAN (the WAVE pair's SCN page): the path each note's position takes, frames 0-15 up the
+    // side and two cycles across, with POS and END as dotted lines. The random modes draw a fixed
+    // pattern of their kind; what plays draws as it goes.
+    void draw_wave_scan_view(enaga::Canvas &canvas) {
+        uint8_t *px = canvas.data();
+        // Two cycles of the path, frame 0 at the bottom, under the POS and END labels.
+        constexpr int kX0 = 4, kX1 = 118, kTop = kPicTop + 12, kBottom = kPicBottom - 5;
+        const ScanMode mode = va_scan_mode(live_value(kScnFirst + 0));
+        const float pos = va_wave_position(live_value(1));
+        const float end = va_scan_end(live_value(kScnFirst + 2));
+        const float curve = va_scan_curve(live_value(kScnFirst + 3));
+        const auto y_of = [](float frame) {
+            return kBottom - int(frame * float(kBottom - kTop) / float(kWaveFrames - 1) + 0.5f);
+        };
+        frame_rect(px, kX0 - 2, kTop - 2, kX1 - kX0 + 4, kBottom - kTop + 5, 3);
+        paint::dotted_h(px, kX0, kX1, y_of(pos), 6, 3);
+        paint::dotted_h(px, kX0, kX1, y_of(end), 6, 3);
+        paint::small_text(px, kX0, kPicTop + 1, "POS", y_of(pos) <= y_of(end) ? 10 : 6);
+        paint::small_text(px, kX0 + 16, kPicTop + 1, "END", y_of(end) < y_of(pos) ? 10 : 6);
+        int16_t xs[97];
+        int16_t ys[97];
+        for (int i = 0; i <= 96; i++) {
+            const float phase = float(i) * (2.0f / 96.0f);
+            const float u = mode == ScanMode::off ? 0.0f : va_scan_travel(mode, phase, curve);
+            const float frame = pos + (end - pos) * u;
+            xs[i] = int16_t(paint::q4(kX0) + i * (kX1 - kX0) * paint::kSub / 96);
+            ys[i] = int16_t(paint::q4(kBottom) -
+                            int(frame * float((kBottom - kTop) * paint::kSub) / float(kWaveFrames - 1)));
+        }
+        paint::polyline(px, xs, ys, 97, mode == ScanMode::off ? 5 : 12);
+        // The cycle line, half way across.
+        paint::dotted_v(px, (kX0 + kX1) / 2, kTop, kBottom, 3, 3);
     }
 
     void draw_lfo_view(enaga::Canvas &canvas) {

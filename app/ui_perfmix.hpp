@@ -16,8 +16,8 @@
     // first, the file actions at the bottom. The selected track's rows (SPEED, PLAY, FREEZE,
     // RELOAD SAMPLE) are in GRID's track menu (app/ui_trackmenu.hpp).
     enum class MenuItem : uint8_t { save, jam, arr, click, count_in, rec_mode, quantize,
-                                    autofill, glide, loop_len, chain, song, arr_undo, save_as,
-                                    open, kits, fresh, reload, clear, demo, count };
+                                    autofill, glide, loop_len, chain, song, arr_undo, prog_out,
+                                    save_as, open, kits, fresh, reload, clear, demo, count };
     static constexpr int kMenuItems = int(MenuItem::count);
     static constexpr int kMenuRows = 9;
 
@@ -32,6 +32,7 @@
             case MenuItem::kits:     return "KITS";
             case MenuItem::chain:    return "CHAIN";
             case MenuItem::song:     return "CHAIN END";
+            case MenuItem::prog_out: return "PROG CHG OUT";
             case MenuItem::autofill: return "AUTO-FILL";
             case MenuItem::quantize: return "QUANTIZE";
             case MenuItem::rec_mode: return "REC MODE";
@@ -55,6 +56,9 @@
                 break;
             case MenuItem::song:
                 append(out, engine_.project().settings.chain_song ? "SONG" : "LOOP");
+                break;
+            case MenuItem::prog_out:
+                append(out, engine_.project().settings.program_out ? "ON" : "OFF");
                 break;
             case MenuItem::autofill:
                 append(out, auto_fill_name(engine_.auto_fill()));
@@ -631,7 +635,42 @@
         if (mode_ == Mode::perform || perf_picked_ == PerfFx::morph) {
             morph_set(0);
             notice("MORPH 0");
+            return;
         }
+        if (value_on_tempo()) tap_value_tempo();
+    }
+
+    // Where a plain turn of VALUE turns the tempo: nothing picked, not PERFORM (the morph), not
+    // PROJECT's CHAIN or PATTERN page (the field under the cursor), no beat repeat held.
+    bool value_on_tempo() const {
+        if (perf_picked_ != PerfFx::none || mode_ == Mode::perform || repeat_held_) return false;
+        return !(mode_ == Mode::project && (project_page_ == ProjectPage::chain ||
+                                            project_page_ == ProjectPage::pattern));
+    }
+
+    // Tap tempo (core/taptempo.hpp): a VALUE tap where VALUE turns the tempo is a beat, stamped
+    // at its press. The first tap starts the count; from the second the tempo follows the taps,
+    // set and saved as a turn of VALUE sets it. Refused under an outside clock, as the turn is.
+    void tap_value_tempo() {
+        if (enaga::clock::source() != ENAGA_CLOCK_INTERNAL) {
+            clock_refused_ = true;
+            notice("EXT CLOCK");
+            return;
+        }
+        const uint32_t tenths = tap_tempo(tap_, value_down_ms_);
+        if (tenths == 0) {
+            notice_logged("TAP TEMPO");
+            return;
+        }
+        tempo_tenths_ = tenths;
+        adopted_tempo_centi_ = uint16_t(tenths * 10);
+        clock_refused_ = !set_clock_tempo(tenths * 10u);      // times VariSpeed's
+        post_tempo(float(tenths) * 0.1f);
+        char *out = notice_buffer_;
+        append(out, "TAP ");
+        append_tenths(out, tenths);
+        *out = 0;
+        notice_logged(notice_buffer_);   // tests/scenario_tempo.sh reads it
     }
 
     // VALUE with an effect picked: its amount, two counts a click (the whole range in 64
@@ -712,6 +751,18 @@
                 const bool song = !engine_.project().settings.chain_song;
                 post_chain(ChainEdit::song, 0, song ? 1 : 0);
                 notice(song ? "SONG: PLAY ONCE" : "LOOP CHAIN");
+                break;
+            }
+            case MenuItem::prog_out: {
+                // PROG CHG OUT (core/project.hpp): pattern changes go out as program changes on
+                // the MIDI CH, which the notice names as gear prints it.
+                const bool on = !engine_.project().settings.program_out;
+                post(Cmd::set_program_out, 0, 0, on ? 1 : 0);
+                char *out = notice_buffer_;
+                append(out, on ? "PROG OUT CH " : "PROG OUT OFF");
+                if (on) append_number(out, uint32_t((enaga::midi::channel() & 0x0F) + 1));
+                *out = 0;
+                notice(notice_buffer_);
                 break;
             }
             case MenuItem::autofill: {

@@ -69,6 +69,9 @@ constexpr uint8_t kMidiAllNotesOff = 123;
 // 1-16, as above; the data bytes are masked to 7 bits as Enaga's own writers do.
 void midi_message(uint8_t *out, uint8_t status_high, uint8_t channel, uint8_t a, uint8_t b);
 
+// A program change's two bytes, channel 1-16, program masked to 7 bits.
+void midi_program(uint8_t *out, uint8_t channel, uint8_t program);
+
 class MidiOut {
 public:
     // 8 tracks x a six-note chord, plus held KEYS and MIDI IN notes. Past it, the note nearest

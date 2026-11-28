@@ -45,7 +45,8 @@ enum class HelpScreen : uint8_t {
     count
 };
 
-constexpr int kHelpEditPages = 8;      // SRC FLTR AMP FX LFO ARP ASR OSC, as app/app.hpp's kEditPages
+// SRC FLTR AMP FX LFO ARP ASR OSC, two pages of the hole, SCAN: as app/app.hpp's kEditPages.
+constexpr int kHelpEditPages = 11;
 constexpr int kHelpMixerPages = 19;    // as app/app.hpp's kMixerPageCount
 constexpr int kHelpRows = 10;          // rows under the title, above the page line
 constexpr int kHelpChars = 21;         // one line of Enaga's font on the 128-pixel screen
@@ -70,7 +71,7 @@ int help_page(const HelpPlace &place, int page, char title[kHelpChars + 1],
               char rows[kHelpRows][kHelpChars + 1]);
 
 // What a knob does, in a few words: "FM AMOUNT" for KCK's FMA. At most 15 characters, so that
-// "A FMA FM AMOUNT" fits a line. `index` is the track parameter, 0-27 (dsp/track.hpp).
+// "A FMA FM AMOUNT" fits a line. `index` is the track parameter (dsp/track.hpp).
 const char *help_param_words(uint8_t machine, int index);
 
 // How many rows have been cut to kHelpChars so far. Always 0 unless a row is too long: the

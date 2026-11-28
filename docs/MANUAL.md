@@ -518,7 +518,8 @@ short blips until you give it a sample (section 6).
 Press **PLAY**. A01 starts; the top line reads `A01 1.1 130.0 > 20%` (pattern, bar.beat, tempo, `>`
 playing, audio load) with the selected track's badge at the right, a thin line under it runs
 across the pattern, the tabs along the bottom are the screen's pages, and the column at the right
-edge is the master level. Turn **VALUE** to change the tempo; push and turn VALUE for swing. **STOP** stops
+edge is the master level. Turn **VALUE** to change the tempo, or tap VALUE in time to set it
+("Tap tempo and nudge", section 5); push and turn VALUE for swing. **STOP** stops
 and lets tails ring; STOP again cuts them.
 
 ### 2. Edit steps
@@ -834,6 +835,7 @@ slide and glide on WMN, chords and the shared 12-voice budget on WPL.
 | AMP | **DEC** as MNO | | **MOT** envelope to position: 64 off, up to +15 or -15 frames | **LVL** |
 | ENV | **ATK** | **SUS** | **REL** | **FSU** as MNO |
 | OSC | **WRP** bends the cycle (0 = none; high notes bend less, to stay clean) | **DET** a second, detuned copy: OFF, up to 60 cents | **SUB** sub level | WMN: **GLD** glide; WPL: **DRV** drive |
+| SCAN | **MOD** scan mode (OFF and nine more, below) | **SPD** speed: 0-63 free (0.06-32 Hz, 28 = 1 Hz), 64-127 synced to the tempo, as the LFO's RAT | **END** where the scan heads, frame 0-15 as POS | **CRV** the curve: 64 LIN, above it slow to start, below it fast |
 
 The tables, from TBL 0 up:
 
@@ -858,7 +860,34 @@ The tables, from TBL 0 up:
 
 MOT above 64 moves the position up as the filter envelope rises and back as it falls; below 64 it
 moves it down. With PLK at POS 127 and MOT 0, each note starts bright and dulls like a string.
-The SOUNDS list (OK on MACHINE) has 8 WMN and 7 WPL starting points.
+The SOUNDS list (OK on MACHINE) has 14 WMN and 14 WPL starting points.
+
+<p><img src="screens/edit_scan.png" width="256" alt="EDIT, the SCAN page on WAVE MONO: PING between POS and END"></p>
+
+**Scanning: the SCAN page.** EDIT's ninth page moves the position between POS and END on its own,
+at SPD, starting again from POS with each note (a slid note carries on where the last one was).
+MOT still adds the envelope on top. The modes:
+
+| MOD | Movement, from POS towards END |
+| --- | --- |
+| OFF | none: the position is POS (and MOT) |
+| FWD | once to END, then holds there |
+| REV | starts at END, once back to POS, then holds there |
+| LOOP | to END, jumps back to POS, again |
+| LREV | the same backwards: END to POS, again |
+| PING | to END and back, again |
+| RET | to END and back to POS once, then holds at POS |
+| SINE | to END and back, eased at both ends, again |
+| RAND | jumps to a random frame between POS and END once a cycle |
+| DRFT | glides to a new random frame each cycle |
+
+One cycle of SPD is one sweep from POS to END (PING and SINE go there and back in one cycle). A
+synced SPD of 96 ticks is a beat, so LOOP at 96 restarts the sweep on every beat. END below POS
+scans downwards; END on POS has nowhere to go and plays as OFF. The page draws the path the scan
+takes over two cycles between dotted lines at POS and END. The chords of WPL scan together. WMN's
+WOBBLE and SCANLD and WPL's DRIFT and SWIRL in SOUNDS use it. The page is not on the other
+machines, and its four knobs cannot be the target of an LFO or a mod slot; a step can lock them
+and a scene can store them.
 
 ### FM4: four-operator FM
 
@@ -1273,6 +1302,19 @@ MIDI IN (the DIN jack, or USB MIDI) plays STRATA like the pads:
   that channel. Enaga sends 123 by itself when a keyboard's active sensing stops.
 - **Program change** on your MIDI CH (the Enaga menu, SETUP shows it) queues pattern 1-128,
   which is A01 to H16, in the queue mode PROJECT has set, exactly as pressing the slot would.
+- **Song position pointer**, under CLOCK SRC MIDI: when the master moves its song position while
+  stopped, STRATA goes where that position falls before the master continues. With the chain
+  on, that is the chain entry and its pass, as if the chain had played from the top without a
+  break (past the end of a song, STRATA stays quiet until the next start). With the chain off,
+  the playing pattern runs from the top of the song, so its steps fall on the master's bars. A
+  pattern change still queued happens at once.
+
+**PROG CHG OUT** (FUNC menu, `OFF` or `ON`) sends a program change on your MIDI CH every time the
+playing pattern changes, whatever changed it: a press, a queued change landing, the chain moving
+on, a program change in. The number is the pattern's, 0-127 for A01-H16, the same numbers MIDI IN
+takes, so a second STRATA or any sequencer that follows program changes changes pattern with
+this one. It is off in a new project, since a synth listening on your MIDI CH would change its
+sound instead, and it is saved with the project.
 
 ---
 
@@ -1289,6 +1331,20 @@ The seven upper pads are the same in every mode:
 | 5 SCENE B | The same for side B | |
 | 6 THROW | Selected track's delay send to full while held | Reverb instead |
 | 7 MUTATE | Mutate the selected track; OK keeps, CLR reverts | **LOCK**: held, store; tapped, jump back or swap back (below) |
+
+### Tap tempo and nudge
+
+**Tap VALUE** in time, at least twice, to set the tempo (`TAP TEMPO` on the first tap, then
+`TAP 128.0`). The tempo follows the last four taps, so one early or late tap moves it a little;
+a pause of more than two seconds, or a tap at half or twice the pace, starts a new count. It
+works wherever VALUE turns the tempo: not in PERFORM (where a VALUE tap resets the morph), not on
+PROJECT's CHAIN and PATTERN pages, and not with an effect picked on VALUE. The tapped tempo is set
+and saved as a turn of VALUE sets it.
+
+**FUNC + push VALUE + turn** nudges: hold FUNC, push VALUE and turn it, and each detent plays 4% faster (`NUDGE FASTER`) or slower (`NUDGE
+SLOWER`) for a quarter of a second, then the tempo goes back to where it was set. The beat ends
+up a little earlier or later and the tempo stays put, which is how to line STRATA up by ear with
+a turntable or a band that sends no clock. Both are refused under an outside clock (`EXT CLOCK`).
 
 ### Mutes
 
@@ -1617,7 +1673,8 @@ effect still in (`MORPH 64` as you turn). Push VALUE + STEP 13 again lets go and
 morph where it is (`MORPH KEPT: VALUE TEMPO`). The looper (16) is the other slot like it.
 
 The stutter is the REPEAT pad's, and the master DJ filter is slots 1 and 2 (its saved setting
-is MIXER's MST page). FUNC + VALUE is VariSpeed (below).
+is MIXER's MST page). FUNC + turn VALUE is VariSpeed (below), and FUNC + push VALUE + turn the
+tempo nudge ("Tap tempo and nudge").
 
 **The looper (STEP 16).** Push VALUE + STEP 16 with the beat running: from the next bar line the
 whole mix is recorded for 4 bars (`LOOP 4 BAR: NEXT BAR`; set 1, 2, 4 or 8 in the FUNC menu's

@@ -22,7 +22,9 @@ namespace {
 using namespace strata;
 
 constexpr uint32_t kSlack = 64;
-constexpr uint32_t kPerformFileBytes = 5121;   // 2424, then the LFO layout (12 + 1) at the end; the scenes' LFO (12 + 640), EQ (12 + 64), arp (12 + 640), ASR (12 + 640) and OSC (12 + 640)
+// 2424, then the LFO layout (12 + 1); the scenes' LFO (12 + 640), EQ (12 + 64), arp (12 + 640),
+// ASR (12 + 640), OSC (12 + 640) and SCN (12 + 640, the last section).
+constexpr uint32_t kPerformFileBytes = 5773;
 
 uint8_t g_buffer[kPerformFileBytes + kSlack];
 uint8_t g_alternate[kPerformFileBytes + kSlack];
@@ -104,6 +106,7 @@ uint32_t drop_last_section(const uint8_t *file, uint8_t *out) {
 void fill_kit(Kit &kit) {
     for (int t = 0; t < kTracks; t++) {
         for (int p = 0; p < kKitParams; p++) {
+            if (!kit_param_real(p)) continue;   // the hole between OSC and SCN
             kit.tracks[t].params[p] = uint8_t((t * 16 + p * 7 + 3) % 128);
         }
     }
@@ -125,6 +128,7 @@ TEST(perform_a_fresh_set_stores_nothing_and_drives_nothing) {
         CHECK_EQ(scene_count(g_scenes.scenes[s]), 0);
         for (int t = 0; t < kTracks; t++) {
             for (int p = 0; p < kKitParams; p++) {
+                if (!kit_param_real(p)) continue;   // the hole between OSC and SCN
                 CHECK(!scene_has(g_scenes.scenes[s], t, p));
             }
         }
@@ -159,14 +163,16 @@ TEST(perform_every_parameter_has_its_own_bit) {
     Scene &scene = g_scenes.scenes[0];
     for (int t = 0; t < kTracks; t++) {
         for (int p = 0; p < kKitParams; p++) {
+            if (!kit_param_real(p)) continue;   // the hole between OSC and SCN
             scene_set(scene, t, p, uint8_t((t * kKitParams + p) & 127));
-            CHECK_EQ(scene_count(scene), t * kKitParams + p + 1);
+            CHECK_EQ(scene_count(scene), t * kKitRealParams + kit_real_index(p) + 1);
         }
     }
-    CHECK_EQ(scene_count(scene), kTracks * kKitParams);
+    CHECK_EQ(scene_count(scene), kTracks * kKitRealParams);
 
     for (int t = 0; t < kTracks; t++) {
         for (int p = 0; p < kKitParams; p++) {
+            if (!kit_param_real(p)) continue;   // the hole between OSC and SCN
             CHECK_EQ(int(scene.values[t][p]), (t * kKitParams + p) & 127);
             scene_clear(scene, t, p);
             CHECK(!scene_has(scene, t, p));
@@ -203,9 +209,10 @@ TEST(perform_capture_takes_the_kit) {
     perform_init(g_scenes, g_macros);
 
     scene_capture(g_scenes.scenes[1], g_kit);
-    CHECK_EQ(scene_count(g_scenes.scenes[1]), kTracks * kKitParams);
+    CHECK_EQ(scene_count(g_scenes.scenes[1]), kTracks * kKitRealParams);
     for (int t = 0; t < kTracks; t++) {
         for (int p = 0; p < kKitParams; p++) {
+            if (!kit_param_real(p)) continue;   // the hole between OSC and SCN
             CHECK_EQ(int(g_scenes.scenes[1].values[t][p]), int(g_kit.tracks[t].params[p]));
         }
     }
@@ -213,14 +220,15 @@ TEST(perform_capture_takes_the_kit) {
     // One track only, which is what capturing with a track selected does.
     scene_erase(g_scenes.scenes[2]);
     scene_capture_track(g_scenes.scenes[2], g_kit, 5);
-    CHECK_EQ(scene_count(g_scenes.scenes[2]), kKitParams);
+    CHECK_EQ(scene_count(g_scenes.scenes[2]), kKitRealParams);
     for (int p = 0; p < kKitParams; p++) {
+        if (!kit_param_real(p)) continue;   // the hole between OSC and SCN
         CHECK(scene_has(g_scenes.scenes[2], 5, p));
         CHECK(!scene_has(g_scenes.scenes[2], 4, p));
     }
     scene_capture_track(g_scenes.scenes[2], g_kit, -1);   // ignored
     scene_capture_track(g_scenes.scenes[2], g_kit, kTracks);
-    CHECK_EQ(scene_count(g_scenes.scenes[2]), kKitParams);
+    CHECK_EQ(scene_count(g_scenes.scenes[2]), kKitRealParams);
 }
 
 // --- the morph ------------------------------------------------------------
@@ -232,6 +240,7 @@ TEST(perform_morph_at_rest_is_the_live_kit_and_at_the_top_is_scene_b_exactly) {
     Scene &b = g_scenes.scenes[1];
     for (int t = 0; t < kTracks; t++) {
         for (int p = 0; p < kKitParams; p++) {
+            if (!kit_param_real(p)) continue;   // the hole between OSC and SCN
             scene_set(a, t, p, uint8_t((t + p) % 128));
             scene_set(b, t, p, uint8_t((100 + t * 3 + p) % 128));
         }
@@ -245,6 +254,7 @@ TEST(perform_morph_at_rest_is_the_live_kit_and_at_the_top_is_scene_b_exactly) {
     scene_morph(a, b, 0, g_out);
     for (int t = 0; t < kTracks; t++) {
         for (int p = 0; p < kKitParams; p++) {
+            if (!kit_param_real(p)) continue;   // the hole between OSC and SCN
             CHECK_EQ(int(g_out[t][p]), int(g_kit.tracks[t].params[p]));
         }
     }
@@ -254,6 +264,7 @@ TEST(perform_morph_at_rest_is_the_live_kit_and_at_the_top_is_scene_b_exactly) {
     scene_morph(a, b, 1, g_out);
     for (int t = 0; t < kTracks; t++) {
         for (int p = 0; p < kKitParams; p++) {
+            if (!kit_param_real(p)) continue;   // the hole between OSC and SCN
             const int delta = int(g_out[t][p]) - int(a.values[t][p]);
             CHECK(delta >= -1 && delta <= 1);
         }
@@ -342,6 +353,7 @@ TEST(perform_morph_does_not_reset_what_it_was_handed) {
     // Everything in `out` deliberately different from the kit, as if a macro had just run.
     for (int t = 0; t < kTracks; t++) {
         for (int p = 0; p < kKitParams; p++) {
+            if (!kit_param_real(p)) continue;   // the hole between OSC and SCN
             g_out[t][p] = uint8_t((g_kit.tracks[t].params[p] + 64) % 128);
         }
     }
@@ -353,6 +365,7 @@ TEST(perform_morph_does_not_reset_what_it_was_handed) {
     int reset = 0;
     for (int t = 0; t < kTracks; t++) {
         for (int p = 0; p < kKitParams; p++) {
+            if (!kit_param_real(p)) continue;   // the hole between OSC and SCN
             if (t == 0 && p == 0) continue;
             if (g_out[t][p] != uint8_t((g_kit.tracks[t].params[p] + 64) % 128)) reset++;
         }
@@ -398,6 +411,7 @@ TEST(perform_morph_leaves_a_parameter_neither_scene_stores_alone) {
     scene_capture_track(g_scenes.scenes[0], g_kit, 5);
     scene_capture_track(g_scenes.scenes[1], g_kit, 5);
     for (int p = 0; p < kKitParams; p++) {
+        if (!kit_param_real(p)) continue;   // the hole between OSC and SCN
         scene_set(g_scenes.scenes[1], 5, p, uint8_t((g_kit.tracks[5].params[p] + 30) % 128));
     }
 
@@ -405,6 +419,7 @@ TEST(perform_morph_leaves_a_parameter_neither_scene_stores_alone) {
     scene_morph(g_scenes.scenes[0], g_scenes.scenes[1], kMorphScale / 2, g_out);
     for (int t = 0; t < kTracks; t++) {
         for (int p = 0; p < kKitParams; p++) {
+            if (!kit_param_real(p)) continue;   // the hole between OSC and SCN
             if (t == 5) continue;
             CHECK_EQ(int(g_out[t][p]), int(g_kit.tracks[t].params[p]));
         }
@@ -456,6 +471,7 @@ TEST(perform_an_empty_scene_morphs_as_the_kit) {
         scene_morph(g_scenes.scenes[0], g_scenes.scenes[1], uint16_t(at), g_out);
         for (int t = 0; t < kTracks; t++) {
             for (int p = 0; p < kKitParams; p++) {
+                if (!kit_param_real(p)) continue;   // the hole between OSC and SCN
                 CHECK_EQ(int(g_out[t][p]), int(g_kit.tracks[t].params[p]));
             }
         }
@@ -481,6 +497,7 @@ TEST(perform_morphing_a_scene_onto_itself_changes_nothing) {
         scene_morph(g_scenes.scenes[0], g_scenes.scenes[0], uint16_t(at), g_out);
         for (int t = 0; t < kTracks; t++) {
             for (int p = 0; p < kKitParams; p++) {
+                if (!kit_param_real(p)) continue;   // the hole between OSC and SCN
                 CHECK_EQ(int(g_out[t][p]), int(g_kit.tracks[t].params[p]));
             }
         }
@@ -608,6 +625,7 @@ TEST(perform_apply_drives_only_the_enabled_targets) {
     int moved = 0;
     for (int t = 0; t < kTracks; t++) {
         for (int p = 0; p < kKitParams; p++) {
+            if (!kit_param_real(p)) continue;   // the hole between OSC and SCN
             if (t == 1 && p == 2) continue;
             if (t == 6 && p == 15) continue;
             if (g_out[t][p] != g_kit.tracks[t].params[p]) moved++;
@@ -636,6 +654,7 @@ TEST(perform_a_macro_target_naming_nothing_is_skipped) {
     macro_apply(macro, 127, g_out);
     for (int t = 0; t < kTracks; t++) {
         for (int p = 0; p < kKitParams; p++) {
+            if (!kit_param_real(p)) continue;   // the hole between OSC and SCN
             CHECK_EQ(int(g_out[t][p]), int(g_kit.tracks[t].params[p]));
         }
     }
@@ -770,7 +789,9 @@ void fill_performance() {
         // Each scene stores a different subset, so the bitmask round trip is exercised rather
         // than only the values.
         for (int t = 0; t < kTracks; t++) {
-            for (int p = 0; p < kKitParams; p++) {
+            // Nothing on SCN (or in the hole before it): the tests of older files drop SCN's
+            // section first and compare counts; perform_scenes_keep_their_scn_bytes... fills it.
+            for (int p = 0; p < kKitOscEnd; p++) {
                 if (((t + p + s) % 3) != 0) continue;
                 // Within each parameter's range: WAV and DST hold numbers (core/project.hpp).
                 scene_set(g_scenes.scenes[s], t, p,
@@ -784,7 +805,7 @@ void fill_performance() {
             if (((m + i) % 2) != 0) continue;         // some disabled, on purpose
             target.enabled = 1;
             target.track = uint8_t((m * 2 + i) % kTracks);
-            target.param = uint8_t((m * 3 + i * 5) % kKitParams);
+            target.param = uint8_t((m * 3 + i * 5) % kKitOscEnd);
             const int top = int(kit_param_max(target.param)) + 1;      // WAV, DST: numbers
             target.low = uint8_t((m * 11 + i) % top);
             target.high = uint8_t((120 - m * 9 - i) % top);
@@ -826,6 +847,7 @@ TEST(perform_round_trips_every_scene_and_every_macro) {
     for (int s = 0; s < kScenes; s++) {
         for (int t = 0; t < kTracks; t++) {
             for (int p = 0; p < kKitParams; p++) {
+                if (!kit_param_real(p)) continue;   // the hole between OSC and SCN
                 if (scene_has(g_loaded_scenes.scenes[s], t, p) !=
                     scene_has(g_scenes.scenes[s], t, p)) {
                     stored_wrong++;
@@ -861,11 +883,11 @@ TEST(perform_the_header_says_strata_and_the_version) {
     const uint32_t written = write_performance();
     CHECK_EQ(int(g_buffer[0]), int(kMagic0));
     CHECK_EQ(int(peek_u16(g_buffer, kVersionOffset)), int(kPerformVersion));
-    CHECK_EQ(int(peek_u16(g_buffer, 6)), 8);          // scenes, macros, the scenes' LFO, EQ, arp, ASR, OSC, the LFO layout
+    CHECK_EQ(int(peek_u16(g_buffer, 6)), 9);          // scenes, macros, the scenes' LFO, EQ, arp, ASR, OSC, the LFO layout, SCN
     CHECK_EQ(peek_u32(g_buffer, 8), written - kHeaderBytes);
     CHECK_EQ(peek_u32(g_buffer, kCrcOffset),
              crc32(g_buffer + kHeaderBytes, written - kHeaderBytes));
-    CHECK_EQ(section_at(g_buffer, kSectionPerformScenes), kHeaderBytes + 8 * kSectionEntryBytes);
+    CHECK_EQ(section_at(g_buffer, kSectionPerformScenes), kHeaderBytes + 9 * kSectionEntryBytes);
     CHECK(section_at(g_buffer, kSectionPerformMacros) >
           section_at(g_buffer, kSectionPerformScenes));
     CHECK(section_at(g_buffer, kSectionPerformSceneLfo) >
@@ -1021,6 +1043,7 @@ TEST(perform_a_scene_index_one_past_the_table_touches_nothing) {
     CHECK_EQ(scene_count(set.scenes[1]), 0);
     for (int t = 0; t < kTracks; t++) {
         for (int p = 0; p < kKitParams; p++) {
+            if (!kit_param_real(p)) continue;   // the hole between OSC and SCN
             CHECK_EQ(int(set.scenes[0].values[t][p]), int(g_kit.tracks[t].params[p] & 127));
         }
     }
@@ -1113,8 +1136,8 @@ TEST(perform_a_payload_declared_one_byte_past_the_file_is_truncated) {
 TEST(perform_a_section_one_byte_longer_than_the_payload_or_a_short_macro_table_is_malformed) {
     fill_performance();
     const uint32_t size = write_performance();
-    // The LAST section, the LFO layout, so one byte more runs past the payload.
-    const uint32_t last = section_entry_at(g_buffer, kSectionPerformLfoLayout);
+    // The LAST section, the scenes' SCN bytes, so one byte more runs past the payload.
+    const uint32_t last = section_entry_at(g_buffer, kSectionPerformSceneScn);
     const uint32_t last_len = peek_u32(g_buffer, last + 8);
     poke_u32(g_buffer, last + 8, last_len + 1);
     refresh_crc(g_buffer);
@@ -1310,6 +1333,7 @@ TEST(perform_a_master_macro_target_drives_the_eq_and_no_track) {
     macro_apply(macro, 127, g_out);
     for (int t = 0; t < kTracks; t++) {
         for (int p = 0; p < kKitParams; p++) {
+            if (!kit_param_real(p)) continue;   // the hole between OSC and SCN
             if (t == 2 && p == 5) continue;
             CHECK_EQ(int(g_out[t][p]), int(g_kit.tracks[t].params[p]));
         }
@@ -1396,11 +1420,11 @@ TEST(perform_a_file_from_before_the_lfo_loads_with_no_scene_storing_one) {
     fill_performance();
     for (int t = 0; t < kTracks; t++) scene_set(g_scenes.scenes[0], t, kKitSoundParams, 77);
     const uint32_t size = write_performance();
-    // Before the LFO there was no scenes' EQ, arp, ASR or OSC section, nor the LFO layout: drop
-    // all six, last first.
-    const uint32_t sizes[6] = {5108u, 4456u, 3804u, 3152u, 3076u, 2424u};
+    // Before the LFO there was no scenes' EQ, arp, ASR, OSC or SCN section, nor the LFO layout:
+    // drop all seven, last first.
+    const uint32_t sizes[7] = {5121u, 5108u, 4456u, 3804u, 3152u, 3076u, 2424u};
     uint32_t old_size = size;
-    for (int k = 0; k < 6; k++) {
+    for (int k = 0; k < 7; k++) {
         old_size = drop_last_section(g_buffer, g_alternate);
         CHECK_EQ(old_size, sizes[k]);
         for (uint32_t i = 0; i < old_size; i++) g_buffer[i] = g_alternate[i];
@@ -1471,7 +1495,9 @@ TEST(perform_scenes_keep_their_arp_bytes_and_an_older_file_stores_none) {
     }
 
     // The file the LFO and kill EQ builds wrote: everything but the arp (and the ASR and OSC
-    // pages after it, and the LFO layout last of all) comes back.
+    // pages after it, and the LFO layout and SCN last of all) comes back.
+    drop_last_section(g_buffer, g_alternate);
+    for (uint32_t i = 0; i < 5121u; i++) g_buffer[i] = g_alternate[i];
     drop_last_section(g_buffer, g_alternate);
     for (uint32_t i = 0; i < 5108u; i++) g_buffer[i] = g_alternate[i];
     drop_last_section(g_buffer, g_alternate);
@@ -1546,6 +1572,8 @@ TEST(perform_scenes_keep_their_osc_bytes_beside_asr_and_an_older_file_stores_non
     // A file from before the OSC page (and the LFO layout after it): ASR comes back, no scene
     // stores an OSC byte.
     drop_last_section(g_buffer, g_alternate);
+    for (uint32_t i = 0; i < 5121u; i++) g_buffer[i] = g_alternate[i];
+    drop_last_section(g_buffer, g_alternate);
     for (uint32_t i = 0; i < 5108u; i++) g_buffer[i] = g_alternate[i];
     const uint32_t old_size = drop_last_section(g_buffer, g_alternate);
     CHECK_EQ(old_size, 4456u);
@@ -1564,8 +1592,55 @@ TEST(perform_scenes_keep_their_osc_bytes_beside_asr_and_an_older_file_stores_non
 
     perform_init(g_scenes, g_macros);
     uint8_t out[kTracks][kKitParams] = {};
-    scene_set(g_scenes.scenes[0], 6, kKitParams - 1, 0);      // DRV, the very last bit
+    scene_set(g_scenes.scenes[0], 6, kKitParams - 1, 0);      // CRV, the very last bit
     scene_set(g_scenes.scenes[1], 6, kKitParams - 1, 100);
     scene_morph(g_scenes.scenes[0], g_scenes.scenes[1], kMorphScale / 2, out);
     CHECK_EQ(int(out[6][kKitParams - 1]), 50);
+}
+
+TEST(perform_scenes_keep_their_scn_bytes_and_an_older_file_stores_none) {
+    // The SCN page (MOD SPD END CRV, ids 40-43) has a section of its own: four values and the
+    // low half of the sixth mask byte per track. The hole before it (32-39) is never stored.
+    fill_performance();
+    Scene &scene = g_scenes.scenes[1];
+    scene_set(scene, 4, kKitScnFirst + 0, 5);      // MOD PING
+    scene_set(scene, 4, kKitScnFirst + 3, 100);    // CRV
+    scene_set(scene, 4, kKitAsrEnd + 1, 33);       // OS2, a page beside it
+    scene_set(scene, 4, kKitOscEnd, 7);            // the hole refuses
+    scene_set(scene, 4, kKitScnFirst - 1, 7);
+    CHECK(!scene_has(scene, 4, kKitOscEnd));
+    CHECK(!scene_has(scene, 4, kKitScnFirst - 1));
+    const uint32_t size = write_performance();
+    CHECK_EQ(size, kPerformFileBytes);
+    CHECK_EQ(int(perform_read(g_loaded_scenes, g_loaded_macros, g_buffer, size)),
+             int(SerializeResult::ok));
+    const Scene &loaded = g_loaded_scenes.scenes[1];
+    CHECK(scene_has(loaded, 4, kKitScnFirst + 0));
+    CHECK(!scene_has(loaded, 4, kKitScnFirst + 1));
+    CHECK(!scene_has(loaded, 4, kKitScnFirst + 2));
+    CHECK(scene_has(loaded, 4, kKitScnFirst + 3));
+    CHECK(scene_has(loaded, 4, kKitAsrEnd + 1));
+    CHECK_EQ(int(loaded.values[4][kKitScnFirst + 0]), 5);
+    CHECK_EQ(int(loaded.values[4][kKitScnFirst + 3]), 100);
+    CHECK_EQ(int(loaded.values[4][kKitAsrEnd + 1]), 33);
+    for (int p = kKitOscEnd; p < kKitScnFirst; p++) CHECK(!scene_has(loaded, 4, p));
+    for (int s = 0; s < kScenes; s++) {
+        CHECK_EQ(scene_count(g_loaded_scenes.scenes[s]), scene_count(g_scenes.scenes[s]));
+    }
+
+    // A file from before the page: the rest comes back, no scene stores an SCN byte.
+    const uint32_t old_size = drop_last_section(g_buffer, g_alternate);
+    CHECK_EQ(old_size, 5121u);
+    for (int s = 0; s < kScenes; s++) scene_set(g_loaded_scenes.scenes[s], 2, kKitScnFirst, 3);
+    CHECK_EQ(int(perform_read(g_loaded_scenes, g_loaded_macros, g_alternate, old_size)),
+             int(SerializeResult::ok));
+    CHECK(scene_has(g_loaded_scenes.scenes[1], 4, kKitAsrEnd + 1));
+    for (int s = 0; s < kScenes; s++) {
+        for (int t = 0; t < kTracks; t++) {
+            for (int p = kKitScnFirst; p < kKitParams; p++) {
+                CHECK(!scene_has(g_loaded_scenes.scenes[s], t, p));
+                CHECK_EQ(int(g_loaded_scenes.scenes[s].values[t][p]), 0);
+            }
+        }
+    }
 }

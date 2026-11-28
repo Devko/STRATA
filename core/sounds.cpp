@@ -245,6 +245,13 @@ constexpr SoundPreset kWaveMonoPresets[] = {
     {"FOLD", {52, 30, 90, 30}, VOICE, {70, 40, 110, 82}, {0, 100, 30, 0}, {30, 30, 0, 30}},
     // A tine: FM TINE from its sine, short, bright: a bell pluck for lines.
     {"TINE", {76, 10, 110, 10}, VOICE, {70, 20, 100, 110}, NO_ASR, {0, 0, 0, 0}},
+    // A scanning lead: each note runs HARMONICS from its sine to its brightest over one beat,
+    // slow to start (SCN FWD, synced). MOT stays out of it, so the scan is the only movement.
+    {"SCANLD", {44, 0, 90, 20}, VOICE, {70, 20, 64, 127}, {0, 100, 30, 0}, {0, 30, 0, 30},
+     {1, 96, 127, 90}},
+    // A wobble bass: GROWL scanned up and back once a beat (SCN PING, synced), held.
+    {"WOBBLE", {100, 20, 70, 50}, VOICE, {70, 40, 64, 98}, {0, 100, 20, 0}, {0, 0, 70, 0},
+     {5, 96, 110, 64}},
 };
 
 // --- WAVE POLY: TBL POS CUT RES / DEC ENV MOT LVL, ASR, OSC WRP DET SUB DRV (dsp/vapoly.cpp) --
@@ -274,6 +281,13 @@ constexpr SoundPreset kWavePolyPresets[] = {
     {"STAB", {44, 60, 80, 30}, VOICE, {64, 50, 80, 88}, NO_ASR, {0, 20, 0, 0}},
     // A vowel stab: VOWELS opening on the strike. Chord hits that talk.
     {"VOXSTB", {92, 40, 90, 20}, VOICE, {60, 30, 100, 90}, NO_ASR, {0, 30, 0, 0}},
+    // A drifting pad: VOWELS gliding between random vowels about every five seconds (SCN DRFT).
+    {"DRIFT", {92, 10, 80, 10}, VOICE, {100, 20, 64, 64}, {90, 100, 96, 50}, {0, 50, 0, 0},
+     {9, 12, 110, 64}},
+    // A swirling pad: the PWM table's widths swung to and fro about every three seconds (SCN
+    // SINE), free of the tempo.
+    {"SWIRL", {12, 0, 80, 20}, VOICE, {96, 30, 64, 66}, {80, 95, 90, 50}, {0, 40, 0, 0},
+     {7, 16, 127, 64}},
 };
 
 // --- FM4: ALG RAT IDX FBK / DEC IEN VEL LVL, ASR ATK SUS REL ISU, OSC DET FIN BRT CAR ----------
@@ -378,14 +392,16 @@ Bank bank_for(uint8_t machine) {
     }
 }
 
-constexpr uint32_t kSrcFltrAmp = 0x0FFFu;                       // params 0-11
-constexpr uint32_t kAsrBits = 0xFu << kSoundAsrFirst;           // params 24-27
-constexpr uint32_t kOscBits = 0xFu << kSoundOscFirst;           // params 28-31
+constexpr uint64_t kSrcFltrAmp = 0x0FFFu;                       // params 0-11
+constexpr uint64_t kAsrBits = uint64_t(0xF) << kSoundAsrFirst;  // params 24-27
+constexpr uint64_t kOscBits = uint64_t(0xF) << kSoundOscFirst;  // params 28-31
+constexpr uint64_t kScnBits = uint64_t(0xF) << kSoundScnFirst;  // params 40-43
 constexpr int kHatChoke = 10;
 constexpr int kGrainPos = 0;
 constexpr int kGrainPit = 8;
 
-static_assert(kSoundOscFirst + 4 == kKitParams, "the OSC page is the last four kit bytes");
+static_assert(kSoundScnFirst + 4 == kKitParams, "the SCN page is the last four kit bytes");
+static_assert(kKitParams <= 64, "sound_preset_writes is one bit a parameter");
 
 }  // namespace
 
@@ -396,19 +412,20 @@ const SoundPreset *sound_preset(uint8_t machine, int index) {
     return index >= 0 && index < b.count ? &b.presets[index] : nullptr;
 }
 
-uint32_t sound_preset_writes(uint8_t machine) {
+uint64_t sound_preset_writes(uint8_t machine) {
     switch (MachineId(machine)) {
         case MachineId::kick:
         case MachineId::snare:
         case MachineId::perc: return kSrcFltrAmp;
-        case MachineId::hat: return kSrcFltrAmp & ~(1u << kHatChoke);
+        case MachineId::hat: return kSrcFltrAmp & ~(uint64_t(1) << kHatChoke);
         case MachineId::va_mono:
         case MachineId::va_poly:
-        case MachineId::wave_mono:
-        case MachineId::wave_poly:
         case MachineId::fm: return kSrcFltrAmp | kAsrBits | kOscBits;
+        case MachineId::wave_mono:
+        case MachineId::wave_poly: return kSrcFltrAmp | kAsrBits | kOscBits | kScnBits;
         case MachineId::grain:
-            return (kSrcFltrAmp | kAsrBits | kOscBits) & ~(1u << kGrainPos) & ~(1u << kGrainPit);
+            return (kSrcFltrAmp | kAsrBits | kOscBits) & ~(uint64_t(1) << kGrainPos) &
+                   ~(uint64_t(1) << kGrainPit);
         default: return 0;
     }
 }
@@ -422,6 +439,10 @@ uint8_t value_of(const SoundPreset &s, int p) {
     if (p < 12) return s.amp[p - 8];
     if (p >= kSoundAsrFirst && p < kSoundAsrFirst + 4) return s.asr[p - kSoundAsrFirst];
     if (p >= kSoundOscFirst && p < kSoundOscFirst + 4) return s.osc[p - kSoundOscFirst];
+    if (p >= kSoundScnFirst && p < kSoundScnFirst + 4) {
+        const bool scans = s.scn[0] != 0 || s.scn[1] != 0 || s.scn[2] != 0 || s.scn[3] != 0;
+        return scans ? s.scn[p - kSoundScnFirst] : kKitScnDefault[p - kSoundScnFirst];
+    }
     return 0;
 }
 
@@ -430,7 +451,7 @@ uint8_t value_of(const SoundPreset &s, int p) {
 bool sound_preset_apply(uint8_t machine, int index, uint8_t *params) {
     const SoundPreset *s = sound_preset(machine, index);
     if (s == nullptr || params == nullptr) return false;
-    const uint32_t mask = sound_preset_writes(machine);
+    const uint64_t mask = sound_preset_writes(machine);
     for (int p = 0; p < kKitParams; p++) {
         if ((mask >> p) & 1u) params[p] = value_of(*s, p);
     }
@@ -440,7 +461,7 @@ bool sound_preset_apply(uint8_t machine, int index, uint8_t *params) {
 bool sound_preset_matches(uint8_t machine, int index, const uint8_t *params) {
     const SoundPreset *s = sound_preset(machine, index);
     if (s == nullptr || params == nullptr) return false;
-    const uint32_t mask = sound_preset_writes(machine);
+    const uint64_t mask = sound_preset_writes(machine);
     for (int p = 0; p < kKitParams; p++) {
         if (((mask >> p) & 1u) && params[p] != value_of(*s, p)) return false;
     }
@@ -467,6 +488,9 @@ bool machine_defaults_apply(uint8_t machine, uint8_t *params) {
         if (machine_reads_osc(machine)) {
             for (int p = 0; p < 4; p++) params[kSoundOscFirst + p] = s->osc[p];
         }
+    }
+    if (machine_reads_scn(machine)) {
+        for (int p = 0; p < 4; p++) params[kSoundScnFirst + p] = value_of(*s, kSoundScnFirst + p);
     }
     return true;
 }

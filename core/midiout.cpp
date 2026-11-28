@@ -9,6 +9,11 @@ void midi_message(uint8_t *out, uint8_t status_high, uint8_t channel, uint8_t a,
     out[2] = uint8_t(b & 0x7Fu);
 }
 
+void midi_program(uint8_t *out, uint8_t channel, uint8_t program) {
+    out[0] = uint8_t(0xC0u | ((channel - 1u) & 0x0Fu));
+    out[1] = uint8_t(program & 0x7Fu);
+}
+
 int MidiOut::find(uint8_t channel, uint8_t note) const {
     for (int i = 0; i < kSlots; i++) {
         const Slot &s = slots_[i];
