@@ -17,12 +17,18 @@ tools/build.sh > /dev/null
 stage="$ENAGA_BUILD/stage/STRATA"
 base="$ENAGA_BUILD"
 
-walk="$(mktemp -d)"
+# STRATA_SCREENS_KEEP=DIR keeps every walk frame there, for a contact sheet before trusting PICKS.
 host="$(mktemp -d)"
-trap 'rm -rf "$walk" "$host"' EXIT
+if [ -n "${STRATA_SCREENS_KEEP:-}" ]; then
+    walk="$STRATA_SCREENS_KEEP"; mkdir -p "$walk"
+    trap 'rm -rf "$host"' EXIT
+else
+    walk="$(mktemp -d)"
+    trap 'rm -rf "$walk" "$host"' EXIT
+fi
 
 pids=()
-for part in a b c d e; do
+for part in a b c d e f; do
     ( export ENAGA_BUILD="$base/screens-$part"; mkdir -p "$ENAGA_BUILD"
       python3 -B tools/emulator_screens.py walk "$stage" "$walk" "$part" > "$walk/log_$part.txt" 2>&1 ) &
     pids+=("$!")
