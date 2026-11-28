@@ -36,6 +36,7 @@
 // `Storage::init` hands the engine its 64 MiB region exactly as `App::init` does on the unit, so
 // `Cmd::set_sample`'s offset, frame-count and alignment checks are reachable here, and
 // tests/test_engine_gaps.cpp drives them.
+#include <cstdlib>
 #include "apprig.hpp"
 #include "check.hpp"
 #include "fakehost.hpp"
@@ -1728,6 +1729,267 @@ TEST(engine_song_mode_plays_the_chain_once_and_asks_for_a_stop) {
     post(Cmd::set_chain, 0, 0, 0);
     FakeHost::the().set_running(false);
     pump();
+}
+
+// --- song sections (core/project.hpp, SectionExtra) -----------------------------------------
+
+namespace {
+
+// A two-entry chain, A01 X1 then A02 X2, with the given section fields, loaded as a file would
+// load it, and the scenes on 1 and 2.
+Engine &section_chain(const SectionExtra &first, const SectionExtra &second) {
+    Engine &engine = clean();
+    Project &incoming = engine.project_for_load();
+    incoming.settings.chain_length = 2;
+    incoming.settings.scene_a = 0;
+    incoming.settings.scene_b = 1;
+    incoming.chain[0] = ChainEntry{0, 0, 1, 0};
+    incoming.chain[1] = ChainEntry{0, 1, 2, 0};
+    for (int i = 2; i < kChainEntries; i++) incoming.chain[i] = ChainEntry{};
+    for (int i = 0; i < kChainEntries; i++) incoming.chain_extra[i] = SectionExtra{};
+    incoming.chain_extra[0] = first;
+    incoming.chain_extra[1] = second;
+    post(Cmd::project_loaded);
+    pump();
+    return engine;
+}
+
+void section_chain_done() {
+    post(Cmd::set_chain, 0, 0, 0);
+    post(Cmd::set_morph);
+    post(Cmd::set_energy, 0, 0, 0);
+    for (uint8_t t = 0; t < kTracks; t++) post(Cmd::set_mute, t, 0, 0, 0);
+    FakeHost::the().set_running(false);
+    pump();
+}
+
+}  // namespace
+
+TEST(engine_a_section_applies_its_fields_as_its_entry_starts) {
+    SectionExtra first;
+    first.cap = 1;
+    first.mask = 0x05;
+    first.scene = 5;
+    first.morph = kSectionMorphSnap;
+    first.energy = section_energy_byte(32);
+    first.bpm = 14000;
+    SectionExtra second;
+    second.energy = section_energy_byte(-40);
+    Engine &engine = section_chain(first, second);
+    const Status &status = engine.status();
+    const uint8_t events = status.section_event.load();
+    const uint8_t due = status.tempo_due.load();
+
+    FakeHost::the().set_running(true);
+    tick_at(0);
+    post(Cmd::set_chain, 0, 0, 1);
+    pump();
+    // Entry 1: the exact mute mask, scene 5 on side B, the morph at B, ENERGY +32, a tempo asked
+    // of the main context.
+    CHECK(engine.muted(0));
+    CHECK(!engine.muted(1));
+    CHECK(engine.muted(2));
+    CHECK_EQ(engine.scene_slot(1), 4);
+    CHECK_EQ(engine.project().settings.scene_b, 4);   // what a save writes
+    CHECK_EQ(engine.scene_slot(0), 0);                // side A is not a section's
+    CHECK_EQ(int(engine.morph()), int(kMorphScale));
+    CHECK_EQ(int(engine.energy()), 32);
+    CHECK_EQ(int(uint8_t(status.tempo_due.load() - due)), 1);
+    CHECK_EQ(int(status.section_tempo.load()), 14000);
+    CHECK_EQ(int(uint8_t(status.section_event.load() - events)), 1);
+
+    // The hands take over inside the section: a mute, and the morph.
+    post(Cmd::set_mute, 1, 0, 1, 0);
+    post(Cmd::set_morph, 0, 0, 0, 0, 0);
+    pump();
+    tick_at(1);
+    tick_at(1536);                                    // entry 2: only NRG is its own
+    tick_at(1537);                                    // a switch re-derives the boundary
+    CHECK_EQ(live_slot(), 1);
+    CHECK_EQ(int(engine.energy()), -40);
+    CHECK(engine.muted(1));                           // `--` leaves the hands' work alone
+    CHECK(engine.muted(0));
+    CHECK_EQ(engine.scene_slot(1), 4);
+    CHECK_EQ(int(engine.morph()), 0);
+    CHECK_EQ(int(uint8_t(status.tempo_due.load() - due)), 1);   // no BPM, no tempo asked
+    CHECK_EQ(int(uint8_t(status.section_event.load() - events)), 2);
+
+    // The next pass of entry 2 is not a new entry: nothing is applied again.
+    post(Cmd::set_energy, 0, 0, 5);
+    pump();
+    tick_at(2u * 1536u);
+    CHECK_EQ(int(engine.energy()), 5);
+    CHECK_EQ(int(uint8_t(status.section_event.load() - events)), 2);
+
+    // Round to entry 1 again: its fields once more.
+    tick_at(3u * 1536u);
+    CHECK_EQ(live_slot(), 0);
+    CHECK_EQ(int(engine.energy()), 32);
+    CHECK(!engine.muted(1));
+    CHECK_EQ(int(engine.morph()), int(kMorphScale));
+    section_chain_done();
+}
+
+TEST(engine_an_entry_with_no_section_fields_plays_as_it_always_did) {
+    Engine &engine = section_chain(SectionExtra{}, SectionExtra{});
+    const uint8_t events = engine.status().section_event.load();
+    post(Cmd::set_energy, 0, 0, uint8_t(int8_t(-12)));
+    post(Cmd::set_morph, 0, 0, 0, 0, 0);
+    post(Cmd::set_mute, 3, 0, 1, 0);
+    pump();
+    FakeHost::the().set_running(true);
+    tick_at(0);
+    post(Cmd::set_chain, 0, 0, 1);
+    pump();
+    tick_at(1);
+    tick_at(1536);
+    tick_at(1537);
+    CHECK_EQ(int(engine.energy()), -12);
+    CHECK(engine.muted(3));
+    CHECK_EQ(engine.scene_slot(1), 1);
+    CHECK_EQ(int(engine.status().section_event.load()), int(events));
+    section_chain_done();
+}
+
+TEST(engine_a_section_rides_the_morph_over_its_whole_entry) {
+    SectionExtra first;
+    first.morph = kSectionMorphSnap;
+    SectionExtra second;
+    second.morph = kSectionMorphBack;               // to A over two passes: 3072 ticks
+    Engine &engine = section_chain(first, second);
+    const Status &status = engine.status();
+    FakeHost::the().set_running(true);
+    tick_at(0);
+    post(Cmd::set_chain, 0, 0, 1);
+    pump();
+    CHECK_EQ(int(engine.morph()), int(kMorphScale));
+    CHECK_EQ(int(status.morph_riding.load()), 0);
+    tick_at(1);
+    tick_at(1536);
+    CHECK_EQ(int(status.morph_riding.load()), 1);
+    CHECK_EQ(int(engine.morph()), int(kMorphScale));
+    tick_at(1537);
+    tick_at(1536 + 768);
+    CHECK(std::abs(int(engine.morph()) - int(kMorphScale) * 3 / 4) <= 1);
+    tick_at(1536 + 1536);                             // a pass boundary inside the entry
+    CHECK(std::abs(int(engine.morph()) - int(kMorphScale) / 2) <= 1);
+    CHECK_EQ(int(status.morph_riding.load()), 1);
+    tick_at(1536 + 3071);
+    CHECK(int(engine.morph()) <= 1);
+    // The next entry's SNAP takes it from there.
+    tick_at(3u * 1536u);
+    CHECK_EQ(int(engine.morph()), int(kMorphScale));
+    CHECK_EQ(int(status.morph_riding.load()), 0);
+    tick_at(3u * 1536u + 1);
+
+    // RIDE goes the other way, from wherever the morph is. A hand on the morph ends the ride.
+    SectionExtra up;
+    up.morph = kSectionMorphRide;
+    Command edit;
+    edit.cmd = Cmd::chain_edit;
+    edit.step = 1;
+    edit.a = uint8_t(ChainEdit::section);
+    edit.e = up.morph;
+    CHECK(engine.commands().post(edit));
+    post(Cmd::set_morph, 0, 0, 0, 0, 0);
+    pump();
+    tick_at(4u * 1536u);                              // entry 2 again, riding up from 0
+    CHECK_EQ(int(engine.morph()), 0);
+    tick_at(4u * 1536u + 1);
+    tick_at(4u * 1536u + 1536);
+    CHECK(std::abs(int(engine.morph()) - int(kMorphScale) / 2) <= 1);
+    Command hand;
+    hand.cmd = Cmd::set_morph;
+    hand.u = 700;
+    CHECK(engine.commands().post(hand));
+    pump();
+    CHECK_EQ(int(status.morph_riding.load()), 0);
+    tick_at(4u * 1536u + 2000);
+    CHECK_EQ(int(engine.morph()), 700);
+    section_chain_done();
+}
+
+TEST(engine_a_ride_starts_again_when_the_transport_jumps_back) {
+    SectionExtra first;
+    first.morph = kSectionMorphRide;                  // over one pass
+    Engine &engine = section_chain(first, SectionExtra{});
+    FakeHost::the().set_running(true);
+    tick_at(0);
+    post(Cmd::set_morph, 0, 0, 0, 0, 0);
+    pump();
+    tick_at(10);
+    post(Cmd::set_chain, 0, 0, 1);                    // armed at tick 10
+    pump();
+    tick_at(768 + 10);
+    CHECK(std::abs(int(engine.morph()) - int(kMorphScale) / 2) <= 1);
+    // STOP and PLAY: the clock is back at 0 and the ride starts again from where it was.
+    tick_at(0);
+    const int at = int(engine.morph());
+    tick_at(768);
+    CHECK(int(engine.morph()) > at);
+    CHECK(int(engine.morph()) < int(kMorphScale));
+    section_chain_done();
+}
+
+TEST(engine_section_edits_copy_and_quick_fill) {
+    Engine &engine = section_chain(SectionExtra{}, SectionExtra{});
+    // The whole record in one command, NRG and BPM packed in `u`.
+    Command edit;
+    edit.cmd = Cmd::chain_edit;
+    edit.step = 0;
+    edit.a = uint8_t(ChainEdit::section);
+    edit.b = 1;
+    edit.c = 0x30;
+    edit.d = 9;
+    edit.e = kSectionMorphRide;
+    edit.u = uint32_t(section_energy_byte(-8)) | (uint32_t(12550) << 8);
+    CHECK(engine.commands().post(edit));
+    pump();
+    const SectionExtra &e = engine.project().chain_extra[0];
+    CHECK_EQ(int(e.cap), 1);
+    CHECK_EQ(int(e.mask), 0x30);
+    CHECK_EQ(int(e.scene), 9);
+    CHECK_EQ(int(e.morph), int(kSectionMorphRide));
+    CHECK_EQ(section_energy(e.energy), -8);
+    CHECK_EQ(int(e.bpm), 12550);
+    // Out of range: refused whole, counted.
+    const uint32_t before = engine.status().refused.load();
+    edit.d = 17;
+    CHECK(engine.commands().post(edit));
+    pump();
+    CHECK_EQ(int(engine.project().chain_extra[0].scene), 9);
+    CHECK_EQ(int(engine.status().refused.load() - before), 1);
+
+    // OK's copy carries the fields; the entry after it moves up.
+    chain_op(ChainEdit::copy, 0);
+    CHECK_EQ(chain_length(engine.project()), 3);
+    CHECK_EQ(int(engine.project().chain_extra[1].scene), 9);
+    CHECK_EQ(int(engine.project().chain[2].slot), 1);
+    CHECK(section_empty(engine.project().chain_extra[2]));
+
+    // Quick fill: what plays now.
+    post(Cmd::set_mute, 6, 0, 1, 0);
+    post(Cmd::scene_select, 0, 0, 1, 11);
+    Command morph;
+    morph.cmd = Cmd::set_morph;
+    morph.u = kMorphScale * 3 / 4;
+    CHECK(engine.commands().post(morph));
+    post(Cmd::set_energy, 0, 0, uint8_t(int8_t(20)));
+    pump();
+    chain_op(ChainEdit::fill, 2);
+    const SectionExtra &f = engine.project().chain_extra[2];
+    CHECK_EQ(int(f.cap), 1);
+    CHECK_EQ(int(f.mask), 0x40);
+    CHECK_EQ(int(f.scene), 12);
+    CHECK_EQ(int(f.morph), int(kSectionMorphSnap));
+    CHECK_EQ(section_energy(f.energy), 20);
+    CHECK_EQ(int(f.bpm), int(engine.project().settings.tempo_centi_bpm));
+    // The morph at rest fills `--`, not a SNAP.
+    post(Cmd::set_morph, 0, 0, 0, 0, 0);
+    pump();
+    chain_op(ChainEdit::fill, 2);
+    CHECK_EQ(int(engine.project().chain_extra[2].morph), int(kSectionMorphNone));
+    section_chain_done();
 }
 
 TEST(engine_starting_an_empty_chain_is_refused) {
