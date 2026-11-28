@@ -284,6 +284,7 @@
     // the track's own file when the folder is the one it lives in).
     void browse_to(const char *folder) {
         stop_audition();
+        audition_armed_ = -1;
         storage_.request_browse(folder);
         sample_cursor_ = 0;
         sample_seek_ = true;
@@ -295,6 +296,7 @@
         const int count = storage_.browse_list().count();
         const int was = sample_cursor_;
         sample_cursor_ = index < 0 ? 0 : (index >= count ? (count > 0 ? count - 1 : 0) : index);
+        if (sample_cursor_ != was) audition_armed_ = -1;   // moving on lets a first push go
         // Listening through a folder: the next entry is heard as the cursor lands on it.
         if (sample_cursor_ != was && storage_.auditioning()) audition_cursor();
     }
@@ -460,7 +462,18 @@
                     notice("A HEARS FILES");
                 } else if (!storage_.card_usable()) {
                     notice("NO CARD");
+                } else if (enaga::clock::running() &&
+                           !(audition_armed_ == sample_cursor_ &&
+                             uint32_t(last_ms_ - audition_armed_at_ms_) < kSaveArmMs)) {
+                    // There is no cue output: the audition goes to the same output as the beat,
+                    // so in a set the room would hear it. With the transport running it takes a
+                    // second push within kSaveArmMs, as opening a project does. (FUNC + push A
+                    // is the kill EQ's, so FUNC cannot be the way past.)
+                    audition_armed_ = sample_cursor_;
+                    audition_armed_at_ms_ = last_ms_;
+                    notice_logged("A AGAIN TO HEAR");   // tests/scenario_auditionplay.sh
                 } else if (audition_cursor()) {
+                    audition_armed_ = -1;
                     notice("HEARING");
                 }
                 return true;

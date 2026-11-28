@@ -5702,6 +5702,68 @@ TEST(ui_samples_push_a_hears_the_file_without_loading_it) {
     pump_until_idle();
 }
 
+// With the transport running, the audition would go out to the room with the beat (there is
+// no cue output), so push A takes a second push within kSaveArmMs.
+TEST(ui_samples_push_a_while_playing_takes_a_second_push) {
+    Strata &app = fresh();
+    seed_sample_card();
+    card_wav("/SAMPLES/A_HIT.WAV", 4800);
+    card_wav("/SAMPLES/b loop.wav", 4800);
+    sample_track_in_edit();
+    key(ENAGA_KEY_F5);                             // PLAY
+    CHECK(enaga::clock::running());
+    key(ENAGA_KEY_OK);
+    pump(4);
+    key(ENAGA_KEY_DOWN);                           // A_HIT.WAV
+
+    // One push: nothing heard, a toast says how.
+    key(ENAGA_KEY_PUSH_A);
+    CHECK_EQ(UiProbe::notice(app), "A AGAIN TO HEAR");
+    CHECK(!app_storage().auditioning());
+    pump(8);
+    CHECK(!app_storage().auditioning());
+    CHECK_EQ(FakeHost::the().streams_open(), 0);
+
+    // Too late: the second push only arms again.
+    g_ms += 2500;
+    pump();                                        // the app reads the time in update()
+    key(ENAGA_KEY_PUSH_A);
+    CHECK_EQ(UiProbe::notice(app), "A AGAIN TO HEAR");
+    CHECK(!app_storage().auditioning());
+
+    // Moving away and back lets the first push go.
+    key(ENAGA_KEY_DOWN);
+    key(ENAGA_KEY_UP);
+    key(ENAGA_KEY_PUSH_A);
+    CHECK_EQ(UiProbe::notice(app), "A AGAIN TO HEAR");
+    CHECK(!app_storage().auditioning());
+
+    // In time, on the same file: heard.
+    key(ENAGA_KEY_PUSH_A);
+    CHECK_EQ(UiProbe::notice(app), "HEARING");
+    CHECK(app_storage().auditioning());
+    CHECK(std::strcmp(app_storage().audition_path(), "/SAMPLES/A_HIT.WAV") == 0);
+
+    // Once heard, the cursor still hears the next without asking again, and one push stops it.
+    key(ENAGA_KEY_DOWN);
+    CHECK(app_storage().auditioning());
+    CHECK(std::strcmp(app_storage().audition_path(), "/SAMPLES/b loop.wav") == 0);
+    key(ENAGA_KEY_PUSH_A);
+    CHECK_EQ(UiProbe::notice(app), "STOPPED");
+    for (int i = 0; i < 20 && app_storage().auditioning(); i++) pump();
+    CHECK(!app_storage().auditioning());
+
+    // Stopped transport: one push, as before.
+    key(ENAGA_KEY_F6);                             // STOP
+    key(ENAGA_KEY_F6);
+    CHECK(!enaga::clock::running());
+    key(ENAGA_KEY_PUSH_A);
+    CHECK_EQ(UiProbe::notice(app), "HEARING");
+    CHECK(app_storage().auditioning());
+    key(ENAGA_KEY_F4);
+    pump_until_idle();
+}
+
 // A file that cannot be heard says why, and the screen shows what is heard.
 TEST(ui_samples_push_a_says_why_a_file_cannot_be_heard) {
     Strata &app = fresh();

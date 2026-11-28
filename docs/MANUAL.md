@@ -1844,11 +1844,14 @@ browser opens in the folder of the file the track plays, with the cursor on it, 
   are left alone.
 - **Push A to hear a file first.** It plays the file under the cursor, whole and from its
   start, straight to the output at about -6 dB, without loading it: the track and the kit stay
-  as they were. Push A again to stop. While a file is heard, UP/DOWN (or turning A, or a page)
+  as they were. Push A again to stop. **With the beat playing it takes two pushes**: the
+  first only says `A AGAIN TO HEAR`, and a second push on the same file within 2 s plays it.
+  The SmplTrek has no separate cue output, so the audition goes out with the beat, and a single
+  bump of the knob in a set should not put a file into the room. While a file is heard, UP/DOWN (or turning A, or a page)
   hears the next file the cursor lands on, so you can listen down a folder and press OK on the
   one you want. A toast says `HEARING 3/12S` (seconds heard of the file's
   length, `OPENING` for the moment before it sounds), and a line under the file's name grows as
-  it plays. It works with the beat playing or stopped; it is streamed from the card, so a long
+  it plays. It is streamed from the card, so a long
   stem starts as quickly as a short hit, plays at its own rate and takes no sample memory. It is
   not recorded by RESAMPLE or the looper and goes round no effect. OK (which loads it), CLR,
   another folder, a folder under the cursor or leaving SAMPLES stops it. A file that cannot be

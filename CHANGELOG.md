@@ -57,6 +57,10 @@ the project file format or the controls.
 
 ### Changed
 
+- **Sample audition with the beat playing takes two pushes.** In SAMPLES, push A while the
+  transport runs only says `A AGAIN TO HEAR`; a second push on the same file within 2 s plays
+  it. The SmplTrek has no cue output, so the audition goes out with the beat, and one bump of
+  the knob in a set should not put a file into the room. Stopped, one push hears it as before.
 - **The clap sounds like a clap.** Its noise moved from 5-10 kHz down to about 2-3 kHz, and each
   of its bursts now rings until the next one strikes instead of dying after a third of the gap,
   so the flutter is as loud as the tail rather than 10-18 dB under it. The factory kit's CLAP and
