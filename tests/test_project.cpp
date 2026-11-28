@@ -43,8 +43,9 @@ using namespace strata;
 // 393 since MIDI OUT: a sixth entry (12) and one channel per track (8). 402 since the sends'
 // ambient modes: nine bytes on the end of the mixer section. 425 since EVOLVE: a seventh entry
 // (12) and its 11 bytes, optional like the others. 429 since the chorus: its four send bytes on the
-// end of the mixer section. 450 since Track Launch: an eighth entry (12) and its 9 bytes.
-constexpr uint32_t kProjectFileBytes = 450;
+// end of the mixer section. 450 since Track Launch: an eighth entry (12) and its 9 bytes. 451
+// since PROG CHG OUT: one byte on the end of the MIDI section.
+constexpr uint32_t kProjectFileBytes = 451;
 constexpr uint32_t kKitFileBytes = 1506;   // 1486 before the widths (12 + 8), 1466 before the chorus sends (12 + 8), 1453 before the LFO layout (12 + 1), 1409 before the arp settings (12 + 32), 1389 before the choke groups (12 + 8), 1329 before the mod slots (12 + 48), 1309 before LFO TRIG (12 + 8), 1296 before the filter layout (12 + 1), 1076 before the LFO and arp (12 + 8 x 4 each), 1164 before SLC AUTO (12 + 8), 1184 before ASR (12 + 32), 1228 before the duck (12 + 12), 1252 before OSC (12 + 32)
 
 // Room past the end of every file, filled with a sentinel, so that a writer going one byte long
@@ -843,6 +844,55 @@ TEST(project_a_damaged_midi_out_channel_turns_that_track_off) {
     CHECK_EQ(int(g_loaded.settings.midi_out[6]), 2);
 }
 
+TEST(project_prog_chg_out_round_trips) {
+    fill_project(g_source, 0);
+    for (int t = 0; t < kTracks; t++) g_source.settings.midi_out[t] = uint8_t(t + 1);
+    for (const bool on : {true, false}) {
+        g_source.settings.program_out = on;
+        uint32_t written = 0;
+        CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
+                 int(SerializeResult::ok));
+        project_init(g_loaded);
+        g_loaded.settings.program_out = !on;
+        CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::ok));
+        CHECK_EQ(g_loaded.settings.program_out, on);
+        CHECK_EQ(int(g_loaded.settings.midi_out[7]), 8);
+    }
+}
+
+// A MIDI section of eight bytes is a file from before PROG CHG OUT: its channels load, and it
+// sends no program changes, which is what it did.
+TEST(project_a_midi_section_from_before_prog_chg_out_loads_it_off) {
+    fill_project(g_source, 0);
+    for (int t = 0; t < kTracks; t++) g_source.settings.midi_out[t] = uint8_t(16 - t);
+    g_source.settings.program_out = true;
+    uint32_t written = 0;
+    CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
+             int(SerializeResult::ok));
+    poke_u32(g_project, section_entry_at(g_project, kSectionProjectMidi) + 8, uint32_t(kTracks));
+    refresh_crc(g_project);
+    project_init(g_loaded);
+    g_loaded.settings.program_out = true;      // a previous project's
+    CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::ok));
+    CHECK(!g_loaded.settings.program_out);
+    for (int t = 0; t < kTracks; t++) CHECK_EQ(int(g_loaded.settings.midi_out[t]), 16 - t);
+    CHECK_EQ(int(g_loaded.settings.evolve_amount), int(g_source.settings.evolve_amount));
+}
+
+// Only a 1 is on: a damaged byte leaves program changes off.
+TEST(project_a_damaged_prog_chg_out_byte_is_off) {
+    fill_project(g_source, 0);
+    g_source.settings.program_out = true;
+    uint32_t written = 0;
+    CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
+             int(SerializeResult::ok));
+    g_project[section_at(g_project, kSectionProjectMidi) + kTracks] = 0x7F;
+    refresh_crc(g_project);
+    project_init(g_loaded);
+    CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::ok));
+    CHECK(!g_loaded.settings.program_out);
+}
+
 TEST(project_refuses_a_midi_section_that_is_short) {
     fill_project(g_source, 0);
     uint32_t written = 0;
@@ -897,7 +947,7 @@ TEST(project_a_file_from_before_song_mode_loops_and_recalls_no_mutes) {
     old_size = drop_last_section(g_project_alt, g_project_alt);
     old_size = drop_last_section(g_project_alt, g_project_alt);
     old_size = drop_last_section(g_project_alt, g_project_alt);
-    CHECK_EQ(old_size, kProjectFileBytes - 12 - 9 - 12 - 11 - 12 - 8 - 12 - 65);
+    CHECK_EQ(old_size, kProjectFileBytes - 12 - 9 - 12 - 11 - 12 - 9 - 12 - 65);
     // A previous project's song settings, which must not survive into this one.
     project_init(g_loaded);
     g_loaded.settings.chain_song = true;
@@ -1137,7 +1187,7 @@ TEST(project_the_header_says_strata_and_the_version) {
     CHECK_EQ(song, live + 3);
     CHECK_EQ(midi, song + 1 + 64);
     const uint32_t evolve = section_at(g_project, kSectionProjectEvolve);
-    CHECK_EQ(evolve, midi + 8);
+    CHECK_EQ(evolve, midi + 9);   // eight channels and PROG CHG OUT
     const uint32_t launch = section_at(g_project, kSectionProjectLaunch);
     CHECK_EQ(launch, evolve + 11);
     CHECK_EQ(launch + 9, kProjectFileBytes);

@@ -337,7 +337,10 @@ constexpr uint32_t kProjectLiveOffset = kProjectMixerOffset + kProjectMixerBytes
 // Song mode: the SONG switch, then each chain entry's mute recall.
 constexpr uint32_t kProjectSongBytes = 1 + uint32_t(kChainEntries);
 constexpr uint32_t kProjectSongOffset = kProjectLiveOffset + kProjectLiveBytes;
-constexpr uint32_t kProjectMidiBytes = uint32_t(kTracks);   // MIDI OUT channel per track
+// The MIDI section: each track's MIDI OUT channel, then PROG CHG OUT (2026-11-28) on the end. A
+// section that stops after the channels is a file from before it, which sent no program changes.
+constexpr uint32_t kProjectMidiBytesV1 = uint32_t(kTracks);   // MIDI OUT channel per track
+constexpr uint32_t kProjectMidiBytes = kProjectMidiBytesV1 + 1;
 constexpr uint32_t kProjectMidiOffset = kProjectSongOffset + kProjectSongBytes;
 // EVOLVE: each track's period, then mode, mutation and amount.
 constexpr uint32_t kProjectEvolveBytes = uint32_t(kTracks) + 3;
@@ -547,6 +550,7 @@ SerializeResult project_write(const Project &project, uint8_t *buffer, uint32_t 
     w.u8(s.chain_song ? 1 : 0);
     for (int i = 0; i < kChainEntries; i++) w.u8(project.chain[i].mutes);
     for (int t = 0; t < kTracks; t++) w.u8(s.midi_out[t]);
+    w.u8(s.program_out ? 1 : 0);
     for (int t = 0; t < kTracks; t++) w.u8(s.evolve_period[t]);
     w.u8(s.evolve_mode);
     w.u8(s.evolve_kind);
@@ -616,7 +620,7 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
     if (offset[4] != 0 && length[4] < kProjectSongBytes) {
         return refuse(SerializeResult::malformed);
     }
-    if (offset[5] != 0 && length[5] < kProjectMidiBytes) {
+    if (offset[5] != 0 && length[5] < kProjectMidiBytesV1) {
         return refuse(SerializeResult::malformed);
     }
     if (offset[6] != 0 && length[6] < kProjectEvolveBytes) {
@@ -754,12 +758,16 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
     // The MIDI OUT channels: absent is an older file, where no track sent MIDI. A byte past 16
     // is damage and turns that track's MIDI out off rather than onto some channel nobody chose.
     for (int t = 0; t < kTracks; t++) s.midi_out[t] = kMidiOutOff;
+    s.program_out = false;
     if (offset[5] != 0) {
         if (!r.seek(kHeaderBytes + offset[5])) return refuse(SerializeResult::malformed);
         for (int t = 0; t < kTracks; t++) {
             const uint8_t channel = r.u8();
             s.midi_out[t] = channel <= kMidiChannels ? channel : kMidiOutOff;
         }
+        // PROG CHG OUT: only 1 is on, so damage leaves it off rather than sending program
+        // changes to gear nobody asked to have them.
+        s.program_out = length[5] >= kProjectMidiBytes && r.u8() == 1;
         if (!r.ok()) return refuse(SerializeResult::truncated);
     }
 
