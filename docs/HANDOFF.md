@@ -14,8 +14,9 @@ unit (2026-11-24), and a build from `main` after #139 boots on the unit's 0.3.0 
 (2026-11-25). Nothing from 0.3.x on has been measured or walked through there yet. On the unit the default beat loads under 30%, and a long, heavy session peaked at
 84.3% MAX with no dropouts. Almost everything added since the first evening has been heard by
 nobody: the walkthrough at the top of `docs/UNIT_CHECKLIST.md` is the next pass. **v0.5.0 is
-the release candidate for 1.0** (Roland, 2026-11-27), and `main` is in feature freeze:
-`docs/PLAN.md`, "Release candidate", has the checks on the unit and the way to 1.0.
+the release candidate for 1.0** (Roland, 2026-11-27). There is no feature freeze (Roland
+lifted it on 2026-11-28): features land on `main`, and `docs/PLAN.md`, "Release candidate", has
+the checks on the unit and the way to 1.0.
 
 ---
 
@@ -37,7 +38,7 @@ the release candidate for 1.0** (Roland, 2026-11-27), and `main` is in feature f
 ## What to do next, in order
 
 0. **The release candidate**, `docs/PLAN.md` "Release candidate": file format option C and the
-   HALL question first (EVOLVE saved, #196 and #197 are in), then the feature freeze. No
+   HALL question first (EVOLVE saved, #196 and #197 are in); the freeze is lifted for now. No
    thread tags or releases on its own: the release runs from its own thread when Roland says so.
 1. **On Roland's PC: the load runs still owed.** `tools/scenarios.sh` once on `main` (it has
    `scenario_wave.sh` and `scenario_fm.sh`, never run), then E13 (the VA rework), E14 (WAVE's cost

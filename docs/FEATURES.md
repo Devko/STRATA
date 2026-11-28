@@ -1,6 +1,6 @@
 # STRATA features and their status
 
-Every feature STRATA has, grouped by area, with where it stands (`main`, 2026-11-27). How to play each one is in [MANUAL.md](MANUAL.md); this file only says what exists
+Every feature STRATA has, grouped by area, with where it stands (`main`, 2026-11-28). How to play each one is in [MANUAL.md](MANUAL.md); this file only says what exists
 and how sure we are of it. Update a row when its status changes.
 
 **Columns**
@@ -43,8 +43,8 @@ UNIT_CHECKLIST.md's ~550 boxes, 4 are ticked.
 | **Screen frame**: top line with bar.beat, progress line, live strip of what is off rest, master meter with held peak and limiter light | #144 | ○ (W26) | The meter is 2 px wide; nothing may draw past x 124 |
 | **RESAMPLE, SAMPLES, SOUNDS, CHAIN, KITS, KEYS and PATTERN redrawn** (docs/SCREENS.md): RESAMPLE's meter, live take and length bar; the browsers' previews; CHAIN as blocks on a lane; KITS' machine pictures; KEYS' held chord and knob gauges; PATTERN's swing bars; no caption repeats a screen's name | #176 | ○ (W45) | draw() see docs/BUDGET.md "The screen" |
 | **PROJECT's slots and MACHINE redrawn to the drafts** (docs/SCREENS.md): a map of all 128 patterns (empty, used, playing, queued) and each of the shown bank's sixteen drawn as its steps; MACHINE's kit as pictures, every machine a picture of its sound, what it is for and what it costs | #175 | ○ (W44) | draw() 1.28 ms PROJECT, 2.50 ms MACHINE (emulator, cl6x) |
-| **Stereo width WID** on VA POLY, WAVE POLY and FM4: MIXER WID 1-4 / 5-8, 1-63 spread (chord notes across the field), 64-127 unison (two voices a note, hard L/R, 6-40 cents); push OFF / 48 / 96 | Unreleased | ○ (W60) | A kit setting, not lockable; unison halves a track's notes (3) and counts two voices a note against the 12; docs/BUDGET.md "Stereo width" |
-| **Chorus, send C**: a stereo chorus on MIXER; CHO 1-4 / 5-8 set each track's send (push: OFF or 64), CHO its RAT DEP LVL and C>R into the reverb | Unreleased | ○ (W59) | The send is a kit setting, not lockable; costs nothing while no track sends; docs/BUDGET.md "The chorus" |
+| **Stereo width WID** on VA POLY, WAVE POLY and FM4: MIXER WID 1-4 / 5-8, 1-63 spread (chord notes across the field), 64-127 unison (two voices a note, hard L/R, 6-40 cents); push OFF / 48 / 96 | #216 | ○ (W60) | A kit setting, not lockable; unison halves a track's notes (3) and counts two voices a note against the 12; docs/BUDGET.md "Stereo width" |
+| **Chorus, send C**: a stereo chorus on MIXER; CHO 1-4 / 5-8 set each track's send (push: OFF or 64), CHO its RAT DEP LVL and C>R into the reverb | #214 | ○ (W59) | The send is a kit setting, not lockable; costs nothing while no track sends; docs/BUDGET.md "The chorus" |
 | **EDIT and MIXER redrawn to the drafts** (docs/SCREENS.md): EDIT's knob line and a picture on every page of every machine; MIXER's eight-strip desk, duck, DLY, REV, ROUTE, MST with LUFS, EQ curve; lists with a lit cursor, the step page's lane, CHAIN's strip | #174 | ○ (W43) | draw() see docs/BUDGET.md "The screen"; GRID and PERFORM unchanged |
 | **Screens rebuilt to the mockups**: frame (badges, toasts, tabs), PERFORM, GRID, EDIT (graph rows 50-117, filter response, LFO trail, WAVE LIVE, GRAIN cloud), MIXER master (spectrum, vectorscope, CMP/LIM bars) | #171 | ○ (W42) | draw() 1.71 ms on PERFORM, 1.20 ms on MST (emulator, cl6x). Knob values in the small font and LUFS on MST came with #174 |
 | **Live screens 6**: MIXER MST/EQ spectrum (24 bands, peak dots) and vectorscope; live meters beside the faders | #170 | ○ (W41) | draw() 1.21 ms on MST (emulator, cl6x) |
@@ -108,7 +108,7 @@ FM4 and GRAIN machines.
 | Feature | Since | Unit | Known limits / notes |
 | --- | --- | --- | --- |
 | Up to 64 steps a track, per-track length and speed (2x ... 1/8): polymeter | v0.1.0 | ○ (M3) | |
-| **Speed 3/2: 16th-note triplets** (16 ticks a step, 24 to the bar) in TRACK SPEED, between 2 and 1 | Unreleased | ○ (W57) | Older builds play a 3/2 track at 1x. The arp, rolls and REPEAT had 1/16T already |
+| **Speed 3/2: 16th-note triplets** (16 ticks a step, 24 to the bar) in TRACK SPEED, between 2 and 1 | #213 | ○ (W57) | Older builds play a 3/2 track at 1x. The arp, rolls and REPEAT had 1/16T already |
 | Steps, trigless steps (FUNC + tap), STEP LED colours | v0.1.0 | ◐ | |
 | Step page: NOTE, VEL, LEN, MICR (±11 ticks), PROB, COND, RTCH 1-8, RAMP, ACNT, SLID, CHRD | v0.1.0 | ○ (6) | LEN is the note length on VA POLY, on VA MONO once SUS is up, and for MIDI out; ignored by drums, SAMPLE and GRAIN |
 | Trig conditions: a:b, FILL, PRE, NEI, 1ST and their NOTs; seeded | v0.1.0 | ○ (M3) | |
@@ -229,8 +229,8 @@ FM4 and GRAIN machines.
 | Kit library: 16 kits on the card, recall while playing, store | v0.1.0 | ○ (15, W54) | Recall is not undoable. Since #184 and #188 a recall brings every kit setting (SLC AUTO, LFO TRIG, MOD slots, choke group, arp) |
 | Damaged files refused, never crash | v0.1.0 | ○ (M4) | Card pulled mid-save not tried on the unit |
 | Factory (demo) project: 130 BPM C minor kit, A01-A05, chain, 3 scenes, 3 macros, 8 mute states; a first start and LOAD DEMO | v0.1.0 | ✔ A01 plays; ◐ the rest (3b) | Track 8 plays a placeholder until given a sample |
-| **Showcase projects** (`tools/showcases/`): nine generators for DEEP (deep house), DUB (dub techno), DRIFT (ambient), ELECTRO, BREAKS, CHAOS, SMASH, NIGHT (breakbeat x synthwave) and STEEL; factory sounds only, chain on; `build.sh --starter` copies them to `content/starter/projects/` | WIP | ○ | Generators link against the host build; not part of the device build. Emulator peaks 24.5-41.2% (cl6x, `runtest.sh`) |
-| **Starter content in the card builder** (web/, `content/starter/`): ten starter projects (0.5.0 and newer), a 105-file sample pack rendered by STRATA (`host/starter.cpp`) in `/SAMPLES/STRATA`, and `STRATA-QUICKSTART.txt`, each a tick box | WIP | ○ W61 | `tests/test_starter.cpp` opens every project through Storage; web tests check the pack and the manifest. No emulator scenario: nothing in the app changed |
+| **Showcase projects** (`tools/showcases/`): nine generators for DEEP (deep house), DUB (dub techno), DRIFT (ambient), ELECTRO, BREAKS, CHAOS, SMASH, NIGHT (breakbeat x synthwave) and STEEL; factory sounds only, chain on; `build.sh --starter` copies them to `content/starter/projects/` | #220, #225 | ○ | Generators link against the host build; not part of the device build. Emulator peaks 24.5-41.2% (cl6x, `runtest.sh`) |
+| **Starter content in the card builder** (web/, `content/starter/`): ten starter projects (0.5.0 and newer), a 105-file sample pack rendered by STRATA (`host/starter.cpp`) in `/SAMPLES/STRATA`, and `STRATA-QUICKSTART.txt`, each a tick box | #223 | ○ W61 | `tests/test_starter.cpp` opens every project through Storage; web tests check the pack and the manifest. No emulator scenario: nothing in the app changed |
 | Factory pattern A05 PAD: held VA POLY chords from the ENV page, in the pattern's locks | #100 | ○ (13k) | The kit's chord stays A01's SUS 0 stab |
 | Factory sounds: SOUNDS (OK in EDIT or MACHINE) loads one of 116 ready-made sounds (KCK 10, SNR 10, HAT 11, PRC 12, MNO 14, PLY 12, WMN 12, WPL 12, FM4 12, GRN 11) into one track, AS WAS puts it back | #102, #118, #122, #126, #134, #184 | ○ (15e) | Leaves FX, LFO, ARP, fader and HAT's choke group; not undoable except by AS WAS |
 
