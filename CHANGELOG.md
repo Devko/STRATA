@@ -8,6 +8,14 @@ the project file format or the controls.
 
 ### Added
 
+- **Line input as a mixer channel.** MIXER's new IN and IN+ pages, after CHO, play whatever is
+  on the INPUT jacks through STRATA's mix: LVL, PAN, the delay, reverb and chorus sends, a duck
+  depth, a tone knob, the jack (LINE, LINE L, MIC, DYN MIC, HI-Z, USB) and its gain on push D.
+  Push A turns it on and off with a short fade. It goes through the master, so the kill EQ, the
+  performance mixer, the looper, REPEAT and JAM REC take it too. Off in new and older projects;
+  saved in PROJECT.BIN's new optional section 9, which older builds ignore. The pages the
+  scenarios count to from the end (MST, EQ) stay where they were; CHO is two pages further. New
+  emulator scenario `linein`.
 - **Queue a pattern from any screen.** Hold PROJECT and press STEP n: slot n of the shown bank is
   queued (`A05 QUEUED END`) and the screen you play on stays up. PROJECT now opens when the key
   comes up, and not at all when a STEP was pressed while it was held. The FUNC help's FUNC + KNOB
