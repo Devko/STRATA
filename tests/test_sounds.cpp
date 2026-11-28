@@ -12,7 +12,10 @@
 #include "perform.hpp"
 #include "project.hpp"
 #include "sounds.hpp"
+#include "kick.hpp"
 #include "perc.hpp"
+#include "snare.hpp"
+#include "chain.hpp"
 
 #include <cmath>
 #include <cstdio>
@@ -459,5 +462,132 @@ TEST(sounds_the_wave_pair_has_scanning_presets_and_the_rest_scan_nothing) {
         const MachineId machine = MachineId(m);
         CHECK_EQ(machine_reads_scn(uint8_t(m)),
                  machine == MachineId::wave_mono || machine == MachineId::wave_poly);
+    }
+}
+
+namespace {
+
+const SoundPreset &named(MachineId machine, const char *name) {
+    const uint8_t m = uint8_t(machine);
+    for (int i = 0; i < sound_preset_count(m); i++)
+        if (std::strcmp(sound_preset(m, i)->name, name) == 0) return *sound_preset(m, i);
+    CHECK(false);
+    return *sound_preset(m, 0);
+}
+
+// One hit of a drum preset through its machine and the insert chain's drive and filter (the
+// chain's tap: before the fader, pan and sends), `frames` frames, a multiple of 64.
+template <class M>
+void drum_hit(const SoundPreset &s, float *out, int frames) {
+    TrackParams p{};
+    for (int i = 0; i < 4; i++) {
+        p.set(i, s.src[i]);
+        p.set(4 + i, s.fltr[i]);
+        p.set(8 + i, s.amp[i]);
+    }
+    p.set(kFx + 1, 64);    // centred
+    M m;
+    m.init(48000.0f);
+    m.prepare(p);
+    InsertChain chain;
+    chain.init(48000.0f);
+    Trig t;
+    t.note = 60;
+    t.velocity = 100;
+    m.trigger(t);
+    static float block[64], dry_l[64], dry_r[64];
+    ChainOut to;
+    to.dry_l = dry_l;
+    to.dry_r = dry_r;
+    for (int i = 0; i < frames; i++) out[i] = 0.0f;
+    for (int b = 0; b < frames / 64; b++) {
+        for (float &x : block) x = 0.0f;
+        m.prepare(p);
+        m.render_add(block, 64);
+        chain.prepare(p, ChainMix{});
+        to.tap = out + b * 64;
+        chain.process(block, 64, to);
+    }
+}
+
+// The energy of x[from, from + n) above (high = true) or below `hz`, through three one-poles in
+// a row (18 dB an octave), so a kick's 50 Hz body does not leak into a band two octaves up.
+float band_energy(const float *x, int from, int n, float hz, bool high) {
+    const float a = 1.0f - std::exp(-6.2831853f * hz / 48000.0f);
+    float lp[3] = {0.0f, 0.0f, 0.0f};
+    double sum = 0.0;
+    for (int i = 0; i < from + n; i++) {
+        float y = x[i];
+        for (float &state : lp) {
+            state += a * (y - state);
+            y = high ? y - state : state;
+        }
+        if (i >= from) sum += double(y) * double(y);
+    }
+    return float(sum);
+}
+
+// The energy of x[0, n) between `low_hz` and `high_hz`: three one-pole high-passes, then three
+// low-passes.
+float band_pass_energy(const float *x, int n, float low_hz, float high_hz) {
+    const float a = 1.0f - std::exp(-6.2831853f * low_hz / 48000.0f);
+    const float b = 1.0f - std::exp(-6.2831853f * high_hz / 48000.0f);
+    float hp[3] = {0.0f, 0.0f, 0.0f}, lp[3] = {0.0f, 0.0f, 0.0f};
+    double sum = 0.0;
+    for (int i = 0; i < n; i++) {
+        float y = x[i];
+        for (float &state : hp) {
+            state += a * (y - state);
+            y -= state;
+        }
+        for (float &state : lp) {
+            state += b * (y - state);
+            y = state;
+        }
+        sum += double(y) * double(y);
+    }
+    return float(sum);
+}
+
+}  // namespace
+
+// The techno benchmark (2026-11-28) measured the presets against techno one-shots from sample
+// libraries. These pin the two findings presets could fix, as properties of the sound rather
+// than as bytes: a later re-voicing can move every number as long as these still hold.
+TEST(sounds_techno_kicks_put_more_knock_in_the_attack_than_the_909) {
+    // The 909's first 20 ms was 20-35 dB short of the references above 250 Hz. The techno kicks,
+    // with the chain's drive their presets turn up, must beat it there by more than 3 dB.
+    static float a[9600], b[9600];
+    drum_hit<Kick>(named(MachineId::kick, "909"), a, 9600);
+    // The first 20 ms above 300 Hz against the first 100 ms under 150 Hz.
+    const float base = band_energy(a, 0, 960, 300.0f, true) / band_energy(a, 0, 4800, 150.0f, false);
+    static const char *const kTechno[] = {"TECHNO", "WHOUSE", "INDUS", "MINIM"};
+    for (const char *name : kTechno) {
+        drum_hit<Kick>(named(MachineId::kick, name), b, 9600);
+        const float knock = band_energy(b, 0, 960, 300.0f, true) / band_energy(b, 0, 4800, 150.0f, false);
+        CHECK(knock > 2.0f * base);   // at least 3 dB more of the attack above 300 Hz
+    }
+}
+
+TEST(sounds_techno_claps_reach_down_to_one_kilohertz) {
+    // The old voicing at TUN 64 high-passed the noise at about 2 kHz (ten times TUN) and filled
+    // 200 Hz with the drum body; the references peak at 1-2 kHz with 250 Hz 20 dB down. So: more
+    // of each techno clap sits between 700 Hz and 2 kHz than the factory CLAP's, and less of it
+    // under 400 Hz.
+    static float x[9600];
+    auto shares = [&](const SoundPreset &s, float *mid, float *low) {
+        drum_hit<Snare>(s, x, 9600);
+        const float total = band_energy(x, 0, 9600, 1.0f, true);
+        *mid = band_pass_energy(x, 9600, 700.0f, 2000.0f) / total;
+        *low = band_energy(x, 0, 9600, 400.0f, false) / total;
+    };
+    float clap_mid, clap_low;
+    shares(named(MachineId::snare, "CLAP"), &clap_mid, &clap_low);
+    static const char *const kClaps[] = {"TCLAP", "CLAP4", "DARK"};
+    for (const char *name : kClaps) {
+        float mid, low;
+        shares(named(MachineId::snare, name), &mid, &low);
+        CHECK(mid > clap_mid);
+        CHECK(low < clap_low);
     }
 }

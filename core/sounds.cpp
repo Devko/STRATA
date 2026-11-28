@@ -42,15 +42,32 @@ constexpr SoundPreset kKickPresets[] = {
     {"DIST", {55, 80, 60, 90}, {100, 127, 20, 0}, {84, 100, 127, 52}, NO_ASR, NO_OSC},
     // Dub: soft attack, no click, a dull top. A kick that sits under a chord rather than on it.
     {"SOFT", {55, 40, 50, 10}, FLAT, {70, 20, 0, 127}, NO_ASR, NO_OSC},
-    // Rumble techno: a long, dark, dirty body with the drive up, for a reverb to smear into
-    // the rumble under the next kick.
-    {"RUMBLE", {55, 50, 70, 40}, {70, 127, 20, 0}, {112, 20, 80, 56}, NO_ASR, NO_OSC},
+    // The rumble layer, for a second KICK track under the main one (the "low rumble" of a layered
+    // techno kick): no click, a slow small sweep, a long dirty body driven hard and then the
+    // chain's 24 dB low-pass at 290 Hz (CUT 50, MOD 40), so only the low growl is left. Measured
+    // against RY Divinity's kick builder rumbles (techno benchmark, 2026-11-28): 125 Hz at -13 dB
+    // and 250 Hz at -29 dB under the fundamental, theirs -16 and -36. Duck it from the main kick.
+    {"RUMBLE", {55, 40, 70, 0}, {120, 50, 60, 40}, {96, 40, 127, 36}, NO_ASR, NO_OSC},
     // Tight: a fast, clicky modern techno kick that leaves room for the bass between hits.
     {"TIGHT", {55, 85, 35, 100}, {20, 127, 20, 0}, {40, 75, 20, 118}, NO_ASR, NO_OSC},
     // Ambient: a slow, deep drop, no click, the longest tail. A boom on the one, not a groove.
     {"BOOM", {55, 35, 100, 0}, FLAT, {127, 10, 0, 100}, NO_ASR, NO_OSC},
     // Hard: a big fast sweep into a fully dirty body, driven hard. Hard and industrial techno.
     {"HARD", {55, 110, 30, 120}, {120, 127, 20, 0}, {64, 110, 127, 44}, NO_ASR, NO_OSC},
+    // The techno benchmark (2026-11-28) measured the presets above against 400+ techno kicks from
+    // sample libraries: in its first 20 ms the 909 is 20-35 dB short of them from 250 Hz to 4 kHz,
+    // the knock that makes a kick punch. The four below get as close as today's knobs can: the
+    // full sweep (FMA 127), full click, DRT at the top and the chain's drive hard, which is where
+    // the 250 Hz-1 kHz knock comes from. LVL sits low because the drive does the level: they land
+    // within about 2 dB of the list's loudest.
+    // Modern techno: the sweep over 27 ms (FMD 56), a 61 ms body. Closest to the references of all.
+    {"TECHNO", {55, 127, 56, 127}, {110, 127, 20, 0}, {64, 100, 127, 62}, NO_ASR, NO_OSC},
+    // Warehouse: a faster sweep and a longer, darker body (DEC 82, about 190 ms to -20 dB).
+    {"WHOUSE", {55, 127, 48, 127}, {100, 127, 20, 0}, {82, 90, 127, 56}, NO_ASR, NO_OSC},
+    // Industrial: the fastest sweep, drive at the top, short. Hard and industrial techno.
+    {"INDUS", {55, 127, 36, 127}, {127, 127, 20, 0}, {58, 110, 127, 56}, NO_ASR, NO_OSC},
+    // Minimal: short and tight, less drive. Leaves room for a rolling bass between the hits.
+    {"MINIM", {55, 127, 40, 127}, {90, 127, 20, 0}, {44, 100, 100, 82}, NO_ASR, NO_OSC},
 };
 
 // --- SNARE: TUN SNP TON CLP / DEC SPR BDY LVL (dsp/snare.cpp) ------------
@@ -62,8 +79,11 @@ constexpr SoundPreset kSnarePresets[] = {
     {"909SN", {64, 70, 70, 0}, FLAT, {50, 28, 40, 100}, NO_ASR, NO_OSC},
     // The 808 snare: tuned higher, less snap, a darker band, a short body.
     {"808SN", {80, 50, 56, 0}, FLAT, {40, 28, 20, 104}, NO_ASR, NO_OSC},
-    // A big clap: four bursts (CLP 100) 14 ms apart, a longer tail. Wider than that is a flam.
-    {"CLAP4", {64, 110, 30, 100}, FLAT, {70, 40, 30, 100}, NO_ASR, NO_OSC},
+    // A big clap: four bursts (CLP 100), a longer tail. TUN 45 (about 160 Hz) is the point: the
+    // noise's high-pass sits at ten times TUN, and at the old 200 Hz it cut everything under 2 kHz
+    // while the drum body filled 200 Hz. Techno claps (the benchmark, 2026-11-28) peak at 1-2 kHz
+    // with 250 Hz 20 dB down; so does this, within about 3 dB from 250 Hz to 8 kHz.
+    {"CLAP4", {45, 127, 12, 100}, FLAT, {50, 24, 10, 127}, NO_ASR, NO_OSC},
     // A snare rim: tuned up, almost no noise, very short. A tick for a sparse groove.
     {"RIMSN", {110, 20, 90, 0}, FLAT, {10, 10, 0, 96}, NO_ASR, NO_OSC},
     // Dirty: noisy, darker, driven hard in the chain. Breaks and electro.
@@ -74,8 +94,12 @@ constexpr SoundPreset kSnarePresets[] = {
     {"TIGHT", {70, 60, 80, 0}, FLAT, {25, 28, 30, 104}, NO_ASR, NO_OSC},
     // A noise wash: all noise, a bright band, a long tail. Ambient hits and risers' ends.
     {"NOISE", {64, 127, 90, 0}, FLAT, {90, 28, 0, 58}, NO_ASR, NO_OSC},
-    // A dark clap: tuned down, the band low, a little drive. Deep and dub techno.
-    {"DARK", {50, 100, 30, 64}, {40, 127, 20, 0}, {54, 40, 40, 96}, NO_ASR, NO_OSC},
+    // A dark clap: tuned down (so the noise reaches down to 1 kHz), the band low, a little drive.
+    // Deep and dub techno.
+    {"DARK", {30, 127, 0, 64}, {40, 127, 20, 0}, {50, 28, 10, 111}, NO_ASR, NO_OSC},
+    // The techno clap: three bursts 9 ms apart, voiced like CLAP4 (TUN 45, the body nearly gone),
+    // short. Within about 3 dB of the benchmark's claps from 250 Hz to 8 kHz.
+    {"TCLAP", {45, 127, 12, 64}, FLAT, {45, 20, 10, 127}, NO_ASR, NO_OSC},
 };
 
 // --- HAT: TUN TON NOI DTN / DEC CHO CHK LVL (dsp/hat.cpp) -----------------
@@ -146,12 +170,15 @@ constexpr SoundPreset kMonoPresets[] = {
     // The factory bass: 24 dB at 290 Hz with some resonance, a short three-octave "wow", and
     // the sub under it for the weight.
     {"ROLL", {64, 40, 46, 56}, VOICE, {46, 72, 18, 127}, NO_ASR, {0, 0, 90, 24}},
-    // Acid: the 303 move. Closed (CUT 26, 145 Hz), resonance high, the envelope wide, driven.
-    // SUS holds each note for its LEN, so DEC is only the filter's sweep: accent and slide do
-    // the rest. A raw saw, no sub.
-    {"ACID", {64, 20, 26, 100}, VOICE, {44, 100, 0, 77}, {0, 100, 8, 0}, {0, 0, 0, 48}},
+    // Acid: the 303 move. CUT 40 (about 220 Hz) with the resonance up, the envelope wide, the saw
+    // driven hard into the filter. SUS holds each note for its LEN, so DEC is only the filter's
+    // sweep: accent and slide do the rest. A raw saw, no sub. Write the line around C3: the
+    // benchmark's 303 loops (2026-11-28) have 125 Hz-1 kHz within 6 dB and their fundamental
+    // band 18 dB down, and so does this an octave up. At CUT 26 the old voicing had its 63 Hz band
+    // loudest and 500 Hz-1 kHz 23 dB under the references: a dull bass rather than acid.
+    {"ACID", {64, 20, 40, 90}, VOICE, {50, 80, 0, 93}, {0, 100, 8, 0}, {0, 0, 0, 90}},
     // The same line on a square: hollower, rubberier.
-    {"ACIDSQ", {64, 20, 30, 98}, VOICE, {44, 96, 0, 71}, {0, 100, 8, 0}, {40, 0, 0, 40}},
+    {"ACIDSQ", {64, 20, 44, 90}, VOICE, {50, 80, 0, 81}, {0, 100, 8, 0}, {40, 0, 0, 80}},
     // A thick bass: two saws 14 cents apart, the sub at the top, driven into a 24 dB filter.
     // Holds for its LEN.
     {"FAT", {64, 30, 42, 36}, VOICE, {70, 40, 0, 101}, {0, 100, 24, 24}, {0, 30, 110, 72}},
