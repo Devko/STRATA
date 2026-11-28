@@ -240,8 +240,9 @@
                 if (note_repeat_mode_) x = draw_tab(canvas, x, "NRPT", false);
                 break;
             case Mode::project: {
-                // The slots, CHAIN, PATTERN, SETUP and PROJECTS, as the screen keys walk them.
-                static const char *const names[] = {"SLOT", "CHAIN", "PAT", "SETUP", "PROJS"};
+                // The slots, CHAIN, PATTERN, SETUP, PROJECTS and LAUNCH, as the screen keys walk
+                // them: 122 pixels in the small font, inside the meter's edge.
+                static const char *const names[] = {"SLOT", "CHAIN", "PAT", "SETUP", "PROJS", "LNCH"};
                 static_assert(int(sizeof(names) / sizeof(names[0])) == int(ProjectPage::count),
                               "a tab for every PROJECT page");
                 for (int p = 0; p < int(ProjectPage::count); p++) {

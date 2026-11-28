@@ -601,6 +601,8 @@
 
         const int track = track_for_pad(pad);
         if (track < 0 || track >= kTracks) return;
+        // LAUNCH: the pad picks the lane, silently (app/ui_launch.hpp).
+        if (launch_pad(track, true)) return;
 
         // F1 + pad mutes in any mode, and MUTE mode makes the lower pads mutes outright. With
         // F1 the mute waits for the bar: a held F1 is the performer asking for it to land in
@@ -683,6 +685,7 @@
         // A rolling pad stops on its own release, whatever the mode is by now: NOTE RPT turned
         // off under a held pad must not leave the roll running.
         const int track = track_for_pad(pad);
+        if (track >= 0 && track < kTracks && launch_pad(track, false)) return;
         mod_pressure_release(track);           // PRS back to 0 (app/ui_modslots.hpp)
         if (track >= 0 && track < kTracks && (rolling_pads_ >> track & 1u) != 0) {
             rolling_pads_ = uint16_t(rolling_pads_ & ~(1u << track));

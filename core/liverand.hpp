@@ -1,8 +1,8 @@
 // LIVE RND: random step playback, turned in live from PERFORM.
 //
 // CyDrums' P1 (backlog Phase 5, "random step playback per track"; the controls concept puts the
-// setting on the pattern and one knob gesture in PERFORM). The pattern half is TRACK PLAY's
-// RND1-RND16 (core/timing.hpp, PlayMode). This is the live half, in the Moves layer beside the
+// setting on the pattern and one knob gesture in PERFORM). The pattern half is the track PLAY
+// mode's RND1-RND16 (core/timing.hpp, PlayMode). This is the live half, in the Moves layer beside the
 // macros, the morph and REL/LEN ALL: one unit for every ARMED track at once, which overrides
 // that track's own play mode while it is on.
 //

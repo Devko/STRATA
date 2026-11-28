@@ -625,6 +625,10 @@
             draw_projects(canvas);
             return;
         }
+        if (project_page_ == ProjectPage::launch) {
+            draw_launch(canvas);   // app/ui_launch.hpp
+            return;
+        }
         if (slot_menu_) {
             draw_slot_menu(canvas);
             return;

@@ -20,8 +20,8 @@ another, small labels end by x 125, two small labels on a line keep 2 blank pixe
 - **Stopped, a screen holds still and still looks right**: pictures are drawn from their knobs;
   analysers (spectrum, scope, meters) sit at rest; nothing moves on a timer of its own. Moving
   parts come from the audio side (an LFO's phase, a grain, a note's envelope) or from the running
-  transport. The control audit (`ui_audit_every_input_in_every_screen_shows_it_did_something`)
-  fails a screen that moves with no input.
+  transport. The control audit's `ui_audit_every_screen_holds_still_with_no_input` fails a
+  screen that moves with no input.
 - **A picture that plays a note through** (a drum's hit, the filter's sweep, the duck's dip)
   starts from the moment the UI saw the track's trigger count move (`update_track_triggers`,
   every frame on every screen). A count that moved while nothing was drawn for 200 ms is an old

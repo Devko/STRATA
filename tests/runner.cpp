@@ -15,7 +15,7 @@ int Registry::checks = 0;
 int Registry::failures = 0;
 const char *Registry::current = "";
 
-void Registry::add(const char *name, void (*fn)()) {
+void Registry::add(const char *name, void (*fn)(), unsigned weight) {
     if (count >= kMax) {
         // A failure, not just a message. Dropping a registration means a test that never runs
         // and therefore never fails, and a suite that is quietly getting smaller while reporting
@@ -36,6 +36,7 @@ void Registry::add(const char *name, void (*fn)()) {
     }
     entries[count].name = name;
     entries[count].fn = fn;
+    entries[count].weight = weight > 0 ? weight : 1;
     count++;
 }
 
@@ -80,8 +81,24 @@ int Registry::run_all(int shard, int shards, unsigned timeout_s) {
     // `--only` already has to survive. Round robin (tried first) gives each test a predecessor it
     // never had: it passes today only after the three tests/apprig.cpp fixes of the same change,
     // and a random order still fails dozens of tests (docs/HANDOFF.md, "Test order").
-    const int first = int(int64_t(count) * shard / shards);
-    const int end = int(int64_t(count) * (shard + 1) / shards);
+    //
+    // The blocks are of equal WEIGHT (TEST_WEIGHTED), not of equal count: test i goes to the shard
+    // its starting weight falls in, so a test of several seconds is spread over its own shards
+    // instead of making one shard as long as the rest of the suite together.
+    int64_t total = 0;
+    for (int i = 0; i < count; i++) total += entries[i].weight;
+    int first = count, end = count;
+    int64_t before = 0;
+    for (int i = 0; i < count; i++) {
+        const int64_t k = total > 0 ? before * shards / total : 0;
+        if (k >= shard && first == count) first = i;
+        if (k > shard) {
+            end = i;
+            break;
+        }
+        before += entries[i].weight;
+    }
+    if (first > end) first = end;
     const int mine = end - first;
     if (shards > 1) {
         std::printf("running %d of %d tests (shard %d/%d)\n", mine, count, shard + 1, shards);

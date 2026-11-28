@@ -46,7 +46,7 @@ HOME "system", PLAY "◀◀", STOP "▶▶", MIXER "fx", EDIT "rec src".
      second label.**
    - **Arrow pad:** the cursor on the screen. UP/DOWN rows, LEFT/RIGHT sideways. OK picks, CLR
      goes back (or clears, where there is something selected to clear).
-   - **Screen keys:** the screen's pages. EDIT SRC FLTR AMP FX LFO ARP ENV OSC; MIXER's twelve; PROJECT,
+   - **Screen keys:** the screen's pages. EDIT SRC FLTR AMP FX LFO ARP ENV OSC; MIXER's seventeen; PROJECT,
      CHAIN, PATTERN, SETUP, PROJECTS; the step page's field pages; SAMPLES' and KIT's pages of
      eight. On GRID and KEYS, where A-D turn the current EDIT page, they turn that page. The
      one-page screens give them their one sideways setting: MACHINE and SOUNDS the track,
@@ -300,7 +300,7 @@ Everything that belongs to the selected track. Roland, 2026-11-27: generate a dr
 part, random but in the key, and let it mutate on its own every few loops. The track's SPEED,
 PLAY, FREEZE and RELOAD SAMPLE joined it from the FUNC menu (usability review, 2026-11-28).
 `core/generate.hpp`, `core/evolve.hpp`, `app/ui_trackmenu.hpp`. OK in GRID with nothing held did
-nothing, so the hold costs no gesture; a tap still does nothing.
+nothing, so the hold costs no gesture; a tap says where the menu is (`HOLD OK: TRACK MENU`).
 
 | Row | Does | Says |
 | --- | --- | --- |
@@ -347,6 +347,47 @@ and UP/DOWN or VALUE when `>` is on it. One line: `OFF`, `DRIFT 1-6`, `WAVE 1-6`
 - On top of swing and micro-timing; the steps never change, so OFF is the grid exactly. Seeded
   from the pattern and the bar position, so a pass plays the same after a reload.
 - Saved in the pattern (an optional section; older files load OFF), undoable, held by a LOCK.
+
+## LAUNCH: one track from another pattern (PROJECT twice)
+
+Track Launch, Roland's decisions of 2026-11-27, `core/launch.hpp`, `app/ui_launch.hpp`. Each track
+is a lane that plays its own part of the playing pattern, or the same track's part of another
+pattern of the project. PROJECT pressed twice quickly opens LAUNCH, PROJECT's last page (tab
+`LNCH`): a row for each lane with its 16 slots of the shown bank.
+
+| Key | Does | Says |
+| --- | --- | --- |
+| STEP 1-16 | launch that slot of the shown bank on the selected lane, or on every held lower pad. The same STEP again while it is queued drops it | `T3 < B07 AT END`, `LAUNCH OFF` |
+| Lower pads | select the lane, held for a launch of several. **Silent** on this page | |
+| UP / DOWN | the lane | |
+| LEFT / RIGHT | the slot cursor | |
+| OK | tap: launch the cursor's slot. Hold (0.5 s): **CAPTURE** | |
+| CLR | the lane back to its own part; on a lane already on its own part, back to SLOT | `T3 < OWN` |
+| push B | PIN the lane: a pattern change leaves it playing what it plays | `T3 PINNED` |
+| FUNC + STEP | a whole-pattern change, as on SLOT | |
+| The bank keys | the shown bank | |
+
+- **When it lands**: on the queue mode's boundary (END, 16, 8, 4, NOW), as a pattern change does;
+  stopped, or NOW, at once. The launched part starts from its own step 1 on that tick, and keeps
+  its own length and speed. `T3 B07` when it lands. A jump back, CLR on SLOT and STOP drop queued
+  launches.
+- **A pattern change** sends every lane back to its own part of the new pattern, unless pinned.
+  A pinned lane on its own part keeps playing the pattern being left. Launches queued for the same
+  boundary land after the change, over the new pattern.
+- **Read only**: a launched lane plays another pattern's part, and edits to it (a trig, a lock,
+  LEN, speed, GEN, recording ...) are refused with `T3 B07 READ ONLY`. EVOLVE pauses on it.
+  Sounds, mutes and the mixer are the track's as ever: only the steps come from elsewhere.
+- **CAPTURE** (hold OK): what plays, every lane's part, is written to the first empty slot of the
+  shown bank and plays from there with every lane on its own part, so it edits again.
+  `CAPTURED A02`; `NO FREE SLOT IN BANK` or `LOCKS FULL` when it cannot. Not undoable; the source
+  patterns are untouched. Master length, swing, key, FEEL and the seed come from the playing
+  pattern.
+- **LOCK** (FUNC + MUTATE) stores what you hear, launched parts included, as the playing
+  pattern's own.
+- **GRID** draws each lane's playing part; a launched lane's number is underlined, a queued one
+  blinks, and the info line ends `<B07`.
+- **Saved** in the project (PROJECT.BIN section 8): each lane's source and the pins. Not in the
+  chain. A project from before this opens with every lane on its own part.
 
 ## The performance mixer (push VALUE + STEP)
 
@@ -644,6 +685,10 @@ pages**, as they turn every screen's pages; the help's last line says
 FUNC + a knob or pad, the upper pads, and the performance mixer's gestures and slots
 (`VALUE FX MIXER:`, `VALUE FX STEPS:`). Every hold starts on the screen's own page.
 
+A quick tap of FUNC alone (let go before the help shows, nothing else pressed) says
+`HOLD FUNC: HELP`, unless another notice or a MUTATE waiting for OK or CLR is up: nothing else
+on the panel says the help is there.
+
 FUNC + a screen key or LEFT/RIGHT does nothing anywhere else, and the help only takes them once
 it is up, so no chord changes meaning. Any other key, knob or pad, or letting go of FUNC, takes
 the help away, so a chord never sees it. Not while a name is being typed.
@@ -660,6 +705,7 @@ The screens and their pages, from `core/help.cpp`:
 | MIXER | the page that is up (TRK, DCK, DUCK, WID, DLY, DLY+, REV, REV+, ROUTE, CHO, MST, EQ) |
 | PERFORM | macros, LEARN, scenes, morph, mutate |
 | PROJECT, CHAIN, PATTERN, SETUP | one page each |
+| LAUNCH | one page |
 | PROJECTS | open, rename, delete, save as; typing a name |
 | MACHINE, KIT, SAMPLES, SOUNDS, RESAMPLE, FUNC menu | one page each |
 

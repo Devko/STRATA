@@ -5,8 +5,9 @@
 #
 # `make -C host test JOBS=N` calls this; CI and tools/ci_local.sh do too. The suite is cut into
 # SHARDS blocks (default 4 x JOBS) and JOBS processes take blocks as they finish, because the cost
-# is lumpy: one test (ui_audit_every_input_in_every_screen...) is 40% of the suite, so equal
-# blocks on exactly JOBS processes leave most of them idle. Each shard is a
+# is lumpy: equal blocks on exactly JOBS processes leave most of them idle. The blocks are of equal
+# weight, not count (TEST_WEIGHTED in tests/check.hpp): the control audit, once one test of 40% of
+# the suite, is one test per screen at weight 120, and the cuts spread those over their own shards. Each shard is a
 # contiguous block of the registration order (tests/runner.cpp, --shard), so every test still runs
 # after the same predecessors it has in the serial run, or first in its process. TIMEOUT_S is the
 # per-test watchdog (--timeout): a test that never returns fails with its name instead of holding

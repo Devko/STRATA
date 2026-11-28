@@ -40,7 +40,7 @@ the top of `docs/UNIT_CHECKLIST.md` is the next pass.
    release). Features keep landing on `main`; 1.0 comes when Roland says so. No thread tags or
    releases on its own: a release runs from its own thread (`docs/release/RELEASING.md`).
 1. **On the unit: the walkthrough** at the top of `docs/UNIT_CHECKLIST.md`: N1-N7 (Enaga 0.4),
-   the smoke test S1-S20, then W1-W63, on a cl6x build from `main` with Enaga 0.4.0 firmware.
+   the smoke test S1-S20, then W1-W64, on a cl6x build from `main` with Enaga 0.4.0 firmware.
 2. **Write the readings down where they belong**: unit rows in `docs/BUDGET.md` (MAX from SETUP
    on A01 and on GENERATE, to pin both ratios), ticks in the reference half of
    `docs/UNIT_CHECKLIST.md`, the Unit column of `docs/FEATURES.md`, and anything odd as an issue
@@ -240,7 +240,8 @@ file-scope, never locals), `fresh()`, `pump()`, `pump_until_idle()`, `settle()`,
   protocol is in section 6 above.
 
 - **Test order.** The host suite passes in registration order, with `--only` on any one test,
-  as contiguous shards (`--shard K/N`, what `make -C host test JOBS=N` and CI run), and since
+  as contiguous shards (`--shard K/N`, what `make -C host test JOBS=N` and CI run; cut by
+  weight, so a test of seconds is `TEST_WEIGHTED`, tests/check.hpp), and since
   2026-11-26 in shuffled orders: 37 seeds clean with `tools/test_shuffle.sh BIN [SEEDS...]`,
   where they had failed 28-55 checks each. What leaked, now fixed: the scenes and macros (they
   load beside `Project`, so `project_init` left them), every UI cursor and page, the take
