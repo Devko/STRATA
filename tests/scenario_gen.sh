@@ -49,7 +49,7 @@ paths = importlib.import_module("paths")
 build_app = importlib.import_module("build_app")
 enaga_cached.wrap_build_app(build_app, paths)
 emulate = importlib.import_module("emulate")
-enaga_cached.wrap_firmware(emulate.firmware_build, paths)
+enaga_cached.wrap_emulate(emulate, paths)
 
 M = 1_000_000
 MS = emulate.MS
