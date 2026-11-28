@@ -18,15 +18,20 @@ python3 tools/mutation_test.py core/queue.cpp core/perform.cpp --lines 1-200 --j
   (0→1, 1→0, 1→2), a `!` removed, or a whole expression statement deleted. String literals
   and comments are masked first, so nothing lands inside one.
 - Each mutant is compiled with the suite's flags, linked against the ordinary build's objects
-  in the Makefile's order, and run against the whole suite with a fail-fast runner. 60 s
+  in the Makefile's order, and run against the whole suite with a fail-fast runner. Three times
+  the suite's own time (measured with every worker running it at once), and at least 60 s,
   without an answer counts as killed (an endless loop).
+- `--skip-test NAME` (repeatable) leaves a test out of every mutant's run: the UI audit takes 22
+  of the suite's 43 s and reaches nothing outside the screens. `--rerun out.json` runs only the
+  survivors of an earlier run, for an "after" figure when only tests changed.
 - Nothing in the tree is touched: each worker mutates a private copy under build/mutation/.
   **Do not rebuild build/host while it runs**; use `ENAGA_BUILD=/tmp/x make -C host build` for
   a side build. And do not edit a file under test: each mutant is made from the file on disk.
 - The unmutated suite has to pass inside the harness first, or it stops. It did not, once: a
   test in test_app.cpp hard-coded the project folder, and passed only because of link order.
-- About 13 s per mutant per worker on a 4-core container (the suite is most of it):
-  app/engine.cpp takes about 50 minutes with -j 4, the seven core files below about 70.
+- A killed mutant is quick; a survivor costs a whole suite run, 43 s (28 s without the UI audit)
+  per worker on a 4-core container. app/engine.cpp took about 50 minutes with -j 4 when the suite
+  was a quarter of that; split a long run into files, so one stopped run does not lose them all.
 
 ## Results
 
@@ -123,6 +128,132 @@ Equivalent, and why:
 
 The `*.ti.c` loop (`dsp/stoploops.ti.c`) is not mutated by the harness, as before.
 
+## Fourth pass: every file not yet run (2026-11-28)
+
+Every `*.cpp` the earlier passes had not reached, but for two groups left to a later pass: the
+screens and keys (app/app.cpp, app/paint.cpp, core/help.cpp), and the files of features being
+built that day (core/energy.cpp, core/launch.cpp, core/liverand.cpp, core/perffx.cpp).
+
+| File | Before | After | New tests |
+| --- | --- | --- | --- |
+| app/spectrum.cpp | 63 / 16 (79.7%) | 71 / 8 (89.9%) | tests/test_spectrum.cpp |
+| core/arp.cpp | 145 / 68 (68.1%) | 178 / 35 (83.6%) | tests/test_arp.cpp |
+| core/arppresets.cpp | 22 / 45 (32.8%) | 25 / 42 (37.3%) | tests/test_arp.cpp; preset content |
+| core/browse.cpp | 194 / 81 (70.5%) | 247 / 28 (89.8%) | tests/test_browse.cpp |
+| core/cpuguard.cpp | 37 / 20 (64.9%) | 43 / 14 (75.4%) | tests/test_cpuguard.cpp |
+| core/evolve.cpp | 78 / 30 (72.2%) | 98 / 10 (90.7%) | tests/test_evolve.cpp |
+| core/generate.cpp | 76 / 95 (44.4%) | 145 / 26 (84.8%) | tests/test_generate.cpp (pinned) |
+| core/lockstore.cpp | 43 / 10 (81.1%) | 45 / 8 (84.9%) | tests/test_lockstore.cpp |
+| core/midiout.cpp | 90 / 32 (73.8%) | 103 / 19 (84.4%) | tests/test_midiout.cpp |
+| core/modslot.cpp | 23 / 5 (82.1%) | 23 / 5 (82.1%) | none: all equivalent |
+| core/moveall.cpp | 37 / 20 (64.9%) | 41 / 16 (71.9%) | tests/test_moveall.cpp |
+| core/onsets.cpp | 99 / 31 (76.2%) | 116 / 14 (89.2%) | tests/test_onsets.cpp |
+| core/overview.cpp | 101 / 46 (68.7%) | 119 / 28 (81.0%) | tests/test_overview.cpp |
+| core/scope.cpp | 24 / 13 (64.9%) | 32 / 5 (86.5%) | tests/test_scope.cpp |
+| core/sounds.cpp | 60 / 263 (18.6%) | 65 / 258 (20.1%) | tests/test_sounds.cpp; preset content |
+| core/stepnotes.cpp | 57 / 29 (66.3%) | 74 / 12 (86.0%) | tests/test_stepnotes.cpp |
+| core/tuning.cpp | 46 / 31 (59.7%) | 48 / 29 (62.3%) | tests/test_tuning.cpp |
+| dsp/ambient.cpp | 83 / 88 (48.5%) | 130 / 41 (76.0%) | goldens, tests/test_ambient.cpp |
+| dsp/audition.cpp | 114 / 50 (69.5%) | 149 / 15 (90.9%) | tests/test_audition.cpp |
+| dsp/click.cpp | 24 / 20 (54.5%) | 35 / 9 (79.5%) | golden, tests/test_click.cpp |
+| dsp/extmidi.cpp | 15 / 2 (88.2%) | 17 / 0 (100.0%) | tests/test_extmidi.cpp |
+| dsp/fm.cpp | 165 / 214 (43.5%) | 310 / 69 (81.8%) | goldens, tests/test_fm.cpp |
+| dsp/fmpoly.cpp | 10 / 22 (31.2%) | 25 / 7 (78.1%) | goldens, tests/test_fm_machine.cpp |
+| dsp/frozen.cpp | 42 / 16 (72.4%) | 48 / 10 (82.8%) | tests/test_frozen.cpp |
+| dsp/looper.cpp | 82 / 60 (57.7%) | 115 / 27 (81.0%) | tests/test_perffx.cpp |
+| dsp/masterfx.cpp | 24 / 30 (44.4%) | 46 / 8 (85.2%) | goldens, tests/test_perffx.cpp |
+| dsp/plucked.cpp | 96 / 162 (37.2%) | 96 / 162 (37.2%) | none: in no machine |
+| dsp/wavetable.cpp | 466 / 426 (52.2%) | 699 / 149 (82.4%) | goldens, tests/test_wavetable.cpp; a fix |
+
+"Before" for dsp/ and app/spectrum.cpp is one run (dsp/wavetable.cpp's lines from 260 in a second
+one); "after" re-ran only its survivors, as the second pass did. dsp/wavetable.cpp changed (the
+fix below), so its "after" is a fresh run of the whole file. core/ before and after are one run
+each, the after on the survivors; core/overview.cpp's after counts five more killed by a test
+tightened once the run was done, checked against those survivors.
+
+What was missing, and is now pinned:
+
+- **The machines' sound.** FM4, WAVE MONO and WAVE POLY had no golden renders. Now FM4 has
+  every algorithm on two patches, a dense pattern, and one render with every page's knobs set
+  and turning while it plays, feedback rising from 0; the WAVE pair has every table on WAVE MONO
+  and four on WAVE POLY; and every wavetable itself is pinned sample by sample, all 16 tables,
+  every frame and mip level, as 24 hash-weighted projections. The LONG and HALL sends, the
+  master effects and the click have renders of their own. 159 renders; the 89 earlier ones are
+  unchanged.
+- **The random draws, again.** GEN's parts, the arp's RND notes and RND2/RND3's ratchets were
+  tested for spread and for repeating within one build, as `probability_roll` was before the
+  first pass. Now pinned: the arp's draws hit by hit, GEN's parts by a checksum over eleven
+  settings (a deliberate change prints the new sums with `STRATA_GOLDEN=print`).
+- **Exact edges.** A click lasting exactly its frames however the blocks fall; the audition's
+  Catmull-Rom reading exactly the frames it needs at five rates; the looper's crossfade law
+  sample by sample across the loop's end, and a take ending mid-block; the onset finder's floor,
+  minimum gap and full table; the overview's stretch of a short file; MIDI out's full table
+  cutting exactly the note nearest its end; every buffer in the browser fitting to the byte;
+  the CPU guard's waits counted from each rise, fall and reset.
+- **State a reset must drop**: a reused FM voice's band cap, a gate brought back, a builder used
+  again after a broken load, a cleared frozen loop.
+
+**One bug.** dsp/wavetable.cpp's `start_next`: with every slot taken, it takes out the table
+wanted least recently and waits two audio blocks before writing its slot, but on every step
+while it waited it took out another unwanted table. All of them went, and the new table landed
+in the lowest slot rather than the least recently wanted one, so turning back to a table played
+a moment ago built it again (CHANGELOG, unit checklist W65). It waits now without taking out more.
+The new slot test (tests/test_wavetable.cpp) fails on the old code.
+
+Equivalent, and why, beyond the classes above:
+
+- **FM4**: the band cap's cache (a flipped comparison recomputes more often: CPU only, and each
+  knob moves two ratios, so one comparison is covered by the other); the three modulators'
+  indices are always equal (one target); the sine table's static zero is sin 0 and its refill
+  writes the same values; choke slices end on 16-frame boundaries.
+- **The wavetable builder**: index 0 of a spectrum (DC) is never read; `* -> /` by ±1 is the same
+  number; quantise's silent branch (no recipe is silent); `normalise_whole` reads frame 0 for all
+  frames on PLUCK, the only recipe it runs on, whose frame 0 is its loudest; growl's shaper
+  ignores its frame argument. The library: refusals after a plain `new` (fatal, never null);
+  -1 against -2 sentinels; resets of a fresh object; two slots settling at once (impossible
+  after the fix); the idle stage's branch.
+- **LONG and HALL**: `kHallMaxLength` and `longest` are larger than any delay the knobs reach;
+  a block of other than 64 frames; init's defaults that `set()` overwrites.
+- **Master FX**: an effect run at depth 0 is bit-exact with skipping it (the skip is CPU only).
+- **The arp, GEN and the tuning maps**: the OFF, CYC and RND rows' lengths (never read); the
+  middle note of CONVERGE (taken by the next pass of the loop either way); the reflection loop's
+  third pass and its boundaries (no step is ever more than one range away); a byte clamp whose
+  both branches give the same note.
+- **TUN's click guard** (core/tuning.cpp 104-105): a click that rounds back to its own byte is
+  moved on by one. Every map is linear and solved exactly, so from every byte of every machine
+  the solved byte already moves (tested); the guard never fires. Kept as a margin.
+- **The overview**: a column closed one pass of the loop later (`at - n`), a zero-length run;
+  a builder reused with `open_` left set, where every column then has frames anyway.
+- **MIDI out**: a cut whose note-off the queue refuses returns a slot index or -1, but the
+  note-on goes to the same full queue and is refused either way.
+- **The scope ring**: a push that exactly fills to the end is not split; `>=` against `>` there.
+- **core/sounds.cpp and core/arppresets.cpp**: the preset tables are content, like
+  core/factory.cpp; what a preset writes and how it matches is tested, not which number it holds.
+- **core/modslot.cpp**: all five are clamp and rounding boundaries.
+
+Accepted gaps:
+
+- **dsp/plucked.cpp** (STRING) is in no machine (postponed in docs/PLAN.md); 162 survivors left.
+- FM4's FBK rising from 0: its first 16-frame slice runs the no-feedback loop, a sliver no render
+  can tell from the ramp.
+- `wave_build_scratch_bytes()` is a formula; a test would restate it. tests/test_memory.cpp sums it.
+- The CPU guard's `cool_ > 0` against `> 1`: one block of the 750 a step down waits.
+- The overview's stretch of a file shorter than its header is pinned to within a column (and
+  exactly for two columns), not index by index for every column count.
+- GEN's walk at the very bottom of the range (a root on note 0) and the nearest-root choice at a
+  bar's start, beyond the pinned settings.
+
+Found along the way, not changed:
+
+- `FmSettings::rate` is set but never read.
+- The wavetable `Arena`'s borrowed-memory path is dead: `at` is never set, so every `take()` is
+  `new`. Harmless; a candidate for removal.
+
+The harness grew three things for this pass: the timeout is three times the suite's own time
+with every worker running (60 s before; the suite is 43 s now, 28 s without the UI audit test),
+`--skip-test NAME` leaves a slow test out of every mutant's run (the UI audit, 22 s, which no
+mutant here can reach), and `--rerun JSON` runs only an earlier run's survivors.
+
 ## Golden renders
 
 The DSP files could not be pinned by property tests alone. A hit that sounds, decays and moves
@@ -141,10 +272,11 @@ make -C host build && STRATA_GOLDEN=print build/host/strata-tests > /tmp/g.txt
 python3 tools/golden_update.py /tmp/g.txt      # rewrites tests/golden_data.inc
 ```
 
-and the diff of golden_data.inc goes in the same commit as the DSP change. 89 renders: two patches
+and the diff of golden_data.inc goes in the same commit as the DSP change. 159 renders: two patches
 of three spaced hits per machine, a dense pattern (retriggers that steal, a chord bigger than any
-pool, key ups, STOP twice) over four more patches, and a steal's splice summarised sample by
-sample.
+pool, key ups, STOP twice) over four more patches, a steal's splice summarised sample by sample,
+FM4's eight algorithms and a render with its knobs moving, every wavetable, the LONG and HALL
+sends, the master effects and the click.
 
 ## What was a missing test
 
@@ -310,7 +442,7 @@ Second pass:
   grain onset at 1/65536 of a frame, and the window's last entry (1.5e-4) zeroed: all below
   what a golden render's tolerance can see.
 - The send tails' exact formula is pinned at one setting each; feedback at exactly 0.001 is not.
-- dsp/freeze, dsp/lfo, dsp/tapestop and core/streamfifo: run in the third pass below. Sampler's
+- dsp/freeze, dsp/lfo, dsp/tapestop and core/streamfifo: run in the third pass above. Sampler's
   stream voice (dsp/sample.cpp, `generate_stream` and `stream_tap`) has not been run line by line.
 
 ## Found along the way
