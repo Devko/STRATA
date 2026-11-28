@@ -176,6 +176,8 @@ TEST(memory_init_is_what_the_budget_says) {
     // The sample browser's audition (dsp/audition.hpp): a WAV header's 32 KiB and its own stream
     // ring of 256 KiB, so it never takes one of the four tracks'.
     const uint64_t audition = 32u * 1024u + 256u * 1024u;
+    // JAM REC (app/storage.hpp, "jam recording"): its recording stream's ring, 1 MiB.
+    const uint64_t jam = 1u * kMiB;
 
     // app/engine: the beat-repeat ring (stereo float) and the resample take (stereo int16 plus
     // a WAV header, dsp/capture.hpp).
@@ -205,7 +207,7 @@ TEST(memory_init_is_what_the_budget_says) {
     // as one array.
     const uint64_t locks = uint64_t(LockStore::kStates + 1) * sizeof(LiveState);
 
-    const uint64_t itemised = region + raw + src + file + rings + audition + repeat + capture + freeze + tape +
+    const uint64_t itemised = region + raw + src + file + rings + audition + jam + repeat + capture + freeze + tape +
                               long_delay + hall + waves + locks;
     CHECK(f.requested >= itemised);
 
@@ -213,13 +215,13 @@ TEST(memory_init_is_what_the_budget_says) {
     // them at 2 MiB, which is the bound here.
     const uint64_t buses = f.requested - itemised;
     std::printf("    region %.2f, loader staging %.2f, file %.2f, stream rings %.2f, repeat %.2f, "
-                "audition %.2f, capture %.2f, freeze %.2f, tape stop %.2f, long delay %.2f, "
+                "audition %.2f, jam %.2f, capture %.2f, freeze %.2f, tape stop %.2f, long delay %.2f, "
                 "hall %.2f, "
                 "wavetables %.2f, locks %.2f, delay+reverb %.2f MiB\n",
                 double(region) / double(kMiB), double(raw + src) / double(kMiB),
                 double(file) / double(kMiB), double(rings) / double(kMiB),
                 double(repeat) / double(kMiB), double(audition) / double(kMiB),
-                double(capture) / double(kMiB),
+                double(jam) / double(kMiB), double(capture) / double(kMiB),
                 double(freeze) / double(kMiB), double(tape) / double(kMiB),
                 double(long_delay) / double(kMiB), double(hall) / double(kMiB),
                 double(waves) / double(kMiB), double(locks) / double(kMiB),

@@ -1624,7 +1624,7 @@ the project. A project or kit from before the chorus opens with no track sending
 
 CPU is the SmplTrek's tight resource and memory is not, so a track can be **frozen**: it plays
 a loop of itself from RAM instead of computing its sound. FUNC+HOME opens the menu; **FREEZE** is
-near the end (UP three times from SAVE, since the list wraps). The row shows the selected track and the loop's length, `T7 1 BAR`;
+near the end (UP four times from SAVE, since the list wraps). The row shows the selected track and the loop's length, `T7 1 BAR`;
 LEFT/RIGHT or B pick 1, 2, 4 or 8 bars. OK arms it (`FREEZE ARMED`, or `ARMED: PRESS PLAY`
 when stopped): from the next bar line the track's machine is recorded for that many bars, and
 then the screen says `FROZEN` and the track plays the recording.
@@ -1696,6 +1696,27 @@ sends, so a quiet or panned track still comes out at full level, and the duck is
 It is mono, half the size of a master take. With `TO TRK n` it lands on that track like any
 take, ready to slice, reverse or put on GRAIN; give that track SAMPLE or GRAIN to hear it. A
 muted track bounces as silence, so unmute it first.
+
+### Recording the whole jam: JAM REC
+
+RESAMPLE keeps 30 seconds. To keep a whole set, use **JAM REC**, the FUNC menu's last row:
+FUNC+HOME, UP, OK. The menu closes with `JAM REC JAM 3`, a dot blinks in the top bar before the
+load, and everything that comes out of STRATA goes to `/RECORD/JAM_<n>.WAV` until you stop it:
+FUNC+HOME, UP, OK again (`JAM STOPPING`, then `SAVED JAM 3`). The row shows how long it has run,
+`4:07` or `1:02:33`.
+
+It records what RESAMPLE's MASTER take hears: every track, the sends, the master effects,
+REPEAT and the tape stop. The metronome and the sample browser's audition are for you and are
+never on it. It runs through starts and stops of the transport, pattern and project changes,
+RESAMPLE, freeze and the looper. The file is 48 kHz 24-bit stereo, about 1 GB an hour; each jam
+gets the next number, so none replaces an earlier one.
+
+It stops on its own, and keeps everything up to that point, when the card is full
+(`CARD FULL: JAM SAVED`) or after 3 hours 51 minutes, where a WAV file on the card has to end
+(`4 HOURS: JAM SAVED`). Pulling the card cuts it (`CARD OUT: JAM CUT`): the audio that reached the
+card is there, but its header could not be written, so some players call it empty. Switching
+STRATA off with a jam running closes the file properly. If the card is too slow, `JAM: CARD TOO
+SLOW` says so and the file skips the blocks that did not fit; use a faster card.
 
 ### What moves on screen while it plays
 
@@ -1959,7 +1980,7 @@ sound crackles:
   out first) and GRAIN clouds get sparser. It steps back down one level a second once the load
   falls, and a second STOP clears it. Seeing `GUARD` often means the pattern asks for more than
   the box has: use the tips above.
-- **Freeze the dearest track.** FUNC+HOME, UP three times to FREEZE, OK: the selected track
+- **Freeze the dearest track.** FUNC+HOME, UP four times to FREEZE, OK: the selected track
   records its loop (1 bar; LEFT/RIGHT or B on the row for 2, 4 or 8) from the next bar line, then
   plays it from memory and stops computing. A six-voice POLY chord goes from the biggest cost
   in the project to almost nothing. See "Freeze" in section 5.

@@ -698,6 +698,8 @@ private:
     int selected_ = 0;
     int shown_bank_ = 0;                        // PROJECT mode browses a bank without switching
     QueueMode queue_mode_ = QueueMode::end_of_pattern;
+    uint32_t jam_lost_seen_ = 0;                // JAM REC's dropped frames last said
+    uint32_t jam_lost_ms_ = 0;
     char notice_buffer_[24] = {};               // notice() keeps the pointer, so dynamic text
                                                 // needs somewhere of its own to live
 

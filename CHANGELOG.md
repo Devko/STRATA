@@ -8,6 +8,14 @@ the project file format or the controls.
 
 ### Added
 
+- **JAM REC: the whole jam to the card.** The FUNC menu's last row (FUNC+HOME, UP, OK) records
+  everything STRATA plays to `/RECORD/JAM_<n>.WAV` until OK again: 48 kHz 24-bit stereo, about
+  1 GB an hour, up to 3 h 51 min. The finished master as RESAMPLE hears it, never the click or
+  the sample audition. A dot blinks in the top bar while it runs and the row counts the time. A
+  full card or the length limit closes the file cleanly and says so; switching off closes it
+  too. RESAMPLE, freeze and the looper still work meanwhile. Every FUNC menu row counted
+  upwards from SAVE is one further on (LOAD DEMO is UP twice now). New emulator scenario
+  `jamrec`.
 - **ENERGY, one knob from breakdown to peak.** In PERFORM, FUNC + turn C (-64 .. +64, rest at 0
   with a detent). Down, every track drops its weakest hits first, in an order: hats at once, then
   percussion, snare and samples, the lines, the pads (which keep their strongest hits), and the
