@@ -832,6 +832,9 @@ with "Include starter and demo files" ticked, copied onto the card.
   comes back where it was. GRID: no step changed, CLR's undo has nothing new. `____`
 - FUNC + turn C up to `+64`: ghost hits on the off-beats, hats busiest, the kick only now and
   then; a probability step plays every pass. Musical, or too busy for techno? `____`
+- Still at `+64`, GRID: the trig glow follows only the programmed trigs, never an empty step a
+  ghost plays on. ARP on the bass track (EDIT, ARP page, MOD UP): its own steps run the arp, its
+  ghosts are single notes between them. `____`
 - `ENERGY -30`, hold FUNC + MUTATE (a lock), turn it back to 0, tap FUNC + MUTATE: the
   breakdown is back; tap again: rest again. `____`
 - MAX at `+64` against the default beat at 0: `________ %`
