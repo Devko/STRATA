@@ -53,6 +53,36 @@ changes a platform constant fails the host tests rather than drifting silently.
 
 ## STRATA measurements
 
+### The owed figures, from one full pass (2026-11-28, emulator, Enaga v0.4.0)
+
+`main` at `db96b69` (#228, Track Launch merged), every scenario with cl6x and GCC-only; the
+per-scenario table is in `docs/SCENARIO_LOG.md`. On this commit the factory beat (`factory`, `m7`)
+reads **23.62% cl6x, 45.36% GCC-only**, and each figure below is against that.
+
+| Scenario | cl6x | GCC-only | Against the beat |
+| --- | --- | --- | --- |
+| `osc` (E13, A01 as shipped) | 23.62% | 45.36% | +0.00 / +0.00: the VA rework costs the factory beat nothing |
+| `factory`, tracks 6 and 7 at E13's worst case | 25.84% | 54.28% | +2.22 / +8.92 |
+| `wave` (E14, WMN bass, WPL chord) | 26.18% | 50.03% | +2.56 / +4.67 |
+| `fm` (E15, FM4 on the chord track) | 24.68% | 49.74% | +1.06 / +4.38 |
+| `grain` (E16, SHIMMR on track 8) | 24.37% | 52.04% | +0.75 / +6.68 |
+| `asr` (SAMPLE's SUS and REL; the ASR page) | 23.62% | 45.36% | +0.00 / +0.00, as expected |
+| `width` (unison 96 on the chord track) | 26.68% | 51.13% | +3.06 / +5.77 (2026-11-27: +3.19 / +5.90) |
+| `launch` (Track Launch: A07's part lands on track 3) | 24.68% | 45.92% | +1.06 / +0.56 |
+| `genload` (the worst) | **34.99%** | 64.19% | GCC-only over 60, under its 70% tripwire |
+| `energy` | 34.62% | 61.67% | |
+
+Worst case 34.99% with cl6x against the 60% target. E13's worst case (pulse wave, OS2 sync, SUB
+and DRV on both VA tracks) is the GCC-only build's sorest point, nine points, where cl6x pipelines
+it to two. Track Launch's peak comes after A07's part has landed on track 3, so it
+measures that part as much as the queue; the queue itself is control rate. WAVE's time to its first table (E14's third row) was
+not taken.
+
+The image grew: with cl6x payload 1,691,888 bytes and bss 1,670,656 (2026-11-25: 1,224,160 and
+1,605,248), `APP.ENA` 1,691,952 (GCC-only 1,660,336). With three copies of a project on the
+emulator's default 4 MiB card that no longer fits, which is why `scenario_projects` failed CARD
+FULL with cl6x only; it runs on an 8 MiB card since.
+
 ### JAM REC (2026-11-28, emulator, Enaga v0.4.0)
 
 JAM REC writes the finished master to an Enaga recording stream every block: Enaga's
@@ -1124,10 +1154,10 @@ scene or knob really did move: those prepare as before.
 | E6 | The master kill EQ running | `tests/scenario_killeq.sh` against `tests/scenario_m7.sh` (same beat, EQ bypassed), with cl6x and with `ENAGA_TI_CGT=none` | the difference is the EQ's cost; the proxy above says ~1.3 cl6x / ~2.2 GCC-only |
 | E7 | Eight LFOs running | `tests/scenario_lfo.sh` as it is (every LFO off: should match `scenario_factory.sh`), then again after a temporary edit to `factory_kit` in core/factory.cpp setting each track's `params[17] = 40` (RAT, about 3 Hz free), `params[18] = 127` (DEP) and `params[19] = 38` (DST = DRV), with cl6x and with `ENAGA_TI_CGT=none`; revert the edit | the difference is eight LFOs' cost; the host figures say about 1.1-1.4 points GCC, and about the same with cl6x |
 | E12 | The ASR page | `tests/scenario_asr.sh`, then the held-chord `factory_kit` edit in "The ASR page" above, `scenario_factory.sh`, both compilers; revert | **done 2026-11-23:** off = A01 (26.15% / 49.32%); held +3.60 cl6x / +4.71 GCC (see "The ASR page") |
-| E13 | The OSC page and the VA rework | `tests/scenario_osc.sh` against `scenario_factory.sh` before it, then the worst-case `factory_kit` edit in "The OSC page" below, both compilers; revert | the factory beat should not rise; worst case at most ~0.1 point a voice over the old voice |
-| E14 | WAVE MONO and WAVE POLY | `tests/scenario_wave.sh` (tracks 6 and 7 switched to WMN and WPL on keys) against `scenario_factory.sh` on the same commit, both compilers; and the time from the switch to `wav FM1` (the first table ready) | see "WAVE MONO and WAVE POLY" below: about 1.0-1.4x a VA voice expected; a table is built on first use, a piece a pass |
-| E15 | FM4 | `tests/scenario_fm.sh` (track 7 switched to FM4 on keys) against `scenario_factory.sh` on the same commit, both compilers; and `tools/ti_loops.py` for `strata_fm_add` and `strata_fm_add_free` | see "FM4" below: about 1.6-1.8x a VA voice on the host; FBK 0 should pipeline far better on cl6x than FBK up |
-| E16 | The GRAIN rework | `tests/scenario_grain.sh` (track 8 switched to GRAIN, SHIMMR loaded on keys) against `scenario_factory.sh` on the same commit, both compilers | see "The GRAIN rework" below: no change to the hot loop, so SHIMMR should cost what a dense v0.3.0 cloud did (a few points), and nothing at all while the track is silent |
+| E13 | The OSC page and the VA rework | `tests/scenario_osc.sh` against `scenario_factory.sh` before it, then the worst-case `factory_kit` edit in "The OSC page" below, both compilers; revert | **done 2026-11-28:** `osc` = the beat (23.62% / 45.36%); worst case +2.22 cl6x / +8.92 GCC (see "The owed figures") |
+| E14 | WAVE MONO and WAVE POLY | `tests/scenario_wave.sh` (tracks 6 and 7 switched to WMN and WPL on keys) against `scenario_factory.sh` on the same commit, both compilers; and the time from the switch to `wav FM1` (the first table ready) | **done 2026-11-28:** +2.56 cl6x / +4.67 GCC over the beat; the time to the first table not taken |
+| E15 | FM4 | `tests/scenario_fm.sh` (track 7 switched to FM4 on keys) against `scenario_factory.sh` on the same commit, both compilers; and `tools/ti_loops.py` for `strata_fm_add` and `strata_fm_add_free` | **done 2026-11-27, again 2026-11-28:** +1.06 cl6x / +4.38 GCC over the beat; `ti_loops.py` not run |
+| E16 | The GRAIN rework | `tests/scenario_grain.sh` (track 8 switched to GRAIN, SHIMMR loaded on keys) against `scenario_factory.sh` on the same commit, both compilers | **done 2026-11-28:** +0.75 cl6x / +6.68 GCC over the beat |
 | E5 | Load time of a 15 s 96 kHz stereo WAV (30 s of the file now loads too: `kSrcFrames` is 30 s of 96 kHz frames since 2026-11-22) | through the emulator's card, cl6x vs GCC | wall time to playable; screen should not stall |
 
 #### To measure on the unit (with the MAX readout from PR #17)
@@ -1522,8 +1552,8 @@ Host bench (x86, GCC -O2, 64-frame blocks, ns per output sample, old voice vs ne
 So the factory beat should get cheaper (its bass and chord dropped the synced pulse), and a voice
 with every OSC option turned on costs at most about 5% more than the old fixed voice: on the
 2.16-point cl6x figure, about 0.1 point a voice, 1.3 points at the 12-voice cap. The 12-voice
-budget and the CPU guard stay as they are. None of this is measured with cl6x or on the
-emulator yet:
+budget and the CPU guard stay as they are. Measured on the emulator 2026-11-28 (the table below);
+not on the unit:
 
 **E13, to measure on Roland's PC (emulator):** `tests/scenario_osc.sh` (walks EDIT to the OSC page
 on a drum and on VA POLY, A01 as shipped) against `scenario_factory.sh` from the commit before the
@@ -1535,8 +1565,9 @@ and revert.
 | Build | cl6x | GCC only |
 | --- | --- | --- |
 | `scenario_factory.sh`, before the OSC page | 26.15% | 49.32% |
-| `scenario_osc.sh` (A01 as shipped, new voice) | | |
-| `scenario_factory.sh`, tracks 6 and 7 at the worst case | | |
+| `scenario_factory.sh`, same commit as below (2026-11-28, `db96b69`) | 23.62% | 45.36% |
+| `scenario_osc.sh` (A01 as shipped, new voice) | 23.62% | 45.36% |
+| `scenario_factory.sh`, tracks 6 and 7 at the worst case | 25.84% | 54.28% |
 
 ### WAVE MONO and WAVE POLY (2026-11-23, host only)
 
@@ -1593,9 +1624,9 @@ FM and STRING, which follow, allocate under 0.1 MiB.
 
 | Build | cl6x | GCC only |
 | --- | --- | --- |
-| `scenario_factory.sh`, same commit | | |
-| `scenario_wave.sh` (WMN bass, WPL chord) | | |
-| cycles to `strata ready`, before / after | | |
+| `scenario_factory.sh`, same commit (2026-11-28, `db96b69`) | 23.62% | 45.36% |
+| `scenario_wave.sh` (WMN bass, WPL chord) | 26.18% | 50.03% |
+| cycles to `strata ready`, before / after | not taken | not taken |
 
 ### FM4 (2026-11-23, host only)
 
@@ -1652,6 +1683,8 @@ heap beyond the engine growing by 6.8 KiB.
 | --- | --- | --- |
 | `scenario_factory.sh`, same commit | 26.27% | 47.62% |
 | `scenario_fm.sh` (FM4 on the chord track) | 26.27% | 50.10% |
+| `scenario_factory.sh`, 2026-11-28 (`db96b69`) | 23.62% | 45.36% |
+| `scenario_fm.sh`, 2026-11-28 | 24.68% | 49.74% |
 
 Taken 2026-11-27 with the chain-wide index cap (`fm_index_cap`); on `main` before it,
 `scenario_fm.sh` read 26.69% cl6x and 50.37% GCC-only, so the cap costs nothing measurable (a
@@ -1680,7 +1713,8 @@ match a dense v0.3.0 cloud.
 
 **E16, cl6x (2026-11-23, main `ce5fc6b`, the v0.3.1 build):** `scenario_grain` (track 8 on GRAIN,
 SHIMMR) peaks at **25.15%** against `scenario_factory`'s 24.52% on the same commit: SHIMMR costs
-about 0.6 points over the default beat. GCC-only not run yet. On the same run `scenario_wave`
+about 0.6 points over the default beat. On 2026-11-28 (`db96b69`) `grain` read 24.37% cl6x and
+52.04% GCC-only against the beat's 23.62% and 45.36%. On the same run `scenario_wave`
 reads 28.64% (was 27.3% on v0.3.0), because a switch to WAVE now loads its default sounds (table
 CLS on the bass, HRM on the chord) instead of reading the VA kit's bytes.
 
@@ -1695,8 +1729,8 @@ Nothing in `dsp/sampleloops.ti.c` changed. SUS and REL only change the shape `En
 already runs; per voice there is one more compare and, with SUS up, a LEN countdown per slice.
 What does change is how long a voice can live: with SUS up a looped sample holds for its LEN
 instead of ending at its decay, but SAMPLE's four voices already allowed a held loop (DEC at the
-top), so the worst case is the one SAMPLE always had. Emulator figures (`scenario_asr`, cl6x and
-GCC-only) owed on Roland's PC; they should match `scenario_factory` to within noise.
+top), so the worst case is the one SAMPLE always had. On the emulator (2026-11-28, `db96b69`)
+`scenario_asr` reads the beat's figures exactly, 23.62% cl6x and 45.36% GCC-only.
 
 ### EDIT's waveforms and envelopes (2026-11-25, emulator, cl6x)
 
