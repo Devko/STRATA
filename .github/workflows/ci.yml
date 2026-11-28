@@ -144,6 +144,9 @@ jobs:
       - name: Enaga build cache (tools/enaga_cached.py, against a stub Enaga)
         run: python3 -B tests/test_enaga_cached.py
 
+      - name: Worktree script (tools/wt.sh, against a scratch origin)
+        run: bash tests/test_wt.sh
+
       - name: Card builder (web/, zip code, compat.json, proxy allowlist)
         run: cd web && node --test test/*.test.mjs
 
