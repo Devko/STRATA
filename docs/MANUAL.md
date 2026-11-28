@@ -1028,15 +1028,20 @@ FUNC+DOWN on one of your own sounds replaces it with what the track has now, und
 or a new one. **Push B** renames the sound under the cursor and **push C** deletes it (OK twice).
 The factory sounds cannot be renamed or deleted. Each machine keeps up to 16 of your sounds.
 
-A saved sound holds the same pages a factory sound sets, and leaves the FX page, the LFO, the
-ARP, HAT's choke group and GRAIN's POS and PIT to the track it is loaded into. SMP and MID have no
-SOUNDS list and so no saved sounds.
+A saved sound holds all of the track's sound: every page (SRC, FLTR, AMP, FX, LFO, ARP and, on
+the machines that have them, ENV, OSC and SCAN) and the settings pushed on the LFO and ARP pages
+(TRIG, the two mod slots, VAR, RHYTHM, ACCENT and RATCHET). Loading it sets all of that, so the
+track sounds and moves as it did when you saved it, pan and sends included. That is more than a
+factory sound sets: a factory sound is a starting point for any track, a saved one is a track you
+finished. What stays the track's own is the mixer's: the fader, the chorus send, WID, the duck
+depth and the choke group set on MIXER. A GRAIN sound plays the sample its new track holds. SMP
+and MID have no SOUNDS list and so no saved sounds.
 
 **FUNC+UP copies** the track's sound. A **PASTE** row then sits under AS WAS on every track
 (`PASTE T1 KCK`): OK on it gives the selected track the copied sound. On a track with another
 machine it switches the machine first (`SWITCHES MACHINE` under the bars), the way MACHINE does,
-and then sets the sound; the track keeps its mix, LFO and ARP. AS WAS takes a paste back, the
-machine included. The copy lasts until the next FUNC+UP or until STRATA is switched off.
+and then sets the sound, all of it, as loading a saved sound does. AS WAS takes a paste or a saved
+sound back, the machine, the pages and the LFO and ARP settings included. The copy lasts until the next FUNC+UP or until STRATA is switched off.
 
 Saved sounds live on the card in `ENAGA/DATA/STRATA/SOUNDS/`, one file per machine (`KCK.BIN`,
 `MNO.BIN` and so on), beside the projects and the kit library. They are not part of a project:

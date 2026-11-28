@@ -10502,6 +10502,8 @@ TEST(ui_sounds_func_down_saves_the_tracks_sound_by_name_and_ok_loads_it_back) {
     Strata &app = fresh();
     sounds_on(app, MachineId::kick);
     kick_of_my_own();
+    post_cmd_track(Cmd::set_lfo_trig, 0, kLfoTrigOneShot);   // a kit setting the sound keeps
+    pump(2);
     const TrackParams mine = app_engine().params(0);
     CHECK(app_storage().sound_bank_state(uint8_t(MachineId::kick)) == Storage::SoundBankState::ready);
 
@@ -10519,15 +10521,20 @@ TEST(ui_sounds_func_down_saves_the_tracks_sound_by_name_and_ok_loads_it_back) {
     CHECK(screen_has(app, ">+KCK 1     NOW"));
     check_layout(app, "SOUNDS with one of your own");
 
-    // Another sound, then the saved one back: exactly the bytes a sound owns.
+    // Another sound, the pan and the LFO TRIG moved, then the saved one back: all of it, the
+    // mix and the kit setting included.
     sounds_cursor_to(2);
     key(ENAGA_KEY_OK);
+    post_cmd(Cmd::set_param, uint8_t(kUserSoundFxFirst + 1), 20);
+    post_cmd_track(Cmd::set_lfo_trig, 0, kLfoTrigFree);
     pump(2);
     CHECK(!same_params(app_engine().params(0), mine));
+    CHECK(!screen_has(app, "+KCK 1     NOW"));
     sounds_cursor_to(first_user_row_on_kick());
     key(ENAGA_KEY_OK);
     pump(2);
     CHECK(same_params(app_engine().params(0), mine));
+    CHECK_EQ(int(app_engine().project().kit.tracks[0].lfo_trig), int(kLfoTrigOneShot));
     CHECK(std::strcmp(UiProbe::notice(app), "KCK 1") == 0);
 
     // FUNC + DOWN on your own row replaces it, offering its name; a second save offers KCK 2.
@@ -10614,17 +10621,24 @@ TEST(ui_sounds_func_up_copies_a_sound_and_paste_puts_it_on_any_track) {
     Strata &app = fresh();
     sounds_on(app, MachineId::kick);
     kick_of_my_own();
+    // Kit settings of its own too: a RETRIG LFO and an arp VAR, which a copy carries.
+    post_cmd_track(Cmd::set_lfo_trig, 0, kLfoTrigRetrig);
+    post_cmd_track(Cmd::set_arp_ext, 0, 0, 2);
+    pump(2);
     const TrackParams kick = app_engine().params(0);
+    const UserSoundExtras kick_extras = user_sound_extras_of(app_engine().project().kit.tracks[0]);
     shift_key(ENAGA_KEY_UP);
     CHECK(std::strcmp(UiProbe::notice(app), "COPIED T1 KCK") == 0);
 
-    // Track 2, another machine: the PASTE row under AS WAS switches it to KICK and sounds as
-    // track 1 does, its own mix kept.
+    // Track 2, another machine: the PASTE row under AS WAS switches it to KICK and is track 1's
+    // sound, all of it: every parameter, mix, LFO and ARP among them, and the kit settings.
     key(ENAGA_KEY_SELECT_RIGHT);
     pump(2);
     const uint8_t was = app_engine().machine_id(1);
     CHECK(was != uint8_t(MachineId::kick));
     const TrackParams before = app_engine().params(1);
+    const UserSoundExtras before_extras = user_sound_extras_of(app_engine().project().kit.tracks[1]);
+    CHECK(!user_sound_extras_equal(before_extras, kick_extras));
     sounds_cursor_to(1);
     CHECK(screen_has(app, ">PASTE T1 KCK"));
     check_layout(app, "SOUNDS with PASTE");
@@ -10634,18 +10648,18 @@ TEST(ui_sounds_func_up_copies_a_sound_and_paste_puts_it_on_any_track) {
     CHECK_EQ(int(app_engine().machine_id(1)), int(MachineId::kick));
     const TrackParams &now = app_engine().params(1);
     for (int p = 0; p < kTrackParams; p++) {
-        if (user_sound_owns(uint8_t(MachineId::kick), p)) {
-            CHECK_EQ(int(now.v[p]), int(kick.v[p]));
-        } else if (p >= kUserSoundFxFirst && p < kSoundAsrFirst) {
-            CHECK_EQ(int(now.v[p]), int(before.v[p]));     // its mix, LFO and ARP stay
-        }
+        if (kit_param_real(p)) CHECK_EQ(int(now.v[p]), int(kick.v[p]));
     }
+    CHECK(user_sound_extras_equal(user_sound_extras_of(app_engine().project().kit.tracks[1]),
+                                  kick_extras));
     // The list is the KICK's now, and AS WAS takes the paste back: machine and sound.
     sounds_cursor_to(0);
     key(ENAGA_KEY_OK);
     pump(2);
     CHECK_EQ(int(app_engine().machine_id(1)), int(was));
     CHECK(same_params(app_engine().params(1), before));
+    CHECK(user_sound_extras_equal(user_sound_extras_of(app_engine().project().kit.tracks[1]),
+                                  before_extras));
     key(ENAGA_KEY_CLR);
     key(ENAGA_KEY_F4);
 }

@@ -69,10 +69,12 @@ the project file format or the controls.
   the same machine, in every project. FUNC+DOWN on one of your own replaces it, push B renames and
   push C deletes it (OK twice). Up to 16 per machine, kept in `ENAGA/DATA/STRATA/SOUNDS/<MCH>.BIN`,
   a versioned file per machine beside the projects; project files do not change. A saved sound
-  sets the pages a factory sound sets.
+  is all of the track's sound: every page, FX, LFO and ARP included, and the TRIG, mod slot and
+  arp settings pushed on the LFO and ARP pages. The mixer's settings stay the track's.
 - **Copy a sound to another track.** FUNC+UP in SOUNDS copies the track's sound; a `PASTE T1 KCK`
   row then sits under AS WAS on every track, and OK on it gives that track the sound, switching
-  its machine first when it hosts another. AS WAS takes the paste back, machine included. New
+  its machine first when it hosts another; the paste is all of the sound, as a saved one is. AS
+  WAS takes a paste or a saved sound back, machine and kit settings included. New
   emulator scenario `usersounds`.
 - **Queue a pattern from any screen.** Hold PROJECT and press STEP n: slot n of the shown bank is
   queued (`A05 QUEUED END`) and the screen you play on stays up. PROJECT now opens when the key
