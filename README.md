@@ -76,13 +76,17 @@ is pretty safe as long as the bootloader is left alone
 
 - **Eleven machines on eight tracks, any machine on any track:** KICK, SNARE, HAT, PERC, SAMPLE,
   GRAIN, VA MONO, VA POLY, WAVE MONO, WAVE POLY and FM4, plus MID for an outboard synth.
-  116 factory sounds load into one track at a time while the beat plays, and any two to eight
+  WAVE scans its wavetable with each note in ten modes. 120 factory sounds load into one track at a time while the beat plays, and any two to eight
   tracks can choke each other.
 - **A sequencer built for techno:** up to 64 steps per track with their own length, speed,
   swing and play mode (forward, reverse, ping-pong, random), parameter locks, trig conditions,
   ratchets and rolls over a step's length, accents, slides, chords, micro-timing, a Euclidean
   generator, live and motion recording (chords note for note, note-repeat rolls, a click and a
   count-in), triplet speeds, and 16 levels of undo.
+- **Songs from a jam:** the chain is a list of song sections, each able to set the scene, the
+  morph, ENERGY, TRANSPOSE, the tempo and the mutes as it starts. ARR REC writes a jam into it as
+  you play, and Track Launch plays one track from another pattern, captured into a free slot when
+  you want to keep it.
 - **Parts that write and move themselves:** GENERATE writes a drum or melodic part in the key,
   and EVOLVE mutates it every few loops, orbiting the part or drifting away from it. The
   arpeggiator has rhythms, accents, ratchets and fourteen factory arps.
@@ -91,16 +95,19 @@ is pretty safe as long as the bootloader is left alone
   macros you learn by turning knobs, throws, seeded mutation you keep or revert, LOCK (store the
   moment, jump back in one tap), ENERGY (one knob that thins the beat to a breakdown or fills
   it towards the peak, never touching the pattern), TRANSPOSE (the melodic tracks into another
-  key from any screen), VariSpeed (tempo and pitch together, like a turntable), and a
-  performance mixer on VALUE with fourteen effects, the morph and a looper.
+  key from any screen), VariSpeed (tempo and pitch together, like a turntable), tap tempo and
+  a nudge to play along with gear that sends no clock, and a performance mixer on VALUE with
+  fourteen effects, the morph and a looper.
 - **Mixing:** a sidechain duck, delay, reverb and chorus sends (with LONG delay and HALL reverb
-  modes for ambient), stereo spread or unison on the polyphonic machines, and a master with a DJ
-  filter, kill EQ, compressor and limiter.
+  modes for ambient), stereo spread or unison on the polyphonic machines, the line input as a
+  ninth channel with its own sends, and a master with a DJ filter, kill EQ, compressor and
+  limiter.
 - **Samples and projects:** a sample browser that also reaches the stock SmplTrek folders,
   slicing (SLC AUTO cuts a break at its hits), streaming for long files, resampling, freeze and
-  bounce, JAM REC (the whole set to a WAV on the card, for hours), and projects with autosave.
+  bounce, JAM REC (the whole set to a WAV on the card, for hours), your own sounds saved by
+  name and loaded into any project, and projects with autosave.
 - **Timing is sacred:** steps land on an exact sample of Enaga's clock, and MIDI clock or SYNC IN
-  can lead.
+  can lead, song position included; pattern changes can go out as program changes.
 - **Help on every screen:** hold FUNC to see what the knobs and keys do where you are.
 
 The full tour, with the factory kit and every effect, is in
