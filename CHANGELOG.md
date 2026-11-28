@@ -15,6 +15,12 @@ the project file format or the controls.
   the kick only near the top, pads never) and probabilities lift towards 100. Each position plays
   the same groove every bar; the pattern is never written, and a LOCK holds it. New emulator
   scenario `energy`.
+- **Starter content in the card builder.** strata.einblick.dev can now put something to play on
+  the card with STRATA: ten starter projects to open and jam on (TECHNO, DEEP, DUB, DRIFT,
+  ELECTRO, NIGHT, BREAKS, STEEL, SMASH, CHAOS; for 0.5.0 and newer), a sample pack of 105
+  one-shots and chords rendered by STRATA's own machines in `/SAMPLES/STRATA`, and a one-page
+  quick start, `STRATA-QUICKSTART.txt`. Each is a tick box; nothing in the app changed. The
+  projects live in `content/starter/` and a host test opens every one on each build.
 - **Nine showcase projects beyond techno** (`tools/showcases/`): DEEP (deep house), DUB (dub
   techno), DRIFT (ambient), ELECTRO, BREAKS, CHAOS, SMASH, NIGHT (breakbeat over synthwave) and
   STEEL (straight breakbeat), each written by a generator with core/'s own serializers, factory
