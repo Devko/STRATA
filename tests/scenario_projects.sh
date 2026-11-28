@@ -23,6 +23,10 @@
 # second press has. Each card job gets 400 M cycles (about a second) before the next key, which
 # is far more than eleven files take. The first press comes late: the panel link is not streaming in the first
 # ~200 M cycles.
+#
+# The card is 8 MiB, not emulate.py's default 4: APP.ENA (1.69 MB with cl6x) plus three copies of
+# a project (about 0.8 MB each: the save, SAVE AS and the rename's copy) filled 4 MiB, and the
+# rename failed CARD FULL with cl6x only, whose image is the larger (2026-11-28).
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -52,7 +56,7 @@ mkdir -p "$ENAGA_BUILD"
 LOG="$ENAGA_BUILD/scenario_projects.log"
 
 echo "running the emulator for $CYCLES cycles: play, save, SAVE AS, rename, delete ..."
-python3 -B tools/enaga_cached.py emulate "$STAGE" --cycles "$CYCLES" \
+python3 -B tools/enaga_cached.py emulate "$STAGE" --cycles "$CYCLES" --card-mib 8 \
     --key 22@300000000 \
     --key 19@380000000 --key 27@385000000 \
     --key 23@460000000 \
