@@ -16,7 +16,8 @@ the project file format or the controls.
   than the older kicks, as long modern kicks are. SNR adds TCLAP and two hats on the snare's
   noise, CLHAT and OPHAT, which score 5 against techno hats where HAT's CLOSED scores 33 (its
   808 model is a narrow band; theirs are broad). PLY adds TSTAB, a techno stab with no sub under
-  its voices (5.5 against STAB's 10). 128 factory sounds in all.
+  its voices (5.5 against STAB's 10). KCK also gets FAT, a long driven rumble kick. 129 factory
+  sounds in all.
 - **KICK's PNCH page** (EDIT, where the synths have ENV): **KNK** a fast second pitch sweep (the
   mid punch), **KND** its time, **TCK** a 3 kHz tick (the top click), **DRP** a pitch fall below
   TUN of up to an octave. The benchmark found the 909's first 20 ms 11-25 dB under techno kicks

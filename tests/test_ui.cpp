@@ -10438,7 +10438,7 @@ void sounds_on(Strata &app, MachineId machine) {
 }
 
 void sounds_cursor_to(int row) {
-    for (int i = 0; i < 16; i++) key(ENAGA_KEY_UP);
+    for (int i = 0; i < 40; i++) key(ENAGA_KEY_UP);   // past any list's top
     for (int i = 0; i < row; i++) key(ENAGA_KEY_DOWN);
 }
 
@@ -10710,6 +10710,10 @@ TEST(ui_sounds_push_b_renames_and_push_c_deletes_only_your_own) {
     CHECK(std::strcmp(UiProbe::notice(app), "DELETED") == 0);
     CHECK_EQ(user_bank_count(app_storage().sound_bank()), 1);
     CHECK(!screen_has(app, "+LCK 1"));
+    // The one left is KCK 1, on the list's first user row (fifteen factory kicks above it may
+    // scroll it out of view, so go there first).
+    sounds_cursor_to(first_user_row_on_kick());
+    draw_now();
     CHECK(screen_has(app, "+KCK 1"));
     key(ENAGA_KEY_CLR);
     key(ENAGA_KEY_F4);

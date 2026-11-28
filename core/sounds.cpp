@@ -75,6 +75,11 @@ constexpr SoundPreset kKickPresets[] = {
     {"INDUS", {55, 127, 44, 127}, {100, 127, 20, 0}, {92, 105, 127, 80}, {127, 45, 55, 10}, NO_OSC},
     // Minimal: short and tight, less drive. Leaves room for a rolling bass between the hits.
     {"MINIM", {55, 127, 40, 127}, {50, 127, 20, 0}, {72, 100, 40, 115}, {100, 40, 60, 0}, NO_OSC},
+    // Fat: TECHNO with a long, driven body (DEC 105) that keeps its sub up for most of a beat and
+    // falls into it (DRP 50), after RY Divinity's "massive" layered kicks (Roland, in the blind
+    // test, 2026-11-28). Scores 6.9 against those two. For the full rumble, add RUMBLE on a
+    // second track, or send it into a dark reverb with MIXER ROUTE's RDK up.
+    {"FAT", {55, 127, 56, 127}, {100, 127, 20, 0}, {105, 100, 60, 70}, {127, 50, 40, 50}, NO_OSC},
 };
 
 // --- SNARE: TUN SNP TON CLP / DEC SPR BDY LVL (dsp/snare.cpp) ------------
