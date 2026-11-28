@@ -59,7 +59,8 @@ ENERGY adds notes only above rest: ghosts on empty steps (hats most, perc, snare
 the mono lines; the kick above +32; never the pads). `scenario_energy` turns it to +64 against the
 default beat and keeps it there; `scenario_liverand` is the same beat, PLAY and PERFORM, without
 it. The first run of `scenario_energy` (one long walk) is the figure below; its functional checks
-were then split over two runs because the report keeps 16 log lines, which does not move the load.
+were then split over two runs because the report keeps 16 log lines. The two-run version passes
+with cl6x at 33.87% and GCC-only at 60.93% (its peak run is shorter).
 
 | | cl6x | GCC-only |
 | --- | --- | --- |
