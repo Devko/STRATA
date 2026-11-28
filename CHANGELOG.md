@@ -8,6 +8,9 @@ the project file format or the controls.
 
 ### Added
 
+- **Two reminders on the screen.** A quick tap of FUNC alone says `HOLD FUNC: HELP`, and a tap of
+  OK in GRID says `HOLD OK: TRACK MENU`. Both keys did nothing visible on their own, and nothing
+  on the panel pointed at the FUNC help or the GEN and EVOLVE menu. Neither covers another notice.
 - **JAM REC: the whole jam to the card.** The FUNC menu's last row (FUNC+HOME, UP, OK) records
   everything STRATA plays to `/RECORD/JAM_<n>.WAV` until OK again: 48 kHz 24-bit stereo, about
   1 GB an hour, up to 3 h 51 min. The finished master as RESAMPLE hears it, never the click or
@@ -27,7 +30,7 @@ the project file format or the controls.
   the card with STRATA: ten starter projects to open and jam on (TECHNO, DEEP, DUB, DRIFT,
   ELECTRO, NIGHT, BREAKS, STEEL, SMASH, CHAOS; for 0.5.0 and newer), a sample pack of 105
   one-shots and chords rendered by STRATA's own machines in `/SAMPLES/STRATA`, and a one-page
-  quick start, `STRATA-QUICKSTART.txt`. Each is a tick box; nothing in the app changed. The
+  quick start, `STRATA-QUICKSTART.txt`, all behind one tick box; nothing in the app changed. The
   projects live in `content/starter/` and a host test opens every one on each build.
 - **Nine showcase projects beyond techno** (`tools/showcases/`): DEEP (deep house), DUB (dub
   techno), DRIFT (ambient), ELECTRO, BREAKS, CHAOS, SMASH, NIGHT (breakbeat over synthwave) and
@@ -53,7 +56,8 @@ the project file format or the controls.
   (after DUCK): 0 mono, 1-63 spread, 64-127 unison; a push steps OFF, spread, unison. Unison
   holds three notes a track and counts two voices a note against the shared 12. Saved in the kit,
   in a new optional KIT.BIN section; older kits open mono. MIXER's DLY to EQ pages are two
-  further on. New emulator scenario `width`.
+  further on. Turning WID up from 0 under a ringing filter does not click, and RESAMPLE from a
+  wide track records it before the duck, as from a mono one. New emulator scenario `width`.
 - **A chorus, the third send.** MIXER has three new pages after ROUTE: CHO 1-4 and CHO 5-8 set
   how much of each track goes to the chorus (push a knob for OFF or half), and CHO sets its sweep
   rate, depth, return and how much of it feeds the reverb. One stereo chorus serves every track

@@ -48,7 +48,9 @@ can keep evolving without stopping.
 browser fetches STRATA and the Enaga firmware it needs from their official GitHub releases,
 checks both, and hands you one zip: copy everything in it to the root of the SD card, hold
 **HOME** while switching on, choose **SYSTEM UPDATE**, and switch on again. For an update on the
-same Enaga version, tick "STRATA only".
+same Enaga version, tick "STRATA only". The starter content, ticked by default, adds ten
+projects to jam on (techno, deep house, dub, ambient, electro, synthwave, breakbeat), a sample
+pack rendered by STRATA's own machines, and a one-page quick start.
 
 **By hand:** STRATA needs two downloads: **Enaga 0.4.0**, the firmware, from Enaga's own release, and the
 **STRATA zip**, which holds only the app.
@@ -80,18 +82,22 @@ is pretty safe as long as the bootloader is left alone
   swing and play mode (forward, reverse, ping-pong, random), parameter locks, trig conditions,
   ratchets and rolls over a step's length, accents, slides, chords, micro-timing, a Euclidean
   generator, live and motion recording (chords note for note, note-repeat rolls, a click and a
-  count-in), and 16 levels of undo.
+  count-in), triplet speeds, and 16 levels of undo.
 - **Parts that write and move themselves:** GENERATE writes a drum or melodic part in the key,
   and EVOLVE mutates it every few loops, orbiting the part or drifting away from it. The
   arpeggiator has rhythms, accents, ratchets and fourteen factory arps.
 - **KEYS:** both lower pad rows become a pressure-sensitive keyboard with the pattern's scale lit.
 - **Performance:** fill, beat and note repeat, step stutter, mutes, scenes with an A/B morph,
   macros you learn by turning knobs, throws, seeded mutation you keep or revert, LOCK (store the
-  moment, jump back in one tap), and a performance mixer on VALUE with fourteen effects, the
+  moment, jump back in one tap), ENERGY (one knob that thins the beat to a breakdown or fills
+  it towards the peak, never touching the pattern), and a performance mixer on VALUE with fourteen effects, the
   morph and a looper.
+- **Mixing:** a sidechain duck, delay, reverb and chorus sends (with LONG delay and HALL reverb
+  modes for ambient), stereo spread or unison on the polyphonic machines, and a master with a DJ
+  filter, kill EQ, compressor and limiter.
 - **Samples and projects:** a sample browser that also reaches the stock SmplTrek folders,
   slicing (SLC AUTO cuts a break at its hits), streaming for long files, resampling, freeze and
-  bounce, and projects with autosave.
+  bounce, JAM REC (the whole set to a WAV on the card, for hours), and projects with autosave.
 - **Timing is sacred:** steps land on an exact sample of Enaga's clock, and MIDI clock or SYNC IN
   can lead.
 - **Help on every screen:** hold FUNC to see what the knobs and keys do where you are.
@@ -121,9 +127,9 @@ The full tour, with the factory kit and every effect, is in
 
 **[v0.5.0](https://github.com/Devko/STRATA/releases/tag/v0.5.0)** is the current
 release and the **release candidate for 1.0**, for **Enaga 0.4.0**: GEN and EVOLVE, chord
-recording, choke groups, arp depth and more since 0.4.0. Until 1.0, only fixes, measurements and
-docs land ([docs/PLAN.md](docs/PLAN.md), "Release candidate"); 1.0 is this build with what the
-unit test finds fixed. Earlier releases have run on the unit: the default beat loads the
+recording, choke groups, arp depth and more since 0.4.0. Development continues on `main` before
+a stable 1.0 (ENERGY, JAM REC, a chorus, stereo width and triplet speeds so far; CHANGELOG.md, "Unreleased"), and
+[docs/PLAN.md](docs/PLAN.md) has the way to 1.0. Earlier releases have run on the unit: the default beat loads the
 CPU under 30%, and long, heavy play on an earlier build peaked at 84.3% with no dropouts. The
 features new in 0.5 are still being walked through on the hardware
 ([unit checklist](docs/UNIT_CHECKLIST.md)).

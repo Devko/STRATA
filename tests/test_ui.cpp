@@ -7343,6 +7343,51 @@ TEST(ui_func_held_alone_shows_the_help_and_a_chord_does_not) {
     key(ENAGA_KEY_F4);
 }
 
+TEST(ui_a_quick_tap_of_func_alone_names_the_help) {
+    // Usability review, 2026-11-28: nothing on the panel said the help exists. A tap of FUNC
+    // with nothing else pressed says how to get it; a chord, a long hold (the help itself) or
+    // a notice already up says nothing.
+    Strata &app = fresh();
+    auto quiet = [&]() {                                 // a known notice, then let it fade
+        key(ENAGA_KEY_F2);
+        key(ENAGA_KEY_F2);
+        CHECK_EQ(UiProbe::notice(app), "REC OFF");
+        g_ms += 4000;
+        pump(2);
+    };
+    auto said_help = [&]() {
+        const char *now = UiProbe::notice(app);
+        return now != nullptr && std::strcmp(now, "HOLD FUNC: HELP") == 0;
+    };
+    key(ENAGA_KEY_F4);
+    quiet();
+    app.on_key(ENAGA_KEY_F1, true);
+    pump(20);
+    app.on_key(ENAGA_KEY_F1, false);
+    CHECK(said_help());
+    check_layout(app, "the FUNC tap's notice");
+
+    quiet();
+    shift_key(ENAGA_KEY_F7);                             // a chord says nothing of the help
+    CHECK(!said_help());
+    key(ENAGA_KEY_F4);
+
+    quiet();
+    app.on_key(ENAGA_KEY_F1, true);                      // held long: the help, then nothing
+    pump(700);
+    CHECK(UiProbe::func_help(app));
+    app.on_key(ENAGA_KEY_F1, false);
+    CHECK(!said_help());
+
+    quiet();
+    key(ENAGA_KEY_F2);                                   // a notice up (REC ON) stays
+    app.on_key(ENAGA_KEY_F1, true);
+    pump(20);
+    app.on_key(ENAGA_KEY_F1, false);
+    CHECK_EQ(UiProbe::notice(app), "REC ON");
+    key(ENAGA_KEY_F2);
+}
+
 // The help is for the screen that is up (Roland, 2026-11-23; core/help.hpp): its own page
 // first, and the screen keys or LEFT/RIGHT, with FUNC still held, turn the pages without
 // touching the screen's own.
@@ -7834,7 +7879,6 @@ const char *quiet_reason(int s, const Probe &p, bool func) {
         {s_chain, false, "UP", "an empty chain has no entry to move to"},
         {s_chain, false, "DOWN", "an empty chain has no entry to move to"},
         // docs/CHEATSHEET.md marks these "--": no job in that screen.
-        {s_grid, false, "OK", "no job (hold STEP + OK opens the step page)"},
         {s_keys, false, "OK", "no job"},
         {s_pattern, false, "OK", "no job"},
         {s_mixer, false, "UP", "no job"}, {s_mixer, false, "DOWN", "no job"},
@@ -12241,6 +12285,7 @@ TEST(ui_hold_ok_in_grid_opens_the_track_menu_for_gen_and_evolve) {
     key(ENAGA_KEY_OK);
     pump(2);
     CHECK(!screen_has(app, "GENERATE"));
+    CHECK_EQ(UiProbe::notice(app), "HOLD OK: TRACK MENU");   // the tap says where it is
     app.on_key(ENAGA_KEY_OK, true);
     pump(600);
     app.on_key(ENAGA_KEY_OK, false);
