@@ -564,7 +564,7 @@ TEST(sounds_techno_kicks_put_more_knock_in_the_attack_than_the_909) {
     drum_hit<Kick>(named(MachineId::kick, "909"), a, 9600);
     // The first 20 ms above 300 Hz against the same 20 ms under 150 Hz: the knock against the body.
     const float base = band_energy(a, 0, 960, 300.0f, true) / band_energy(a, 0, 960, 150.0f, false);
-    static const char *const kTechno[] = {"TECHNO", "WHOUSE", "INDUS", "MINIM"};
+    static const char *const kTechno[] = {"TECHNO", "WHOUSE", "HEAVY", "MINIM"};
     for (const char *name : kTechno) {
         drum_hit<Kick>(named(MachineId::kick, name), b, 9600);
         const float knock = band_energy(b, 0, 960, 300.0f, true) / band_energy(b, 0, 960, 150.0f, false);

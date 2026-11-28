@@ -67,24 +67,26 @@ constexpr SoundPreset kKickPresets[] = {
     // kick is.
     // Modern techno: the sweep over 27 ms (FMD 56), a 61 ms body. Closest to the references of all.
     {"TECHNO", {55, 127, 56, 127}, {70, 127, 20, 0}, {95, 100, 60, 95}, {127, 50, 40, 30}, NO_OSC},
-    // Warehouse: matched to the one library kick Roland singled out in the blind tests
+    // Warehouse: TECHNO with a longer body (DEC 102), nothing else. Three blind tests against
+    // library kicks (Roland, 2026-11-28): TECHNO and this passed as samples; variants with heavier
+    // drive or a big pitch fall were caught every time. So the family keeps TECHNO's recipe.
+    {"WHOUSE", {55, 127, 56, 127}, {70, 127, 20, 0}, {102, 100, 60, 88}, {127, 50, 40, 30}, {60, 0, 0, 0}},
+    // Heavy: matched to the one library kick Roland singled out in the blind tests
     // (2026-11-28: "basically the thing we would need"), a massive layered techno kick that
     // sweeps from about 300 Hz over 50 ms and holds its sub near full level for 300 ms before it
     // is cut at the next beat. A slower sweep (FMD 72), the full knock held long (KND 100: 16 ms),
     // the drive near the top, a long body, and CHK on CUT so the next hit cuts it as the sample
     // is cut. 3.5 dB off that kick, attack and loop. It is loud, as that kick is: turn its fader
     // down rather than LVL, which would take the drive's density with it.
-    {"WHOUSE", {55, 127, 72, 127}, {120, 127, 20, 0}, {110, 100, 127, 80}, {127, 100, 40, 0}, {100, 0, 0, 0}},
-    // Industrial: TECHNO driven harder (DRV 88) with more tick (TCK 60). Hard techno.
-    {"INDUS", {55, 127, 56, 127}, {88, 127, 20, 0}, {95, 100, 60, 85}, {127, 50, 60, 30}, NO_OSC},
+    {"HEAVY", {55, 127, 72, 127}, {120, 127, 20, 0}, {110, 100, 127, 80}, {127, 100, 40, 0}, {100, 0, 0, 0}},
     // Minimal: TECHNO with a shorter body (DEC 75). Leaves room for a rolling bass between hits.
     {"MINIM", {55, 127, 56, 127}, {70, 127, 20, 0}, {75, 100, 60, 110}, {127, 50, 40, 30}, NO_OSC},
-    // Fat: TECHNO with a long body (DEC 108) that keeps its sub up for most of a beat and falls
-    // into it (DRP 50), after RY Divinity's "massive" layered kicks (Roland, in the blind test,
+    // Fat: TECHNO with a long body (DEC 108) that keeps its sub up for most of a beat, a small
+    // fall (DRP 20: a big one was caught in the third blind test) and CHK so it does not stack, after RY Divinity's "massive" layered kicks (Roland, in the blind test,
     // 2026-11-28). Scores 8.4 against those two; a driven version scored 6.9 but stepped out of
     // the TECHNO family, which is what the blind tests kept catching. For the full rumble, add RUMBLE on a
     // second track, or send it into a dark reverb with MIXER ROUTE's RDK up.
-    {"FAT", {55, 127, 56, 127}, {70, 127, 20, 0}, {108, 100, 60, 82}, {127, 50, 40, 50}, {100, 0, 0, 0}},
+    {"FAT", {55, 127, 56, 127}, {70, 127, 20, 0}, {108, 100, 60, 82}, {127, 50, 40, 20}, {100, 0, 0, 0}},
 };
 
 // --- SNARE: TUN SNP TON CLP / DEC SPR BDY LVL (dsp/snare.cpp) ------------

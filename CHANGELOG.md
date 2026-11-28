@@ -10,7 +10,7 @@ the project file format or the controls.
 
 - **Techno sounds, measured against sample libraries.** Every factory sound was benchmarked
   against 400+ techno one-shots and loops (octave bands over the whole hit and its first 20 ms).
-  KCK adds TECHNO, WHOUSE, INDUS and MINIM: the full sweep and click, the chain's drive, a long
+  KCK adds TECHNO, WHOUSE, HEAVY and MINIM: the full sweep and click, the chain's drive, a long
   body and the new PNCH page, within a few dB of the references in a four-on-the-floor loop and
   5-13 dB under them at 1-4 kHz in the first 20 ms (909: 11-25 dB under). They are 4-6 dB louder
   than the older kicks, as long modern kicks are. SNR adds TCLAP and two hats on the snare's
@@ -25,8 +25,8 @@ the project file format or the controls.
   unchanged.
 - **KICK's CUT page**: **CHK**, a choke. Above 0 each hit fades the one still ringing out over
   60 ms down to 1 ms, as one-beat kick samples are cut, so a long held body does not stack up.
-  0 is the old overlap. WHOUSE is now matched to the library kick Roland singled out in the blind
-  tests (3.5 dB off it, attack and loop) and uses it, as does FAT.
+  0 is the old overlap. HEAVY is matched to the library kick Roland singled out in the blind
+  tests (3.5 dB off it, attack and loop) and uses it, as do WHOUSE and FAT.
 - **PSH, the master push** (MIXER EQ, D): 0-12 dB of gain into the limiter. Measured against
   mastered techno, a STRATA mix sits about 4 dB less dense (crest near 12 dB against 8) and LVL
   stops at unity; FORGE at +2.5 dB reaches the reference track's loudness (-9.7 against -9.1

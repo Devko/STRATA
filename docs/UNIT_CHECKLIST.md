@@ -1145,7 +1145,7 @@ A01 at 130.0, no chain.
   its first note, not sub only for a moment while it is built again. `____`
 
 **W84. The techno sounds, PNCH and RDK (8 min).** Beat playing, A01.
-- Track 1, SOUNDS: TECHNO, WHOUSE, INDUS, MINIM. Each knocks harder than 909 (a thud with a
+- Track 1, SOUNDS: TECHNO, WHOUSE, HEAVY, MINIM, FAT. Each knocks harder than 909 (a thud with a
   punch at its front, audible on small speakers too) and sits within a couple of dB of 909's
   level. `____`
 - Track 5, FUNC+EDIT to KCK, SOUNDS RUMBLE, duck it from track 1 (MIXER DCK): a low growl under
@@ -1162,7 +1162,7 @@ A01 at 130.0, no chain.
 - MIXER ROUTE, D (RDK) to 100; the kick's SNB up to about 40; REV: HPF low, DMP high, DEC long.
   The reverb tail drops away under each kick and swells back between them; RDK 0: a steady
   wash. MAX stays where it was (within a point). `____`
-- Track 1, SOUNDS WHOUSE (fader down a little: it is loud): a big, held kick that stops dead at
+- Track 1, SOUNDS HEAVY (fader down a little: it is loud): a big, held kick that stops dead at
   the next one. EDIT, the eighth page reads `CUT`; CHK to `OFF`: the tails now stack into a boom.
   `____`
 - MIXER EQ, D (PSH) from `+0DB` to `+4DB` with the beat playing: louder and denser, the peaks
