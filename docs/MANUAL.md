@@ -1330,8 +1330,9 @@ drums and lines are gone and only the pads and textures play, on their strongest
 sound of the hit before them on the same track, so a ghost on a tuned kick is the same kick and a
 ghost on a bass line repeats the note it follows. The hats fill most, then the percussion, the
 snare and the samples, and the lines; the kick only in the top half, and pads and MID tracks
-never. A track with nothing on it stays silent. Steps with a probability play more often too: a
-50% hat plays every pass at +64.
+never. A track with nothing on it stays silent. A ghost is one note even on a track whose arp is
+on, and it lights no step and no trig glow in GRID: the lights show the pattern, not the fill.
+Steps with a probability play more often too: a 50% hat plays every pass at +64.
 
 Each position of the knob plays the same groove every bar: turning one click further takes away
 (or adds) exactly one more set of hits, and turning back brings each one back where it was. The

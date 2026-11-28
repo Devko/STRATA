@@ -18,8 +18,10 @@
 // metric weight times the amount times the track's appetite: the hats fill most, then the
 // percussion, the samples, the snare and the lines; the kick only near the top; pads, textures
 // and MID tracks never (a chord made up from nothing, or a note sent to someone else's
-// instrument, is not a fill). Up also lifts a step's probability towards 100, so a 50% hat plays
-// more often as the energy climbs.
+// instrument, is not a fill). A ghost is marked as one (StepEvent::ghost): it lights no step and
+// no trig glow, since the lights show the pattern, and on a track whose arp is on it is one note,
+// not a run. Up also lifts a step's probability towards 100, so a 50% hat plays more often as
+// the energy climbs.
 //
 // **Recoverable by construction**: the pattern is never written, and at 0 the scheduler takes no
 // branch of this at all, so rest is the programmed part to the bit. Each draw is a hash of the
