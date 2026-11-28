@@ -8,6 +8,15 @@ the project file format or the controls.
 
 ### Added
 
+- **JAM REC on FUNC+REC twice.** FUNC+REC opens RESAMPLE as before; pressed again there it
+  starts JAM REC, and again stops it. RESAMPLE's last line shows the time and `FUNC+REC: STOP
+  JAM` (`JAM OFF` when none runs), and the REC key blinks a dim red with the top bar's dot while
+  a jam records. The FUNC menu's JAM REC row stays.
+- **MIXER: UP/DOWN jump a group of pages.** The levels, the duck, the widths, the delay, the
+  reverb, the chorus and the master, each to its first page and round the ends; LEFT/RIGHT still
+  go page by page.
+- **The track menu in KEYS.** Hold OK in KEYS for GENERATE and EVOLVE, as in GRID; the pads stay
+  the piano while it is open. New emulator scenario `shortcuts` for the three.
 - **Two reminders on the screen.** A quick tap of FUNC alone says `HOLD FUNC: HELP`, and a tap of
   OK in GRID says `HOLD OK: TRACK MENU`. Both keys did nothing visible on their own, and nothing
   on the panel pointed at the FUNC help or the GEN and EVOLVE menu. Neither covers another notice.
@@ -69,6 +78,8 @@ the project file format or the controls.
 
 ### Fixed
 
+- **A JAM REC start the card refuses no longer uses up a number.** The jam's number is taken
+  only once its file exists, so the next jam that starts is the next after the last real one.
 - **The CPU guard no longer thins chords that were never in danger.** With generated parts on
   every track the unit read 40-60% and showed `GUARD1`-`GUARD4`, shedding POLY voices and grains
   with no block anywhere near an overrun. The guard averaged the load over 11 ms, which follows

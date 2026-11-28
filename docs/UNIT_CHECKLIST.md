@@ -867,6 +867,18 @@ it switch, put a few trigs on track 3 that sound clearly different, then PROJECT
   sound, and GRID now edits track 3. `____`
 - Launch something, save, power cycle, open: the launch is still playing. `____`
 
+**W65. Usability quick wins: MIXER groups, the KEYS track menu, JAM REC on FUNC+REC (5 min).**
+Beat playing, A01, a card with some space.
+- MIXER, then DOWN: `DCK 1-4`; DOWN again `WID 1-4`, then `DLY`, `REV`, `CHO 1-4`, `MST` and
+  round to `TRK 1-4`. UP from `TRK 1-4` is `MST`. LEFT/RIGHT still go one page. `____`
+- HOME twice for KEYS, hold OK half a second: the track menu (`TRACK T1`, `>GENERATE`). The pads
+  still play notes; UP/DOWN move the menu's row, not the track; OK on GENERATE writes a part.
+  CLR: `KEYS`, the keyboard back. `____`
+- FUNC+REC: RESAMPLE, the last line reads `LEFT RIGHT: WHERE TO` and `JAM OFF`. FUNC+REC again:
+  `JAM REC JAM n`, the REC key blinks a dim red with the top bar's dot, and the last line reads
+  `FUNC+REC: STOP JAM` with the time counting. FUNC+REC again: `JAM STOPPING`, `SAVED JAM n`,
+  REC dark. `____`
+
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
 

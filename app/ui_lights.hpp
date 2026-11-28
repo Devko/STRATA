@@ -736,8 +736,9 @@
         leds_.key(ENAGA_KEY_F7, mode_ == Mode::perform ? 8 : 0, mode_ == Mode::mixer ? 8 : 0);
         leds_.key(ENAGA_KEY_F8, mode_ == Mode::machine || mode_ == Mode::kit ? 8 : 0,
                   mode_ == Mode::edit ? 8 : 0);
-        // REC is red while recording, and green on RESAMPLE ("sampling").
-        leds_.key(ENAGA_KEY_F2, rec_ ? 8 : 0, mode_ == Mode::resample ? 8 : 0);
+        // REC is red while recording, and green on RESAMPLE ("sampling"). JAM REC blinks it a dim
+        // red in time with the top bar's dot, so a running jam shows from a step back.
+        leds_.key(ENAGA_KEY_F2, rec_ ? 8 : (jam_mark_on() ? 4 : 0), mode_ == Mode::resample ? 8 : 0);
         // FUNC lights while it is held, so a chord shows it is being read as one.
         leds_.key(ENAGA_KEY_F1, 0, shift_ ? 8 : 0);
 

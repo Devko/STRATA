@@ -4374,8 +4374,9 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
 
     // JAM REC: the same finished master, every block, into the jam's file (app/storage.hpp, "jam
     // recording"). Before the audition and the click, so neither is ever on it. The writer turns
-    // the floats into 24-bit PCM and hands them to Enaga's ring, which never waits; a block the
-    // ring has no room for is dropped whole and counted (Writer::frames_lost), not waited for.
+    // the floats into 24-bit PCM and hands them to Enaga's ring, which never waits; when the ring
+    // is full the frames that do not fit are dropped and counted (Writer::frames_lost), and the
+    // ones that fit are kept.
     if (jam_on_) jam_.write(out, frames);
 
     // The input's level, every block, for the RESAMPLE screen's meter: one pass of the master's

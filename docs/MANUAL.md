@@ -430,7 +430,7 @@ level: OK keeps it, CLR takes it back.
 
 <p><img src="screens/trackmenu.png" width="256" alt="The track menu, held OK in GRID: GENERATE and its settings, EVOLVE, MODE, MUTATION, AMOUNT"></p>
 
-**Hold OK in GRID** for the track menu. **GENERATE** writes a new part on the selected track: on
+**Hold OK in GRID** (or in KEYS) for the track menu. **GENERATE** writes a new part on the selected track: on
 a drum track a rhythm, busier on the beats than between them, with accents and ghost notes; on a
 melodic track a line in the pattern's key and scale too, starting on the root. DENSITY sets how
 busy, RANGE how many octaves the line may climb, LEAP how often it jumps, and WHAT whether to
@@ -570,7 +570,8 @@ are the white keys C to C, the upper pads above them the black keys (C#, D#, F#,
 two upper pads with no black key are octave down (between E and F) and octave up (after B). Pads
 play at the strength you hit them and hold the note while down; the pads in the scale light in
 the track's colour, the root brightest; the screen draws the same keyboard. LEFT/RIGHT change
-octave, UP/DOWN the track, and FUNC + a pad still mutes on the bar. The STEP keys are the track's
+octave, UP/DOWN the track, and FUNC + a pad still mutes on the bar. **Hold OK** for the track menu
+(GENERATE and EVOLVE, below), as in GRID; the pads stay the piano while it is open. The STEP keys are the track's
 steps, as on GRID, with the pad-row keys for the step page, so you can play a line on the pads and
 place or fix steps at the same time. Press **REC** (it lights red) while playing and what you play is
 recorded onto the selected track, quantized by the SETUP page's QUANTIZE amount (100% by
@@ -1569,7 +1570,7 @@ tracks 3 and 4 is separate and still works without a group.
 
 <p><img src="screens/mixer.png" width="256" alt="MIXER: the faders of tracks 1-4"> <img src="screens/mixer_dly.png" width="256" alt="MIXER's DLY page"></p>
 
-<sub>MIXER's first page, all eight faders with A-D on tracks 1-4, and the DLY page. The screen keys walk all seventeen: TRK 1-4, TRK 5-8, DCK 1-4, DCK 5-8, DUCK, WID 1-4, WID 5-8, DLY, DLY+, REV, REV+, ROUTE, CHO 1-4, CHO 5-8, CHO, MST, EQ.</sub>
+<sub>MIXER's first page, all eight faders with A-D on tracks 1-4, and the DLY page. The screen keys walk all seventeen: TRK 1-4, TRK 5-8, DCK 1-4, DCK 5-8, DUCK, WID 1-4, WID 5-8, DLY, DLY+, REV, REV+, ROUTE, CHO 1-4, CHO 5-8, CHO, MST, EQ. UP/DOWN jump a group at a time, to its first page: the levels (TRK), the duck (DCK), the widths (WID), the delay (DLY), the reverb (REV), the chorus (CHO 1-4) and the master (MST).</sub>
 
 Each send has a second mode for long, washy sounds. They sit on the MIXER pages beside their
 send, `DLY+` after `DLY` and `REV+` after `REV`. **Push A** on either page (or turn A) flips the
@@ -1719,11 +1720,12 @@ muted track bounces as silence, so unmute it first.
 
 ### Recording the whole jam: JAM REC
 
-RESAMPLE keeps 30 seconds. To keep a whole set, use **JAM REC**, the FUNC menu's last row:
-FUNC+HOME, UP, OK. The menu closes with `JAM REC JAM 3`, a dot blinks in the top bar before the
-load, and everything that comes out of STRATA goes to `/RECORD/JAM_<n>.WAV` until you stop it:
-FUNC+HOME, UP, OK again (`JAM STOPPING`, then `SAVED JAM 3`). The row shows how long it has run,
-`4:07` or `1:02:33`.
+RESAMPLE keeps 30 seconds. To keep a whole set, use **JAM REC**: press **FUNC+REC twice**, once
+for RESAMPLE and again to start it (`JAM REC JAM 3`). A dot blinks in the top bar before the load,
+the REC key blinks a dim red, and everything that comes out of STRATA goes to
+`/RECORD/JAM_<n>.WAV` until you stop it with FUNC+REC on RESAMPLE again (`JAM STOPPING`, then
+`SAVED JAM 3`). RESAMPLE's last line shows how long it has run, `4:07` or `1:02:33`, and the key
+that stops it. The FUNC menu's JAM REC row does the same, with the time on the row.
 
 It records what RESAMPLE's MASTER take hears: every track, the sends, the master effects,
 REPEAT and the tape stop. The metronome and the sample browser's audition are for you and are
