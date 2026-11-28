@@ -97,6 +97,7 @@ lane_checks() {
     tools/check_rules.sh || ok=1
     tools/enaga_check.sh || ok=1
     python3 -B tests/test_package_release.py || ok=1
+    python3 -B tests/test_release_docs.py || ok=1
     python3 -B tests/test_enaga_cached.py || ok=1
     bash tests/test_wt.sh || ok=1
     tools/check_scripts.sh || ok=1
