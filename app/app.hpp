@@ -1192,6 +1192,13 @@ private:
     // The screen last logged, as mode * 16 + page. -1 so the first pass logs whatever is up.
     int logged_screen_ = -1;
     bool shift_ = false;
+    // PERFORM's A-D: whether each knob's last turn reached the FUNC layer, and when. A turn
+    // keeps that layer while the knob has not rested for kKnobLayerMs (knob_layer_moves), so
+    // FUNC let go (or pressed) mid-turn does not hand the last clicks to the other layer.
+    bool knob_moves_[kMacros] = {};
+    uint32_t knob_turn_ms_[kMacros] = {};
+    bool knob_turned_[kMacros] = {};
+    static constexpr uint32_t kKnobLayerMs = 250;
     bool stop_armed_ = false;
     bool clock_refused_ = false;   // the last transport call was refused: an external source
     bool muted_[kTracks] = {};

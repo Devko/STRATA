@@ -23,12 +23,13 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 sys.path.insert(0, str(ROOT / "third_party" / "enaga" / "tools"))
 import enaga_cached  # noqa: E402
+import menu_rows  # noqa: E402
 
 paths = importlib.import_module("paths")
 build_app = importlib.import_module("build_app")
 enaga_cached.wrap_build_app(build_app, paths)
 emulate = importlib.import_module("emulate")
-enaga_cached.wrap_firmware(emulate.firmware_build, paths)
+enaga_cached.wrap_emulate(emulate, paths)
 
 M = 1_000_000
 MS = emulate.MS
@@ -36,6 +37,12 @@ CYCLES_PER_BLOCK = 496_000
 
 # Keys (third_party/enaga/include/enaga/abi.h).
 UP, RIGHT, F1, F3, PLAY, OK, LEFT, DOWN, F4, CLR = 17, 18, 19, 20, 22, 23, 24, 25, 27, 30
+
+
+def track_menu_up(row):
+    """UP presses from GENERATE, round the bottom, to the track menu's `row` (a TrackRow name):
+    read from app/ui_trackmenu.hpp, so a row added there does not break the walk."""
+    return menu_rows.up("app/ui_trackmenu.hpp", "TrackRow", row)
 
 
 def step_key(n):

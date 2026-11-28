@@ -1083,7 +1083,16 @@ its own; A07's track 3 a different part.
 - STEP 7 on track 3 again, tap FUNC + MUTATE twice, then CLR on track 3: A01's own track 3 is
   still its own part, not A07's. Save, RELOAD PROJECT: the same. `____`
 
-**W79. Tempo: sections, ARR REC, tap tempo and VariSpeed (5 min).** The factory beat stopped on
+**W79. A knob keeps its layer through FUNC (2 min).** A01 playing, PERFORM.
+- Hold FUNC, turn C down steadily and let go of FUNC while still turning, for about half a
+  second more: ENERGY goes on going down (`ENERGY -30`), and after letting go macro C's gauge has
+  not moved. Turn C back up with FUNC to `ENERGY 0`: the part is as programmed, the dub delay as
+  before. `____`
+- Rest the knob a moment, then turn C without FUNC: `MACRO C` and a number, macro C moves at once. Turn it
+  and press FUNC mid-turn: macro C goes on; rest, then turn: ENERGY. The same with A (REL ALL) and
+  D (LIVE RND). `____`
+
+**W80. Tempo: sections, ARR REC, tap tempo and VariSpeed (5 min).** The factory beat stopped on
 A01 at 130.0, no chain.
 - On GRID, tap VALUE twice about a second apart: `TAP TEMPO` both times and the tempo stays
   130.0. Two more taps at the same pace: `TAP 60.0` or near. Turn VALUE back to 130.0. `____`

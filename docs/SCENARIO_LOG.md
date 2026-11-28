@@ -23,6 +23,7 @@ figures are a regression guard.
 
 | Date | Commit | Scenarios | cl6x | GCC-only | Notes |
 | --- | --- | --- | --- | --- | --- |
+| 2026-11-28 | `dacb1f1` (PR #261, the harness fixes) | cl6x 66 of 66, GCC-only 65 of 66 | worst **35.40%** (`genload`) | worst **64.41%** (`genload`) | cl6x on Roland's PC at `-j 8` in 309 s; GCC-only in a 4-core cloud session with Enaga's prebuilt GCC 13.3, where `m0` idled at 5.08% over its 5% line (now 6% for GCC-only) |
 | 2026-11-28 | `db96b69` (after #228, Track Launch) | cl6x 54 of 55, GCC-only 55 of 55 | worst **34.99%** (`genload`) | worst **64.19%** (`genload`) | `projects` failed with cl6x only: the rename's copy found the 4 MiB card full; fixed by an 8 MiB card (`3800908`), which passes with both compilers at the same peaks |
 | 2026-11-27 | `main` with chorus and width | 50 of 50 | worst **34.20%** (`genload`) | not run | chorus (send C) and stereo width in |
 | 2026-11-27 | `46cc054` (v0.5.0) | 47 of 47 | worst **26.34%** (`ratchetspan`) | worst **55.06%** (`ambient`) | the release candidate build; `docs/BUDGET.md`, "The v0.5.0 release candidate build" |
@@ -40,69 +41,80 @@ Before 2026-11-25 the scenarios were run a few at a time; those figures are in `
 
 ## The latest full pass
 
-2026-11-28, `main` at `db96b69` (#228, Track Launch merged), Enaga v0.4.0, `-j 4`. Image with
-cl6x: payload 1,691,888 bytes, bss 1,670,656 (`APP.ENA` 1,691,952; GCC-only 1,660,336). Peaks
-repeat exactly from run to run on the same build: `factory` read 23.62% / 45.36% in two runs each.
+2026-11-28, PR #261 at `dacb1f1` (`main` at `8c3ae12` plus the harness fixes), Enaga v0.4.0. cl6x on
+Roland's PC at `-j 8` (309 s); GCC-only in a cloud session with Enaga's prebuilt GCC 13.3 toolchain
+at `-j 4` (474 s). Peaks repeat exactly from run to run on the same build.
 
-Most scenarios play the factory beat (A01) and read the same 23.62% / 45.36%: the figure that
-differs is the cost of what the scenario adds. GCC-only, `genload` (64.19%) and `energy` (61.67%)
-are over 60%; their scenarios hold that build to a 70% tripwire, a regression guard only.
-`freeze` prints windowed `ld` lines instead of a peak.
+Most scenarios play the factory beat (A01) and read the same 23.84% / 45.54%: the figure that
+differs is the cost of what the scenario adds. GCC-only, `genload` (64.41%) and `energy`
+(62.05%) are over 60%; their scenarios hold that build to a 70% tripwire, a regression guard
+only.
 
 | Scenario | cl6x | GCC-only |
 | --- | --- | --- |
-| `ambient` | 25.47% | 55.38% |
-| `arp` | 23.62% | 45.36% |
-| `asr` | 23.62% | 45.36% |
-| `audition` | 6.34% | 6.48% |
-| `auditionplay` | 25.50% | 45.36% |
-| `bounce` | 25.99% | 45.82% |
-| `choke` | 23.62% | 45.36% |
-| `chorus` | 24.07% | 47.84% |
-| `clear` | 23.62% | 45.36% |
-| `click` | 23.27% | 45.85% |
-| `controls` | 23.62% | 45.36% |
-| `duck` | 23.62% | 45.36% |
-| `energy` | 34.62% | 61.67% |
-| `factory` | 23.62% | 45.36% |
-| `feel` | 23.62% | 45.66% |
-| `fm` | 24.68% | 49.74% |
-| `freeze` | no figure | no figure |
-| `gen` | 26.85% | 48.45% |
-| `genload` | **34.99%** (the worst) | **64.19%** (the worst) |
-| `glide` | 23.62% | 45.36% |
-| `grain` | 24.37% | 52.04% |
-| `jamrec` | 25.90% | 46.56% |
-| `killeq` | 25.55% | 49.00% |
-| `kits` | 23.62% | 45.36% |
-| `launch` | 24.68% | 45.92% |
-| `lfo` | 23.62% | 45.36% |
-| `liverand` | 25.24% | 44.26% |
-| `locks` | 23.62% | 45.58% |
-| `m0` | 4.40% | 4.87% |
-| `m1` | 23.62% | 45.36% |
-| `m3` | 22.70% | 40.58% |
-| `m4` | 14.52% | 27.12% |
-| `m5` | 23.62% | 45.36% |
-| `m6` | 23.62% | 45.36% |
-| `m7` | 23.62% | 45.36% |
-| `midi` | 23.06% | 41.57% |
-| `modslots` | 23.62% | 45.36% |
-| `moveall` | 23.62% | 45.36% |
-| `osc` | 23.62% | 45.36% |
-| `pad` | 23.77% | 45.36% |
-| `pictures` | 24.21% | 51.46% |
-| `playmode` | 23.62% | 45.36% |
-| `plock` | 23.62% | 45.62% |
-| `projects` | 25.41% (FAILed CARD FULL; passes on an 8 MiB card, same peak) | 45.36% |
-| `ratchetspan` | 27.79% | 48.96% |
-| `recmode` | 23.62% | 45.36% |
-| `samples` | 23.62% | 45.36% |
-| `slots` | 23.62% | 45.36% |
-| `sounds` | 24.28% | 44.58% |
-| `stepkeys` | 23.62% | 45.36% |
-| `triplets` | 25.40% | 46.19% |
-| `tune` | 23.62% | 45.36% |
-| `visuals` | 25.41% | 45.82% |
-| `wave` | 26.18% | 50.03% |
-| `width` | 26.68% | 51.13% |
+| `ambient` | 25.84% | 55.55% |
+| `arp` | 23.84% | 45.54% |
+| `arrlaunch` | 29.95% | 46.13% |
+| `arrrec` | 23.99% | 46.83% |
+| `asr` | 23.84% | 45.54% |
+| `audition` | 6.30% | 6.58% |
+| `auditionplay` | 26.17% | 45.54% |
+| `bounce` | 25.84% | 46.01% |
+| `choke` | 23.84% | 45.54% |
+| `chorus` | 24.20% | 48.01% |
+| `clear` | 23.84% | 45.54% |
+| `click` | 23.24% | 46.30% |
+| `controls` | 23.84% | 45.54% |
+| `duck` | 23.84% | 45.54% |
+| `energy` | 34.57% | 62.05% |
+| `factory` | 23.84% | 45.54% |
+| `feel` | 23.84% | 45.84% |
+| `fm` | 25.37% | 49.92% |
+| `freeze` | 25.70% | 45.76% |
+| `gen` | 26.70% | 48.72% |
+| `genload` | **35.40%** (the worst) | **64.41%** (the worst) |
+| `glide` | 23.84% | 45.54% |
+| `grain` | 24.93% | 52.22% |
+| `jamrec` | 25.77% | 46.81% |
+| `killeq` | 25.93% | 49.17% |
+| `kits` | 23.84% | 45.54% |
+| `launch` | 24.52% | 46.11% |
+| `lfo` | 23.84% | 45.54% |
+| `linein` | 24.45% | 45.72% |
+| `liverand` | 24.97% | 44.44% |
+| `locks` | 23.84% | 45.78% |
+| `m0` | 4.61% | 5.08% |
+| `m1` | 23.84% | 45.54% |
+| `m3` | 22.88% | 40.76% |
+| `m4` | 14.70% | 27.31% |
+| `m5` | 23.84% | 45.54% |
+| `m6` | 23.84% | 45.54% |
+| `m7` | 23.84% | 45.54% |
+| `midi` | 23.28% | 41.79% |
+| `modslots` | 23.84% | 45.54% |
+| `moveall` | 23.84% | 45.54% |
+| `osc` | 23.84% | 45.54% |
+| `pad` | 23.97% | 45.54% |
+| `pictures` | 24.43% | 51.65% |
+| `playmode` | 23.84% | 45.54% |
+| `plock` | 23.84% | 45.82% |
+| `projects` | 25.27% | 45.54% |
+| `queuehold` | 23.84% | 45.54% |
+| `ratchetspan` | 27.65% | 49.25% |
+| `recmode` | 23.84% | 45.54% |
+| `samples` | 23.84% | 45.54% |
+| `sections` | 25.84% | 45.90% |
+| `shortcuts` | 25.77% | 46.81% |
+| `slots` | 26.25% | 45.85% |
+| `sounds` | 25.17% | 44.76% |
+| `stepkeys` | 23.84% | 45.54% |
+| `tempo` | 23.96% | 45.54% |
+| `transpose` | 23.92% | 45.54% |
+| `triplets` | 25.92% | 46.40% |
+| `tune` | 23.84% | 45.54% |
+| `usersounds` | 23.84% | 45.54% |
+| `varispeed` | 32.80% | 57.55% |
+| `visuals` | 25.27% | 46.01% |
+| `wave` | 26.79% | 50.30% |
+| `wavescan` | 25.70% | 45.56% |
+| `width` | 26.87% | 51.31% |

@@ -6,10 +6,21 @@
 # a log line app/ had stopped writing, and scenario_m1.sh's load tripwire had been overtaken by
 # the default kit growing. A test nobody runs is worse than no test: it reads as coverage.
 #
-#   tools/scenarios.sh            every scenario, side by side on every core
+#   tools/scenarios.sh            every scenario, side by side on every core (the full pass)
+#   tools/scenarios.sh --changed  the per-PR set: what this branch changes against origin/main
+#                                 needs (tools/scenario_pick.py: the scenarios that name a changed
+#                                 file, the load set for DSP, and a smoke set); --changed=REF
+#                                 compares against REF instead. Uncommitted changes count.
 #   tools/scenarios.sh m3 m6      just those
 #   tools/scenarios.sh -j 1       one at a time, in $ENAGA_BUILD itself, as before
 #   tools/scenarios.sh -j 4 m3    at most four at once
+#
+# Every scenario takes one of $STRATA_EMU_SLOTS slots (default: seven of every eight cores) shared by
+# every run on the machine (lock files in ~/strata-build/slots), so threads in several worktrees
+# running scenarios at once queue for the cores instead of all slowing down together: five runs
+# at -j 4 on Roland's 16 threads sent single scenarios from 49 s to 226 s (2026-11-28). The load
+# figures do not depend on it (the emulator counts guest cycles); only the wall time does.
+# STRATA_EMU_SLOTS=0 turns the queue off.
 #
 # In parallel, each scenario gets its own build folder, $ENAGA_BUILD/par/<name>, because
 # emulate.py writes its card image, capture and report to fixed names under $ENAGA_BUILD. Its
@@ -27,13 +38,31 @@ source tools/env.sh
 jobs="$(nproc 2>/dev/null || echo 2)"
 names=()
 full=0
+changed=""
 while [ $# -gt 0 ]; do
     case "$1" in
         -j)  jobs="$2"; shift 2 ;;
         -j*) jobs="${1#-j}"; shift ;;
+        --changed)   changed="origin/main"; shift ;;
+        --changed=*) changed="${1#--changed=}"; shift ;;
         *)   names+=("$1"); shift ;;
     esac
 done
+
+if [ -n "$changed" ]; then
+    # Committed on this branch since it left $changed, plus whatever is not committed yet.
+    base=$("$STRATA_GIT" merge-base "$changed" HEAD 2>/dev/null) || {
+        echo "error: no merge base with $changed (fetch it first)" >&2; exit 2; }
+    files=$({ "$STRATA_GIT" diff --name-only "$base" HEAD; "$STRATA_GIT" diff --name-only HEAD;
+              "$STRATA_GIT" ls-files --others --exclude-standard; } | tr -d '\r' | sort -u)
+    echo "changed against $changed: $(printf '%s\n' "$files" | grep -c . || true) file(s)"
+    python3 -B tools/scenario_pick.py --why $files | sed 's/^/  /'
+    mapfile -t names < <(python3 -B tools/scenario_pick.py $files)
+    if [ ${#names[@]} -eq 0 ]; then
+        echo "no scenario needed: nothing but prose changed"
+        exit 0
+    fi
+fi
 
 if [ ${#names[@]} -eq 0 ]; then
     full=1
@@ -55,8 +84,33 @@ fi
 results="$(mktemp -d "${TMPDIR:-/tmp}/strata-scenarios.XXXXXX")"
 trap 'rm -rf "$results"' EXIT
 
+# One of $STRATA_EMU_SLOTS machine-wide slots, held until this shell exits (flock on an fd).
+cores=$(nproc 2>/dev/null || echo 4)
+slots="${STRATA_EMU_SLOTS:-$(( cores - cores / 8 ))}"
+slot_dir="${STRATA_SLOT_DIR:-$HOME/strata-build/slots}"
+take_slot() {
+    local i waited=0
+    [ "$slots" -gt 0 ] 2>/dev/null && command -v flock > /dev/null || return 0
+    mkdir -p "$slot_dir"
+    while :; do
+        for ((i = 0; i < slots; i++)); do
+            exec {slot_fd}> "$slot_dir/$i"
+            if flock -n "$slot_fd"; then
+                [ "$waited" -gt 0 ] && echo "waited ${waited} s for a free emulator slot" > "$results/$1.wait"
+                return 0
+            fi
+            exec {slot_fd}>&-
+        done
+        sleep 2
+        waited=$((waited + 2))
+    done
+}
+export -f take_slot
+export slots slot_dir
+
 run_one() {   # name build_dir
     local s e
+    take_slot "$1"
     s=$(date +%s)
     if [ -n "$2" ]; then
         mkdir -p "$2"
@@ -122,8 +176,9 @@ for name in "${names[@]}"; do
     if [ -n "$load" ] && awk -v a="$pct" -v b="$worst_pct" 'BEGIN { exit !(a > b) }'; then
         worst_pct=$pct worst_name=$name
     fi
+    wait_note=$(cat "$results/$name.wait" 2>/dev/null || true)
     if [ "$status" -eq 0 ]; then
-        printf '%-9s OK    %4ss  %s\n' "$name" "$sec" "${load:-(no load figure)}"
+        printf '%-9s OK    %4ss  %s%s\n' "$name" "$sec" "${load:-(no load figure)}" "${wait_note:+  ($wait_note)}"
     else
         printf '%-9s FAIL  %4ss  %s\n' "$name" "$sec" "${load:-}"
         printf '%s\n' "$output" | grep -E '^  FAIL|^FAIL|^error' | sed 's/^/        /'
