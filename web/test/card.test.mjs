@@ -258,7 +258,7 @@ test("enagaFromBody reads the release body's marker, and only a version", () => 
 test("a new release appears from GitHub with its digest and its marked Enaga", withFetch(async () => {
   api = {
     "/repos/Devko/STRATA/releases?per_page=100": [
-      release("0.6.0", { body: '<!-- strata-card: {"enaga":"0.5.0"} -->', digest: sha("b") }),
+      release("9.0.0", { body: '<!-- strata-card: {"enaga":"0.5.0"} -->', digest: sha("b") }),
       release("0.4.0", { digest: pinnedSha("0.4.0") }),
       release("0.3.9", { body: "no marker, not pinned" }),
       release("0.3.8", { body: '<!-- strata-card: {"enaga":"0.3.0"} -->', draft: true }),
@@ -269,13 +269,13 @@ test("a new release appears from GitHub with its digest and its marked Enaga", w
   mockGitHub();
   const m = await liveManifest();
   assert.equal(m.source, "github");
-  assert.deepEqual(m.strata.map((s) => s.version), ["0.6.0", "0.4.0"]);
-  assert.deepEqual(m.strata[0], { version: "0.6.0", tag: "v0.6.0", date: "2027-01-02", asset: "STRATA-v0.6.0-smpltrek.zip", sha256: sha("b"), enaga: "0.5.0" });
+  assert.deepEqual(m.strata.map((s) => s.version), ["9.0.0", "0.4.0"]);
+  assert.deepEqual(m.strata[0], { version: "9.0.0", tag: "v9.0.0", date: "2027-01-02", asset: "STRATA-v9.0.0-smpltrek.zip", sha256: sha("b"), enaga: "0.5.0" });
   assert.equal(m.strata[1].enaga, "0.3.0", "pinned releases keep their pinned Enaga");
   assert.deepEqual(m.enaga["0.5.0"], { tag: "v0.5.0", asset: "enaga-v0.5.0-smpltrek.zip", sha256: sha("c") });
   assert.deepEqual(m.enaga["0.3.0"], manifestFile.enaga["0.3.0"]);
   const ids = Object.keys(allowedAssets(m));
-  assert.ok(ids.includes("strata-0.6.0") && ids.includes("enaga-0.5.0") && ids.includes("enaga-0.5.0-license"));
+  assert.ok(ids.includes("strata-9.0.0") && ids.includes("enaga-0.5.0") && ids.includes("enaga-0.5.0-license"));
 }));
 
 test("a pinned release whose GitHub digest changed is not offered", withFetch(async () => {
@@ -285,7 +285,7 @@ test("a pinned release whose GitHub digest changed is not offered", withFetch(as
 }));
 
 test("a release whose Enaga cannot be found is not offered", withFetch(async () => {
-  api = { "/repos/Devko/STRATA/releases?per_page=100": [release("0.6.0", { body: '<!-- strata-card: {"enaga":"9.9.9"} -->' }), release("0.4.0", { digest: pinnedSha("0.4.0") })] };
+  api = { "/repos/Devko/STRATA/releases?per_page=100": [release("9.0.0", { body: '<!-- strata-card: {"enaga":"9.9.9"} -->' }), release("0.4.0", { digest: pinnedSha("0.4.0") })] };
   mockGitHub();
   assert.deepEqual((await liveManifest()).strata.map((s) => s.version), ["0.4.0"]);
 }));
@@ -307,17 +307,17 @@ test("GitHub's answer is cached, so the API is asked once", withFetch(async () =
 
 test("when GitHub refuses after a good answer, the last good answer is served, not the pinned list", withFetch(async () => {
   api = {
-    "/repos/Devko/STRATA/releases?per_page=100": [release("0.6.0", { body: '<!-- strata-card: {"enaga":"0.4.0"} -->', digest: sha("b") })],
+    "/repos/Devko/STRATA/releases?per_page=100": [release("9.0.0", { body: '<!-- strata-card: {"enaga":"0.4.0"} -->', digest: sha("b") })],
   };
   mockGitHub();
   const realNow = Date.now;
   try {
-    assert.equal((await liveManifest()).strata[0].version, "0.6.0");
+    assert.equal((await liveManifest()).strata[0].version, "9.0.0");
     api = null; // GitHub now answers 403, as it does when the shared IP's rate limit is spent
     Date.now = () => realNow() + 3600 * 1000; // past the ten-minute cache
     const m = await liveManifest();
     assert.equal(m.source, "github");
-    assert.equal(m.strata[0].version, "0.6.0");
+    assert.equal(m.strata[0].version, "9.0.0");
   } finally {
     Date.now = realNow;
   }
