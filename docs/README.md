@@ -25,6 +25,7 @@
 | [SPEC.md](SPEC.md) | The design: sound architecture, sequencer, panel mapping, data model |
 | [PLAN.md](PLAN.md) | The build order and milestones |
 | [BUDGET.md](BUDGET.md) | Measured CPU and memory figures |
+| [SCENARIO_LOG.md](SCENARIO_LOG.md) | Every full emulator scenario pass: commit, compiler, worst peak |
 | [ENAGA_API.md](ENAGA_API.md) | The verified Enaga signatures STRATA uses |
 | [SOUND.md](SOUND.md) | Where the drum synthesis comes from |
 | [MUTATION.md](MUTATION.md) | Mutation testing of the test suite |
