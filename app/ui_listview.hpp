@@ -823,13 +823,20 @@
                 append_number(out, uint32_t(entry.repeats));
                 *out = 0;
                 paint::small_text(px, x + 2, kLaneY + 11, name, here ? 13 : 8);
-                if (entry.mutes != 0) {
-                    out = name;
+                // The mute state it sets, and `+` when the section has fields of its own.
+                const SectionExtra &extra = project.chain_extra[i];
+                out = name;
+                if (extra.cap != 0) {
+                    *out++ = 'C';
+                } else if (entry.mutes != 0) {
                     *out++ = 'M';
                     append_number(out, uint32_t(entry.mutes));
-                    *out = 0;
-                    paint::small_text(px, x + 2, kLaneY + 19, name, here ? 13 : 8);
                 }
+                SectionExtra rest = extra;
+                rest.cap = 0;
+                if (!section_empty(rest)) *out++ = '+';
+                *out = 0;
+                if (name[0] != 0) paint::small_text(px, x + 2, kLaneY + 19, name, here ? 13 : 8);
             }
             x += w + 2;
         }
@@ -863,13 +870,19 @@
             }
         }
         paint::small_text(px, 54, 77, "MUTES", 6);
-        if (entry.mutes == 0) {
+        const SectionExtra &extra = project.chain_extra[chain_cursor_];
+        if (entry.mutes == 0 && extra.cap == 0) {
             paint::small_text(px, 54, 85, "AS THEY ARE", 9);
         } else {
-            const uint8_t mask = project.settings.mute_states[entry.mutes - 1];
+            const uint8_t mask = extra.cap != 0 ? extra.mask
+                                                : project.settings.mute_states[entry.mutes - 1];
             out = line;
-            *out++ = 'M';
-            append_number(out, uint32_t(entry.mutes));
+            if (extra.cap != 0) {
+                append(out, "CAP");
+            } else {
+                *out++ = 'M';
+                append_number(out, uint32_t(entry.mutes));
+            }
             *out = 0;
             paint::small_text(px, 78, 77, line, 13);
             for (int t = 0; t < kTracks; t++) {
@@ -882,8 +895,12 @@
             }
         }
 
+        // The section's own fields (app/ui_section.hpp), "S4 SNAP E+32 132BPM".
+        section_summary(extra, line);
+        if (line[0] != 0) paint::small_text(px, 0, 96, line, 12);
+
         paint::small_text(px, 0, 105, "OK ADD  CLR X2 REMOVE", 10);
-        paint::small_text(px, 0, 113, "A:REPEATS B:MUTES", 10);
+        paint::small_text(px, 0, 113, "A:REPEATS PUSH A:SECT", 10);
     }
 
     // The cursor entry's steps, read once when the cursor's pattern changes (a pattern is a few

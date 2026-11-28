@@ -89,6 +89,7 @@ struct Entry {
 // `settings.chain_length` for the tests that need the two to disagree.
 void set_chain(Project &project, const Entry *entries, int count, int declared = -1) {
     for (int i = 0; i < kChainEntries; i++) project.chain[i] = ChainEntry{};
+    for (int i = 0; i < kChainEntries; i++) project.chain_extra[i] = SectionExtra{};
     for (int i = 0; i < count && i < kChainEntries; i++) {
         project.chain[i].bank = entries[i].bank;
         project.chain[i].slot = entries[i].slot;
@@ -1464,4 +1465,192 @@ TEST(chain_edits_carry_the_mute_recall_and_refuse_past_eight) {
     CHECK_EQ(int(g_project.chain[1].mutes), 0);
     CHECK(chain_remove(g_project, 0));
     CHECK_EQ(int(g_project.chain[1].mutes), 0);       // the vacated entry is zeroed whole
+}
+
+// --- song sections (core/project.hpp, SectionExtra) -----------------------------------------
+
+namespace {
+
+SectionExtra section_with_scene(uint8_t scene) {
+    SectionExtra e;
+    e.scene = scene;
+    return e;
+}
+
+}  // namespace
+
+TEST(chain_section_fields_follow_their_entry_through_every_edit) {
+    const Entry entries[] = {{0, 0, 1}, {0, 1, 1}, {0, 2, 1}};
+    set_chain(g_project, entries, 3);
+    for (int i = 0; i < 3; i++) CHECK(chain_set_section(g_project, i, section_with_scene(uint8_t(i + 1))));
+    // Insert before entry 1: the fields move up with their entries; the new one has none.
+    CHECK(chain_insert(g_project, 1, 0, 5, 1));
+    CHECK_EQ(int(g_project.chain_extra[0].scene), 1);
+    CHECK(section_empty(g_project.chain_extra[1]));
+    CHECK_EQ(int(g_project.chain_extra[2].scene), 2);
+    CHECK_EQ(int(g_project.chain_extra[3].scene), 3);
+    // A copy carries its fields, even from inside the chain it shifts.
+    CHECK(chain_insert(g_project, 3, 0, 1, 1, 0, &g_project.chain_extra[2]));
+    CHECK_EQ(int(g_project.chain_extra[3].scene), 2);
+    CHECK_EQ(int(g_project.chain_extra[4].scene), 3);
+    // Remove: the fields move down, and the vacated record is zeroed.
+    CHECK(chain_remove(g_project, 0));
+    CHECK(section_empty(g_project.chain_extra[0]));
+    CHECK_EQ(int(g_project.chain_extra[3].scene), 3);
+    CHECK(section_empty(g_project.chain_extra[4]));
+    // Changing an entry's pattern or repeats keeps its fields.
+    CHECK(chain_set(g_project, 3, 0, 9, 4));
+    CHECK_EQ(int(g_project.chain_extra[3].scene), 3);
+    // A damaged tail is cut with its fields.
+    g_project.chain_extra[6].scene = 5;
+    CHECK(chain_set(g_project, 0, 0, 0, 1));
+    CHECK(section_empty(g_project.chain_extra[6]));
+}
+
+TEST(chain_mut_is_one_field_cap_or_a_recall) {
+    const Entry entries[] = {{0, 0, 1}};
+    set_chain(g_project, entries, 1);
+    CHECK(chain_set(g_project, 0, 0, 0, 1, 3));
+    SectionExtra cap;
+    cap.cap = 1;
+    cap.mask = 0x0F;
+    CHECK(chain_set_section(g_project, 0, cap));
+    CHECK_EQ(int(g_project.chain[0].mutes), 0);       // CAP replaces the recall
+    CHECK_EQ(int(g_project.chain_extra[0].mask), 0x0F);
+    CHECK(chain_set(g_project, 0, 0, 0, 1, 2));        // and a recall replaces CAP
+    CHECK_EQ(int(g_project.chain_extra[0].cap), 0);
+    CHECK_EQ(int(g_project.chain_extra[0].mask), 0);
+    // An insert with a recall drops a copied CAP.
+    CHECK(chain_insert(g_project, 1, 0, 0, 1, 4, &cap));
+    CHECK_EQ(int(g_project.chain_extra[1].cap), 0);
+    CHECK_EQ(int(g_project.chain[1].mutes), 4);
+}
+
+TEST(chain_section_fields_out_of_range_are_refused_whole) {
+    const Entry entries[] = {{0, 0, 1}};
+    set_chain(g_project, entries, 1);
+    CHECK(chain_set_section(g_project, 0, section_with_scene(16)));
+    SectionExtra bad[7];
+    bad[0].scene = 17;
+    bad[1].morph = kSectionMorphMax + 1;
+    bad[2].energy = kSectionEnergyMax + 1;
+    bad[3].bpm = kTempoCentiMin - 1;
+    bad[4].bpm = kTempoCentiMax + 1;
+    bad[5].cap = 2;
+    bad[6].mask = 1;                                  // a mask with no CAP
+    for (const SectionExtra &e : bad) {
+        CHECK(!section_valid(e));
+        CHECK(!chain_set_section(g_project, 0, e));
+        CHECK(!chain_insert(g_project, 1, 0, 0, 1, 0, &e));
+    }
+    CHECK_EQ(int(g_project.chain_extra[0].scene), 16);   // a refusal changes nothing
+    CHECK_EQ(chain_length(g_project), 1);
+    CHECK(!chain_set_section(g_project, 1, SectionExtra{}));   // past the chain
+    CHECK(!chain_set_section(g_project, -1, SectionExtra{}));
+    // The edges are in range.
+    SectionExtra edges;
+    edges.scene = kSectionScenesMax;
+    edges.morph = kSectionMorphMax;
+    edges.energy = kSectionEnergyMax;
+    edges.bpm = kTempoCentiMax;
+    CHECK(chain_set_section(g_project, 0, edges));
+    edges.bpm = kTempoCentiMin;
+    edges.energy = 1;
+    CHECK(chain_set_section(g_project, 0, edges));
+    // reserved is not kept.
+    edges.reserved = 9;
+    CHECK(chain_set_section(g_project, 0, edges));
+    CHECK_EQ(int(g_project.chain_extra[0].reserved), 0);
+}
+
+TEST(chain_entry_section_is_the_playing_entrys) {
+    const Entry entries[] = {{0, 0, 1}, {0, 1, 1}};
+    set_chain(g_project, entries, 2);
+    CHECK(chain_set_section(g_project, 1, section_with_scene(7)));
+    ChainPlayer player;
+    CHECK(chain_entry_section(g_project, player) == nullptr);   // inactive
+    CHECK(chain_start(g_project, player));
+    CHECK(section_empty(*chain_entry_section(g_project, player)));
+    uint8_t bank = 0, slot = 0;
+    chain_advance(g_project, player, bank, slot);
+    CHECK_EQ(int(chain_entry_section(g_project, player)->scene), 7);
+    CHECK(chain_remove(g_project, 1));
+    chain_player_removed(player, 1);
+    CHECK(chain_entry_section(g_project, player) == nullptr);   // orphaned: plays no entry
+}
+
+TEST(chain_section_energy_byte_maps_both_ways) {
+    CHECK_EQ(section_energy(1), -64);
+    CHECK_EQ(section_energy(kSectionEnergyZero), 0);
+    CHECK_EQ(section_energy(kSectionEnergyMax), 64);
+    CHECK_EQ(int(section_energy_byte(-64)), 1);
+    CHECK_EQ(int(section_energy_byte(0)), int(kSectionEnergyZero));
+    CHECK_EQ(int(section_energy_byte(64)), int(kSectionEnergyMax));
+    CHECK_EQ(int(section_energy_byte(-100)), 1);       // held to the range, never `--`
+    CHECK_EQ(int(section_energy_byte(100)), int(kSectionEnergyMax));
+    for (int e = -64; e <= 64; e++) CHECK_EQ(section_energy(section_energy_byte(e)), e);
+}
+
+TEST(chain_section_step_walks_each_field_and_clear_puts_it_back) {
+    const Entry entries[] = {{0, 0, 1}};
+    set_chain(g_project, entries, 1);
+    SectionExtra &e = g_project.chain_extra[0];
+    // MUT: --, M1 .. M8, CAP (taking the live mutes), and back down through M8.
+    CHECK(section_step(g_project, 0, SectionField::mut, 3, 0x11, 13000));
+    CHECK_EQ(int(g_project.chain[0].mutes), 3);
+    CHECK(section_step(g_project, 0, SectionField::mut, 20, 0x11, 13000));
+    CHECK_EQ(int(e.cap), 1);
+    CHECK_EQ(int(e.mask), 0x11);
+    CHECK_EQ(int(g_project.chain[0].mutes), 0);
+    CHECK(section_step(g_project, 0, SectionField::mut, 1, 0x22, 13000));
+    CHECK_EQ(int(e.mask), 0x11);                      // at the end: the mask stays as stored
+    CHECK(section_step(g_project, 0, SectionField::mut, -1, 0x22, 13000));
+    CHECK_EQ(int(e.cap), 0);
+    CHECK_EQ(int(e.mask), 0);
+    CHECK_EQ(int(g_project.chain[0].mutes), 8);
+    CHECK(section_step(g_project, 0, SectionField::mut, -20, 0, 13000));
+    CHECK_EQ(int(g_project.chain[0].mutes), 0);
+    // SCN and MRP stop at their ends.
+    CHECK(section_step(g_project, 0, SectionField::scn, 40, 0, 13000));
+    CHECK_EQ(int(e.scene), 16);
+    CHECK(section_step(g_project, 0, SectionField::mrp, 2, 0, 13000));
+    CHECK_EQ(int(e.morph), int(kSectionMorphRide));
+    CHECK(section_step(g_project, 0, SectionField::mrp, 1, 0, 13000));
+    CHECK_EQ(int(e.morph), int(kSectionMorphBack));
+    CHECK(section_step(g_project, 0, SectionField::mrp, 9, 0, 13000));
+    CHECK_EQ(int(e.morph), int(kSectionMorphSnapA));
+    // NRG and BPM leave `--` for 0 and the tempo playing on any turn, then walk.
+    CHECK(section_step(g_project, 0, SectionField::nrg, -5, 0, 13000));
+    CHECK_EQ(section_energy(e.energy), 0);
+    CHECK(section_step(g_project, 0, SectionField::nrg, -100, 0, 13000));
+    CHECK_EQ(section_energy(e.energy), -64);          // never back to `--` by turning
+    CHECK(section_step(g_project, 0, SectionField::bpm, 3, 0, 12850));
+    CHECK_EQ(int(e.bpm), 12850);
+    CHECK(section_step(g_project, 0, SectionField::bpm, 3, 0, 12850));
+    CHECK_EQ(int(e.bpm), 13150);
+    CHECK(section_step(g_project, 0, SectionField::bpm, 127, 0, 12850));
+    CHECK(section_step(g_project, 0, SectionField::bpm, 127, 0, 12850));
+    CHECK_EQ(int(e.bpm), int(kTempoCentiMax));
+    for (int i = 0; i < 3; i++) CHECK(section_step(g_project, 0, SectionField::bpm, -128, 0, 12850));
+    CHECK_EQ(int(e.bpm), int(kTempoCentiMin));
+    CHECK(section_valid(e));
+    // Push: back to `--`, field by field.
+    CHECK(section_clear(g_project, 0, SectionField::bpm));
+    CHECK_EQ(int(e.bpm), 0);
+    CHECK(section_clear(g_project, 0, SectionField::nrg));
+    CHECK(section_clear(g_project, 0, SectionField::mrp));
+    CHECK(section_clear(g_project, 0, SectionField::scn));
+    CHECK(section_empty(e));
+    CHECK(section_step(g_project, 0, SectionField::mut, 20, 0x03, 13000));
+    CHECK(section_clear(g_project, 0, SectionField::mut));
+    CHECK(section_empty(e));
+    CHECK_EQ(int(e.mask), 0);
+    CHECK(section_step(g_project, 0, SectionField::mut, 2, 0, 13000));
+    CHECK(section_clear(g_project, 0, SectionField::mut));
+    CHECK_EQ(int(g_project.chain[0].mutes), 0);
+    // Refusals: past the chain, past the five fields.
+    CHECK(!section_step(g_project, 1, SectionField::scn, 1, 0, 13000));
+    CHECK(!section_step(g_project, 0, SectionField::count, 1, 0, 13000));
+    CHECK(!section_clear(g_project, 1, SectionField::scn));
+    CHECK(!section_clear(g_project, 0, SectionField::count));
 }

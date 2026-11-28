@@ -1144,6 +1144,33 @@ outside clock that keeps running, STRATA goes quiet at the end and waits for PLA
 STOP. The header shows which (`CHAIN 3/64 ON SONG`). Both are saved with the project; a project
 from before song mode loops, with no recalls.
 
+**Sections.** Push A on an entry for its **SECTION** view. Each entry can also change the sound,
+the energy and the tempo as it starts, so one pattern can be an intro, a build and a drop. The
+screen keys switch two pages: **SECT** (A PAT, B REP, C MUT, D SCN) and **MOVE** (A MRP, B NRG,
+C BPM). Every field reads `--` until you turn it, and `--` leaves that thing as it is.
+
+<p><img src="screens/section.png" width="256" alt="The SECTION view, MOVE page"></p>
+
+| Field | Values | As the entry starts |
+| --- | --- | --- |
+| MUT | `--`, M1-M8, CAP | M1-M8 recall a stored mute state; CAP sets the exact mutes the entry stores (turned to CAP, it takes the mutes as they stand) |
+| SCN | `--`, 1-16 | that scene goes on morph side B |
+| MRP | `--`, SNAP, RIDE, BACK, SNAP A | SNAP jumps the morph to B; RIDE rides it to B over the whole entry; BACK rides it to A; SNAP A jumps it to A |
+| NRG | `--`, -64 to +64 | ENERGY jumps there |
+| BPM | `--`, 20-300 | the tempo changes there, a whole BPM a click |
+
+A push on a knob puts its field back to `--`. UP/DOWN go to the previous or next entry without
+leaving the view, and OK or CLR go back to the list. **Hold OK** to fill the fields from what
+plays: the mutes as CAP, the scene on side B, SNAP if the morph is past half way (else SNAP A), the ENERGY and
+the tempo. So a breakdown is set by ear: dial it in, hold OK.
+
+Your hands win until the next entry: a mute, the morph or ENERGY changed during a section takes
+over at once and stops a RIDE where it is. The next entry applies its own fields. A section's
+tempo becomes the project's tempo, as a turn of VALUE would; under an outside clock it is skipped
+and STRATA says `EXT CLOCK: BPM SKIPPED` once. On the list, `+` under an entry marks fields of its
+own, `C` a CAP, and the cursor's entry lists them under MUTES (`S4 SNAP E-40 132BPM`). OK copies
+an entry with its fields. A project from before sections opens with every field `--`.
+
 ### Track Launch: one track from another pattern
 
 Play the bass of B07 under the drums of A01 without making a new pattern. Press PROJECT twice

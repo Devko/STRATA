@@ -1143,6 +1143,8 @@ bool Engine::apply_perform(const Command &command, int track, int step) {
             break;
 
         case Cmd::set_morph:
+            // The hand takes over from a section's ride, as a knob does from a scene.
+            morph_ride_stop();
             morph_ = uint16_t(command.u > kMorphScale ? kMorphScale : command.u);
             perform_dirty_ = true;
             break;
@@ -1961,6 +1963,53 @@ bool Engine::apply_arrangement(const Command &command, int, int) {
                     project_.settings.chain_song = command.b != 0;
                     done = true;
                     break;
+                case ChainEdit::section: {
+                    SectionExtra extra;
+                    extra.cap = command.b;
+                    extra.mask = command.c;
+                    extra.scene = command.d;
+                    extra.morph = command.e;
+                    extra.energy = uint8_t(command.u & 0xFFu);
+                    extra.bpm = uint16_t(command.u >> 8);
+                    done = chain_set_section(project_, at, extra);
+                    break;
+                }
+                case ChainEdit::copy:
+                    if (at >= chain_length(project_)) break;
+                    {
+                        const ChainEntry entry = project_.chain[at];
+                        const SectionExtra extra = project_.chain_extra[at];
+                        done = chain_insert(project_, at + 1, entry.bank, entry.slot,
+                                            entry.repeats, entry.mutes, &extra);
+                    }
+                    if (done) chain_player_inserted(chain_, at + 1);
+                    break;
+                case ChainEdit::section_delta:
+                    done = section_step(project_, at, SectionField(command.b),
+                                        int(int8_t(command.c)), mute_state_capture(muted_),
+                                        project_.settings.tempo_centi_bpm);
+                    break;
+                case ChainEdit::section_clear:
+                    done = section_clear(project_, at, SectionField(command.b));
+                    break;
+                case ChainEdit::fill: {
+                    // What plays now, as the section's fields: the room by ear, then hold OK.
+                    SectionExtra extra;
+                    extra.cap = 1;
+                    extra.mask = mute_state_capture(muted_);
+                    extra.scene = uint8_t(scene_b_ + 1);
+                    // The morph where it sits, to the nearer side: SNAP to B or SNAP A.
+                    extra.morph = morph_ * 2u > kMorphScale ? kSectionMorphSnap
+                                                            : kSectionMorphSnapA;
+                    extra.energy = section_energy_byte(perform_.energy);
+                    const uint16_t tempo = project_.settings.tempo_centi_bpm;
+                    extra.bpm = tempo < kTempoCentiMin ? uint16_t(kTempoCentiMin)
+                                                       : (tempo > kTempoCentiMax
+                                                              ? uint16_t(kTempoCentiMax)
+                                                              : tempo);
+                    done = chain_set_section(project_, at, extra);
+                    break;
+                }
                 case ChainEdit::pattern_delta:
                 case ChainEdit::repeats_delta:
                 case ChainEdit::mutes_delta: {
@@ -3061,10 +3110,74 @@ void Engine::evolve_from_settings() {
     status_.bump_evolve_loaded();
 }
 
-// A chain entry has just started: its mute recall, if it has one, now (song mode).
+// A chain entry has just started: its mute recall, if it has one, now (song mode), and its
+// section fields (core/project.hpp, SectionExtra). Every `--` leaves what the hands set alone.
+// Whatever the last entry rode is let go: a section's morph is its own or the hand's.
 void Engine::chain_entry_started() {
+    morph_ride_stop();
     const int state = chain_entry_mutes(project_, chain_);
     if (state >= 0) apply_mutes(project_.settings.mute_states[state]);
+    const SectionExtra *section = chain_entry_section(project_, chain_);
+    if (section == nullptr || section_empty(*section)) return;
+    if (section->cap != 0) apply_mutes(section->mask);
+    if (section->scene != 0 && section->scene <= kScenes) {
+        scene_b_ = uint8_t(section->scene - 1);
+        project_.settings.scene_b = scene_b_;
+        perform_dirty_ = true;
+    }
+    if (section->morph == kSectionMorphSnap || section->morph == kSectionMorphSnapA) {
+        morph_ = section->morph == kSectionMorphSnap ? kMorphScale : 0;
+        perform_dirty_ = true;
+    } else if (section->morph == kSectionMorphRide || section->morph == kSectionMorphBack) {
+        // Over the whole entry: its repeats times the pattern's pass, from where the morph is.
+        const uint32_t repeats = project_.chain[chain_.entry].repeats;
+        const uint32_t length = repeats * uint32_t(master_loop_ticks(live()));
+        morph_ride_start(section->morph == kSectionMorphRide ? kMorphScale : 0, length);
+    }
+    if (section->energy != 0) perform_.energy = energy_turn(int8_t(section_energy(section->energy)), 0);
+    // Only the main context may set Enaga's clock: ask, and the UI sets it or says it was refused.
+    if (section->bpm != 0) status_.bump_tempo_due(section->bpm);
+    status_.bump_section_event();
+}
+
+// MRP RIDE and BACK: the morph from where it is to `to` over `length` ticks, one step a tick in
+// resolve_tick. The rate is worked out once here, in 1/65536 of a morph unit a tick, because this
+// chip has no integer divide and a tick comes every 2 ms at 300 BPM.
+void Engine::morph_ride_start(uint16_t to, uint32_t length) {
+    ride_from_ = morph_;
+    ride_to_ = to;
+    ride_start_ = tick_;
+    ride_length_ = length < 1u ? 1u : length;
+    const int32_t span = int32_t(to) - int32_t(morph_);
+    ride_rate_ = int32_t((int64_t(span) * 65536) / int64_t(ride_length_));
+    ride_on_ = true;
+    status_.morph_riding.store(1, std::memory_order_relaxed);
+}
+
+void Engine::morph_ride_stop() {
+    ride_on_ = false;
+    status_.morph_riding.store(0, std::memory_order_relaxed);
+}
+
+// The ride's position at `tick`. Ends exactly on its target, at the entry's last tick.
+void Engine::morph_ride_tick(uint32_t tick) {
+    if (!ride_on_) return;
+    // A transport that jumped back (STOP and PLAY) starts the ride again from here.
+    if (tick < ride_start_) ride_start_ = tick;
+    const uint32_t elapsed = tick - ride_start_;
+    uint16_t next;
+    if (elapsed >= ride_length_) {
+        next = ride_to_;
+        morph_ride_stop();
+    } else {
+        const int32_t moved = int32_t((int64_t(ride_rate_) * int64_t(elapsed)) >> 16);
+        const int32_t at = int32_t(ride_from_) + moved;
+        next = uint16_t(at < 0 ? 0 : (at > int32_t(kMorphScale) ? int32_t(kMorphScale) : at));
+    }
+    if (next != morph_) {
+        morph_ = next;
+        perform_dirty_ = true;
+    }
 }
 
 Project &Engine::project_for_load() { return project_; }
@@ -3217,6 +3330,8 @@ void Engine::resolve_tick(uint32_t tick, uint32_t frame) {
         next_boundary_ = origin_ + ((tick - origin_) / loop + 1) * loop;
         cross_boundary(crossed);
     }
+    // A section's morph ride (MRP RIDE / BACK), after the boundary that may have started it.
+    morph_ride_tick(tick);
     // EVOLVE's turns, in the last ticks before the boundary (evolve_lead says why).
     if (boundary_known_ && next_boundary_ > tick &&
         next_boundary_ - tick <= uint32_t(kEvolveLeadTicks)) {
@@ -4847,6 +4962,7 @@ void Engine::apply_live(const LiveState &state) {
     apply_mixer_bytes();
     apply_mutes(state.mutes);
     for (int m = 0; m < kMacros; m++) macro_position_[m] = state.macros[m];
+    morph_ride_stop();   // a LOCK jump is a hand on the morph
     morph_ = state.morph;
     rel_all_ = state.rel_all;
     len_all_ = state.len_all;

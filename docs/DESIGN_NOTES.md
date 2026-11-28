@@ -257,3 +257,22 @@ strip is on and its jack or gain differs from what was last applied; RESAMPLE's 
 invalidate that and win while RESAMPLE is up. The IN pages sit before MST so the scenarios that go
 round to MST and EQ still count the same; CHO moved two pages further (scenario_chorus, m7).
 UNIT_CHECKLIST W69.
+
+## Song sections
+
+Roland approved the arrangement concept on 2026-11-28 (no section names, no kit per section, MOVE's D free; ARR REC and launch capture follow in their own PRs).
+Each chain entry has a `SectionExtra` (core/project.hpp), saved in PROJECT.BIN section 10: a
+layout byte, then 8 bytes for each of the 64 entries. A CAP entry writes `--` into section 5, so
+a build without section 10 leaves the mutes alone rather than recalling a stale state. The reader
+reads anything it does not understand as `--`. `chain_insert`, `chain_remove` and
+`chain_normalize` move the extras with their entries.
+
+`Engine::chain_entry_started` applies the fields on the audio side as an entry starts: the mute
+recall or CAP mask, the scene on side B, the morph (SNAP and SNAP A at once; RIDE and BACK through
+`morph_ride_*`, a rate worked out once and stepped in `resolve_tick`, since the C674x has no
+integer divide), the energy. A BPM goes to the main context through `Status::tempo_due`,
+because only it may call `clock::set_tempo`; under an outside clock the UI skips it and says so
+once a run. Every edit is a `ChainEdit` the audio side applies as a delta to the authoritative
+record. Quick fill (hold OK) writes SNAP or SNAP A, the morph's nearer side, so a filled section
+brings the morph back after one that moved it.
+`tests/scenario_sections.sh` drives the view and a section in the emulator.
