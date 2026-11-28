@@ -16,6 +16,12 @@ the project file format or the controls.
   too. RESAMPLE, freeze and the looper still work meanwhile. Every FUNC menu row counted
   upwards from SAVE is one further on (LOAD DEMO is UP twice now). New emulator scenario
   `jamrec`.
+- **Nine showcase projects beyond techno** (`tools/showcases/`): DEEP (deep house), DUB (dub
+  techno), DRIFT (ambient), ELECTRO, BREAKS, CHAOS, SMASH, NIGHT (breakbeat over synthwave) and
+  STEEL (straight breakbeat), each written by a generator with core/'s own serializers, factory
+  sounds only, opening with the chain on. `tools/showcases/build.sh` makes the cards (and with
+  `--render` the arrangement renders); `--starter` copies them into `content/starter/projects/`
+  for the card builder.
 - **16th-note triplets as a track speed.** TRACK SPEED (FUNC menu) has a new **3/2** between 2
   and 1: a step every 16 ticks, six to the beat, so 24 steps make a bar. Set LEN 24 for a one-bar
   triplet hat. The arp, rolls over LEN and REPEAT already had 1/16T. No file change: a build from
