@@ -80,8 +80,8 @@ static_assert((kMorphScale & (kMorphScale - 1)) == 0,
 // and app/ static_asserts it against MasterField::eq_low and kKillBands.
 constexpr int kMasterBands = 3;
 constexpr int kMasterEqFirst = 4;
-static_assert(kMasterEqFirst + kMasterBands == kMasterFields,
-              "the kill EQ's bands are the last three master bytes");
+static_assert(kMasterEqFirst + kMasterBands == kMasterFieldsV2,
+              "the kill EQ's bands are the three master bytes before PSH");
 
 // A macro target on the master EQ rather than a track: `track` is this, `param` the band 0-2.
 // One past the last track, so a build without it drops such a target as a track it does not

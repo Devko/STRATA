@@ -491,7 +491,7 @@ constexpr Text kMixer[kHelpMixerPages] = {
     {"MIXER REV+:", {"A TYP ROOM OR HALL", "B SIZ SIZE", "C MOD SWEEP", "D SHM SHIMMER",
                      "PUSH A  FLIPS TYP", nullptr}},
     {"MIXER ROUTE:", {"A PNG PING-PONG", "B D>R DELAY TO REVERB", "C LCT LONG LOW CUT",
-                      "D ---", nullptr}},
+                      "D RDK REVERB DUCK", "RUMBLE: KICK IN REV", nullptr}},
     {"MIXER CHO 1-4:", {"A-D  CHORUS SEND 1-4", "PUSH  OFF OR HALF", "RATE DEPTH ON CHO",
                         "SAVED IN THE KIT", nullptr}},
     {"MIXER CHO 5-8:", {"A-D  CHORUS SEND 5-8", "PUSH  OFF OR HALF", "RATE DEPTH ON CHO",
@@ -504,7 +504,7 @@ constexpr Text kMixer[kHelpMixerPages] = {
                     "PUSH A  IN ON OR OFF", "PUSH D  GAIN", "SAVED IN THE PROJECT", nullptr}},
     {"MIXER MST:", {"A DJ  DJ FILTER", "B CMP COMPRESSOR", "C LIM LIMITER", "D LVL LEVEL",
                     nullptr}},
-    {"MIXER EQ:", {"A LOW BELOW 250 HZ", "B MID MIDDLE", "C HI  ABOVE 2.5 KHZ", "D ---",
+    {"MIXER EQ:", {"A LOW BELOW 250 HZ", "B MID MIDDLE", "C HI  ABOVE 2.5 KHZ", "D PSH INTO LIMITER",
                    "PUSH A-C   KILL BAND", "MIDDLE = FLAT", "BOTTOM = KILL", nullptr}},
 };
 
@@ -557,6 +557,8 @@ constexpr const char *kFmOscWords[4] = {"PAIR DETUNE", "RATIO FINE", "INDEX KEYT
 constexpr const char *kGrainAsrWords[4] = {"ATTACK", "SUSTAIN", "RELEASE", ""};
 // SAMPLE's: SUS and REL only, its attack being AMP's (dsp/sample.cpp).
 constexpr const char *kSampleAsrWords[4] = {"", "SUSTAIN", "RELEASE", ""};
+// KICK's PNCH page (dsp/kick.hpp): the knock, its time, the tick and the fall.
+constexpr const char *kKickPunchWords[4] = {"KNOCK", "KNOCK TIME", "TICK", "PITCH DROP"};
 constexpr const char *kGrainOscWords[4] = {"SCAN SPEED", "PITCH SPRAY", "", ""};
 // The WAVE pair's SCAN page (dsp/va.cpp, "SCN").
 constexpr const char *kScnWords[4] = {"SCAN MODE", "SCAN SPEED", "SCAN END FRAME", "SCAN CURVE"};
@@ -567,13 +569,17 @@ const char *const kEditPageNames[kHelpEditPages] = {"SRC", "FLTR", "AMP", "FX", 
 
 // Does the machine read EDIT's page 6 (ASR), 7 (OSC) or 10 (SCAN)? Nobody reads the hole.
 bool reads_page(uint8_t machine, int page) {
-    if (page == 6) return machine_reads_asr(machine);
-    if (page == 7) return machine_reads_osc(machine);
+    if (page == 6) return machine_has_asr_page(machine);
+    if (page == 7) return machine_has_osc_page(machine);
     return page == kScanHelpPage && machine_reads_scn(machine);
 }
 
 const char *osc_words(uint8_t machine, int slot) {
-    if (!machine_reads_osc(machine)) return "";
+    if (!machine_has_osc_page(machine)) return "";
+    if (machine_is_kick(machine)) {
+        static const char *const kick[4] = {"CHOKE", "RUMBLE", "RUMBLE LENGTH", "HOLD"};
+        return kick[slot];
+    }
     if (machine_is_fm(machine)) return kFmOscWords[slot];
     if (machine_is_grain(machine)) return kGrainOscWords[slot];
     if (!machine_is_wave(machine)) return kOscWords[slot];
@@ -630,7 +636,7 @@ void knob_rows(const HelpPlace &place, bool slc_auto, char rows[kHelpRows][kHelp
                int &count) {
     const int page = place.page < kHelpEditPages ? place.page : 0;
     if (page >= 6 && !reads_page(place.machine, page)) {
-        add_row(rows, count, page == 6   ? "ASR: SYNTHS GRN SMP"
+        add_row(rows, count, page == 6   ? "ASR: SYN GRN SMP KCK"
                              : page == 7 ? "OSC: VA WAVE FM GRN"
                                          : "SCAN: WAVE ONLY");
         return;
@@ -665,6 +671,11 @@ void knob_rows(const HelpPlace &place, bool slc_auto, char rows[kHelpRows][kHelp
             add_row(rows, count, "OK         ARPS");
             break;
         case 6:
+            if (machine_is_kick(place.machine)) {
+                add_row(rows, count, "ALL 0  THE OLD KICK");
+                add_row(rows, count, "DRP UP  FALLS LOWER");
+                break;
+            }
             add_row(rows, count,
                     machine_is_grain(place.machine) || place.machine == uint8_t(MachineId::sample)
                         ? "SUS 0  DEC DECIDES"
@@ -715,7 +726,10 @@ void knob_rows(const HelpPlace &place, bool slc_auto, char rows[kHelpRows][kHelp
 // The title of a page that names the EDIT page: "EDIT SRC KCK".
 void edit_title(const char *screen, const HelpPlace &place, char title[kHelpChars + 1]) {
     const int page = place.page < kHelpEditPages ? place.page : 0;
-    Line(title).add(screen).add(" ").add(kEditPageNames[page]).add(" ").add(machine_name(place.machine));
+    const char *name = page == 6 && machine_is_kick(place.machine)   ? "PNCH"
+                       : page == 7 && machine_is_kick(place.machine) ? "TAIL"
+                                                                     : kEditPageNames[page];
+    Line(title).add(screen).add(" ").add(name).add(" ").add(machine_name(place.machine));
 }
 
 // The screen's own pages, before the five shared ones. Indexed from 0; returns false past
@@ -869,8 +883,9 @@ const char *help_param_words(uint8_t machine, int index) {
         case 4: return kLfoWords[slot];
         case 5: return kArpWords[slot];
         case 6:
-            if (!machine_reads_asr(machine)) return "";
-            return machine_is_fm(machine)                    ? kFmAsrWords[slot]
+            if (!machine_has_asr_page(machine)) return "";
+            return machine_is_kick(machine)                  ? kKickPunchWords[slot]
+                   : machine_is_fm(machine)                  ? kFmAsrWords[slot]
                    : machine_is_grain(machine)               ? kGrainAsrWords[slot]
                    : machine == uint8_t(MachineId::sample)   ? kSampleAsrWords[slot]
                                                              : kAsrWords[slot];

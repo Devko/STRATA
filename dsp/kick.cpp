@@ -60,6 +60,28 @@ constexpr float kTransientTau = 0.005f;
 // noise would still add is under 3e-6 of full scale per unit of CLK, -110 dB, under the last
 // bit of a 16-bit file. About 64 ms after the hit at tau = 5 ms; the body rings on far longer.
 constexpr float kTransientFloor = 3.0e-6f;
+// PNCH (kick.hpp). KNK at the top adds 15 x f0 to the increment at the hit: with TUN's 49 Hz the
+// knock starts near 780 Hz, the top of the references' 250 Hz-1 kHz punch. Its time constant
+// runs 1-16 ms (KND), against FMD's 8-128 ms: the knock is over before the body's sweep is.
+constexpr float kKnockMax = 15.0f;
+constexpr float kKnockTauLow = 0.001f;
+constexpr float kKnockTauOctaves = 4.0f;
+// The tick: noise high-passed at 3 kHz under a 1.5 ms envelope, kTickGain at TCK's top, set by
+// measurement against the benchmark's references (kick.hpp).
+constexpr float kTickHz = 3000.0f;
+constexpr float kTickK = 1.4f;
+constexpr float kTickTau = 0.0015f;
+constexpr float kTickGain = 2.0f;
+constexpr float kTickFloor = 1.0e-4f;
+// TAIL's rumble (kick.hpp): the noise's low-pass (two one-poles near 90 Hz, fm1-HYP1's 0.012 at
+// 48 kHz), the swell's fast half (35 ms), and its gain at RMB's top.
+constexpr float kRumbleLpCoef = 0.012f;
+constexpr float kRumbleFastTau = 0.035f;
+constexpr float kRumbleGain = 1.0f;
+constexpr float kRumbleFloor = 1.0e-4f;
+// HLD's top: 400 ms.
+constexpr float kHoldMaxSeconds = 0.4f;
+
 // ln(100): EnvelopeShape::make wants the time to reach 1% of the target, where the reference
 // gives time constants. One is ln(100) of the other, and the per-sample coefficient comes out
 // the same as Plaits' 1 / (tau * rate).
@@ -108,6 +130,17 @@ constexpr float kToOnePercent = 4.60517019f;
 //           pairing the 909 is known for.
 //  11  LVL  output level, square law, 0-1. Square gives usable control over the quiet end.
 
+float kick_knock_seconds(uint8_t value) {
+    return kKnockTauLow * exp2(kKnockTauOctaves * float(value) * (1.0f / 127.0f));
+}
+
+int kick_drop_cents(uint8_t value) { return -int((int(value) * 1200 + 63) / 127); }
+
+float kick_choke_seconds(uint8_t value) {
+    // 60 ms at 1 down to 1 ms at 127, exponential: log2(60) = 5.907 octaves.
+    return value == 0 ? 0.0f : 0.060f * exp2(-5.9069f * float(value - 1) * (1.0f / 126.0f));
+}
+
 void Kick::init(float sample_rate) {
     rate_ = sample_rate > 1.0f ? sample_rate : 48000.0f;
     inv_rate_ = reciprocal(rate_);
@@ -117,12 +150,21 @@ void Kick::init(float sample_rate) {
         EnvelopeShape::make(0.0002f, kTransientTau * kToOnePercent, 0.0f, 0.001f, rate_);
     click_coefficients_ =
         SvfCoefficients::from_g(enaga::dsp::tan_pi(kClickHz * inv_rate_), kClickK);
+    tick_coefficients_ = SvfCoefficients::from_g(enaga::dsp::tan_pi(kTickHz * inv_rate_), kTickK);
+    tick_decay_ = exp(-inv_rate_ * reciprocal(kTickTau));
+    for (uint8_t &b : punch_bytes_) b = 0xFF;   // a new rate: PNCH's coefficients are made again
+    for (uint8_t &b : tail_bytes_) b = 0xFF;
+    rumble_lp_[0] = rumble_lp_[1] = 0.0f;
+    rumble_slow_ = rumble_fast_ = 0.0f;
+    choke_byte_ = 0;
+    choke_frames_ = 0;
     for (Voice &v : voices_) {
         v = Voice{};
         v.click_band.reset();
         v.noise_lp.reset();
         v.noise_hp.reset();
         v.tone_lp.reset();
+        v.tick_hp.reset();
     }
     active_ = false;
     // A machine must be safe to trigger before the first prepare(), so derive from mid values.
@@ -148,6 +190,48 @@ void Kick::prepare(const TrackParams &params) {
     dirtiness_ = params.unit(10);
     const float level = params.unit(11);
     out_gain_ = level * level;
+
+    // CUT (kick.hpp): CHK, the OSC page's first slot. One byte, read every block, no exponential
+    // unless it moved.
+    {
+        const uint8_t chk = params.get(kOscFirst);
+        if (chk != choke_byte_) {
+            choke_byte_ = chk;
+            const float t = kick_choke_seconds(chk);
+            choke_frames_ = chk == 0 ? 0 : (int(t * rate_) > 0 ? int(t * rate_) : 1);
+        }
+        // RMB RLN HLD, made again only when one moves (or DEC, which HLD's decay follows).
+        const uint8_t tb[3] = {params.get(kOscFirst + 1), params.get(kOscFirst + 2),
+                               params.get(kOscFirst + 3)};
+        const float decay_u = params.unit(8);
+        const float hold_tau = 0.020f * exp2(5.0f * decay_u * decay_u);
+        if (tb[0] != tail_bytes_[0] || tb[1] != tail_bytes_[1] || tb[2] != tail_bytes_[2] ||
+            params.get(8) != punch_bytes_[4]) {
+            for (int i = 0; i < 3; i++) tail_bytes_[i] = tb[i];
+            const float level = float(tb[0]) * (1.0f / 127.0f);
+            rumble_gain_ = kRumbleGain * level * level;
+            const float rln = 0.1f * exp2(3.585f * float(tb[1]) * (1.0f / 127.0f));   // 0.1-1.2 s
+            rumble_slow_decay_ = exp(-inv_rate_ * reciprocal(rln));
+            rumble_fast_decay_ = exp(-inv_rate_ * reciprocal(kRumbleFastTau));
+            hold_frames_amp_ = int(kHoldMaxSeconds * float(tb[2]) * (1.0f / 127.0f) * rate_);
+            hold_decay_ = exp(-inv_rate_ * reciprocal(hold_tau));
+        }
+    }
+    // PNCH (kick.hpp): KNK KND TCK DRP, the ASR page's four slots. Made again only when one of
+    // them, or DEC, has moved: a kick with the page at 0 pays one compare a block.
+    const uint8_t bytes[5] = {params.get(kAsrFirst + 0), params.get(kAsrFirst + 1),
+                              params.get(kAsrFirst + 2), params.get(kAsrFirst + 3), params.get(8)};
+    bool same = true;
+    for (int i = 0; i < 5; i++) same = same && bytes[i] == punch_bytes_[i];
+    if (same) return;
+    for (int i = 0; i < 5; i++) punch_bytes_[i] = bytes[i];
+    knock_amount_ = kKnockMax * params.unit(kAsrFirst + 0);
+    knock_decay_ = bytes[0] == 0 ? 0.0f : exp(-inv_rate_ * reciprocal(kick_knock_seconds(bytes[1])));
+    tick_gain_ = kTickGain * params.unit(kAsrFirst + 2);
+    // The fall: down to 2^-DRP of f0 (an octave at the top), on the amplitude's own time
+    // constant, so the pitch has fallen most of the way by the time the body has.
+    drop_target_ = bytes[3] == 0 ? 1.0f : exp2(-params.unit(kAsrFirst + 3));
+    drop_rate_ = -inv_rate_ * reciprocal(amp_tau);
 }
 
 void Kick::trigger(const Trig &trig) {
@@ -159,13 +243,29 @@ void Kick::trigger(const Trig &trig) {
             break;
         }
     }
-    if (pick < 0) pick = voices_[0].amp.level() <= voices_[1].amp.level() ? 0 : 1;
+    if (pick < 0) pick = voices_[0].level() <= voices_[1].level() ? 0 : 1;
 
     Voice &v = voices_[pick];
+    // CHK: every other voice still sounding is faded out over the choke time, from the new
+    // hit's frame on, so a long kick is cut at the next one as a one-beat sample is. A voice
+    // already fading keeps the shorter of its fade and this one.
+    if (choke_frames_ > 0) {
+        for (int i = 0; i < kVoices; i++) {
+            Voice &o = voices_[i];
+            if (i == pick || !o.sounding() || o.pending) continue;
+            const int frames = int(trig.frame) + choke_frames_;
+            if (o.fade == 0 || frames < o.fade) {
+                if (o.fade == 0) o.gain = 1.0f;
+                o.fade = frames;
+                o.fade_step = o.gain * reciprocal(float(frames));
+            }
+        }
+    }
     // A voice that is still loud is faded out first and the new hit starts at the end of the
     // fade. Below kFadeFloor the splice is inaudible, so it starts straight away instead.
-    if (v.fade == 0 && v.sounding() && v.amp.level() > kFadeFloor) {
+    if (v.fade == 0 && v.sounding() && v.level() > kFadeFloor) {
         v.fade = kFadeFrames;
+        v.fade_step = kFadeStep;
         v.gain = 1.0f;
     }
     v.next = trig;
@@ -195,11 +295,19 @@ void Kick::render_add(float *out, int frames) {
     while (done < frames) {
         const int n = frames - done < kBlock ? frames - done : kBlock;
         for (Voice &v : voices_) render_voice(v, out + done, n);
+        // TAIL's rumble, on top of the voices, before the chain's drive.
+        if (rumble_slow_ > kRumbleFloor) {
+            enaga_clear(rumble_noise_, n);
+            rumble_rng_.add_noise(rumble_noise_, n, 1.0f);
+            strata_kick_rumble(out + done, rumble_noise_, n, kRumbleLpCoef, &rumble_lp_[0],
+                               &rumble_lp_[1], &rumble_slow_, &rumble_fast_, rumble_slow_decay_,
+                               rumble_fast_decay_, &rumble_phase_, rumble_inc_, out_gain_);
+        }
         done += n;
     }
     bool busy = false;
     for (const Voice &v : voices_) busy = busy || v.busy();
-    active_ = busy;
+    active_ = busy || rumble_slow_ > kRumbleFloor;
 }
 
 const char *Kick::param_name(int index) const {
@@ -230,6 +338,19 @@ void Kick::start(Voice &v) {
     v.hold = hold_frames_;
     v.gate = gate_frames_;
     v.fm_env = v.trigger_level;
+    v.knock_env = v.trigger_level;
+    v.tick_env = v.trigger_level;
+    v.drop_env = 1.0f;
+    v.tick_hp.reset();
+    // TAIL: the rumble's swell starts again from this hit, on its note; HLD holds the body.
+    if (rumble_gain_ > 0.0f) {
+        rumble_slow_ = rumble_gain_ * v.trigger_level;
+        rumble_fast_ = rumble_slow_;
+        rumble_inc_ = clamp(base_hz_ * v.note_ratio * inv_rate_, 0.0f, 0.25f);
+    }
+    v.held = hold_frames_amp_ > 0;
+    v.hold_level = v.trigger_level;
+    v.hold_left = hold_frames_amp_;
     v.slew = 0.0f;
     v.click_hp = 0.0f;
     v.click_band.reset();
@@ -274,7 +395,11 @@ void Kick::run(Voice &v, float *out, int n) {
 
     // Note-dependent coefficients: still control rate, just once per voice per block rather than
     // once per machine, because the trig note moves f0 and three of these follow f0.
-    const float f0 = clamp(base_hz_ * v.note_ratio * pitch_mod_ratio_, 10.0f, 2000.0f);
+    // DRP: f0 falls from itself towards drop_target_ of itself along drop_env. Control rate: a
+    // fall over hundreds of ms in 1.3 ms steps is a smooth glide on a low sine.
+    const float drop = drop_target_ + (1.0f - drop_target_) * v.drop_env;
+    if (drop_target_ < 1.0f) v.drop_env *= exp(float(n) * drop_rate_);
+    const float f0 = clamp(base_hz_ * v.note_ratio * pitch_mod_ratio_ * drop, 10.0f, 2000.0f);
     const float f0_norm = f0 * inv_rate_;
     const float dirtiness = dirtiness_ * clamp(1.0f - 8.0f * f0_norm, 0.0f, 1.0f);
     const float tone_coefficient = clamp(4.0f * f0_norm * tone_ratio_, 0.0f, 1.0f);
@@ -286,11 +411,22 @@ void Kick::run(Voice &v, float *out, int n) {
     v.hold -= held;
     // The phase accumulator, the FM envelope (which runs through the pinned samples too) and the
     // shaper, in one cl6x-built pass over the block.
-    strata_kick_body(body_, held, n, f0_norm, fm_amount_, fm_decay_, dirtiness, &v.phase,
-                     &v.fm_env);
+    if (knock_amount_ > 0.0f) {
+        strata_kick_body_knock(body_, held, n, f0_norm, fm_amount_, fm_decay_, knock_amount_,
+                               knock_decay_, dirtiness, &v.phase, &v.fm_env, &v.knock_env);
+    } else {
+        strata_kick_body(body_, held, n, f0_norm, fm_amount_, fm_decay_, dirtiness, &v.phase,
+                         &v.fm_env);
+    }
 
-    v.amp.render(env_, n, amp_shape_);
-    enaga_scale(env_, n, v.trigger_level);
+    if (v.held) {
+        // HLD: the level held, then DEC's decay (the hold envelope already carries the trigger
+        // level, so no scale).
+        strata_kick_hold_env(env_, n, &v.hold_level, &v.hold_left, hold_decay_);
+    } else {
+        v.amp.render(env_, n, amp_shape_);
+        enaga_scale(env_, n, v.trigger_level);
+    }
     enaga_multiply(body_, env_, n);
     strata_one_pole_inplace(&v.tone_lp.state_, tone_coefficient, body_, n);
 
@@ -326,9 +462,18 @@ void Kick::run(Voice &v, float *out, int n) {
         v.gate = 0;
     }
 
+    // TCK: high-passed noise under its own 1.5 ms envelope, after the tone low-pass so TON
+    // never dulls it. Skipped once the envelope is spent (under -80 dB), and entirely at TCK 0.
+    if (tick_gain_ > 0.0f && v.tick_env > kTickFloor) {
+        enaga_clear(aux_, n);
+        tick_rng_.add_noise(aux_, n, 1.0f);
+        strata_svf_inplace(&v.tick_hp.state_, &tick_coefficients_, Svf::band_pass, aux_, n);
+        strata_kick_tick(body_, aux_, n, tick_gain_, tick_decay_, &v.tick_env);
+    }
+
     if (v.fade > 0) {
-        strata_mix_ramp(out, body_, n, out_gain_ * v.gain, -out_gain_ * kFadeStep);
-        v.gain -= kFadeStep * float(n);
+        strata_mix_ramp(out, body_, n, out_gain_ * v.gain, -out_gain_ * v.fade_step);
+        v.gain -= v.fade_step * float(n);
         if (v.gain < 0.0f) v.gain = 0.0f;
     } else {
         enaga_mix(out, body_, n, out_gain_);

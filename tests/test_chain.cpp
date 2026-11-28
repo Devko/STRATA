@@ -1043,6 +1043,79 @@ TEST(mixer_chorus_can_feed_the_reverb) {
     CHECK(mixer.reverb_running());
 }
 
+// RDK: the reverb's return rides the kit's duck. A tail ringing with nothing new going in is
+// pulled down while the duck is down by about RDK, and is left alone at RDK 0 and once the duck
+// has let go.
+namespace {
+float reverb_tail_energy(float rdk, int from_block, int blocks) {
+    SendSettings sends = silent_sends();
+    sends.reverb_level = 1.0f;
+    sends.reverb_decay_s = 4.0f;
+    sends.reverb_duck = rdk;
+    const MasterSettings master = transparent_master();
+    TrackParams p = neutral_params();
+    p.set(kSnb, 127);
+    ChainMix mix;
+    static Mixer mixer;
+    mixer.init(kRate);
+    mixer.set_duck(0.001f, 0.1f, 0.05f);
+    static float out[2 * kFrames];
+    float mono[kFrames];
+    float sum = 0.0f;
+    for (int b = 0; b < 60; b++) {
+        fill_signal(Signal::sine, mono, kFrames, b, b < 20 ? 0.5f : 0.0f);
+        if (b == 30) mixer.trigger_duck(0);     // well into the tail; held for 100 ms
+        mixer_block(mixer, sends, master, p, mix, mono, out);
+        if (b >= from_block && b < from_block + blocks) sum += energy_of(out, 2 * kFrames);
+    }
+    return sum;
+}
+}  // namespace
+
+TEST(mixer_reverb_duck_pulls_the_return_down_while_the_duck_is_down) {
+    // Blocks 32-36 sit inside the duck's 100 ms hold.
+    const float open = reverb_tail_energy(0.0f, 32, 4);
+    const float half = reverb_tail_energy(0.5f, 32, 4);
+    const float full = reverb_tail_energy(1.0f, 32, 4);
+    CHECK(open > 0.0f);
+    CHECK_NEAR(half / open, 0.25f, 0.05f);      // 1 - 0.5: a quarter of the energy
+    CHECK(full < 1e-4f * open);
+    // Before the duck fires, RDK changes nothing at all.
+    CHECK_EQ(reverb_tail_energy(1.0f, 22, 6), reverb_tail_energy(0.0f, 22, 6));
+}
+
+// PSH: gain into the limiter. Unity at 0 (bit-exact with no push), louder and denser above it,
+// and never past the ceiling.
+TEST(mixer_push_drives_the_limiter_without_passing_the_ceiling) {
+    const SendSettings sends = silent_sends();
+    MasterSettings master;
+    master.compressor = 0.0f;
+    TrackParams p = neutral_params();
+    ChainMix mix;
+    static float out[2 * kFrames];
+    float mono[kFrames];
+    float rms[3] = {}, peak[3] = {};
+    const float pushes[3] = {1.0f, 2.0f, 4.0f};
+    for (int k = 0; k < 3; k++) {
+        master.push = pushes[k];
+        static Mixer mixer;
+        mixer.init(kRate);
+        for (int b = 0; b < 40; b++) {
+            fill_signal(Signal::sine, mono, kFrames, b, 0.6f);
+            mixer_block(mixer, sends, master, p, mix, mono, out);
+            if (b >= 20) {
+                rms[k] += energy_of(out, 2 * kFrames);
+                peak[k] = peak_of(out, 2 * kFrames) > peak[k] ? peak_of(out, 2 * kFrames) : peak[k];
+            }
+        }
+    }
+    CHECK(rms[1] > 1.5f * rms[0]);
+    CHECK(rms[2] > rms[1]);
+    for (float pk : peak) CHECK(pk <= 1.0f);
+    CHECK_NEAR(master_value_from_byte(uint8_t(MasterField::push), 0), 1.0f, 1e-6);
+    CHECK_NEAR(master_value_from_byte(uint8_t(MasterField::push), 127), 4.0f, 1e-3);
+}
+
 TEST(mixer_delay_can_feed_the_reverb) {
     SendSettings sends;
     sends.delay_seconds = 0.03f;       // 1440 samples

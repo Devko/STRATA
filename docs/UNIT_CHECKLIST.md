@@ -1144,6 +1144,32 @@ A01 at 130.0, no chain.
   tables, a few notes on each, then back two tables. The table played a moment ago sounds on
   its first note, not sub only for a moment while it is built again. `____`
 
+**W84. The techno sounds, PNCH and RDK (8 min).** Beat playing, A01.
+- Track 1, SOUNDS: TECHNO, WHOUSE, HEAVY, MINIM, FAT. Each knocks harder than 909 (a thud with a
+  punch at its front, audible on small speakers too) and sits within a couple of dB of 909's
+  level. `____`
+- Track 5, FUNC+EDIT to KCK, SOUNDS RUMBLE, duck it from track 1 (MIXER DCK): a low growl under
+  the kick that breathes with it, no click of its own. `____`
+- Track 2, SOUNDS: TCLAP, CLAP4, DARK: the smack is in the middle (1-2 kHz), not a boxy 200 Hz
+  thud under a hiss. CLHAT and OPHAT on tracks 3 and 4 (FUNC+EDIT to SNR first): bright, full
+  hats, fuller than HAT's CLOSED and OPEN. `____`
+- Track 7, SOUNDS TSTAB: a bright stab with no boom under it; STAB beside it is muddier. `____`
+- Track 6, SOUNDS ACID, transpose the bass up an octave (or play KEYS around C3): it squelches
+  in the mids rather than booming. `____`
+- Track 1 back to 909, EDIT, RIGHT to the seventh page: it reads `PNCH`, KNK KND TCK DRP at 0
+  and the kick sounds exactly as before. KNK up: a harder knock at the front. TCK up: a click
+  on top. DRP up with DEC long: the boom falls lower as it fades. No clicks or crackle. `____`
+- MIXER ROUTE, D (RDK) to 100; the kick's SNB up to about 40; REV: HPF low, DMP high, DEC long.
+  The reverb tail drops away under each kick and swells back between them; RDK 0: a steady
+  wash. MAX stays where it was (within a point). `____`
+- Track 1, SOUNDS HEAVY (fader down a little: it is loud): a big, held kick that stops dead at
+  the next one, with a low rumble swelling between the hits. EDIT, the eighth page reads `TAIL`;
+  CHK to `OFF`: the tails stack into a boom; RMB to 0: the rumble goes; HLD to `OFF`: the
+  body thins out after the hit. `____`
+- MIXER EQ, D (PSH) from `+0DB` to `+4DB` with the beat playing: louder and denser, the peaks
+  held at the ceiling, no crackle; at `+12DB` it squashes but never clips harshly. Back at
+  `+0DB` it is as before. `____`
+
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
 

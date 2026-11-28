@@ -117,7 +117,8 @@ TEST(help_knob_words_fit_beside_a_three_letter_name) {
     CHECK(std::strcmp(help_param_words(uint8_t(MachineId::sample), 3), "SLICES") == 0);
     CHECK(std::strcmp(help_param_words(uint8_t(MachineId::grain), 8), "PITCH") == 0);
     CHECK(std::strcmp(help_param_words(uint8_t(MachineId::va_poly), 24), "ATTACK") == 0);
-    CHECK(std::strcmp(help_param_words(uint8_t(MachineId::kick), 24), "") == 0);  // no ASR
+    CHECK(std::strcmp(help_param_words(uint8_t(MachineId::kick), 24), "KNOCK") == 0);  // PNCH
+    CHECK(std::strcmp(help_param_words(uint8_t(MachineId::snare), 24), "") == 0);  // no ASR
 }
 
 TEST(help_the_last_five_pages_are_the_same_everywhere) {
@@ -157,7 +158,10 @@ TEST(help_starts_on_the_screens_own_page) {
     CHECK(!first_page_has(place_of(HelpScreen::grid, 0, int(MachineId::sample)), "SLC AUTO"));
     // ASR: what SUS does on a VA, and that it is a VA page elsewhere.
     CHECK(first_page_has(place_of(HelpScreen::edit, 6, int(MachineId::va_poly)), "SUS 0  ONE-SHOT"));
-    CHECK(first_page_has(place_of(HelpScreen::edit, 6, int(MachineId::kick)), "ASR: SYNTHS GRN SMP"));
+    CHECK(first_page_has(place_of(HelpScreen::edit, 6, int(MachineId::snare)), "ASR: SYN GRN SMP KCK"));
+    // KICK reads the page as PNCH: its title says so, and what the knobs are for.
+    CHECK(first_page_has(place_of(HelpScreen::edit, 6, int(MachineId::kick)), "EDIT PNCH KCK"));
+    CHECK(first_page_has(place_of(HelpScreen::edit, 6, int(MachineId::kick)), "ALL 0  THE OLD KICK"));
     CHECK(first_page_has(place_of(HelpScreen::edit, 6, int(MachineId::sample)), "SUS 0  DEC DECIDES"));
     CHECK(first_page_has(place_of(HelpScreen::edit, 7, int(MachineId::sample)), "OSC: VA WAVE FM GRN"));
     CHECK(first_page_has(place_of(HelpScreen::edit, 6, int(MachineId::grain)), "SUS 0  DEC DECIDES"));

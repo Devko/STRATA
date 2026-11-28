@@ -789,6 +789,206 @@ TEST(kick_holds_the_body_for_1_3_ms_and_clicks_instead) {
     CHECK_NEAR(energy(g_other + 2048, 2048), late, 0.05 * double(late));
 }
 
+// --- KICK's PNCH page (KNK KND TCK DRP, dsp/kick.hpp) -----------------------
+
+namespace {
+
+// One kick hit with `p` on a fresh machine (so the click's noise starts from the same seed),
+// 9,600 frames into `out`. `before`, when given, is prepared first, as a knob that was elsewhere.
+void kick_hit(const TrackParams &p, float *out, const TrackParams *before = nullptr) {
+    Kick m;
+    m.init(kRate);
+    if (before != nullptr) m.prepare(*before);
+    m.prepare(p);
+    m.trigger(hit(60, 110));
+    clear(out, 9600);
+    render_blocks(m, p, out, 9600 / kBlk);
+}
+
+// Energy above `hz` in x[from, from + n): three one-pole high-passes in a row (18 dB an octave),
+// so a 50 Hz body does not leak two octaves up.
+float energy_above(const float *x, int from, int n, float hz) {
+    const float a = 1.0f - enaga::dsp::exp(-6.2831853f * hz / kRate);
+    float lp[3] = {0.0f, 0.0f, 0.0f};
+    float sum = 0.0f;
+    for (int i = 0; i < from + n; i++) {
+        float y = x[i];
+        for (float &state : lp) {
+            state += a * (y - state);
+            y -= state;
+        }
+        if (i >= from) sum += y * y;
+    }
+    return sum;
+}
+
+// The factory 909 (core/sounds.cpp) as TrackParams, the page at 0.
+TrackParams kick_909() {
+    TrackParams p{};
+    const uint8_t src[4] = {55, 72, 56, 72}, amp[4] = {72, 60, 44, 110};
+    for (int i = 0; i < 4; i++) {
+        p.set(i, src[i]);
+        p.set(8 + i, amp[i]);
+    }
+    return p;
+}
+
+}  // namespace
+
+TEST(kick_pnch_at_zero_is_the_kick_it_was) {
+    // Bytes 24-27 at 0 must not touch a sample: every saved kit has them at 0. A kick whose
+    // page was turned up and back to 0 plays exactly the plain one.
+    static float a[9600], b[9600];
+    const TrackParams p = kick_909();
+    kick_hit(p, a);
+    TrackParams up = p;
+    for (int i = 0; i < 4; i++) up.set(kAsrFirst + i, 100);
+    kick_hit(p, b, &up);
+    for (int i = 0; i < 9600; i++) CHECK(a[i] == b[i]);
+}
+
+TEST(kick_knock_puts_the_mid_punch_into_the_attack) {
+    // KNK: a second, fast pitch envelope. The first 20 ms above 300 Hz grows by well over 6 dB,
+    // and the knock is gone by 60 ms: the tail above 300 Hz stays within 3 dB of the plain kick.
+    static float plain[9600], knock[9600];
+    TrackParams p = kick_909();
+    kick_hit(p, plain);
+    p.set(kAsrFirst + 0, 127);   // KNK
+    p.set(kAsrFirst + 1, 64);    // KND: 4 ms
+    kick_hit(p, knock);
+    CHECK(energy_above(knock, 0, 960, 300.0f) > 4.0f * energy_above(plain, 0, 960, 300.0f));
+    const float tail_plain = energy_above(plain, 2880, 2880, 300.0f);
+    const float tail_knock = energy_above(knock, 2880, 2880, 300.0f);
+    CHECK(tail_knock < 2.0f * tail_plain);
+    CHECK(finite_within(knock, 9600, 4.0f));
+}
+
+TEST(kick_tick_is_a_top_click_that_is_over_in_milliseconds) {
+    // TCK: noise high-passed at 2 kHz under a 1.5 ms envelope. The first 5 ms above 2 kHz grows
+    // by well over 10 dB; after 30 ms the tick adds nothing measurable.
+    static float plain[9600], tick[9600];
+    TrackParams p = kick_909();
+    kick_hit(p, plain);
+    p.set(kAsrFirst + 2, 127);   // TCK
+    kick_hit(p, tick);
+    CHECK(energy_above(tick, 0, 240, 2000.0f) > 10.0f * energy_above(plain, 0, 240, 2000.0f));
+    float late = 0.0f;
+    for (int i = 1440; i < 9600; i++) late += (tick[i] - plain[i]) * (tick[i] - plain[i]);
+    CHECK(late < 1e-6f * energy(plain, 9600));
+}
+
+TEST(kick_drop_keeps_the_pitch_falling_below_tun) {
+    // DRP at the top: the pitch falls towards an octave below TUN on the amplitude's time
+    // constant, so late in a long hit the body crosses zero far less often than without it.
+    static float plain[9600], drop[9600];
+    TrackParams p = kick_909();
+    p.set(3, 0);                 // CLK off: its noise would add crossings
+    p.set(8, 100);               // a 170 ms time constant: long, and the fall well along by 150 ms
+    kick_hit(p, plain);
+    p.set(kAsrFirst + 3, 127);   // DRP
+    kick_hit(p, drop);
+    const int plain_late = sign_changes(plain + 4800, 4800);
+    const int drop_late = sign_changes(drop + 4800, 4800);
+    CHECK(drop_late < plain_late * 17 / 20);
+    CHECK(drop_late > plain_late / 3);   // falls towards an octave, never past it
+    // and the start is untouched: the first 10 ms cross as often either way, give or take one.
+    const int plain_early = sign_changes(plain, 480), drop_early = sign_changes(drop, 480);
+    CHECK(drop_early >= plain_early - 1 && drop_early <= plain_early + 1);
+}
+
+TEST(kick_choke_cuts_a_ringing_hit_at_the_next_one) {
+    // CHK (dsp/kick.hpp, CUT): a long kick hit twice 200 ms apart. Without the choke the first
+    // rings on under the second; with it, the first is gone within the choke's fade, so 50 ms
+    // after the second hit the output is the second hit alone.
+    static float plain[19200], choked[19200], second[19200];
+    TrackParams p = kick_909();
+    p.set(3, 0);                 // CLK off: no noise, so the three renders line up exactly
+    p.set(8, 127);               // the longest decay
+    auto two_hits = [&](const TrackParams &q, float *out, bool first) {
+        Kick m;
+        m.init(kRate);
+        m.prepare(q);
+        clear(out, 19200);
+        if (first) m.trigger(hit(60, 110, 0));
+        for (int b = 0; b < 19200 / kBlk; b++) {
+            if (b * kBlk == 9600) m.trigger(hit(60, 110, 0));
+            m.prepare(q);
+            m.render_add(out + b * kBlk, kBlk);
+        }
+    };
+    two_hits(p, plain, true);
+    two_hits(p, second, false);
+    TrackParams c = p;
+    c.set(kOscFirst, 100);       // CHK: a fade of a few ms
+    two_hits(c, choked, true);
+    float rest_plain = 0.0f, rest_choked = 0.0f;
+    for (int i = 9600 + 2400; i < 19200; i++) {
+        rest_plain += (plain[i] - second[i]) * (plain[i] - second[i]);
+        rest_choked += (choked[i] - second[i]) * (choked[i] - second[i]);
+    }
+    CHECK(rest_plain > 1e-3f);           // the first hit is still ringing without the choke
+    CHECK(rest_choked < 1e-9f);          // and gone with it
+    CHECK(finite_within(choked, 19200, 4.0f));
+    // Before the second hit nothing differs.
+    for (int i = 0; i < 9600; i++) CHECK(choked[i] == plain[i]);
+    CHECK_NEAR(kick_choke_seconds(1), 0.060f, 1e-4);
+    CHECK_NEAR(kick_choke_seconds(127), 0.001f, 1e-4);
+    CHECK_EQ(kick_choke_seconds(0), 0.0f);
+}
+
+TEST(kick_rumble_adds_a_low_tail_that_each_hit_ducks) {
+    // TAIL's RMB (dsp/kick.hpp): low noise and the kick's note under a swell. With it up,
+    // 150-200 ms after a short hit there is low energy where the plain kick has died away; at the
+    // hit the swell is at zero, so the first 2 ms are the plain kick's; and it is all low:
+    // little above 1 kHz.
+    static float plain[19200], rumble[19200];
+    TrackParams p = kick_909();
+    p.set(3, 0);                     // CLK off: no noise, so the hits line up
+    kick_hit(p, plain);
+    TrackParams r = p;
+    r.set(kOscFirst + 1, 110);       // RMB
+    r.set(kOscFirst + 2, 64);        // RLN: about 0.35 s
+    kick_hit(r, rumble);
+    float late_plain = 0.0f, late_rumble = 0.0f;
+    for (int i = 7200; i < 9600; i++) {
+        late_plain += plain[i] * plain[i];
+        late_rumble += rumble[i] * rumble[i];
+    }
+    CHECK(late_rumble > 4.0f * late_plain + 1e-6f);
+    float early_diff = 0.0f, early = 0.0f;
+    for (int i = 0; i < 96; i++) {
+        early_diff += (rumble[i] - plain[i]) * (rumble[i] - plain[i]);
+        early += plain[i] * plain[i];
+    }
+    CHECK(early_diff < 0.01f * early + 1e-9f);
+    float diff[9600];
+    for (int i = 0; i < 9600; i++) diff[i] = rumble[i] - plain[i];
+    CHECK(energy_above(diff, 0, 9600, 1000.0f) < 0.01f * energy(diff, 9600));
+    CHECK(finite_within(rumble, 9600, 4.0f));
+}
+
+TEST(kick_hold_keeps_the_body_up_then_decays_on_dec) {
+    // HLD (dsp/kick.hpp, TAIL): the body at full level for the hold, then DEC's decay. With HLD at
+    // 200 ms and a short DEC, the body 150-190 ms after the hit is still within 3 dB of its level
+    // at 20-60 ms, where without the hold it has fallen far; and well after the hold it decays.
+    static float plain[19200], held[19200];
+    TrackParams p = kick_909();
+    p.set(3, 0);
+    p.set(8, 50);                    // a short DEC
+    kick_hit(p, plain);
+    TrackParams h = p;
+    h.set(kOscFirst + 3, 64);        // HLD: about 200 ms
+    kick_hit(h, held);
+    auto rms = [](const float *x, int a, int b) {
+        float s = 0.0f;
+        for (int i = a; i < b; i++) s += x[i] * x[i];
+        return s / float(b - a);
+    };
+    CHECK(rms(held, 7200, 9120) > 0.5f * rms(held, 960, 2880));
+    CHECK(rms(plain, 7200, 9120) < 0.05f * rms(plain, 960, 2880));
+    CHECK(finite_within(held, 9600, 4.0f));
+}
+
 // --- SNARE ----------------------------------------------------------------
 
 TEST(snare_carries_the_909_oscillator_ratio) {

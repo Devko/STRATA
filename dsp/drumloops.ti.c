@@ -50,6 +50,76 @@ void strata_kick_body(float *restrict out, int hold, int n, float f0_norm, float
     *fm_env = e;
 }
 
+void strata_kick_body_knock(float *restrict out, int hold, int n, float f0_norm, float fm_amount,
+                            float fm_decay, float knock_amount, float knock_decay,
+                            float dirtiness, float *phase, float *fm_env, float *knock_env) {
+    float p = *phase;
+    float e = *fm_env;
+    float k = *knock_env;
+    int i;
+    for (i = 0; i < hold; i++) {
+        e *= fm_decay;
+        k *= knock_decay;
+    }
+    for (i = hold; i < n; i++) {
+        float dp = f0_norm * (1.0f + 3.5f * fm_amount * e + knock_amount * k);
+        dp = dp > 0.5f ? 0.5f : dp;
+        p += dp;
+        p -= p >= 1.0f ? 1.0f : 0.0f;
+        out[i] = distorted_sine(p, dirtiness);
+        e *= fm_decay;
+        k *= knock_decay;
+    }
+    *phase = p;
+    *fm_env = e;
+    *knock_env = k;
+}
+
+void strata_kick_tick(float *restrict out, const float *restrict src, int n, float gain,
+                      float decay, float *env) {
+    float e = *env;
+    int i;
+    for (i = 0; i < n; i++) {
+        out[i] += src[i] * gain * e;
+        e *= decay;
+    }
+    *env = e;
+}
+
+void strata_kick_rumble(float *restrict out, const float *restrict noise, int n, float lp_coef,
+                        float *lp1, float *lp2, float *slow, float *fast, float slow_decay,
+                        float fast_decay, float *phase, float inc, float gain) {
+    float a = *lp1, b = *lp2, s = *slow, f = *fast, p = *phase;
+    int i;
+    for (i = 0; i < n; i++) {
+        a += lp_coef * (noise[i] - a);
+        b += lp_coef * (a - b);
+        out[i] += (s - f) * (3.0f * b + 0.5f * enaga_sin_turns(p)) * gain;
+        p += inc;
+        p -= p >= 1.0f ? 1.0f : 0.0f;
+        s *= slow_decay;
+        f *= fast_decay;
+    }
+    *lp1 = a;
+    *lp2 = b;
+    *slow = s;
+    *fast = f;
+    *phase = p;
+}
+
+void strata_kick_hold_env(float *restrict out, int n, float *level, int *hold, float decay) {
+    float l = *level;
+    int h = *hold;
+    int i;
+    for (i = 0; i < n; i++) {
+        out[i] = l;
+        l *= h > 0 ? 1.0f : decay;
+        h -= h > 0 ? 1 : 0;
+    }
+    *level = l;
+    *hold = h;
+}
+
 void strata_kick_click(float *restrict out, int n, int gate, float *slew, float *high_pass) {
     float s = *slew;
     float hp = *high_pass;

@@ -177,8 +177,9 @@ constexpr MixerPage kMixerPages[] = {
                     int8_t(SendField::reverb_high_pass_hz), int8_t(SendField::reverb_level)}},
     {"REV+", false, {int8_t(SendField::reverb_mode), int8_t(SendField::reverb_size),
                      int8_t(SendField::reverb_mod), int8_t(SendField::reverb_shimmer)}},
+    // RDK, the reverb's return under the kit's duck, in the slot ROUTE had spare.
     {"ROUTE", false, {int8_t(SendField::delay_ping_pong), int8_t(SendField::delay_to_reverb),
-                      int8_t(SendField::delay_low_cut_hz), -1}},
+                      int8_t(SendField::delay_low_cut_hz), int8_t(SendField::reverb_duck)}},
     // The chorus, send C: how much of each track goes to it, four at a time (kit bytes, handled
     // on their own like the duck's depths), then the chorus itself.
     {"CHO 1-4", false, {-1, -1, -1, -1}},
@@ -195,7 +196,7 @@ constexpr MixerPage kMixerPages[] = {
     // The kill EQ, next to the master it sits in. Push A, B or C to throw that band's kill
     // switch; FUNC + push does the same from any mode.
     {"EQ", true, {int8_t(MasterField::eq_low), int8_t(MasterField::eq_mid),
-                  int8_t(MasterField::eq_high), -1}},
+                  int8_t(MasterField::eq_high), int8_t(MasterField::push)}},
 };
 
 
@@ -540,6 +541,15 @@ const char *page_name(Page page) {
         default:         return "?";
     }
 }
+
+// The same, on a machine: KICK's ASR page is PNCH, its knock, tick and drop (dsp/kick.hpp).
+const char *page_name_on(Page page, uint8_t machine) {
+    if (machine_is_kick(machine) && page == Page::asr) return "PNCH";
+    if (machine_is_kick(machine) && page == Page::osc) return "TAIL";
+    return page_name(page);
+}
+// KICK's PNCH page's encoder names.
+constexpr const char *kKickPunchNames[kAsrParams] = {"KNK", "KND", "TCK", "DRP"};
 
 // The ASR page's encoder names (dsp/va.cpp's table). Only the VAs read the page; on any other
 // machine its four slots show "---".

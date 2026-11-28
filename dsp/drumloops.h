@@ -33,6 +33,30 @@ extern "C" {
 void strata_kick_body(float *out, int hold, int n, float f0_norm, float fm_amount,
                       float fm_decay, float dirtiness, float *phase, float *fm_env);
 
+/* The body with KNK, the knock (kick.cpp): a second, much faster pitch envelope on top of the
+ * FM one, the increment f0 * (1 + 3.5 * fm_amount * fm_env + knock_amount * knock_env), still
+ * capped at 0.5. A loop of its own so that a kick with KNK at 0 runs strata_kick_body exactly as
+ * before, bit for bit and cycle for cycle. *knock_env carries on from the last block. */
+void strata_kick_body_knock(float *out, int hold, int n, float f0_norm, float fm_amount,
+                            float fm_decay, float knock_amount, float knock_decay,
+                            float dirtiness, float *phase, float *fm_env, float *knock_env);
+
+/* TCK, the tick: src (high-passed noise) times an exponential envelope, added into out.
+ * *env carries on from the last block. */
+void strata_kick_tick(float *out, const float *src, int n, float gain, float decay, float *env);
+
+/* TAIL's rumble (kick.cpp): low-passed noise (two one-poles, `lp_coef`) plus a sine at the
+ * kick's own note (phase increment `inc`), shaped by a swell -- a slow envelope less a fast one,
+ * so it rises after the hit and dies away like a reverb's low end -- added into out. *slow and
+ * *fast fall by their coefficients a sample; *lp1 *lp2 *phase carry on. */
+void strata_kick_rumble(float *out, const float *noise, int n, float lp_coef, float *lp1,
+                        float *lp2, float *slow, float *fast, float slow_decay, float fast_decay,
+                        float *phase, float inc, float gain);
+
+/* The amplitude envelope with HLD (kick.cpp): *level held for *hold samples, then multiplied by
+ * `decay` a sample. Writes out[0..n). */
+void strata_kick_hold_env(float *out, int n, float *level, int *hold, float decay);
+
 /* The click: a gate high for the first `gate` samples, slewed 0.5 rising / 0.1 falling, less its
  * one-pole high-pass. *slew and *high_pass carry on from the last block. */
 void strata_kick_click(float *out, int n, int gate, float *slew, float *high_pass);

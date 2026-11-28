@@ -128,6 +128,9 @@ bool send_field_set(SendSettings &settings, uint8_t field, float value) {
         case SendField::chorus_to_reverb:
             settings.chorus_to_reverb = clamp_to(value, 0.0f, 1.0f);
             return true;
+        case SendField::reverb_duck:
+            settings.reverb_duck = clamp_to(value, 0.0f, 1.0f);
+            return true;
         default:
             return false;
     }
@@ -158,6 +161,7 @@ float send_field_get(const SendSettings &settings, uint8_t field) {
         case SendField::chorus_depth:        return settings.chorus_depth;
         case SendField::chorus_level:        return settings.chorus_level;
         case SendField::chorus_to_reverb:    return settings.chorus_to_reverb;
+        case SendField::reverb_duck:         return settings.reverb_duck;
         default:                             return 0.0f;
     }
 }
@@ -166,7 +170,7 @@ const char *send_field_name(uint8_t field) {
     static const char *const names[] = {"TIM", "FBK", "TON", "PNG", "LVL", "D>R", "DEC",
                                         "DMP", "HPF", "LVL", "TYP", "MUL", "WOW", "DIF",
                                         "LCT", "TYP", "SIZ", "MOD", "SHM", "RAT", "DEP",
-                                        "LVL", "C>R"};
+                                        "LVL", "C>R", "RDK"};
     static_assert(sizeof(names) / sizeof(names[0]) == std::size_t(SendField::count),
                   "a send field without a name");
     return field < uint8_t(SendField::count) ? names[field] : "---";
@@ -198,6 +202,9 @@ bool master_field_set(MasterSettings &settings, uint8_t field, float value) {
         case MasterField::eq_high:
             settings.eq_high = clamp_to(value, 0.0f, 2.0f);
             return true;
+        case MasterField::push:
+            settings.push = clamp_to(value, 1.0f, 4.0f);
+            return true;
         default:
             return false;
     }
@@ -212,12 +219,13 @@ float master_field_get(const MasterSettings &settings, uint8_t field) {
         case MasterField::eq_low:     return settings.eq_low;
         case MasterField::eq_mid:     return settings.eq_mid;
         case MasterField::eq_high:    return settings.eq_high;
+        case MasterField::push:       return settings.push;
         default:                      return 0.0f;
     }
 }
 
 const char *master_field_name(uint8_t field) {
-    static const char *const names[] = {"DJ", "CMP", "LIM", "LVL", "LOW", "MID", "HI"};
+    static const char *const names[] = {"DJ", "CMP", "LIM", "LVL", "LOW", "MID", "HI", "PSH"};
     return field < uint8_t(MasterField::count) ? names[field] : "---";
 }
 
@@ -383,6 +391,7 @@ float send_value_from_byte(uint8_t field, uint8_t byte, float beat_seconds) {
         case SendField::chorus_depth:    return byte_unit(byte);
         case SendField::chorus_level:    return byte_unit(byte);
         case SendField::chorus_to_reverb: return byte_unit(byte);
+        case SendField::reverb_duck:     return byte_unit(byte);
         default:                         return 0.0f;
     }
 }
@@ -407,6 +416,8 @@ float master_value_from_byte(uint8_t field, uint8_t byte) {
             const float u = float(byte) * (1.0f / 64.0f);
             return u * u;
         }
+        // 0 to +12 dB in equal dB steps: 2^(2 * byte / 127), so 0 is exactly unity.
+        case MasterField::push:       return enaga::dsp::exp2(2.0f * float(byte > 127 ? 127 : byte) * (1.0f / 127.0f));
         default:                      return 0.0f;
     }
 }
@@ -566,6 +577,7 @@ void Mixer::resolve_sends(const SendSettings &sends) {
                 ed::clamp(sends.chorus_depth, 0.0f, 1.0f));
     chorus_level_ = ed::clamp(sends.chorus_level, 0.0f, 1.0f);
     chorus_to_reverb_ = ed::clamp(sends.chorus_to_reverb, 0.0f, 1.0f);
+    reverb_duck_ = ed::clamp(sends.reverb_duck, 0.0f, 1.0f);
 
     // --- send B: the reverb and the high-pass on its input -----------------------------------
     reverb_.set(sends.reverb_decay_s, sends.reverb_damping);
@@ -641,6 +653,7 @@ void Mixer::resolve_master(const MasterSettings &master_settings) {
     limit_headroom_ = 1.0f - limit_threshold_;
     limit_inv_headroom_ = ed::reciprocal(limit_headroom_);
     out_level_ = ed::clamp(master_settings.level, 0.0f, 1.0f);
+    push_ = ed::clamp(master_settings.push, 1.0f, 4.0f);
 
     // --- master: the kill EQ's targets, with the switches over the knobs ----------------------
     const float knobs[kKillBands] = {master_settings.eq_low, master_settings.eq_mid,
@@ -815,15 +828,29 @@ void Mixer::finish_block(float *out, int frames) {
     if (n > 0 && fed_b) {
         strata_biquad_inplace(&reverb_high_pass_.state_, &reverb_high_pass_coefficients_, send_b_, n);
     }
+    // RDK: with the duck running, the return is rendered aside and added under 1 - RDK x duck,
+    // the curve every ducked track rides (dsp/chain.hpp). RDK 0, or the duck idle, adds straight
+    // into the mix as before: no extra pass.
+    const bool duck_return = reverb_duck_ > 0.0f && duck_active_;
+    float *rev_l = duck_return ? wet_l_ : mix_l_;
+    float *rev_r = duck_return ? wet_r_ : mix_r_;
+    if (duck_return && n > 0 && (reverb_tail_ > 0 || hall_tail_ > 0)) {
+        enaga_clear(wet_l_, n);
+        enaga_clear(wet_r_, n);
+    }
     if (n > 0 && reverb_tail_ > 0) {
         reverb_tail_--;
-        reverb_.process(hall_mode_ ? kSilence : send_b_, kSilence, mix_l_, mix_r_, n,
+        reverb_.process(hall_mode_ ? kSilence : send_b_, kSilence, rev_l, rev_r, n,
                         reverb_level_ * 2.0f);
     }
     // --- send B's HALL mode -------------------------------------------------------------------
     if (n > 0 && hall_tail_ > 0) {
         hall_tail_--;
-        hall_.process(hall_mode_ ? send_b_ : kSilence, mix_l_, mix_r_, n, reverb_level_);
+        hall_.process(hall_mode_ ? send_b_ : kSilence, rev_l, rev_r, n, reverb_level_);
+    }
+    if (duck_return && n > 0) {
+        strata_duck_mix(mix_l_, wet_l_, duck_curve_, reverb_duck_, n);
+        strata_duck_mix(mix_r_, wet_r_, duck_curve_, reverb_duck_, n);
     }
 
     // --- master ------------------------------------------------------------------------------
@@ -876,7 +903,7 @@ void Mixer::master(int n) {
 
     // --- that gain and the output level, as one ramped pass ------------------------------------
     const float from = master_gain_;
-    const float to = compressor_gain_ * out_level_;
+    const float to = compressor_gain_ * out_level_ * push_;
     if (from != 1.0f || to != 1.0f) {
         if (n != ramp_frames_) {
             ramp_frames_ = n;

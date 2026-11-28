@@ -95,6 +95,47 @@ sits right after it in our insert chain.
 ([Ableton](https://www.ableton.com/en/blog/drop-it-kick-electronic-music/),
 [Perfect Circuit](https://perfectcircuit.com/signal/kick-drum-synthesis))
 
+### KICK's PNCH page — what the benchmark added (2026-11-28)
+
+Measured against 400+ techno kick one-shots from sample libraries (octave bands over the whole
+hit tiled in a loop and over its first 20 ms), the 909 model above is 11-25 dB short in the
+attack from 250 Hz to 4 kHz, and has nothing below f0. Commercial techno kicks are built in layers: a low punch (this
+model's body), a mid punch (a fast pitch sweep through 250 Hz-1 kHz), a top (a click at 2-6 kHz)
+and often a falling sub tail. The model's own click is a 1 ms gate, whose spectrum has nulls at
+1, 2 and 3 kHz, and DRT moves the waveform but barely the spectrum. So the PNCH page adds the
+missing layers rather than changing the reference's knobs:
+
+- **KNK / KND**: a second pitch envelope, `f0 * (1 + 3.5*FMA*fm_env + 15*KNK*knock_env)`, with a
+  1-16 ms time constant. The knock starts up to four octaves over the body and is gone before
+  FMD's sweep is.
+- **TCK**: white noise band-passed at 3 kHz (Q 0.7) under a 1.5 ms envelope, added after TON so
+  the body's low-pass never dulls it. Its own noise generator, so the click's never moves.
+- **DRP**: f0 falls towards `2^-DRP` of itself on the amplitude's time constant (control rate).
+
+All three at 0 run the reference exactly. The techno presets land within a few dB of the
+references in the loop and 5-13 dB under them at 1-4 kHz in the attack. Two lessons from tuning
+them: the body's length (DEC) sets the loop's balance more than anything on the page, and heavy
+drive or a loud tick overshoots the loop's mids and top by 10-20 dB while barely helping the
+attack. Measure the attack with a window that does not fade in over its first milliseconds
+(a Hann window there hides the tick).
+
+**TAIL** (slots 28-31). RMB and RLN are a rumble after fm1-HYP1's kick (GPL-3; the idea, not the
+code): white noise through two one-pole low-passes near 90 Hz, plus a sine at the kick's own note,
+under a swell that is a slow envelope (RLN, 0.1-1.2 s) less a fast one (35 ms), so it rises after
+the hit; added to the machine's output, before the chain's drive, so body and rumble distort
+together. HLD is a 909's amplitude hold (ReplicantFM1's 909 model holds the body before its
+decay): the level held for up to 400 ms, then DEC's time constant. Measured against RY Divinity's
+layered kicks, their 30-150 Hz energy 100-450 ms after the hit sits 2-6 dB above the hit's first
+50 ms; HEAVY sits 0-3 dB above, FAT 0-1.5. An earlier version of the rumble ran the kick's tail
+through all-passes and combs; the swell is cheaper, needs no delay memory and growls with the
+drive.
+
+**CHK** (slot 28): sample kicks are cut at the next beat. With CHK above 0, a trigger fades
+every other sounding voice out over 60 ms (CHK 1) down to 1 ms (127), starting at the new hit's
+frame. Two blind tests with Roland (2026-11-28) also taught a voicing rule: the kicks that passed
+as samples share one recipe (TECHNO's); variants that changed drive, dirt, sweep and length at
+once were heard as synthetic.
+
 ### SNARE — follow `synthetic_snare_drum` (909), with 808 mode ratios available
 
 Author's comment: *"Uses a few magic numbers taken from the 909 schematics"* and

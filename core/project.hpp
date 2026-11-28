@@ -242,9 +242,20 @@ constexpr bool machine_is_grain(uint8_t id) { return id == uint8_t(MachineId::gr
 constexpr bool machine_reads_osc(uint8_t id) {
     return machine_reads_asr(id) && id != uint8_t(MachineId::sample);
 }
+// KICK reads the ASR page's four slots as a page of its own, PNCH (KNK KND TCK DRP, dsp/kick.hpp):
+// not an envelope, so it is not in machine_reads_asr, which everything about held notes asks.
+constexpr bool machine_is_kick(uint8_t id) { return id == uint8_t(MachineId::kick); }
+// Does this machine have the page at all, as an envelope or as KICK's PNCH? What shows, names,
+// saves and presets the page's bytes asks here.
+constexpr bool machine_has_asr_page(uint8_t id) { return machine_reads_asr(id) || machine_is_kick(id); }
+// And the OSC page: the synths and GRAIN, and KICK's CUT (CHK, dsp/kick.hpp) on its first slot.
+constexpr bool machine_has_osc_page(uint8_t id) {
+    return (machine_reads_asr(id) && id != uint8_t(MachineId::sample)) || machine_is_kick(id);
+}
 // SAMPLE's ASR page is SUS and REL alone: ATK is AMP's, and there is no fourth.
 constexpr bool machine_reads_asr_slot(uint8_t id, int slot) {
-    return machine_reads_asr(id) && (id != uint8_t(MachineId::sample) || slot == 1 || slot == 2);
+    return machine_is_kick(id) ||
+           (machine_reads_asr(id) && (id != uint8_t(MachineId::sample) || slot == 1 || slot == 2));
 }
 
 // The WAVE pair: the VA voice with a wavetable where its oscillators were.
@@ -545,15 +556,21 @@ constexpr uint16_t kTempoCentiMax = 30000;    // 300.00 BPM
 // dsp/buses.hpp's enums because core/ cannot include dsp/ -- dsp/buses.hpp reaches Enaga and
 // CLAUDE.md says core/ never does. dsp/buses.hpp static_asserts that the two agree, so the day
 // a field is added the build stops here rather than writing a short section.
-constexpr int kSendFields = 23;
+constexpr int kSendFields = 24;
 // What a PROJECT.BIN written before the ambient modes holds; the other nine follow the master's.
 constexpr int kSendFieldsV1 = 10;
 // And before the chorus (send C): the ambient modes' nine after the master's, no chorus bytes.
 constexpr int kSendFieldsV2 = 19;
-constexpr int kMasterFields = 7;
+// And before the reverb's duck (RDK, 2026-11-28): the chorus's four were the last.
+constexpr int kSendFieldsV3 = 23;
+constexpr int kMasterFields = 8;
 // What a PROJECT.BIN written before the kill EQ holds: the DJ filter, compressor, limiter and
 // level. The three EQ bands were appended after them, so a short mixer section is an older file.
 constexpr int kMasterFieldsV1 = 4;
+// And before PSH, the push into the limiter (2026-11-28): the kill EQ's three were the last. The
+// eighth byte is written at the END of the mixer section, after the sends, so that every byte an
+// older build reads stays where it was (core/project.cpp).
+constexpr int kMasterFieldsV2 = 7;
 
 // The delay's default division: dotted 1/8, index 5 of dsp/buses.hpp's table, as the byte an
 // encoder at that position produces. Named here because `ProjectSettings` needs it as an
@@ -698,10 +715,12 @@ struct ProjectSettings {
                                   // The chorus (send C): a 0.6 Hz sweep, half depth, full
                                   // return, none of it into the reverb. Nothing sounds until a
                                   // track sends to it (KitTrack::chorus), which no track does.
-                                  69, 64, 127, 0};
+                                  69, 64, 127, 0,
+                                  // The reverb's return never ducked (RDK 0).
+                                  0};
     // Centre (flat) DJ filter, the glue compressor at 0.3, the limiter at 0.8, unity out, and the
     // kill EQ's three bands at their flat (bypassed) centre.
-    uint8_t master[kMasterFields] = {64, 38, 101, 127, 64, 64, 64};
+    uint8_t master[kMasterFields] = {64, 38, 101, 127, 64, 64, 64, 0};
     // The kill EQ's kill switches, bit 0 LOW, bit 1 MID, bit 2 HIGH. Live only: PROJECT.BIN
     // keeps their byte, after the master bytes, but writes it as 0 and ignores it on read
     // (Roland, 2026-11-22), so a project never opens with a band killed.

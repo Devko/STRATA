@@ -8,6 +8,45 @@ the project file format or the controls.
 
 ### Added
 
+- **Techno sounds, measured against sample libraries.** Every factory sound was benchmarked
+  against 400+ techno one-shots and loops (octave bands over the whole hit and its first 20 ms).
+  KCK adds TECHNO, WHOUSE, HEAVY and MINIM: the full sweep and click, the chain's drive, a long
+  body and the new PNCH page, within a few dB of the references in a four-on-the-floor loop and
+  5-13 dB under them at 1-4 kHz in the first 20 ms (909: 11-25 dB under). They are 4-6 dB louder
+  than the older kicks, as long modern kicks are. SNR adds TCLAP and two hats on the snare's
+  noise, CLHAT and OPHAT, which score 5 against techno hats where HAT's CLOSED scores 33 (its
+  808 model is a narrow band; theirs are broad). PLY adds TSTAB, a techno stab with no sub under
+  its voices (5.5 against STAB's 10). KCK also gets FAT, a long driven rumble kick. 129 factory
+  sounds in all.
+- **KICK's PNCH page** (EDIT, where the synths have ENV): **KNK** a fast second pitch sweep (the
+  mid punch), **KND** its time, **TCK** a 3 kHz tick (the top click), **DRP** a pitch fall below
+  TUN of up to an octave. The benchmark found the 909's first 20 ms 11-25 dB under techno kicks
+  from 250 Hz to 4 kHz. All four at 0 is the old kick, bit for bit, so saved projects are
+  unchanged.
+- **KICK's TAIL page**: **CHK**, a choke: above 0 each hit fades the one still ringing out over
+  60 ms down to 1 ms, as one-beat kick samples are cut, so a long held body does not stack up.
+  **RMB** and **RLN**: a rumble inside the kick (low noise and the kick's note under a swell that
+  rises after each hit, into the track's drive), the techno rumble without the shared reverb.
+  **HLD**: the body held at full level for up to 400 ms before DEC, a 909's amp hold. All 0 is the
+  old kick. HEAVY is matched to the library kick Roland singled out in the blind
+  tests (3.5 dB off it, attack and loop) and uses it, as do WHOUSE and FAT.
+- **PSH, the master push** (MIXER EQ, D): 0-12 dB of gain into the limiter. Measured against
+  mastered techno, a STRATA mix sits about 4 dB less dense (crest near 12 dB against 8) and LVL
+  stops at unity; FORGE at +2.5 dB reaches the reference track's loudness (-9.7 against -9.1
+  LUFS). One more byte at the end of PROJECT.BIN's mixer section (1000 bytes); older projects
+  open at 0, unchanged.
+- **RDK, the reverb duck** (MIXER ROUTE, D): the reverb's return rides the kit's sidechain duck,
+  0-100%, for the rumble-techno kick into a long dark reverb. One new byte in PROJECT.BIN (999
+  bytes before PSH); an older project opens with RDK 0.
+
+### Changed
+
+- **Re-voiced from the benchmark:** RUMBLE is now a rumble layer for a second kick track (no
+  click, driven, low-passed at 290 Hz, falling half an octave with DRP; duck it from the main
+  kick). CLAP4 and DARK are tuned down
+  so their noise reaches 1 kHz instead of starting at 2 kHz over a boxy 200 Hz body. ACID and
+  ACIDSQ open further (CUT 40 and 44) and drive harder: written around C3 they squelch in the
+  mids where the old voicing boomed at the fundamental. Levels stay balanced with each list.
 - **A MIDI importer for project generators** (`tools/midi_import/`, Python, stdlib only).
   `midi2strata.py info|show|emit` reads Standard MIDI Files and writes STRATA steps for a
   generator like those in `tools/showcases/`: a 16th grid with the rest kept as micro-timing,

@@ -664,9 +664,29 @@ distorted. Two voices, so a ratchet does not cut itself off.
 | --- | --- | --- | --- | --- |
 | SRC | **TUN** pitch, 25-120 Hz (55 Hz at 64) | **FMA** pitch-sweep amount, up to about +26 semitones | **FMD** sweep time, 8-128 ms | **CLK** click level |
 | AMP | **DEC** decay, 20-640 ms time constant | **TON** body low-pass: thud to open | **DRT** dirt: clean sine to soft-clipped | **LVL** |
+| PNCH | **KNK** knock: a fast second sweep, up to four octaves over the body | **KND** knock time, 1-16 ms | **TCK** tick: a 3 kHz click at the very front | **DRP** drop: the pitch keeps falling, up to an octave (in cents) |
+| TAIL | **CHK** choke: `OFF`, or the next hit cuts this one over 60 ms down to 1 ms | **RMB** rumble | **RLN** rumble length, 0.1-1.2 s | **HLD** hold: the body at full level for up to 400 ms before DEC |
 
 The trig note transposes the kick, so a kick follows the key. FMD in the middle of the knob is
 where the classic click lives. Add DRV on FLTR for more 909 grit.
+
+**PNCH** (the seventh EDIT page, where the synths have ENV) is what a layered techno kick adds
+on top of the 909 body: KNK is the mid punch you feel in the first few milliseconds, TCK the top
+click that cuts through on small speakers, DRP the fall that makes a long kick deep rather than a
+held note. All four at 0 is the kick as it always was, so older projects sound the same. The
+SOUNDS TECHNO, WHOUSE, HEAVY, MINIM and FAT use the page; RUMBLE uses DRP.
+
+**TAIL** (the eighth page) is what happens after the hit. **CHK** is a choke: sample-based techno
+kicks are cut off at the next beat, which is what lets a long, held body sit under a
+four-on-the-floor without stacking up. With CHK up, each hit fades the one still ringing out
+over the choke time; at `OFF` two hits overlap as they always have.
+
+**RMB** and **RLN** are a **rumble** built into the kick: low noise and the kick's own note under a
+swell that rises after each hit and dies away like a reverb's low end (RLN sets how long). It goes
+in before the track's DRV, so the kick and its rumble distort together, the way the techno
+rumble (kick, reverb, distortion, low-pass, sidechain) growls, without the shared reverb. **HLD**
+holds the body at full level before DEC's decay starts: the held, fat sub of a layered techno
+kick, stopped by CHK at the next hit. HEAVY and FAT use all three.
 
 ### SNR: SNARE
 
@@ -1002,12 +1022,12 @@ first entry of each list is the factory kit's own sound.
 
 | Machine | Sounds |
 | --- | --- |
-| KCK | 909 (the factory kick), 808 (long boom), DEEP (rounder, darker), PUNCH (short, hard, driven), DIST (industrial, distorted), SOFT (dub, no click), RUMBLE (long, dark, dirty: for rumble techno), TIGHT (short, clicky), BOOM (ambient: slow drop, longest tail), HARD (hard techno, fully driven) |
-| SNR | CLAP (the factory clap), 909SN, 808SN, CLAP4 (four bursts, wide), RIMSN (a snare rim tick), DIRTY (noisy, driven), SHORT (a tight clap), TIGHT (a short snare), NOISE (a long noise wash), DARK (a dark, driven clap) |
+| KCK | 909 (the factory kick), 808 (long boom), DEEP (rounder, darker), PUNCH (short, hard, driven), DIST (industrial, distorted), SOFT (dub, no click), RUMBLE (a rumble layer for a second kick track: no click, driven, low-passed; duck it from the main kick), TIGHT (short, clicky), BOOM (ambient: slow drop, longest tail), HARD (hard techno, fully driven), TECHNO (modern techno: full sweep, click and drive, the most knock), WHOUSE (TECHNO with a longer body), HEAVY (a massive warehouse kick: slow wide sweep, held sub, cut at the next hit; loud, pull its fader down), MINIM (TECHNO with a shorter body), FAT (TECHNO with a long body that falls into the sub: the fat rumble kick) |
+| SNR | CLAP (the factory clap), 909SN, 808SN, CLAP4 (four bursts, the smack at 1-2 kHz), RIMSN (a snare rim tick), DIRTY (noisy, driven), SHORT (a tight clap), TIGHT (a short snare), NOISE (a long noise wash), DARK (a dark, driven clap), TCLAP (the techno clap: three bursts, the smack at 1-2 kHz), CLHAT and OPHAT (closed and open hats on the snare's noise: the broad, bright hats of modern techno, where HAT's 808 model is narrow) |
 | HAT | CLOSED, OPEN (the factory pair), TIGHT, 808HH (pure squares), SHAKE (a shaker), RIDE (long, clangy), TRASH (noisy, metallic), DARK (a dark closed hat), TICK (shortest), SIZZLE (long, bright, noisy), SHIMMR (a ringing metallic cymbal) |
 | PRC | RIM (the factory rim), TOM, COWBEL, BELL, BLIP, CONGA, METAL, CLAVE, ZAP (a falling laser), DUBTOM (low, long, for the delay), CHIME (glassy, ringing), KNOCK (a metallic tick) |
-| MNO | ROLL (the factory bass), ACID (squelching 303 line), ACIDSQ (the same on a square), FAT (detuned saws, sub and drive), REESE (wide detuned band-pass), SUB (deep, near-sine), PLUCK, GROWL (band-pass mid bass), GLIDE (portamento), SYNC (sync lead), LEAD (square lead with glide), DRONE (SUS up: holds each note for its LEN), DUBBAS (dub bass: closed, deep, held), RUBBER (the offbeat techno bass) |
-| PLY | STAB (the factory stab), PAD (A05's pad), STRING, KEYS, RAVE (best with 5TH OCT chords), PLUCK, BRASS, DUBCHD (darker, longer dub chord), WARM (a warm pad), SWELL (opens as it swells), HOOVER (wide driven rave chord), ORGAN |
+| MNO | ROLL (the factory bass), ACID (squelching 303 line; write it around C3), ACIDSQ (the same on a square), FAT (detuned saws, sub and drive), REESE (wide detuned band-pass), SUB (deep, near-sine), PLUCK, GROWL (band-pass mid bass), GLIDE (portamento), SYNC (sync lead), LEAD (square lead with glide), DRONE (SUS up: holds each note for its LEN), DUBBAS (dub bass: closed, deep, held), RUBBER (the offbeat techno bass) |
+| PLY | STAB (the factory stab), PAD (A05's pad), STRING, KEYS, RAVE (best with 5TH OCT chords), PLUCK, BRASS, DUBCHD (darker, longer dub chord), WARM (a warm pad), SWELL (opens as it swells), HOOVER (wide driven rave chord), ORGAN, TSTAB (the techno stab: one saw a voice, no sub, bright, high-passed off the bass) |
 | WMN | SWEEP, RESO (a resonant sweep), GROWL, FORMNT (formant), DIGI (digital), VOWEL, WARP, FMBASS (FM bass), ACIDWV (acid on a wavetable), HARMBS (harmonics bass), FOLD (fold lead), TINE (a bell pluck) |
 | WPL | PAD, EPIANO (electric piano), BELL, MALLET, PLUCK, CHOIR, PWMPAD (a PWM pad), GLASS (a crystalline pad), DIGPAD (digital pad), RESOPD (a resonant pad), STAB (a warm dub stab), VOXSTB (a vowel stab) |
 | FM4 | EPIANO, BELL, BASS, BRASS, ORGAN, MALLET, PAD, GLASS, BLIP (the bleep), CHIME (1:14, ringing), DUBSTB (a dub stab), DRONE (held, slow index) |
@@ -1642,7 +1662,7 @@ The master has a DJ-style **kill EQ** (an isolator) after the DJ filter: three b
   D in PERFORM too, so LIVE RND's tracks are picked with FUNC + a lower pad instead.
 - **The knobs**: MIXER, then the screen keys (or LEFT/RIGHT) to the last page, `EQ`. A, B and
   C are LOW, MID and HI: centre (`0`) is flat, down to `KILL` at the bottom, up to +6 dB at the
-  top (`+63`). D is empty.
+  top (`+63`). D is **PSH**, below.
 
 A kill takes its band down by 30-50 dB within about 10 ms and comes back as fast, with no click.
 Coming back puts the band where its knob is. While all three bands are flat and no switch is on,
@@ -1651,6 +1671,12 @@ switches itself off again a few milliseconds after everything is flat. The knobs
 the project; the switches are a performance move and are not: a project always opens with every
 band in. A knob turned to the bottom is saved, so a project saved that way reopens with the band
 out: look for `KILL` on the EQ page.
+
+**PSH** (EQ page, D: `+0DB` to `+12DB`) pushes the whole mix into the limiter. Commercial techno
+is mastered dense: about 8 dB between its peaks and its average, where a STRATA mix sits near
+12, and LVL stops at unity, so nothing else drives the limiter. A few dB (`+2DB` to `+4DB`) brings
+a mix to that density and loudness; more starts to squash the kick. At `+0DB`, where every
+project starts and every older project opens, the master is exactly as it was.
 
 ### Tape stop and delay freeze
 
@@ -1849,6 +1875,11 @@ mode; the old mode's echoes ring out underneath, so a switch never clicks.
   tail drifts, **SHM** (D) feeds the tail back an octave up: a rising shimmer over held chords.
   DEC, DMP, HPF and LVL work as in the classic mode, and D>R sends the LONG delay into the HALL
   for the biggest wash.
+- **RDK, the reverb duck** (`ROUTE`, D: 0-100%). The reverb's return rides the kit's sidechain
+  duck (MIXER `DUCK`: which track fires it, and its attack, hold and release). This is the
+  rumble-techno move: send the kick into a long, dark reverb (REV: HPF low, DMP high, a long DEC;
+  the kick's SNB up), turn RDK up, and the tail pulls away under every kick and swells back
+  between them. At 0 the reverb is never ducked, as before; a project from before it opens at 0.
 
 The modes and their knobs are saved with the project; a project from before they existed opens
 with both sends classic. Both cost more CPU than the classic modes while they sound (about

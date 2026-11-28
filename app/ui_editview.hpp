@@ -385,7 +385,10 @@
                 break;
             case Page::amp:
             case Page::asr:
-                if (Page(param_page_) == Page::asr && !has_asr(selected_)) {
+                if (Page(param_page_) == Page::asr && machine_is_kick(id)) {
+                    add("KNK KND  MID PUNCH");
+                    add("TCK TOP  DRP FALL");
+                } else if (Page(param_page_) == Page::asr && !has_asr(selected_)) {
                     add("NOT ON THIS MACHINE");
                 } else if (has_asr(selected_)) {
                     const bool sustains = kit.v[kAsrFirst + 1] > 0;
@@ -450,7 +453,11 @@
                 break;
             }
             case Page::osc:
-                if (!machine_reads_osc(id)) add("NOT ON THIS MACHINE");
+                if (machine_is_kick(id)) {
+                    add("CHK  NEXT HIT CUTS");
+                    add("RMB  RUMBLE");
+                }
+                else if (!machine_reads_osc(id)) add("NOT ON THIS MACHINE");
                 break;
             case Page::scn:
                 if (!machine_reads_scn(id)) {

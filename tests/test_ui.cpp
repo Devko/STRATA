@@ -860,8 +860,9 @@ TEST(ui_the_parameter_page_decides_which_parameter_an_encoder_writes) {
     // The pages wrap, so the four of them are reachable in either direction.
     key(ENAGA_KEY_SELECT_LEFT);
     CHECK_EQ(UiProbe::param_page(app), int(Page::src));
-    // A drum has six of the pages: the keys step over ENV, OSC, the hole and SCAN.
-    for (int i = 0; i < 6; i++) key(ENAGA_KEY_SELECT_LEFT);
+    // KICK has eight of the pages (its ENV slot is PNCH, its OSC slot TAIL): the keys step over
+    // the hole and SCAN.
+    for (int i = 0; i < 8; i++) key(ENAGA_KEY_SELECT_LEFT);
     CHECK_EQ(UiProbe::param_page(app), int(Page::src));
 
     // And a lock follows the same page. The step page is not open and the mode is GRID, but
@@ -3656,7 +3657,7 @@ TEST(ui_a_knob_on_the_delay_page_changes_the_delay) {
     CHECK_EQ(delay_division_index(engine.project().settings.sends[0]), 0);
 }
 
-TEST(ui_an_empty_slot_on_the_routing_page_does_nothing) {
+TEST(ui_the_routing_pages_d_is_the_reverbs_duck) {
     Strata &app = fresh();
     Engine &engine = app_engine();
     mixer_page(app, kMixerHallPage + 1);  // ROUTE
@@ -3670,19 +3671,25 @@ TEST(ui_an_empty_slot_on_the_routing_page_does_nothing) {
     pump(2);
     CHECK(engine.sends().delay_ping_pong);
 
-    // D is empty -- nineteen send fields do not divide into four. Turning it changes nothing
-    // and, in particular, does not fall through to the track faders below.
+    // D was empty until RDK, the reverb's return under the duck, took it. Turning it writes that
+    // byte alone and does not fall through to the track faders below.
     const uint32_t refused_before = engine.status().refused.load(std::memory_order_relaxed);
     const float level_before = engine.level(0);
     uint8_t sends_before[kSendFields];
     for (int i = 0; i < kSendFields; i++) sends_before[i] = engine.project().settings.sends[i];
+    CHECK_EQ(int(sends_before[int(SendField::reverb_duck)]), 0);
     app.on_encoder(3, +5);
     pump(2);
     CHECK_NEAR(engine.level(0), level_before, 1e-6);
     CHECK_EQ(int(engine.status().refused.load(std::memory_order_relaxed) - refused_before), 0);
     for (int i = 0; i < kSendFields; i++) {
-        CHECK_EQ(int(engine.project().settings.sends[i]), int(sends_before[i]));
+        if (i == int(SendField::reverb_duck)) {
+            CHECK(engine.project().settings.sends[i] > 0);
+        } else {
+            CHECK_EQ(int(engine.project().settings.sends[i]), int(sends_before[i]));
+        }
     }
+    CHECK(engine.sends().reverb_duck > 0.0f);
 }
 
 namespace {
@@ -5768,7 +5775,9 @@ TEST(ui_the_arp_is_edits_sixth_page_and_keys_play_it) {
 
 TEST(ui_asr_is_edits_seventh_page_and_speaks_for_the_vas_only) {
     Strata &app = fresh();
-    key(ENAGA_KEY_F8);                                // EDIT, track 1: a drum
+    post_track(Cmd::set_machine, 0, uint8_t(MachineId::snare));   // a drum with no ASR page
+    pump(4);
+    key(ENAGA_KEY_F8);                                // EDIT, track 1
     goto_edit_page(app, Page::asr);
     CHECK_EQ(int(Page::asr), int(Page::osc) - 1);
     check_layout(app, "EDIT ASR, a drum");
@@ -5906,7 +5915,9 @@ TEST(ui_scan_is_the_wave_pairs_ninth_page_and_names_its_modes) {
 
 TEST(ui_osc_is_edits_eighth_page_and_names_its_waves_and_modes) {
     Strata &app = fresh();
-    key(ENAGA_KEY_F8);                                // EDIT, track 1: a drum
+    post_track(Cmd::set_machine, 0, uint8_t(MachineId::snare));   // a drum with no OSC page
+    pump(4);
+    key(ENAGA_KEY_F8);                                // EDIT, track 1
     goto_edit_page(app, Page::osc);
     CHECK_EQ(int(Page::osc), int(Page::scn) - 3);     // the hole's two pages between
     CHECK_EQ(int(Page::scn), kEditPages - 1);
@@ -10429,7 +10440,7 @@ void sounds_on(Strata &app, MachineId machine) {
 }
 
 void sounds_cursor_to(int row) {
-    for (int i = 0; i < 16; i++) key(ENAGA_KEY_UP);
+    for (int i = 0; i < 40; i++) key(ENAGA_KEY_UP);   // past any list's top
     for (int i = 0; i < row; i++) key(ENAGA_KEY_DOWN);
 }
 
@@ -10701,6 +10712,10 @@ TEST(ui_sounds_push_b_renames_and_push_c_deletes_only_your_own) {
     CHECK(std::strcmp(UiProbe::notice(app), "DELETED") == 0);
     CHECK_EQ(user_bank_count(app_storage().sound_bank()), 1);
     CHECK(!screen_has(app, "+LCK 1"));
+    // The one left is KCK 1, on the list's first user row (fifteen factory kicks above it may
+    // scroll it out of view, so go there first).
+    sounds_cursor_to(first_user_row_on_kick());
+    draw_now();
     CHECK(screen_has(app, "+KCK 1"));
     key(ENAGA_KEY_CLR);
     key(ENAGA_KEY_F4);
@@ -11578,9 +11593,49 @@ TEST(ui_envelope_on_asr_holds_when_sus_is_up) {
     CHECK(plateau >= 15);
     check_layout(app, "EDIT ASR, VA POLY holding");
     // A drum has no ASR: the page says so and draws nothing.
-    post_track(Cmd::set_machine, 0, 0);
+    post_track(Cmd::set_machine, 0, uint8_t(MachineId::snare));
     pump(4);
     CHECK(screen_has(app, "NOT ON THIS MACHINE"));
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_a_kicks_osc_page_is_tail) {
+    // KICK's OSC page is TAIL (dsp/kick.hpp): CHK on A, OFF at 0, then the rumble.
+    Strata &app = fresh();
+    key(ENAGA_KEY_F8);
+    goto_edit_page(app, Page::osc);
+    CHECK_EQ(UiProbe::param_page(app), int(Page::osc));
+    check_layout(app, "EDIT TAIL, KICK");
+    CHECK(screen_has(app, "TAIL"));
+    CHECK(screen_has(app, "CHK"));
+    CHECK(screen_has(app, "RMB"));
+    CHECK(screen_has(app, "HLD"));
+    CHECK(screen_has(app, "OFF"));
+    CHECK(!screen_has(app, "NOT ON THIS MACHINE"));
+    app.on_encoder(0, +10);
+    pump();
+    CHECK(app_engine().params(0).v[kOscFirst] > 0);
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_a_kicks_asr_page_is_pnch) {
+    // KICK reads the ASR page's slots as PNCH (dsp/kick.hpp): KNK KND TCK DRP, as bars, with
+    // values in their units, and an encoder there writes the kit's bytes 24-27.
+    Strata &app = fresh();
+    key(ENAGA_KEY_F8);                                // EDIT, track 1: the factory KICK
+    goto_edit_page(app, Page::asr);
+    CHECK_EQ(UiProbe::param_page(app), int(Page::asr));
+    check_layout(app, "EDIT PNCH, KICK");
+    CHECK(screen_has(app, "PNCH"));
+    CHECK(screen_has(app, "KNK"));
+    CHECK(screen_has(app, "DRP"));
+    CHECK(!screen_has(app, "NOT ON THIS MACHINE"));
+    CHECK(!screen_has(app, "ATK"));
+    app.on_encoder(0, +10);
+    app.on_encoder(3, +20);
+    pump();
+    CHECK(app_engine().params(0).v[kAsrFirst + 0] > 0);
+    CHECK(app_engine().params(0).v[kAsrFirst + 3] > 0);
     key(ENAGA_KEY_F4);
 }
 

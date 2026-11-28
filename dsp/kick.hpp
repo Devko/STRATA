@@ -30,7 +30,35 @@
 // is stolen; if it is still loud it fades over kFadeFrames first and the new hit starts at the
 // end of that fade -- the spec's "retrigger with a short fade".
 //
-// It reads the SRC page (0-3) and the AMP page (8-11); FLTR and FX belong to the insert chain.
+// The PNCH page (the ASR page's four slots, 24-27, which no other drum reads) adds what the
+// techno benchmark (2026-11-28) found the model cannot reach: measured against 400+ techno kicks
+// from sample libraries, its first 20 ms was 11-25 dB short from 250 Hz to 4 kHz, and nothing of
+// it fell below f0. A layered techno kick is a low punch, a mid punch and a top; these are the
+// last two and the fall:
+//   KNK  knock: a second pitch envelope on top of FMA's, up to 15 x f0 more (four octaves above
+//        the body), much faster -- the "mid punch" layer, 250 Hz-1 kHz in the first milliseconds
+//   KND  the knock's time constant, 1-16 ms exponential
+//   TCK  tick: noise high-passed at 3 kHz under a 1.5 ms envelope -- the top layer, 2-6 kHz
+//   DRP  drop: the pitch keeps falling below TUN as the hit decays, up to an octave
+// All four at 0 is the kick as it was, bit for bit: KNK 0 runs the old body loop, TCK 0 skips
+// the tick (its noise has a generator of its own, so the click's noise stream never moves), and
+// DRP 0 leaves f0 alone.
+//
+// And the OSC page's four slots (28-31), on a page of its own, TAIL:
+//   CHK  choke: 0 lets a hit ring under the next as it always has; above 0 the next hit fades the
+//        sounding one out, over 60 ms at 1 down to 1 ms at 127. Sample-based techno kicks are
+//        cut at the next beat (RY Divinity's are exactly one beat long), which is what lets a long,
+//        sustained body sit under a four-on-the-floor without stacking.
+//   RMB  rumble: low-passed noise and a sine at the kick's own note under a swell that rises
+//        after the hit and dies like a reverb's low end, added before the chain's drive so body
+//        and rumble distort together (after fm1-HYP1's kick, GPL-3, reimplemented). 0: none.
+//   RLN  the rumble's length: the swell's fall, 0.1-1.2 s
+//   HLD  hold: the body stays at full level for 0-400 ms before DEC's decay starts (a 909's amp
+//        hold; RY Divinity's layered kicks hold their sub near full for about 300 ms). 0: as
+//        before, the Enaga envelope from the first millisecond.
+//
+// It reads the SRC page (0-3), the AMP page (8-11), PNCH (24-27) and CUT (28); FLTR and FX
+// belong to the insert chain.
 #pragma once
 
 #include <enaga/dsp.hpp>
@@ -38,6 +66,11 @@
 #include "track.hpp"
 
 namespace strata {
+
+// PNCH's knob curves, for the screen as well as for prepare().
+float kick_knock_seconds(uint8_t value);     // KND: 1-16 ms
+float kick_choke_seconds(uint8_t value);     // CHK: 0 off, else 60 ms at 1 to 1 ms at 127
+int kick_drop_cents(uint8_t value);          // DRP: 0 to -1200, where the fall ends
 
 class Kick final : public Machine {
 public:
@@ -71,8 +104,15 @@ private:
         enaga::dsp::Svf click_band;                  // the reference's 5 kHz Q 2 on the click
         enaga::dsp::OnePole noise_lp, noise_hp;      // attack noise, 0.05 minus 0.005
         enaga::dsp::OnePole tone_lp;                 // the output low-pass
+        enaga::dsp::Svf tick_hp;                     // TCK's 3 kHz high-pass
         float phase = 0.0f;
         float fm_env = 0.0f;
+        float knock_env = 0.0f;    // KNK's pitch envelope
+        float tick_env = 0.0f;     // TCK's level envelope
+        float drop_env = 1.0f;     // DRP: 1 at the hit, falling towards 0 (the full drop)
+        bool held = false;         // HLD: this hit runs the hold envelope, not `amp`
+        float hold_level = 0.0f;   // its level
+        int hold_left = 0;         // and the frames it still holds
         float slew = 0.0f;         // the click gate's slew limiter
         float click_hp = 0.0f;     // the click's one-pole high-pass state
         float note_ratio = 1.0f;   // the trig note's frequency ratio against note 60
@@ -81,6 +121,7 @@ private:
         int hold = 0;              // frames the phase is still pinned at 0.25
         int gate = 0;              // frames the click gate is still high
         int fade = 0;              // frames of fade left, 0 when not fading
+        float fade_step = 1.0f / 24.0f;   // gain lost a frame while fading
         int wait = 0;              // frames until `next` starts
         bool pending = false;
         Trig next{};
@@ -93,7 +134,8 @@ private:
             return s == enaga::dsp::Envelope::idle ||
                    (s != enaga::dsp::Envelope::attack && e.level() < 1e-4f);
         }
-        bool sounding() const { return !done(amp); }
+        bool sounding() const { return held ? hold_level > 1e-4f : !done(amp); }
+        float level() const { return held ? hold_level : amp.level(); }
         bool busy() const { return pending || sounding(); }
     };
 
@@ -104,9 +146,11 @@ private:
 
     Voice voices_[kVoices];
     enaga::dsp::Random rng_{0x5F2A41C7u};
+    enaga::dsp::Random tick_rng_{0x2C9E5B13u};    // TCK's own, so the click's noise never moves
     enaga::dsp::EnvelopeShape amp_shape_{};
     enaga::dsp::EnvelopeShape transient_shape_{};
     enaga::dsp::SvfCoefficients click_coefficients_{};
+    enaga::dsp::SvfCoefficients tick_coefficients_{};
 
     float rate_ = 48000.0f;
     float inv_rate_ = 1.0f / 48000.0f;
@@ -119,6 +163,31 @@ private:
     float click_level_ = 0.0f;     // CLK
     float tone_ratio_ = 1.0f;      // TON, as 2^(tone * 108/12)
     float out_gain_ = 0.25f;       // LVL
+    float knock_amount_ = 0.0f;    // KNK: extra multiples of f0 at the hit, 0-15
+    float knock_decay_ = 0.98f;    // KND, as a per-sample multiplier
+    float tick_gain_ = 0.0f;       // TCK
+    float tick_decay_ = 0.986f;    // the tick's 1.5 ms, as a per-sample multiplier
+    float drop_target_ = 1.0f;     // DRP: f0's ratio at the end of the fall, 1 (none) to 0.5
+    float drop_rate_ = 0.0f;       // -1 / (the fall's time constant in frames)
+    // The bytes PNCH's coefficients were last made from (four PNCH, then DEC), so prepare() pays
+    // for its exponentials only when a knob moves. 0xFF: never made.
+    uint8_t punch_bytes_[5] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    int choke_frames_ = 0;         // CHK: 0 off, else the fade a new hit gives the sounding one
+    uint8_t choke_byte_ = 0;
+
+    // TAIL's rumble and hold (RMB RLN HLD).
+    float rumble_lp_[2] = {0.0f, 0.0f};
+    float rumble_slow_ = 0.0f, rumble_fast_ = 0.0f;
+    float rumble_phase_ = 0.0f;
+    float rumble_inc_ = 0.0f;          // the last hit's f0, normalised
+    float rumble_gain_ = 0.0f;         // RMB
+    float rumble_slow_decay_ = 0.9999f;
+    float rumble_fast_decay_ = 0.9994f;
+    int hold_frames_amp_ = 0;          // HLD, in frames; 0 is the old envelope
+    float hold_decay_ = 0.999f;        // DEC's time constant as a per-sample multiplier
+    uint8_t tail_bytes_[3] = {0xFF, 0xFF, 0xFF};
+    enaga::dsp::Random rumble_rng_{0x7A3C91E5u};   // the rumble's own noise
+    float rumble_noise_[kBlock] = {};
     bool active_ = false;
 
     float body_[kBlock] = {};
