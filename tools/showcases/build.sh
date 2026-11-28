@@ -30,7 +30,7 @@ done
 
 make -C "$ROOT/host" build -j"$(nproc)" > "$ENAGA_BUILD/showcases_hostbuild.log" 2>&1 || {
     tail -20 "$ENAGA_BUILD/showcases_hostbuild.log" >&2; exit 1; }
-OBJS=$(find "$ENAGA_BUILD/host" -name '*.o' | grep -v -e '/tests/test_' -e '/tests/runner.o' -e '/tests/apprig.o')
+OBJS=$(find "$ENAGA_BUILD/host" -name '*.o' | grep -v -e '/tests/test_' -e '/tests/runner.o' -e '/tests/apprig.o' -e '/host/host/')
 
 for n in "${names[@]}"; do
     out="$ROOT/build/showcases/$n"

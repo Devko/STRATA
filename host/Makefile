@@ -94,7 +94,7 @@ WARN_OUT   := $(OUT)/warn-O1
 WARN_STAMP := $(patsubst $(ROOT)/%.cpp,$(WARN_OUT)/%.ok,$(CORE_SRC) $(DSP_SRC) $(APP_SRC) $(TEST_SRC)) \
               $(patsubst $(ROOT)/%.c,$(WARN_OUT)/%.ok,$(DSP_C_SRC))
 
-.PHONY: test list build clean render probe warn
+.PHONY: test list build clean render probe warn starter
 warn: $(WARN_STAMP)
 	@echo "warn: $(words $(WARN_STAMP)) sources compile without warnings at -O1"
 
@@ -161,7 +161,20 @@ $(PROBE_BIN): $(PROBE_OBJ)
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) $(PROBE_OBJ) -o $@
 
+# The card builder's starter content (host/starter.cpp): re-saves projects through app/storage.cpp
+# and renders the sample pack. It drives the app through tests/apprig, so it links that and the
+# fake host but no test. web/tools/starter.mjs runs it.
+STARTER_OBJ := $(filter-out $(OUT)/tests/%,$(OBJ)) $(OUT)/tests/fakehost.o $(OUT)/tests/apprig.o \
+               $(OUT)/host/starter.o
+STARTER_BIN := $(OUT)/strata-starter
+
+starter: $(STARTER_BIN)
+
+$(STARTER_BIN): $(STARTER_OBJ)
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) $(STARTER_OBJ) -o $@
+
 clean:
 	rm -rf $(OUT)
 
--include $(DEP) $(OUT)/host/render.d $(OUT)/host/probe.d $(WARN_STAMP:.ok=.d)
+-include $(DEP) $(OUT)/host/render.d $(OUT)/host/probe.d $(OUT)/host/starter.d $(WARN_STAMP:.ok=.d)

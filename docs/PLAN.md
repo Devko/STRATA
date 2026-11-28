@@ -79,9 +79,9 @@ no Enaga firmware.
 - [x] **The open PRs**: #196 (the LONG delay in passes, bit-exact), #197 (the second review's
       fixes) and #198 (compiled blocks for the scenarios), all merged 2026-11-27.
 
-**2. Feature freeze.** Once the items above are on `main`: no new feature, gesture or file
-change until 1.0. What may still land: fixes with a failing test first, performance work that is
-bit-exact or null-tested, docs, and tooling.
+**2. Feature freeze: lifted.** Planned as no new feature, gesture or file change until 1.0.
+Roland lifted it on 2026-11-28: development comes before a stable release for now, so features
+land on `main` as usual. A freeze comes back only when Roland calls the 1.0 release.
 
 **3. Checks on the RC build** (a build from `main` at the freeze, with cl6x):
 
@@ -92,7 +92,7 @@ bit-exact or null-tested, docs, and tooling.
       pass, worst 26.34% cl6x, 55.06% GCC-only.)
 - [x] `tools/emulator_screens.sh`, and a look at the contact sheet: the docs' pictures are the
       RC's screens.
-- [ ] On the unit: the smoke test (S1-S20) first, then the walkthrough (W1-W61) or at least
+- [ ] On the unit: the smoke test (S1-S20) first, then the walkthrough (W1-W62) or at least
       every W item marked for this release; the unit's MAX figures in `docs/BUDGET.md`.
 - [ ] Projects and kits saved by v0.4.0 open in the RC (the factory project, a project with
       locks, scenes and MOD slots), and a project saved by the RC opens in v0.4.0 as the release

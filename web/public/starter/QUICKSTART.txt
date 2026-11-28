@@ -1,0 +1,52 @@
+STRATA QUICK START
+==================
+Keys are named as printed on the SmplTrek. FUNC+X: hold FUNC, press X.
+Lost? Hold FUNC alone for help on the screen you are on. FUNC+CLR undoes anything.
+
+1. PLAY A BEAT
+   PLAY / STOP start and stop (STOP twice cuts the tails). Turn VALUE for the tempo.
+   A first start plays the demo project, DEFAULT: five patterns in bank A.
+
+2. OPEN A STARTER PROJECT
+   PROJECT, then the screen key RIGHT four times (PROJECTS). Pick one with A, OK twice.
+   Each plays its arrangement on the chain: FUNC+HOME, CHAIN turns it on or off.
+   On PROJECT, STEP 1-16 queue the next pattern of the bank shown.
+   TECHNO 132  DEEP 122  DUB 118  DRIFT 80  ELECTRO 128  NIGHT 132
+   BREAKS 134  STEEL 140  SMASH 155  CHAOS 150
+
+3. MAKE STEPS
+   HOME shows GRID: all eight tracks. A lower pad picks a track and plays it.
+   Tap a STEP key to set or clear a step. The pad-row keys L/R show steps 17-64.
+   Hold a STEP and turn A-D: that step gets its own value (a p-lock).
+   Hold a STEP and turn VALUE: the step's note. HOME twice: the pads are a keyboard.
+   REC, then play pads while it runs: live recording.
+
+4. SHAPE THE SOUND
+   EDIT: the selected track's sound. Screen keys L/R walk the pages, A-D turn.
+   OK in EDIT opens SOUNDS: ready-made sounds for that track. AS WAS puts yours back.
+   FUNC+EDIT (MACHINE): pick the machine on each track with A.
+   MIXER: levels, delay, reverb, the sidechain duck and the master.
+
+5. PERFORM
+   Upper pads: FILL, REPEAT, MUTE, SCENE A, SCENE B, THROW, MUTATE.
+   FUNC + a lower pad mutes that track on the next bar.
+   Push VALUE + STEP 1-15: an effect (sweeps, risers, tape stop...). VALUE is its amount;
+   tap VALUE to bring it back to dry. Push VALUE + STEP 16: the looper.
+   FUNC+MIXER (PERFORM): scenes, the A/B morph on VALUE, four macros on A-D.
+   Hold OK on GRID: GENERATE a part for the track, or let it EVOLVE as it plays.
+
+6. USE THE SAMPLE PACK
+   The pack is in /SAMPLES/STRATA on the card: drums, perc, bass, leads and chords, all
+   rendered by STRATA's own machines. On MACHINE (FUNC+EDIT) set a track to SMP with A,
+   then OK opens the sample browser in /SAMPLES: OK on STRATA opens the pack, push A
+   hears a file, OK loads it.
+   Melodic files name their note (MONO_ACID_C2): played at C4 they sound at that note.
+   M7 files are C minor seventh chords.
+
+7. SAVE
+   FUNC+HOME, OK saves the project. A changed starter project is yours: save it, or
+   SAVE AS a new name on PROJECTS (FUNC+DOWN) to keep the original.
+   FUNC+REC (RESAMPLE) records the output to a WAV file or onto a track.
+
+More: the manual, https://github.com/Devko/STRATA/blob/main/docs/MANUAL.md
+and the cheatsheet, https://github.com/Devko/STRATA/blob/main/docs/CHEATSHEET.md
