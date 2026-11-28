@@ -937,25 +937,24 @@ TEST(kick_choke_cuts_a_ringing_hit_at_the_next_one) {
 }
 
 TEST(kick_rumble_adds_a_low_tail_that_each_hit_ducks) {
-    // TAIL's RMB (dsp/kick.hpp): the kick's own tail through all-passes and combs, driven and
-    // low-passed. With it up, 150-450 ms after a short hit there is low energy where the plain
-    // kick has died away; right at the hit the rumble is ducked, so the first 2 ms are the
-    // plain kick's; and it is all low: little above 1 kHz.
+    // TAIL's RMB (dsp/kick.hpp): low noise and the kick's note under a swell. With it up,
+    // 150-200 ms after a short hit there is low energy where the plain kick has died away; at the
+    // hit the swell is at zero, so the first 2 ms are the plain kick's; and it is all low:
+    // little above 1 kHz.
     static float plain[19200], rumble[19200];
     TrackParams p = kick_909();
     p.set(3, 0);                     // CLK off: no noise, so the hits line up
     kick_hit(p, plain);
     TrackParams r = p;
     r.set(kOscFirst + 1, 110);       // RMB
-    r.set(kOscFirst + 2, 20);        // RTN: about 90 Hz
-    r.set(kOscFirst + 3, 60);        // RDR
+    r.set(kOscFirst + 2, 64);        // RLN: about 0.35 s
     kick_hit(r, rumble);
     float late_plain = 0.0f, late_rumble = 0.0f;
     for (int i = 7200; i < 9600; i++) {
         late_plain += plain[i] * plain[i];
         late_rumble += rumble[i] * rumble[i];
     }
-    CHECK(late_rumble > 10.0f * late_plain + 1e-6f);
+    CHECK(late_rumble > 4.0f * late_plain + 1e-6f);
     float early_diff = 0.0f, early = 0.0f;
     for (int i = 0; i < 96; i++) {
         early_diff += (rumble[i] - plain[i]) * (rumble[i] - plain[i]);
@@ -966,6 +965,28 @@ TEST(kick_rumble_adds_a_low_tail_that_each_hit_ducks) {
     for (int i = 0; i < 9600; i++) diff[i] = rumble[i] - plain[i];
     CHECK(energy_above(diff, 0, 9600, 1000.0f) < 0.01f * energy(diff, 9600));
     CHECK(finite_within(rumble, 9600, 4.0f));
+}
+
+TEST(kick_hold_keeps_the_body_up_then_decays_on_dec) {
+    // HLD (dsp/kick.hpp, TAIL): the body at full level for the hold, then DEC's decay. With HLD at
+    // 200 ms and a short DEC, the body 150-190 ms after the hit is still within 3 dB of its level
+    // at 20-60 ms, where without the hold it has fallen far; and well after the hold it decays.
+    static float plain[19200], held[19200];
+    TrackParams p = kick_909();
+    p.set(3, 0);
+    p.set(8, 50);                    // a short DEC
+    kick_hit(p, plain);
+    TrackParams h = p;
+    h.set(kOscFirst + 3, 64);        // HLD: about 200 ms
+    kick_hit(h, held);
+    auto rms = [](const float *x, int a, int b) {
+        float s = 0.0f;
+        for (int i = a; i < b; i++) s += x[i] * x[i];
+        return s / float(b - a);
+    };
+    CHECK(rms(held, 7200, 9120) > 0.5f * rms(held, 960, 2880));
+    CHECK(rms(plain, 7200, 9120) < 0.05f * rms(plain, 960, 2880));
+    CHECK(finite_within(held, 9600, 4.0f));
 }
 
 // --- SNARE ----------------------------------------------------------------

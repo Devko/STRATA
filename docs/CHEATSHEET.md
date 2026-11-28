@@ -377,7 +377,7 @@ MNO VA mono · PLY VA poly · WMN wavetable mono · WPL wavetable poly · FM4 fo
 
 | Machine | SRC (A B C D) | AMP (A B C D) |
 | --- | --- | --- |
-| KCK | TUN tune, FMA FM amount, FMD FM decay, CLK click | DEC decay, TON tone, DRT dirt, LVL level; PNCH: KNK knock, KND knock time, TCK tick, DRP pitch drop; TAIL: CHK choke (the next hit cuts), RMB rumble, RTN rumble tone, RDR rumble drive |
+| KCK | TUN tune, FMA FM amount, FMD FM decay, CLK click | DEC decay, TON tone, DRT dirt, LVL level; PNCH: KNK knock, KND knock time, TCK tick, DRP pitch drop; TAIL: CHK choke (the next hit cuts), RMB rumble, RLN rumble length, HLD hold |
 | SNR | TUN, SNP snappy, TON noise tone, CLP clap mode | DEC, SPR clap spread, BDY body, LVL |
 | HAT | TUN, TON tone, NOI noise, DTN detune | DEC, CHO choke time, CHK choke group, LVL |
 | PRC | TUN, RAT ratio, IDX FM index, IDD index decay | DEC, SWP pitch sweep, SWT sweep time, LVL |

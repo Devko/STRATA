@@ -49,12 +49,13 @@
 //        sounding one out, over 60 ms at 1 down to 1 ms at 127. Sample-based techno kicks are
 //        cut at the next beat (RY Divinity's are exactly one beat long), which is what lets a long,
 //        sustained body sit under a four-on-the-floor without stacking.
-//   RMB  rumble: the kick's own output through a small diffuse tail (two all-passes, two feedback
-//        combs), driven, low-passed and ducked by every hit -- the techno rumble (kick -> reverb
-//        -> distortion -> low-pass -> sidechain) inside the track, so it needs neither the shared
-//        reverb nor effects after a send. 0 renders nothing.
-//   RTN  the rumble's low-pass, 60-400 Hz exponential
-//   RDR  the rumble's drive into a soft clip, 0 to +30 dB (made up at the output)
+//   RMB  rumble: low-passed noise and a sine at the kick's own note under a swell that rises
+//        after the hit and dies like a reverb's low end, added before the chain's drive so body
+//        and rumble distort together (after fm1-HYP1's kick, GPL-3, reimplemented). 0: none.
+//   RLN  the rumble's length: the swell's fall, 0.1-1.2 s
+//   HLD  hold: the body stays at full level for 0-400 ms before DEC's decay starts (a 909's amp
+//        hold; RY Divinity's layered kicks hold their sub near full for about 300 ms). 0: as
+//        before, the Enaga envelope from the first millisecond.
 //
 // It reads the SRC page (0-3), the AMP page (8-11), PNCH (24-27) and CUT (28); FLTR and FX
 // belong to the insert chain.
@@ -109,6 +110,9 @@ private:
         float knock_env = 0.0f;    // KNK's pitch envelope
         float tick_env = 0.0f;     // TCK's level envelope
         float drop_env = 1.0f;     // DRP: 1 at the hit, falling towards 0 (the full drop)
+        bool held = false;         // HLD: this hit runs the hold envelope, not `amp`
+        float hold_level = 0.0f;   // its level
+        int hold_left = 0;         // and the frames it still holds
         float slew = 0.0f;         // the click gate's slew limiter
         float click_hp = 0.0f;     // the click's one-pole high-pass state
         float note_ratio = 1.0f;   // the trig note's frequency ratio against note 60
@@ -130,7 +134,8 @@ private:
             return s == enaga::dsp::Envelope::idle ||
                    (s != enaga::dsp::Envelope::attack && e.level() < 1e-4f);
         }
-        bool sounding() const { return !done(amp); }
+        bool sounding() const { return held ? hold_level > 1e-4f : !done(amp); }
+        float level() const { return held ? hold_level : amp.level(); }
         bool busy() const { return pending || sounding(); }
     };
 
@@ -170,28 +175,19 @@ private:
     int choke_frames_ = 0;         // CHK: 0 off, else the fade a new hit gives the sounding one
     uint8_t choke_byte_ = 0;
 
-    // TAIL's rumble (RMB RTN RDR). Delay lines of prime lengths near 7.4, 11.7, 37.3 and 53.3 ms
-    // at 48 kHz; 5,262 floats, 21 KiB, members so nothing is allocated.
-    static constexpr int kRumbleAp1 = 353, kRumbleAp2 = 563, kRumbleC1 = 1789, kRumbleC2 = 2557;
-    float rumble_ap1_[kRumbleAp1] = {};
-    float rumble_ap2_[kRumbleAp2] = {};
-    float rumble_c1_[kRumbleC1] = {};
-    float rumble_c2_[kRumbleC2] = {};
-    int rumble_pos_[4] = {0, 0, 0, 0};
-    float rumble_in_lp_ = 0.0f;
-    float rumble_duck_ = 0.0f;
-    float rumble_level_ = 0.0f;       // RMB, as a gain
-    float rumble_drive_ = 1.0f;       // RDR, into the clip
-    float rumble_makeup_ = 1.0f;      // and back out
-    int rumble_tail_ = 0;             // frames the tail still rings after the last sound
-    uint8_t rumble_bytes_[3] = {0xFF, 0xFF, 0xFF};
-    enaga::dsp::Svf rumble_lp_;
-    enaga::dsp::SvfCoefficients rumble_coefficients_{};
-    enaga::dsp::OnePole rumble_hp_;
-    float mix_[kBlock] = {};
-    float rumble_[kBlock] = {};
-    float rumble_aux_[kBlock] = {};
-    void render_rumble(float *out, int n);
+    // TAIL's rumble and hold (RMB RLN HLD).
+    float rumble_lp_[2] = {0.0f, 0.0f};
+    float rumble_slow_ = 0.0f, rumble_fast_ = 0.0f;
+    float rumble_phase_ = 0.0f;
+    float rumble_inc_ = 0.0f;          // the last hit's f0, normalised
+    float rumble_gain_ = 0.0f;         // RMB
+    float rumble_slow_decay_ = 0.9999f;
+    float rumble_fast_decay_ = 0.9994f;
+    int hold_frames_amp_ = 0;          // HLD, in frames; 0 is the old envelope
+    float hold_decay_ = 0.999f;        // DEC's time constant as a per-sample multiplier
+    uint8_t tail_bytes_[3] = {0xFF, 0xFF, 0xFF};
+    enaga::dsp::Random rumble_rng_{0x7A3C91E5u};   // the rumble's own noise
+    float rumble_noise_[kBlock] = {};
     bool active_ = false;
 
     float body_[kBlock] = {};

@@ -10,7 +10,7 @@
 # Track 1 (KICK) is selected on a fresh project, and the list opens on the sound it plays now,
 # 909 on row 1. DOWN then OK loads 808; DOWN twice then OK loads PUNCH; DOWN nine times then OK
 # loads HEAVY, which plays with everything KICK has up (PNCH's knock and tick, TAIL's choke and
-# rumble), so the peak below includes all of it; LEFT twice (a page up each, to the first row) then OK is AS WAS; CLR goes back to EDIT.
+# rumble), so the peak below includes all of it; LEFT three times (a page up each, to the first row) then OK is AS WAS; CLR goes back to EDIT.
 #
 # Keys (third_party/enaga/include/enaga/abi.h): F5 = 22 PLAY, F8 = 28 EDIT, OK = 23, DOWN = 25,
 # LEFT = 24, CLR = 30. The first press comes late: the panel link is not streaming in the first
@@ -53,8 +53,8 @@ python3 -B tools/enaga_cached.py emulate "$STAGE" --cycles "$CYCLES" \
     --key 25@660000000 --key 25@700000000 --key 25@740000000 --key 25@780000000 \
     --key 25@820000000 --key 25@860000000 --key 25@900000000 --key 25@940000000 \
     --key 25@980000000 --key 23@1020000000 \
-    --key 24@1180000000 --key 24@1220000000 --key 23@1260000000 \
-    --key 30@1320000000 \
+    --key 24@1180000000 --key 24@1220000000 --key 24@1260000000 --key 23@1300000000 \
+    --key 30@1360000000 \
     > "$LOG" 2>&1 || {
     echo "FAIL: emulate.py exited non-zero" >&2
     tail -30 "$LOG" >&2

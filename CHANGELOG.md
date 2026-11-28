@@ -25,9 +25,10 @@ the project file format or the controls.
   unchanged.
 - **KICK's TAIL page**: **CHK**, a choke: above 0 each hit fades the one still ringing out over
   60 ms down to 1 ms, as one-beat kick samples are cut, so a long held body does not stack up.
-  **RMB**, **RTN**, **RDR**: a rumble inside the kick (its tail through all-passes and combs,
-  driven, low-passed, ducked by every hit), the techno rumble without the shared reverb. All 0 is
-  the old kick. HEAVY is matched to the library kick Roland singled out in the blind
+  **RMB** and **RLN**: a rumble inside the kick (low noise and the kick's note under a swell that
+  rises after each hit, into the track's drive), the techno rumble without the shared reverb.
+  **HLD**: the body held at full level for up to 400 ms before DEC, a 909's amp hold. All 0 is the
+  old kick. HEAVY is matched to the library kick Roland singled out in the blind
   tests (3.5 dB off it, attack and loop) and uses it, as do WHOUSE and FAT.
 - **PSH, the master push** (MIXER EQ, D): 0-12 dB of gain into the limiter. Measured against
   mastered techno, a STRATA mix sits about 4 dB less dense (crest near 12 dB against 8) and LVL

@@ -11609,7 +11609,7 @@ TEST(ui_a_kicks_osc_page_is_tail) {
     CHECK(screen_has(app, "TAIL"));
     CHECK(screen_has(app, "CHK"));
     CHECK(screen_has(app, "RMB"));
-    CHECK(screen_has(app, "RDR"));
+    CHECK(screen_has(app, "HLD"));
     CHECK(screen_has(app, "OFF"));
     CHECK(!screen_has(app, "NOT ON THIS MACHINE"));
     app.on_encoder(0, +10);

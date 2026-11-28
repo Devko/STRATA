@@ -119,12 +119,16 @@ drive or a loud tick overshoots the loop's mids and top by 10-20 dB while barely
 attack. Measure the attack with a window that does not fade in over its first milliseconds
 (a Hann window there hides the tick).
 
-**TAIL** (slots 28-31). RMB RTN RDR are a rumble: the kick's own output, low-passed at 400 Hz,
-through two all-passes (7.4 and 11.7 ms, g 0.6) and two parallel combs (37.3 and 53.3 ms,
-feedback 0.7), soft-clipped with RDR's gain and made up, low-passed by an SVF at RTN (60-400 Hz),
-high-passed near 30 Hz and ducked by each hit (back up with a 120 ms release). Measured against
-RY Divinity's layered kicks, their 30-150 Hz energy 100-450 ms after the hit sits 2-6 dB above the
-hit's first 50 ms; HEAVY with its rumble sits 0.5-3.4 dB above.
+**TAIL** (slots 28-31). RMB and RLN are a rumble after fm1-HYP1's kick (GPL-3; the idea, not the
+code): white noise through two one-pole low-passes near 90 Hz, plus a sine at the kick's own note,
+under a swell that is a slow envelope (RLN, 0.1-1.2 s) less a fast one (35 ms), so it rises after
+the hit; added to the machine's output, before the chain's drive, so body and rumble distort
+together. HLD is a 909's amplitude hold (ReplicantFM1's 909 model holds the body before its
+decay): the level held for up to 400 ms, then DEC's time constant. Measured against RY Divinity's
+layered kicks, their 30-150 Hz energy 100-450 ms after the hit sits 2-6 dB above the hit's first
+50 ms; HEAVY sits 0-3 dB above, FAT 0-1.5. An earlier version of the rumble ran the kick's tail
+through all-passes and combs; the swell is cheaper, needs no delay memory and growls with the
+drive.
 
 **CHK** (slot 28): sample kicks are cut at the next beat. With CHK above 0, a trigger fades
 every other sounding voice out over 60 ms (CHK 1) down to 1 ms (127), starting at the new hit's

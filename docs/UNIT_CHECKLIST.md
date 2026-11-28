@@ -1164,7 +1164,8 @@ A01 at 130.0, no chain.
   wash. MAX stays where it was (within a point). `____`
 - Track 1, SOUNDS HEAVY (fader down a little: it is loud): a big, held kick that stops dead at
   the next one, with a low rumble swelling between the hits. EDIT, the eighth page reads `TAIL`;
-  CHK to `OFF`: the tails stack into a boom; RMB to 0: the rumble goes. `____`
+  CHK to `OFF`: the tails stack into a boom; RMB to 0: the rumble goes; HLD to `OFF`: the
+  body thins out after the hit. `____`
 - MIXER EQ, D (PSH) from `+0DB` to `+4DB` with the beat playing: louder and denser, the peaks
   held at the ceiling, no crackle; at `+12DB` it squashes but never clips harshly. Back at
   `+0DB` it is as before. `____`

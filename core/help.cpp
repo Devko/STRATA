@@ -577,7 +577,7 @@ bool reads_page(uint8_t machine, int page) {
 const char *osc_words(uint8_t machine, int slot) {
     if (!machine_has_osc_page(machine)) return "";
     if (machine_is_kick(machine)) {
-        static const char *const kick[4] = {"CHOKE", "RUMBLE", "RUMBLE TONE", "RUMBLE DRIVE"};
+        static const char *const kick[4] = {"CHOKE", "RUMBLE", "RUMBLE LENGTH", "HOLD"};
         return kick[slot];
     }
     if (machine_is_fm(machine)) return kFmOscWords[slot];

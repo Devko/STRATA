@@ -665,7 +665,7 @@ distorted. Two voices, so a ratchet does not cut itself off.
 | SRC | **TUN** pitch, 25-120 Hz (55 Hz at 64) | **FMA** pitch-sweep amount, up to about +26 semitones | **FMD** sweep time, 8-128 ms | **CLK** click level |
 | AMP | **DEC** decay, 20-640 ms time constant | **TON** body low-pass: thud to open | **DRT** dirt: clean sine to soft-clipped | **LVL** |
 | PNCH | **KNK** knock: a fast second sweep, up to four octaves over the body | **KND** knock time, 1-16 ms | **TCK** tick: a 3 kHz click at the very front | **DRP** drop: the pitch keeps falling, up to an octave (in cents) |
-| TAIL | **CHK** choke: `OFF`, or the next hit cuts this one over 60 ms down to 1 ms | **RMB** rumble | **RTN** rumble tone, 60-400 Hz | **RDR** rumble drive, 0 to +30 dB |
+| TAIL | **CHK** choke: `OFF`, or the next hit cuts this one over 60 ms down to 1 ms | **RMB** rumble | **RLN** rumble length, 0.1-1.2 s | **HLD** hold: the body at full level for up to 400 ms before DEC |
 
 The trig note transposes the kick, so a kick follows the key. FMD in the middle of the knob is
 where the classic click lives. Add DRV on FLTR for more 909 grit.
@@ -681,11 +681,12 @@ kicks are cut off at the next beat, which is what lets a long, held body sit und
 four-on-the-floor without stacking up. With CHK up, each hit fades the one still ringing out
 over the choke time; at `OFF` two hits overlap as they always have.
 
-**RMB**, **RTN** and **RDR** are a **rumble** built into the kick: its own tail runs through a
-small, smeared echo, is driven (RDR), low-passed (RTN) and ducked by every hit, so it swells up
-between the kicks and gets out of the way of each one. It is the techno rumble (kick into a
-reverb, distortion after it, a low-pass, sidechained) without the shared reverb, so the clap and
-stab sends stay clean. Keep RTN low for a sub rumble, raise RDR for growl. HEAVY and FAT use it.
+**RMB** and **RLN** are a **rumble** built into the kick: low noise and the kick's own note under a
+swell that rises after each hit and dies away like a reverb's low end (RLN sets how long). It goes
+in before the track's DRV, so the kick and its rumble distort together, the way the techno
+rumble (kick, reverb, distortion, low-pass, sidechain) growls, without the shared reverb. **HLD**
+holds the body at full level before DEC's decay starts: the held, fat sub of a layered techno
+kick, stopped by CHK at the next hit. HEAVY and FAT use all three.
 
 ### SNR: SNARE
 
