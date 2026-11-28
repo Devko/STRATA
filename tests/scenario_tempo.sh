@@ -45,7 +45,7 @@ LOG="$ENAGA_BUILD/scenario_tempo.log"
 
 echo "running the emulator for $CYCLES cycles: play, four VALUE taps, FUNC + push VALUE + turn ..."
 python3 -B tools/enaga_cached.py emulate "$STAGE" --cycles "$CYCLES" \
-    --key 22@250000000 \
+    --key 22@300000000 \
     --key 4@400000000 --key 4@586000000 --key 4@772000000 --key 4@958000000 \
     --key 19@1050000000 --key 4@1052000000 --turn 4:1@1054000000 \
     > "$LOG" 2>&1 || {

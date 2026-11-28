@@ -5,10 +5,8 @@
 # C674x does not compile here either. core/ must never include an Enaga header; dsp/ may
 # include <enaga/dsp.h>, which builds on the host too.
 #
-#   make -C host test     build and run the tests
-#   make -C host test -j4 JOBS=4
-#                         the same suite as four processes side by side (tools/test_shards.sh):
-#                         about 2x faster, bounded by the one 6-second UI audit test
+#   make -C host test -j8 build and run the tests, as shards on every core up to 8
+#                         (tools/test_shards.sh); JOBS=1 runs them in one process
 #   make -C host list     print the test names
 #   make -C host build    build the test binary without running it
 #   make -C host warn -j8   compile everything at -O1 to catch the warnings only CI's -O1
@@ -108,11 +106,13 @@ $(WARN_OUT)/%.ok: $(ROOT)/%.c
 	$(CC) $(CFLAGS) -O1 -MMD -MP -MT $@ -MF $(@:.ok=.d) -c $< -o /dev/null
 	@touch $@
 
-# JOBS=N runs the suite as shards on N processes (tools/test_shards.sh); without it, one process
-# in registration order, as always. TEST_TIMEOUT is the per-test watchdog in seconds for either.
+# JOBS=N runs the suite as shards on N processes (tools/test_shards.sh); by default every core up
+# to 8 (15.5 s in one process, 4.4 s on 8 on Roland's PC, 2026-11-28). JOBS=1 is one process in
+# registration order. TEST_TIMEOUT is the per-test watchdog in seconds for either.
 TEST_TIMEOUT ?= 0
+JOBS ?= $(shell n=$$(nproc 2>/dev/null || echo 1); [ $$n -gt 8 ] && n=8; echo $$n)
 test: $(BIN)
-ifeq ($(strip $(JOBS)),)
+ifeq ($(strip $(JOBS)),1)
 	@$(BIN) --timeout $(TEST_TIMEOUT)
 else
 	@$(ROOT)/tools/test_shards.sh $(BIN) $(JOBS) $(if $(filter-out 0,$(TEST_TIMEOUT)),$(TEST_TIMEOUT),120)

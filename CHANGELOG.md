@@ -181,6 +181,10 @@ the project file format or the controls.
   before it whatever its condition or probability, so a FILL-only crash, a 1:4 hit or a step at 0%
   played every bar once ENERGY was up. A ghost passes over those to the nearest trig that plays
   every pass.
+- **A knob in PERFORM keeps its layer while it turns.** Letting go of FUNC with C still turning
+  gave the last clicks to macro C, so ENERGY moved the macro too, and turning ENERGY back to 0
+  left the macro moved. A turn of A-D stays on the layer it started on (the macro, or REL ALL,
+  LEN ALL, ENERGY and LIVE RND with FUNC) until the knob rests for a quarter second.
 - **A LOCK no longer writes launched parts over the pattern's own tracks.** With a track
   launched from another pattern, storing a lock and jumping to it (or swapping back) copied the
   borrowed part into the playing pattern, replacing the track's own steps, and the next save kept

@@ -11,18 +11,24 @@
 # The app logs a notice for every detent and the emulator's report keeps only the newest 16 log
 # lines, so the walk is two runs, each short enough to keep what it checks:
 #
-#   run "walk" (0.9 G cycles)
+#   run "walk" (1.0 G cycles)
 #     PLAY, FUNC + MIXER     -> PERFORM
 #     FUNC + turn C -3       -> "ENERGY -2", "-4", "-6"
 #     FUNC + turn C +3       -> "-4", "-2", "ENERGY 0": the click onto rest
 #     FUNC + turn C -2       -> "ENERGY -4" again
+#     turn C -1, FUNC up     -> "ENERGY -6": C was still turning (a turn keeps its layer for
+#                               250 ms of rest, about 93 M cycles), so not macro C
+#     turn C -1, rested      -> macro C (not logged): no "ENERGY -8"
 #   run "peak" (1.9 G cycles)
 #     PLAY, FUNC + MIXER     -> PERFORM
-#     FUNC + turn C +32      -> "ENERGY +64", left on to the end: the load with the ghosts
+#     FUNC + turn C +36      -> "ENERGY +64", left on to the end: the load with the ghosts.
+#                               +36, not +32: the emulator holds each encoder phase 3 ms and
+#                               Enaga's decoder counts a detent only on phase 0, so a main-loop
+#                               pass over 3 ms loses one (two of 32 here); ENERGY stops at +64
 #   run "load" (1.2 G cycles)
 #     PLAY, FUNC + MIXER     -> PERFORM
 #     FUNC + turn C -5       -> "ENERGY -10" (or short of it: any ENERGY below rest)
-#     FUNC + HOME, UP, OK, OK -> LOAD DEMO (tests/scenario_clear.sh: UP from SAVE is LOAD DEMO)
+#     FUNC + HOME, UP to LOAD DEMO (tools/menu_rows.py), OK, OK -> the demo loads
 #     FUNC + turn C +1       -> "ENERGY +2": the load put ENERGY back to rest, so the click
 #                               starts from 0 and not from -10
 #
@@ -38,7 +44,7 @@ cd "$(dirname "$0")/.."
 source tools/env.sh
 
 # Both runs together, for tools/scenarios.sh's longest-first order.
-CYCLES=4000000000
+CYCLES=4100000000
 export CYCLES
 if [ $# -gt 0 ]; then
     echo "error: unknown argument: $1" >&2
@@ -72,28 +78,35 @@ emulate() {   # emulate LOGFILE CYCLES KEYS...
 }
 
 echo "running the emulator: ENERGY down and back to rest ..."
-emulate "$LOG_WALK" 900000000 \
+emulate "$LOG_WALK" 1000000000 \
     --key 22@300000000 \
     --key 19@380000000 --key 21@385000000 \
     --key 19@460000000 --turn 2:-3@462000000 \
     --key 19@600000000 --turn 2:3@602000000 \
-    --key 19@740000000 --turn 2:-2@742000000
+    --key 19@740000000 --turn 2:-2@742000000 \
+    --turn 2:-1@790000000 \
+    --turn 2:-1@930000000
 
 echo "running the emulator: ENERGY at +64 ..."
 emulate "$LOG" 1900000000 \
     --key 22@300000000 \
     --key 19@380000000 --key 21@385000000 \
-    --key 19@460000000 --turn 2:32@462000000
+    --key 19@460000000 --turn 2:36@462000000
 
 echo "running the emulator: ENERGY across LOAD DEMO ..."
-emulate "$LOG_LOAD" 1200000000 \
-    --key 22@300000000 \
-    --key 19@380000000 --key 21@385000000 \
-    --key 19@460000000 --turn 2:-5@462000000 \
-    --key 19@560000000 --key 27@565000000 \
-    --key 17@640000000 \
-    --key 23@720000000 --key 23@780000000 \
-    --key 19@1000000000 --turn 2:1@1002000000
+# UP from SAVE, round the bottom, to LOAD DEMO: counted from the FUNC menu's own order.
+load_keys=(--key 22@300000000
+           --key 19@380000000 --key 21@385000000
+           --key 19@460000000 --turn 2:-5@462000000
+           --key 19@560000000 --key 27@565000000)
+ups=$(python3 -B tools/menu_rows.py app/ui_perfmix.hpp MenuItem demo --up)
+for ((i = 0; i < ups; i++)); do
+    load_keys+=(--key "17@$((640000000 + i * 40000000))")
+done
+ok_at=$((640000000 + ups * 40000000 + 40000000))
+load_keys+=(--key "23@$ok_at" --key "23@$((ok_at + 60000000))")
+load_keys+=(--key 19@1000000000 --turn 2:1@1002000000)
+emulate "$LOG_LOAD" 1200000000 "${load_keys[@]}"
 
 rc=0
 python3 - "$LOG_WALK" "$LOG" "$LOG_LOAD" <<'PY' || rc=$?
@@ -147,6 +160,9 @@ check(down >= 0, "walk: FUNC + turn C took ENERGY down to -6", f"log={log}")
 check(rest > down, "walk: turning back landed on rest", f"log={log}")
 check(again > rest, "walk: and down again from it", f"log={log}")
 check("ENERGY +2" not in log, "walk: never past rest", f"log={log}")
+held = index(log, "ENERGY -6", again)
+check(held > again, "walk: a click just after FUNC came up stayed on ENERGY", f"log={log}")
+check("ENERGY -8" not in log, "walk: a turn after a rest was macro C again", f"log={log}")
 
 peak_run = load(sys.argv[2])
 log = common(peak_run, "peak")
