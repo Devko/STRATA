@@ -137,6 +137,7 @@ FM4 and GRAIN machines.
 | **Arp VAR, RHYTHM, ACCENT, RATCHET** (push A-D on the ARP page): CONV DIVG THUMB PINKY; 11 rest patterns (rests hold the note); 7 accent patterns and CYC; ratchets 2-4 on fixed slots or by chance | #184 | ○ (W51) | Kit settings (KIT.BIN section 12), not lockable or scene-able |
 | **ARPS**: OK on the ARP page loads one of 14 factory arps (all eight settings) into one track, AS WAS puts it back | #184 | ○ (W51) | Any machine |
 | Banks A-H x 16 patterns, queued changes (END, 16, 32, NOW) | v0.1.0 | ◐ (3b) | |
+| **Queue from any screen**: hold PROJECT + STEP n queues slot n of the shown bank and the screen stays; PROJECT opens on its release | Unreleased | ○ (W65) | The bank is the one PROJECT last showed |
 | Chain of up to 64 entries, repeats X1-X16 | v0.1.0 | ○ (3b, 12) | |
 | **Song mode**: per-entry mute recall, SONG plays once and stops | v0.1.0 | ○ (13i) | |
 | Restart (FUNC+PLAY) and stop-and-reset (FUNC+STOP, also resets the chain) | v0.1.0 | ○ (11) | |

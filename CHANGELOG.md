@@ -8,6 +8,10 @@ the project file format or the controls.
 
 ### Added
 
+- **Queue a pattern from any screen.** Hold PROJECT and press STEP n: slot n of the shown bank is
+  queued (`A05 QUEUED END`) and the screen you play on stays up. PROJECT now opens when the key
+  comes up, and not at all when a STEP was pressed while it was held. The FUNC help's FUNC + KNOB
+  OR PAD page lists the chord in place of two lines for gestures retired on 2026-11-25.
 - **JAM REC: the whole jam to the card.** The FUNC menu's last row (FUNC+HOME, UP, OK) records
   everything STRATA plays to `/RECORD/JAM_<n>.WAV` until OK again: 48 kHz 24-bit stereo, about
   1 GB an hour, up to 3 h 51 min. The finished master as RESAMPLE hears it, never the click or

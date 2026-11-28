@@ -1088,6 +1088,10 @@ the playing one; STEP 1-16 or the cursor plus OK queue a slot from it. CLR cance
 (`QUEUE OFF`). The slots show the playing pattern bright, patterns with trigs mid grey, empty ones
 dark, and `05>` marks a queued slot.
 
+From any other screen, **hold PROJECT and press STEP 1-16**: that slot of the shown bank is
+queued (`A05 QUEUED END`) and the screen you are playing on stays up. PROJECT itself opens when
+the key comes up, and only if no STEP was pressed while it was held.
+
 The **CHAIN** page (PROJECT, screen key RIGHT) lists the entries, `>02 A05 X2 PLAY`. UP/DOWN move the
 cursor, a STEP key puts that slot of the shown bank into the entry, LEFT/RIGHT step the entry's
 pattern, A or VALUE set its repeats, OK adds a copy after the cursor (up to 64), CLR twice removes

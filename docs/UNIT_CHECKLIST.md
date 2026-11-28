@@ -5,7 +5,7 @@ On a unit that still runs Enaga 0.3.0, update it to 0.4.0 first and do **the Ena
 most likely to break only on the hardware. If it passes, the walkthrough is worth its two hours;
 if an item fails, report that first.
 
-Then **the walkthrough** (W1-W63, about 210 minutes): everything merged since v0.1.0,
+Then **the walkthrough** (W1-W65, about 215 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -849,6 +849,15 @@ free.
 - Start another, let it run 30 s with four streamed samples playing if you have them, then
   power off with it running. On the PC the second file has the next number and plays to the
   end. `____`
+
+**W65. Queue a pattern from any screen (3 min).** Beat playing, A01, something different in A05.
+- GRID. Hold PROJECT: the screen stays on GRID and PROJECT lights green. Press STEP 5:
+  `A05 QUEUED END`. Let both go: still GRID, no trig on step 5 changed, and A05 starts at the end
+  of A01, on the bar. `____`
+- PERFORM (FUNC + MIXER). Hold PROJECT, STEP 1: `A01 QUEUED END`, still PERFORM, A01 comes back
+  at the end of the pattern. `____`
+- Tap PROJECT: PROJECT opens as the key comes up, no slower than before to the hand. FUNC +
+  PROJECT: SAMPLES at once. `____`
 
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.

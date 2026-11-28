@@ -125,7 +125,7 @@ HOME "system", PLAY "◀◀", STOP "▶▶", MIXER "fx", EDIT "rec src".
 | --- | --- | --- | --- |
 | FUNC | modifier | — | green while held |
 | REC | live record on/off | RESAMPLE ("sampling") | red recording, green on RESAMPLE |
-| PROJECT | PROJECT: banks, patterns, chain, card | SAMPLES, the selected track's browser ("pool") | green PROJECT, red SAMPLES |
+| PROJECT | PROJECT: banks, patterns, chain, card. Opens on the release; held, STEP n queues slot n from any screen (below) | SAMPLES, the selected track's browser ("pool") | green PROJECT, red SAMPLES |
 | HOME | GRID, always. Double-tap (within 0.4 s, on GRID) = KEYS | **FUNC menu** ("system"); again closes it | green GRID, amber KEYS, red menu |
 | PLAY | play | restart from step 1 ("◀◀") | green running |
 | STOP | stop; again cuts the tails | reset: back to step 1, queue dropped, chain to its start ("▶▶") | red stopped |
@@ -339,6 +339,20 @@ and UP/DOWN or VALUE when `>` is on it. One line: `OFF`, `DRIFT 1-6`, `WAVE 1-6`
 - On top of swing and micro-timing; the steps never change, so OFF is the grid exactly. Seeded
   from the pattern and the bar position, so a pass plays the same after a reload.
 - Saved in the pattern (an optional section; older files load OFF), undoable, held by a LOCK.
+
+## Queue a pattern from any screen (hold PROJECT + STEP)
+
+Hold PROJECT and press STEP n: slot n of the shown bank (the bank PROJECT last showed) is queued,
+and the screen stays where it is. The toast names the slot and when it lands, `A05 QUEUED END`,
+by the QUEUE mode on PROJECT's knob A. Several STEP keys while PROJECT is held queue each in
+turn; the last one is what lands. PROJECT lights green while held.
+
+- PROJECT opens on its release, and only when no STEP was pressed while it was held. With a STEP
+  held as a modifier (a lock, the step page), PROJECT opens at once and ends the hold.
+- The chord means the same on every screen, PROJECT's own pages and KIT included. FUNC +
+  PROJECT stays SAMPLES.
+- To queue from another bank, pick the bank on PROJECT first (the pad-row keys); the chord
+  keeps using it.
 
 ## The performance mixer (push VALUE + STEP)
 
