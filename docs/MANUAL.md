@@ -461,7 +461,8 @@ or VA track lists ready-made sounds for its machine and loads one into that trac
 
 Everything STRATA keeps is on the SD card, never in the unit's flash. (To put STRATA on a card
 in the first place, [strata.einblick.dev](https://strata.einblick.dev) builds the card zip for
-you; [INSTALL.md](INSTALL.md) has the steps.)
+you, with starter projects, a sample pack and a quick start unless you untick them;
+[INSTALL.md](INSTALL.md) has the steps.)
 
 ```text
 /ENAGA/APPS/STRATA/APP.ENA                     the app
@@ -473,6 +474,8 @@ you; [INSTALL.md](INSTALL.md) has the steps.)
 /ENAGA/DATA/STRATA/AUTOSAVE/                   the working copy, same files
 /ENAGA/DATA/STRATA/KITS/KIT_01.BIN ... KIT_16.BIN   the kit library
 /RECORD/STRATA_<n>.WAV                         resampled takes
+/RECORD/JAM_<n>.WAV                            JAM REC recordings
+/SAMPLES/STRATA/                               the starter sample pack, if the card builder added it
 ```
 
 The first project is called `DEFAULT`. A new project is named `NEW1`, `NEW2` and so on. Give a
@@ -494,7 +497,7 @@ FUNC menu's LOAD DEMO brings back (a NEW PROJECT starts empty). It takes about f
 | A02 | GROOVE+ | The same beat developing: a kick pickup every fourth bar, a hat roll, a clap on FILL, a 12-step perc line and a 7-step loop against the 16 |
 | A03 | BREAK | Kick and bass out; long dub chords, a perc ticking at 35% probability |
 | A04 | PEAK | Everything up: ratcheted hats, an acid bass line, a rave stab, kick and clap rolls on FILL |
-| A05 | PAD | Held chords over a quiet beat: Cm9, Abmaj7, Ebmaj7 and Gm7, a bar each, swelling in and ringing into the next. The sound of the [ENV page](#held-notes-the-asr-page) |
+| A05 | PAD | Held chords over a quiet beat: Cm9, Abmaj7, Ebmaj7 and Gm7, a bar each, swelling in and ringing into the next. The sound of the [ENV page](#held-notes-the-env-page) |
 
 It also ships a chain (GROOVE x2, GROOVE+ x2, BREAK, PEAK x2, GROOVE+, about two minutes) that
 starts **off**, eight mute states, and scenes 2-4: **DUB** (chord, rim, loop and clap pushed into
@@ -768,7 +771,7 @@ with accent, slide and glide.
 | OSC | **WAV** saw, square, pulse | **OS2** off, 1-63 detune, 64-127 sync | **SUB** sub level | **DRV** drive |
 
 With SUS at 0 (the default) DEC is the note's length. Turn SUS up for long, held notes: see
-[Held notes: the ENV page](#held-notes-the-asr-page).
+[Held notes: the ENV page](#held-notes-the-env-page).
 
 FLTR is the voice's own filter, the only one on the track (TON on SRC is a tone knob after
 it). ENV 0 is a static dub bass; ENV and RES up is the acid squelch; RES at the top
@@ -801,7 +804,7 @@ each with inversions `/n`).
 | OSC | **WAV** | **OS2** as MNO | **SUB** | **DRV** |
 
 For pads, turn SUS up on the ENV page: a chord then holds for its step's LEN, or for as long as you
-hold the keys ([Held notes: the ENV page](#held-notes-the-asr-page)).
+hold the keys ([Held notes: the ENV page](#held-notes-the-env-page)).
 
 Every note is a sustaining voice and costs CPU while it rings. All VA POLY, WAVE POLY and FM4 tracks
 together share a budget of **12 voices**; past it, the quietest note is faded out quickly to make room. A longer
@@ -1103,6 +1106,24 @@ outside clock that keeps running, STRATA goes quiet at the end and waits for PLA
 STOP. The header shows which (`CHAIN 3/64 ON SONG`). Both are saved with the project; a project
 from before song mode loops, with no recalls.
 
+### Track Launch: one track from another pattern
+
+Play the bass of B07 under the drums of A01 without making a new pattern. Press PROJECT twice
+quickly for the **LAUNCH** page: a row for each track with the 16 slots of the shown bank. Pick
+the track with UP/DOWN or its lower pad (the pads make no sound here), then press a STEP key:
+that track plays the same track's part of that pattern from the next boundary, from its own step
+1 (`T3 < B07 AT END`). Hold several lower pads to launch on all of them. CLR sends the track back
+to its own part.
+
+A launched track is read only: its steps belong to the other pattern, so edits are refused
+(`T3 B07 READ ONLY`). When the mix is right, **hold OK**: CAPTURE writes what plays into the
+first empty slot of the bank and switches to it, every track on its own part again, ready to edit.
+
+A pattern change sends every track back to its own part, unless you **pin** it with push B: a
+pinned track keeps playing what it plays across pattern changes. Launches are saved with the
+project, not in the chain. On GRID a launched track's number is underlined and the info line
+says which pattern it plays (`<B07`).
+
 ### Recording
 
 REC toggles live and motion recording. With the transport running, pad hits, KEYS and MIDI notes
@@ -1390,8 +1411,8 @@ Two held master moves, both in the performance mixer (below) since backlog D1 (#
 
 Neither is saved or undone; both cost nothing until used. With the delay in its LONG mode
 (below) the freeze is the LONG delay's own: the whole wash holds exactly as it is, whatever its
-length. The old chord FUNC + hold push D now only says where the move went (`TAPE STOP: SLOT
-8`), and FUNC + MUTATE is LOCK (below); see "Gestures that moved" in CHANGELOG.md.
+length. FUNC + hold push D only says where the tape stop is (`TAPE STOP: SLOT 8`), and
+FUNC + MUTATE is LOCK (below); "Gestures that moved" in CHANGELOG.md lists older gestures.
 
 ### LOCK: store a moment, jump back to it
 
@@ -1480,8 +1501,8 @@ every screen. Picking it leaves the effect that was up where it is, so you can m
 effect still in (`MORPH 64` as you turn). Push VALUE + STEP 13 again lets go and leaves the
 morph where it is (`MORPH KEPT: VALUE TEMPO`). The looper (16) is the other slot like it.
 
-The stutter that slot 7 used to be is the REPEAT pad's, and the master DJ filter is slots 1 and
-2 (its saved setting is MIXER's MST page): FUNC + VALUE only says `DJ FILTER: SLOT 1/2` now.
+The stutter is the REPEAT pad's, and the master DJ filter is slots 1 and 2 (its saved setting
+is MIXER's MST page): FUNC + VALUE only says `DJ FILTER: SLOT 1/2`.
 
 **The looper (STEP 16).** Push VALUE + STEP 16 with the beat running: from the next bar line the
 whole mix is recorded for 4 bars (`LOOP 4 BAR: NEXT BAR`; set 1, 2, 4 or 8 in the FUNC menu's
@@ -1801,6 +1822,32 @@ delete removes `PROJECT.BIN` first, so a folder it did not finish is no longer a
 A delete that finds a folder inside the project's folder (put there from a computer) removes
 everything else and says `FOLDER NOT EMPTY`.
 
+### Starter projects and the sample pack
+
+The card builder can add ten starter projects, each a short arrangement in its own style, built
+from the factory sounds and opening with the chain on:
+
+| Project | Style | Tempo, key |
+| --- | --- | --- |
+| TECHNO | Driving groove techno | 132, G minor |
+| DEEP | Deep house, FM4 e-piano chords | 122, A minor |
+| DUB | Dub techno, one chord into a long echo | 118, F minor |
+| DRIFT | Ambient, WAVE POLY chords in the HALL | 80, D dorian |
+| ELECTRO | 808 kit, rubbery bass, a synced lead | 128, E phrygian |
+| NIGHT | Synthwave over a breakbeat | 132, A minor |
+| BREAKS | A synthesized break that changes by chance | 134, A minor |
+| STEEL | Straight breaks, ratchets, a driven reese | 140, E minor |
+| SMASH | Drum chaos, ghosts and rolls | 155, F minor |
+| CHAOS | BREAKS pulled apart: rolls to 1/64, constant mutation | 150, D phrygian |
+
+Open one on the PROJECTS page like any other project. A changed starter project is yours to keep:
+save it, or SAVE AS a new name to keep the original as it came. They need STRATA 0.5.0 or newer.
+
+The sample pack, in `/SAMPLES/STRATA`, holds 105 files in DRUMS, PERC, BASS, LEADS and CHORDS,
+each rendered by one of STRATA's own machines from a factory sound. Melodic files name their
+note (`MONO_ACID_C2`): played at C4 on a SAMPLE track they sound at that note. `M7` files are C
+minor seventh chords.
+
 ### The kit library
 
 <p><img src="screens/kit.png" width="256" alt="KIT: the kit library"></p>
@@ -1945,7 +1992,8 @@ under 30%, and long, heavy play has peaked at 84% without a dropout. If the load
 sound crackles:
 
 - **VA POLY, WAVE POLY and FM4** are the biggest cost: every chord note is a sustaining voice. Use shorter DEC, fewer
-  notes per chord (MIN rather than MIN11), or fewer POLY tracks. All POLY tracks share 12 voices.
+  notes per chord (MIN rather than MIN11), or fewer POLY tracks. All POLY tracks share 12 voices,
+  and a unison note (WID 64 and up) counts two.
 - **GRAIN** with high DEN is eight grains at once; lower DEN or use SAMPLE.
 - **The CPU guard** steps in on its own when the load stays high: the tabs' line shows
   `GUARD1` to `GUARD4` at its right, POLY chords get thinner (two voices fewer a step, the quietest fading
@@ -1958,7 +2006,8 @@ sound crackles:
   in the project to almost nothing. See "Freeze" in section 5.
 - **The insert filter and lo-fi** cost nothing when off. Set FLTR MOD to OFF and LOF to 0 on the
   tracks that do not need them.
-- **Closed sends** cost nothing: keep SNA and SNB at 0 on tracks that do not use the delay or reverb.
+- **Closed sends** cost nothing: keep SNA and SNB at 0 on tracks that do not use the delay or
+  reverb. The chorus costs nothing while no track's CHO send is up.
 
 ### Sample messages
 

@@ -344,23 +344,33 @@ Glide glide_target(const TrackPattern &source, const TrackTiming &timing, float 
 void Scheduler::reset(bool first_loop) {
     // Chaining state only: configure()'s timing survives a reset, which is what lets the
     // transport stop and start without re-deriving every track.
-    for (int t = 0; t < kTracks; t++) {
-        tracks_[t].playhead = 0;
-        tracks_[t].last_condition = true;   // PRE on a fresh pattern's first step reads true
-        tracks_[t].first_pass_loop = 0;
-        tracks_[t].seen_a_loop = false;
-    }
-    first_loop_ = first_loop;
+    for (int t = 0; t < kTracks; t++) reset_lane(t, first_loop);
+}
+
+void Scheduler::reset_lane(int track, bool first_loop) {
+    if (track < 0 || track >= kTracks) return;
+    TrackState &state = tracks_[track];
+    state.playhead = 0;
+    state.last_condition = true;   // PRE on a fresh pattern's first step reads true
+    state.first_pass_loop = 0;
+    state.seen_a_loop = false;
+    state.first_loop = first_loop;
 }
 
 void Scheduler::configure(const Pattern &pattern, float samples_per_tick) {
-    pattern_seed_ = pattern.seed;
+    const Pattern *lanes[kTracks];
+    for (int t = 0; t < kTracks; t++) lanes[t] = &pattern;
+    configure(pattern, lanes, samples_per_tick);
+}
 
-    const int pattern_swing = clamp_int(int(pattern.swing), kSwingMin, kSwingMax);
+void Scheduler::configure(const Pattern &master, const Pattern *const lanes[kTracks],
+                          float samples_per_tick) {
+    const int pattern_swing = clamp_int(int(master.swing), kSwingMin, kSwingMax);
     const float tick_samples = samples_per_tick > 0.0f ? samples_per_tick : 0.0f;
 
     for (int t = 0; t < kTracks; t++) {
-        const TrackPattern &source = pattern.tracks[t];
+        const Pattern &lane = lanes[t] != nullptr ? *lanes[t] : master;
+        const TrackPattern &source = lane.tracks[t];
         TrackState &state = tracks_[t];
 
         state.timing.length = uint8_t(clamp_int(int(source.length), 1, kMaxSteps));
@@ -380,15 +390,29 @@ void Scheduler::configure(const Pattern &pattern, float samples_per_tick) {
 
 int Scheduler::tick(uint32_t tick_number, uint32_t frame, const Pattern &pattern,
                     const PerformState &perform, StepEvent *out, int max) {
-    // The draw must follow the pattern it is handed, not one a stale configure() saw.
-    pattern_seed_ = pattern.seed;
+    uint32_t ticks[kTracks];
+    const Pattern *lanes[kTracks];
+    for (int t = 0; t < kTracks; t++) {
+        ticks[t] = tick_number;
+        lanes[t] = &pattern;
+    }
+    return tick(ticks, frame, pattern, lanes, perform, out, max);
+}
 
+int Scheduler::tick(const uint32_t lane_ticks[kTracks], uint32_t frame, const Pattern &master,
+                    const Pattern *const lanes[kTracks], const PerformState &perform,
+                    StepEvent *out, int max) {
     const int limit = (out == nullptr || max <= 0) ? 0 : max;
     int written = 0;
 
     for (int t = 0; t < kTracks; t++) {
         TrackState &state = tracks_[t];
+        // The lane's own pattern (core/launch.hpp): its steps, locks and seed. The draw follows
+        // the pattern it is handed, not one a stale configure() saw.
+        const Pattern &pattern = lanes[t] != nullptr ? *lanes[t] : master;
         const TrackPattern &source = pattern.tracks[t];
+        const uint32_t seed = pattern.seed;
+        const uint32_t tick_number = lane_ticks[t];
 
         // core/timing wants micro-timing as a plain array and Step is 12 bytes wide, so the
         // column has to be gathered. 64 bytes of stack, read fresh every tick: a step edit
@@ -402,12 +426,13 @@ int Scheduler::tick(uint32_t tick_number, uint32_t frame, const Pattern &pattern
         state.timing.play = live_play_mode(source.play, perform.rnd_unit, perform.rnd_armed, t);
         // Only the RND modes draw, so only they pay for the hash.
         state.timing.play_seed =
-            state.timing.play >= PlayMode::rnd1 ? play_seed(pattern_seed_, t) : 0u;
+            state.timing.play >= PlayMode::rnd1 ? play_seed(seed, t) : 0u;
 
-        // FEEL, fresh as well: a pattern setting an undo or a LOCK jump can change.
-        state.timing.feel = pattern.feel <= kFeelMax ? pattern.feel : uint8_t(0);
+        // FEEL, fresh as well: a pattern setting an undo or a LOCK jump can change. It is the
+        // playing pattern's, a launched part's included: FEEL is the groove of the whole.
+        state.timing.feel = master.feel <= kFeelMax ? master.feel : uint8_t(0);
         state.timing.feel_seed = feel_mode(state.timing.feel) == FeelMode::drift
-                                     ? feel_seed(pattern_seed_, t)
+                                     ? feel_seed(master.seed, t)
                                      : 0u;
 
         Firing firings[kMaxFiringsPerTick];
@@ -431,7 +456,7 @@ int Scheduler::tick(uint32_t tick_number, uint32_t frame, const Pattern &pattern
                 if (perform.energy > 0 && written < limit) {
                     uint8_t velocity = 0;
                     const EnergyTier tier = EnergyTier(perform.energy_tier[t]);
-                    if (!energy_ghost(perform.energy, tier, pattern_seed_, t, firing.step,
+                    if (!energy_ghost(perform.energy, tier, seed, t, firing.step,
                                       velocity)) {
                         continue;
                     }
@@ -467,7 +492,7 @@ int Scheduler::tick(uint32_t tick_number, uint32_t frame, const Pattern &pattern
                 state.first_pass_loop = firing.loop;
                 state.seen_a_loop = true;
             }
-            const bool is_first = first_loop_ && firing.loop == state.first_pass_loop;
+            const bool is_first = state.first_loop && firing.loop == state.first_pass_loop;
             const bool neighbour = t == 0 ? false : tracks_[t - 1].last_condition;
 
             const bool passed = condition_passes(step.condition, firing.loop, perform.fill,
@@ -480,8 +505,7 @@ int Scheduler::tick(uint32_t tick_number, uint32_t frame, const Pattern &pattern
             const uint8_t probability = energy_probability(step.probability, perform.energy);
             if (probability == 0) continue;
             if (probability < 100 &&
-                probability_roll(pattern_seed_, t, firing.step, firing.loop) >=
-                    uint32_t(probability)) {
+                probability_roll(seed, t, firing.step, firing.loop) >= uint32_t(probability)) {
                 continue;
             }
 
@@ -492,7 +516,7 @@ int Scheduler::tick(uint32_t tick_number, uint32_t frame, const Pattern &pattern
             // so a thinned hit counts as a pass for PRE as a failed roll does. A trigless step
             // is never thinned: its locks are a sweep someone programmed.
             if (has_trig && perform.energy < 0 &&
-                !energy_keeps(perform.energy, EnergyTier(perform.energy_tier[t]), pattern_seed_,
+                !energy_keeps(perform.energy, EnergyTier(perform.energy_tier[t]), seed,
                               t, firing.step, accent)) {
                 continue;
             }

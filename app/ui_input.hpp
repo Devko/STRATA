@@ -45,6 +45,8 @@
             return;
         }
         if (down) shift_alone_ = false;
+        // Any other key between two PROJECT presses makes them two presses, not a double tap.
+        if (down && key != ENAGA_KEY_F3) project_tapped_ = false;
         // A press of VALUE on its own, let go with nothing turned or pressed in between, resets
         // what VALUE is on to 0 (Roland, 2026-11-23; value_reset). Held, it stays the modifier
         // for swing, STEP, LEFT/RIGHT and CLR, which is why it acts on the RELEASE.
@@ -84,6 +86,8 @@
         if (on_slot_menu_key(key, down)) return;
         // GRID: a held OK opens the track menu (GEN and EVOLVE), which then takes its keys.
         if (on_track_menu_key(key, down)) return;
+        // PROJECT's LAUNCH page: STEP, OK, CLR, the arrows and push B are its own.
+        if (on_launch_key(key, down)) return;
 
         // FUNC + push D was the held tape stop until 2026-11-25 (backlog D5): one home per job,
         // and the tape stop's is the mixer's slot 8. The chord says where it went rather than
@@ -666,6 +670,19 @@
                     // to the FUNC menu (FUNC + HOME, OK).
                     open_samples();
                     break;
+                }
+                // PROJECT double-tapped opens LAUNCH, as HOME double-tapped opens KEYS (Track
+                // Launch): the second press within kDoubleTapMs, with no other key between.
+                {
+                    const bool double_tap = mode_ == Mode::project && project_tapped_ &&
+                                            uint32_t(last_ms_ - project_tapped_at_ms_) < kDoubleTapMs;
+                    project_tapped_ = !double_tap;
+                    project_tapped_at_ms_ = last_ms_;
+                    if (double_tap) {
+                        project_page_ = ProjectPage::launch;
+                        notice(project_page_name(project_page_));
+                        break;
+                    }
                 }
                 mode_ = Mode::project;
                 leave_mode();

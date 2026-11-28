@@ -549,6 +549,13 @@ struct ProjectSettings {
     uint8_t evolve_kind = kEvolveKindDefault;
     uint8_t evolve_amount = 50;
 
+    // Track Launch (core/launch.hpp): what each lane plays, 0 its own part in the playing
+    // pattern or 1-128 the same track of pattern A01-H16 (lane_source), and which lanes are
+    // pinned (bit t = lane t), so a set comes back with the parts it was playing. Saved in
+    // PROJECT.BIN's optional section 8; the queued launches are live state and are not.
+    uint8_t lane_source[kTracks] = {};
+    uint8_t lane_pinned = 0;
+
     // The two send effects and the master bus, as encoder bytes rather than as the floats the
     // mixer runs on. One byte per field, in dsp/buses.hpp's `SendField` and `MasterField`
     // order, which is why those two enums are declared permanent: these indices reach a file.
@@ -661,6 +668,10 @@ constexpr uint16_t kSectionProjectMidi = 6;
 // Optional on read like the ones above: an older file has every track's EVOLVE off, ORBIT,
 // VELOCITY at 50, which is what a fresh project has.
 constexpr uint16_t kSectionProjectEvolve = 7;
+// Track Launch (core/launch.hpp): each lane's source, then the pin mask. Optional on read like
+// the ones above: an older file has every lane on its own part, which is how it played; an older
+// build ignores the section and plays the playing pattern whole.
+constexpr uint16_t kSectionProjectLaunch = 8;
 
 constexpr uint16_t kKitVersion = 1;
 constexpr uint16_t kSectionKitTracks = 1;

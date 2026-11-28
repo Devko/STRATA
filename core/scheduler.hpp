@@ -118,6 +118,10 @@ public:
     // the 1ST and NOT 1ST conditions test.
     void reset(bool first_loop = true);
 
+    // Forget one lane's chaining state: a launched part (core/launch.hpp) starts its passes, its
+    // PRE chain and its 1ST window from scratch, while the other seven run on.
+    void reset_lane(int track, bool first_loop = true);
+
     // Per-track timing, derived from the pattern. Call when the pattern or its lengths change,
     // not per tick: it resolves each track's swing against the pattern's and clamps lengths.
     //
@@ -129,6 +133,12 @@ public:
     // per tick. Left at zero, a ratchet still emits its full count with the right velocities,
     // but every hit lands on the step's own frame.
     void configure(const Pattern &pattern, float samples_per_tick = 0.0f);
+
+    // The same with Track Launch (core/launch.hpp): lane t plays track t of `lanes[t]`, with that
+    // pattern's length, speed and fixed swing; a track that follows the pattern's swing follows
+    // `master`'s, the playing pattern. A null lane plays `master`.
+    void configure(const Pattern &master, const Pattern *const lanes[kTracks],
+                   float samples_per_tick);
 
     // Resolve one tick. Appends to `out`, returns how many events were written.
     //
@@ -151,6 +161,15 @@ public:
     int tick(uint32_t tick_number, uint32_t frame, const Pattern &pattern,
              const PerformState &perform, StepEvent *out, int max);
 
+    // The same with Track Launch: each lane plays its own pattern (`lanes[t]`, null for
+    // `master`) at its own tick, `lane_ticks[t]`, counted from where that lane's part started,
+    // so a launched part has its own step 1, passes and 1ST. A part brings its steps, locks,
+    // length, speed, play mode and seed (probability, random ranges and the RND play modes draw
+    // as they did in their own pattern); FEEL is the playing pattern's, `master`.
+    int tick(const uint32_t lane_ticks[kTracks], uint32_t frame, const Pattern &master,
+             const Pattern *const lanes[kTracks], const PerformState &perform, StepEvent *out,
+             int max);
+
     // The playhead, for the UI: which step each track is currently on. Updated by tick().
     uint8_t playhead(int track) const;
 
@@ -169,11 +188,11 @@ private:
         // "changed since last time" would end the 1ST window a pass too soon.
         uint32_t first_pass_loop = 0;
         bool seen_a_loop = false;     // whether first_pass_loop has been anchored yet
+        // Whether the pass reset() or reset_lane() anchored counts as a first pass (1ST).
+        bool first_loop = true;
     };
 
     TrackState tracks_[kTracks];
-    bool first_loop_ = true;
-    uint32_t pattern_seed_ = 0;
 };
 
 // --- step stutter ---------------------------------------------------------

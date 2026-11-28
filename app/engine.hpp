@@ -45,6 +45,7 @@
 #include "masterfx.hpp"  // its own master effects: pump, crush, noise, gate
 #include "looper.hpp"    // its slot 16: the master looper, in RESAMPLE's buffer
 #include "lockstore.hpp" // LOCK: FUNC + MUTATE stores, jumps and swaps back
+#include "launch.hpp"    // Track Launch: a lane playing another slot's part
 #include "moveall.hpp"   // REL ALL and LEN ALL: every track's release and note length
 #include "arp.hpp"       // the arpeggiator's notes
 #include "sample.hpp"
@@ -107,6 +108,9 @@ public:
     // and the UI is the one saving, nothing is writing pattern memory at all.
     const Project &project() const { return project_; }
     const Queue &queue() const { return queue_; }
+    // Track Launch: a lane's queued launch (core/launch.hpp), and the pattern lane `track` plays.
+    const LaneQueue &lane_queue(int track) const { return lane_queue_[track]; }
+    const Pattern &lane(int track) const { return lane_pattern(project_, track); }
     const ChainPlayer &chain() const { return chain_; }
     const TrackParams &params(int track) const { return params_[track]; }
     const Machine *machine(int track) const { return machines_[track]; }
@@ -413,6 +417,14 @@ private:
     // A whole pattern in memory was replaced (pattern_copy, pattern_clear): when it is the one
     // playing, what was derived from it is stale, as after a switch.
     void pattern_replaced(int bank, int slot);
+    // Track Launch: lane `track` plays `source` from now on, from its step 1 at `start` when
+    // `restart`, else keeping its place. Its pending ratchet hits, roll and slides belong to the
+    // part it left and go.
+    void land_launch(int track, uint8_t source, bool restart, uint32_t start);
+    // The lanes' own patterns for the scheduler.
+    void lane_patterns(const Pattern *lanes[kTracks]) const;
+    // The lane a track-edit command names plays another part: refused, and said (Status).
+    bool launch_refuses(const Command &command, int track);
 
     // The pass boundary passed: let a chain move on if one is playing.
     void cross_boundary(uint32_t boundary);
@@ -642,6 +654,13 @@ private:
     // and there is no cross-context struct to tear. core/queue.hpp was written expecting that.
     Queue queue_;
     ChainPlayer chain_;
+    // Track Launch (core/launch.hpp): each lane's queued launch, and where each lane's part
+    // started. A lane whose bit is set in `lane_follows_` counts from the pattern's `origin_`, as
+    // every lane did before; a launched lane, or a pinned one kept through a pattern change,
+    // counts from its own `lane_origin_`.
+    LaneQueue lane_queue_[kTracks];
+    uint32_t lane_origin_[kTracks] = {};
+    uint8_t lane_follows_ = 0xFF;
     // Song mode: the song has played to its end and the sequencer is silent until the transport
     // stops or starts again (`cross_boundary`).
     bool song_over_ = false;

@@ -853,6 +853,19 @@ free.
 - Start another, let it run 30 s with four streamed samples playing if you have them, then
   power off with it running. On the PC the second file has the next number and plays to the
   end. `____`
+**W64. Track Launch (5 min).** Beat playing, A01. First put a part in A07: PROJECT, STEP 7, let
+it switch, put a few trigs on track 3 that sound clearly different, then PROJECT, STEP 1 back.
+- PROJECT twice quickly: `LAUNCH`, a row per track. Press pad 3 of the lower row: no sound, the
+  row of track 3 is marked. STEP 7: `T3 < A07 AT END`, its cell blinks. At the end of A01 track 3
+  plays A07's part, starting on the bar, in time; the other tracks carry on. `T3 A07`. `____`
+- HOME: GRID shows A07's trigs on track 3, its number underlined, the info line ends `<A07`. Tap
+  a STEP of track 3: `T3 A07 READ ONLY`, nothing changes. `____`
+- PROJECT twice, push B: `T3 PINNED`. FUNC + STEP 2 for A02: at the boundary track 3 still plays
+  A07, the others A02. Push B again, then FUNC + STEP 1: track 3 goes back to its own part. `____`
+- Launch A07 on track 3 again, hold two pads (1 and 2) and press STEP 7: tracks 1 and 2 land
+  together. Hold OK for half a second: `CAPTURED A0x` (the first empty slot), no gap in the
+  sound, and GRID now edits track 3. `____`
+- Launch something, save, power cycle, open: the launch is still playing. `____`
 
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
@@ -3020,4 +3033,3 @@ sends), rim -35.6, blips -37.7; the mix -17.0 RMS with peaks at the limiter.
       only, the bare groove without rim and blips.
 - [ ] Anything that sounds wrong, say which and how: each value has its arithmetic in a comment
       in core/factory.cpp, so a change is one number.
-
