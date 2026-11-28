@@ -2,7 +2,7 @@
 """Compare an import's render with the original, and make an A/B file to listen to.
 
     python tools/midi_import/ab.py ORIGINAL.wav STRATA.wav --bpm 135 [--bars 8] [--ab OUT.wav]
-                                   [--pairs 17,49]
+                                   [--pairs 17,49] [--skip SECONDS]
 
 Prints, for every section of --bars bars, the loudness of each in four bands (lows < 150 Hz,
 low mids to 1 kHz, high mids to 5 kHz, highs) and the difference, so a track that is too loud or
@@ -56,10 +56,14 @@ def main():
     ap.add_argument('--bpm', type=float, required=True)
     ap.add_argument('--bars', type=int, default=8)
     ap.add_argument('--ab')
+    ap.add_argument('--skip', type=float, default=0.0,
+                    help='seconds to drop from the original start, when its export began before '
+                    'the bar the import starts on (Live exports from the selection)')
     ap.add_argument('--pairs', help='sections by their first bar, e.g. 17,49,65: each played by '
                     'the original and then by STRATA (with --ab), instead of alternating the song')
     args = ap.parse_args()
     a, b = read(args.original), read(args.strata)
+    a = a[int(round(args.skip * RATE)):]
     sec = int(round(args.bars * 4 * 60.0 / args.bpm * RATE))
     n = min(len(a), len(b)) // sec
     print(f"original {rms_db(a):6.1f} dB rms, STRATA {rms_db(b):6.1f} dB rms over the whole song")

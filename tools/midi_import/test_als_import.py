@@ -158,6 +158,15 @@ class SetToProject(unittest.TestCase):
         reps, group, _ = self.a2s.cluster([hit, other, hit * 0.99, other], 3.0)
         self.assertEqual(group, [0, 1, 0, 1])
 
+    def test_onsets_skip_a_kick_body_inside_a_16th(self):
+        import numpy as np
+        x = np.zeros((48000, 2), dtype=np.float32)
+        for start in (0, 12000, 24000):
+            x[start:start + 240] = 0.05         # the click
+            x[start + 2400:start + 4800] = 0.8  # the body, 50 ms later: the same hit
+        hits = self.a2s.onsets(x, 24000, 4800)
+        self.assertEqual([s for s, _ in hits], [0, 12000, 24000])
+
     def test_slice_knob_matches_the_sampler(self):
         # dsp/sample.cpp: slices = 1 + round(knob / 127 * 15). import_project.cpp's slice_knob.
         for n in range(1, 17):

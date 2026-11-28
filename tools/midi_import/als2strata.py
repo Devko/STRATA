@@ -204,7 +204,9 @@ def hit_events(data, spec, t0, t1, frames):
                     cache[key] = _trim(buf)
                 events.append((n['start_beats'], cache[key], n['vel'] / 127.0 * auto))
             continue
-        long_clip = any(a['end'] - a['start'] > 0.5 * (t1 - t0) for a in t['audio'])
+        # Clips no longer than two hits are hits; anything longer (a loop, a consolidated
+        # track) is searched for the hits inside it.
+        long_clip = any((a['end'] - a['start']) * spb * RATE > 2 * max_frames for a in t['audio'])
         if not long_clip:
             for a in t['audio']:
                 if a['disabled'] or not t0 <= a['start'] < t1:
@@ -217,11 +219,10 @@ def hit_events(data, spec, t0, t1, frames):
                 if buf.any():
                     events.append((a['start'], _trim(buf), 1.0))
             continue
-        # One clip over the whole song (a consolidated track): find its hits.
         stem = als_bounce.render_track(data, t, t0, frames)
         if stem is None:
             continue
-        for start, end in onsets(stem, max_frames):
+        for start, end in onsets(stem, max_frames, int(spb / 4 * RATE * 0.9)):
             beat = t0 + start / RATE / spb
             events.append((beat, _trim(stem[start:end]), 1.0))
     return events
@@ -233,17 +234,18 @@ def _trim(x, floor=1e-4):
     return x[:loud[-1] + 1] if len(loud) else x[:0]
 
 
-def onsets(stem, max_frames):
+def onsets(stem, max_frames, min_gap):
     """(start, end) frames of the hits in a stem: a rise of 15 dB over the last 50 ms to above
-    -50 dBFS starts one; it ends at the next, at max_frames or in silence."""
+    -50 dBFS starts one, at least min_gap frames (about a 16th) after the last, so a kick's body
+    after its click is not a hit of its own; it ends at the next, at max_frames or in silence."""
     hop = 240
     m = np.max(np.abs(stem), axis=1)
     n = len(m) // hop
     env = 20 * np.log10(m[:n * hop].reshape(n, hop).max(axis=1) + 1e-9)
     starts = []
-    for i in range(1, n):
-        floor = env[max(0, i - 10):i].min()
-        if env[i] > -50 and env[i] - floor > 15 and (not starts or i - starts[-1] > 8):
+    for i in range(n):
+        floor = env[max(0, i - 10):i].min() if i else -120.0    # silence before the stem
+        if env[i] > -50 and env[i] - floor > 15 and (not starts or (i - starts[-1]) * hop >= min_gap):
             starts.append(i)
     out = []
     for k, i in enumerate(starts):
