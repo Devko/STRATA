@@ -8,10 +8,10 @@
 //
 // `LiveState`: the playing pattern whole (steps, p-locks, conditions, lengths, swing), every
 // track's sound bytes and fader, the send and master bytes, the mutes, the morph position and
-// the four macro positions, REL ALL and LEN ALL (core/moveall.hpp), LIVE RND and ENERGY
-// (core/energy.hpp). Not the tempo (STRATA may not own it under external sync), not the
-// samples, the machines or the chain, and not the performance mixer: a jump rides the picked
-// effect to rest instead (app/), and a loop keeps playing.
+// the four macro positions, REL ALL and LEN ALL (core/moveall.hpp), LIVE RND, ENERGY
+// (core/energy.hpp) and TRANSPOSE (core/transpose.hpp). Not the tempo (STRATA may not own it
+// under external sync), not the samples, the machines or the chain, and not the performance
+// mixer: a jump rides the picked effect to rest instead (app/), and a loop keeps playing.
 //
 // ## Why the swap-back exists (R1)
 //
@@ -60,6 +60,7 @@ struct LiveState {
     uint8_t rnd_unit;              // LIVE RND (core/liverand.hpp): the unit, 0 OFF
     uint8_t rnd_armed;             // and the armed tracks, bit t = track t
     int8_t energy;                 // ENERGY (core/energy.hpp), 0 at rest
+    int8_t transpose;              // TRANSPOSE (core/transpose.hpp), 0 at rest
 };
 
 // Byte for byte, except the faders, which are compared as floats (a fader is never NaN: the

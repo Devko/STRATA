@@ -4,6 +4,7 @@
 #include "factory.hpp"
 #include "liverand.hpp"    // LIVE RND: the unit held to its range
 #include "energy.hpp"      // ENERGY: the amount held to its range, the tiers
+#include "transpose.hpp"   // TRANSPOSE: which tracks move, and the note moved
 #include "chainloops.h"    // strata_choke_fade, a choke group's fade
 #include "masterloops.h"   // strata_master_peak, for the input meter
 #include "pcm.hpp"         // a streamed file's bytes to int16, in top_up_streams
@@ -1188,6 +1189,13 @@ bool Engine::apply_perform(const Command &command, int track, int step) {
             perform_.energy = energy_turn(int8_t(command.a), 0);    // held to the range
             break;
 
+        case Cmd::set_transpose:
+            // Heard from the next note: a note already sounding keeps its pitch, as a key
+            // change on a keyboard leaves the held keys alone.
+            transpose_ = transpose_turn(int8_t(command.a), 0);      // held to the range
+            transpose_semis_ = command.b != 0;
+            break;
+
         case Cmd::set_varispeed:
             // The pitch half. The clock is the main context's (app/ has set Enaga's tempo); the
             // machines take the semitones on the next run_lfos, and the delay's beat follows the
@@ -1374,7 +1382,11 @@ bool Engine::apply_notes(const Command &command, int track, int) {
             // machine and sound the moment the track was unmuted.
             if (machines_[track] && !muted_[track]) {
                 Trig trig;
-                trig.note = clamp_7bit(command.a);
+                // TRANSPOSE moves a played note as it moves a step's. A held key remembers the
+                // shift it took, so its release lets go of that pitch (Cmd::release_note).
+                const uint8_t played = clamp_7bit(command.a);
+                trig.note = transposed(track, played);
+                if (command.c == 1) key_shift_[track][played] = int8_t(int(trig.note) - int(played));
                 trig.velocity = uint8_t(command.b < 1 ? 1 : (command.b > 127 ? 127 : command.b));
                 trig.frame = 0;
                 trig.held = command.c == 1;   // a key or MIDI IN note: its release comes
@@ -1437,10 +1449,13 @@ bool Engine::apply_notes(const Command &command, int track, int) {
             // A KEYS key coming up. Not refused on a muted track or with nothing holding the
             // note: a release with nothing to let go is the second half of a gesture whose
             // first half was swallowed, and it changes nothing (dsp/track.hpp, `release`).
-            if (machines_[track]) machines_[track]->release(clamp_7bit(command.a));
-            midi_out_.release(midi_sink_, track, clamp_7bit(command.a));
-            // And out of the arp's held notes, if it was one.
+            // At the pitch it sounded at: the transpose of its press, not of now.
             const uint8_t note = clamp_7bit(command.a);
+            const uint8_t sounded = transpose_note(note, key_shift_[track][note]);
+            key_shift_[track][note] = 0;
+            if (machines_[track]) machines_[track]->release(sounded);
+            midi_out_.release(midi_sink_, track, sounded);
+            // And out of the arp's held notes, if it was one.
             uint8_t &count = held_count_[track];
             for (int i = 0; i < count; i++) {
                 if (held_notes_[track][i] != note) continue;
@@ -3680,6 +3695,17 @@ void Engine::span_tick(uint32_t tick, uint32_t frame) {
     }
 }
 
+// TRANSPOSE (core/transpose.hpp): `note` as `track` plays it now, through the key or by
+// semitones. Unmoved at rest and on every track that does not fold into the scale; SAMPLE asks
+// its slice count as the fold does.
+uint8_t Engine::transposed(int track, uint8_t note) const {
+    if (transpose_ == 0 || machines_[track] == nullptr ||
+        !transpose_moves(machine_id_[track], pool_[track].sampler.slices())) {
+        return note;
+    }
+    return transpose_apply(note, transpose_, transpose_semis_, key_root(), int(key_scale()));
+}
+
 // --- note repeat ---------------------------------------------------------
 
 float Engine::roll_period_frames() const {
@@ -3697,7 +3723,7 @@ void Engine::roll_fire(int track, uint32_t frame) {
     if (machines_[track] == nullptr || muted_[track]) return;
     const Roll &roll = rolls_[track];
     Trig trig;
-    trig.note = roll.note;
+    trig.note = transposed(track, roll.note);   // each hit at the transpose of now
     trig.velocity = roll.velocity;
     trig.frame = frame;
     trig.gate_frames = roll_gate_frames();
@@ -3848,6 +3874,10 @@ void Engine::arp_hit(int track, ArpRun &run, uint32_t frame) {
 void Engine::arp_play(int track, uint8_t note, uint8_t velocity, bool accent, uint32_t frame,
                       uint32_t gate_frames) {
     if (machines_[track] == nullptr || muted_[track]) return;
+    // TRANSPOSE here, on every hit, so a run moves the moment the transpose does, and a KEYS
+    // arp's held notes move with the steps' (core/transpose.hpp). `fire` hands the arp the
+    // folded notes unmoved for that reason.
+    note = transposed(track, note);
     Trig trig;
     trig.note = note;
     trig.velocity = velocity;
@@ -4149,9 +4179,15 @@ void Engine::fire(const StepEvent &event) {
         const uint8_t key_root_now = key_root();
         const int key_scale_now = int(key_scale());
         const int slices = pool_[track].sampler.slices();
-        const uint8_t note = machine_folds_note(machine_id_[track], slices)
-                                 ? scale_fold(event.note, key_root_now, key_scale_now)
-                                 : event.note;
+        const uint8_t folded = machine_folds_note(machine_id_[track], slices)
+                                   ? scale_fold(event.note, key_root_now, key_scale_now)
+                                   : event.note;
+        // TRANSPOSE (core/transpose.hpp) after the fold, on exactly the tracks that fold: the
+        // key moves with the notes. 0 on every other track and at rest.
+        const bool moves = transpose_ != 0 && transpose_moves(machine_id_[track], slices);
+        const uint8_t note = moves ? transpose_apply(folded, transpose_, transpose_semis_,
+                                                     key_root_now, key_scale_now)
+                                   : folded;
         sent_note_[track] = note;
 
         Trig trig;
@@ -4183,7 +4219,7 @@ void Engine::fire(const StepEvent &event) {
             // for a step with no length. The first hit is now, on the step's own frame.
             uint8_t input[kChordMaxNotes];
             int count = 1;
-            input[0] = note;
+            input[0] = folded;   // arp_play transposes each hit
             const uint8_t packed = folding.tracks[track].steps[event.step].chord;
             if (polys_[track] != nullptr) {
                 count = chord_expand(event.note, packed, key_root_now, key_scale_now, input,
@@ -4252,6 +4288,10 @@ void Engine::fire(const StepEvent &event) {
             // folded like the rest of the chord, within the same six voices.
             voiced = with_extra_notes(folding, track, event.step, notes, voiced, key_root_now,
                                       key_scale_now, true, PolyMachine::kVoices);
+            for (int i = 0; i < voiced && moves; i++) {
+                notes[i] = transpose_apply(notes[i], transpose_, transpose_semis_, key_root_now,
+                                           key_scale_now);
+            }
             for (int i = 0; i < voiced; i++) {
                 trig.note = notes[i];
                 // The budget across every POLY track (kPolyVoiceBudget, engine.hpp).
@@ -5155,6 +5195,7 @@ void Engine::capture_live(LiveState &state) const {
     state.rnd_unit = perform_.rnd_unit;
     state.rnd_armed = perform_.rnd_armed;
     state.energy = perform_.energy;
+    state.transpose = transpose_;
 }
 
 // At once (D3): the next step plays from the restored pattern, and the sound is heard in this
@@ -5189,6 +5230,7 @@ void Engine::apply_live(const LiveState &state) {
     perform_.rnd_unit = state.rnd_unit;
     perform_.rnd_armed = state.rnd_armed;
     perform_.energy = energy_turn(state.energy, 0);
+    transpose_ = transpose_turn(state.transpose, 0);
     perform_dirty_ = true;
     reconfigure();
 }

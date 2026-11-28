@@ -293,7 +293,7 @@ beat playing.
 **W19. Help for the screen you are on (#107, 3 min).** Hold FUNC alone on each screen below
 for a second; it shows that screen's help, with `PAGE 1/11` at its foot.
 - GRID on the kick: `GRID SRC KCK`, then `A TUN TUNE` ... `D CLK CLICK`, `PUSH A     NOTE VIEW`.
-- Still holding FUNC, tap the screen key RIGHT: `STEPS:` (`STEP+LATER STEP  LEN` among them),
+- Still holding FUNC, tap RIGHT: `STEPS:` (`STEP+LATER STEP  LEN` among them),
   `HOLD STEP + PAD:`, `RANGE AND TRACK:`, `STEP LIGHTS:`, `FUNC + KEY:`, `FUNC + KNOB OR PAD:`,
   `UPPER PADS`, `VALUE FX MIXER:`, `VALUE FX STEPS:`, and round to page 1. LEFT goes back. GRID's
   own knob page did **not** change.
@@ -1023,6 +1023,24 @@ stopped on A01, scenes 3 and 4 as in W71.
 - CLOCK SRC MIDI with a running outside clock: record two sections; their BPM reads `--`. Back to
   INTERNAL. With JAM REC also running, both blink and both keep recording. `____`
 - Save, power cycle, open: the recorded chain is there. `____`
+
+**W75. TRANSPOSE (4 min).** Beat playing, A01.
+- FUNC + SEL> three times: `TRANSPOSE +1 IN KEY`, `+2`, `+3`; the bass, chords and leads walk up
+  the scale together and stay in the key, while the kick, hats, snare and a sliced loop do not
+  move. The live strip shows `TR+3`, PERFORM's status line `TR+3`. Musical? `____`
+- FUNC+HOME, DOWN to TRANSPOSE (under FX GLIDE), RIGHT: `SEMI`, `TRANSPOSE SEMITONES`; the parts
+  jump to +3 semitones, a new key. FUNC + SEL<: `TRANSPOSE +2 ..` with the key named in sharps.
+  Back to `SCALE`. `____`
+- FUNC held down, SEL< then SEL> while SEL< is still down: `TRANSPOSE 0`, A01 exactly as
+  programmed. Hold FUNC alone for a second: the help comes up, and LEFT/RIGHT (not the screen
+  keys) turn its pages. `____`
+- KEYS on the bass track: hold a pad, FUNC + SEL> twice while it sounds, let go of the pad: the
+  note ends cleanly, nothing hangs. The next pad sounds two scale steps up. With REC on, a note
+  played at +2 plays back moved with the rest; at 0 it is the pad you pressed. `____`
+- ARP on the chord track (EDIT, ARP page, MOD UP): FUNC + SEL< while it runs: the run follows at
+  its next note. `____`
+- `TRANSPOSE +5`, hold FUNC + MUTATE (a lock), go back to 0, tap FUNC + MUTATE: +5 again; tap
+  again: 0. `____`
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
 

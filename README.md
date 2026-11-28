@@ -90,8 +90,9 @@ is pretty safe as long as the bootloader is left alone
 - **Performance:** fill, beat and note repeat, step stutter, mutes, scenes with an A/B morph,
   macros you learn by turning knobs, throws, seeded mutation you keep or revert, LOCK (store the
   moment, jump back in one tap), ENERGY (one knob that thins the beat to a breakdown or fills
-  it towards the peak, never touching the pattern), VariSpeed (tempo and pitch together, like a
-  turntable), and a performance mixer on VALUE with fourteen effects, the morph and a looper.
+  it towards the peak, never touching the pattern), TRANSPOSE (the melodic tracks into another
+  key from any screen), VariSpeed (tempo and pitch together, like a turntable), and a
+  performance mixer on VALUE with fourteen effects, the morph and a looper.
 - **Mixing:** a sidechain duck, delay, reverb and chorus sends (with LONG delay and HALL reverb
   modes for ambient), stereo spread or unison on the polyphonic machines, and a master with a DJ
   filter, kill EQ, compressor and limiter.
