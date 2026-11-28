@@ -1078,9 +1078,9 @@ slots, no chain.
 **W78. Everything up at once, and the review's fixes (8 min).** A project filled the way
 `scenario_stack` does: GEN (DENSITY 100, RANGE 3 OCT, LEAP 100) on all eight tracks, PLAY.
 - The line input on (MIXER IN, push A), PERFORM, FUNC + turn A, B and C to the top (`REL ALL +64`,
-  `LEN ALL 200%`, `ENERGY +64`), FUNC + turn VALUE to `VARISPEED +12.0`, FUNC + SEL> three times,
+  `LEN ALL 400%`, `ENERGY +64`), FUNC + turn VALUE to `VARISPEED +12.0`, FUNC + SEL> three times,
   then FUNC+HOME, DOWN, OK (JAM REC). Let it run a minute. Top-line load: `____`, MAX from SETUP:
-  `____`, GUARD shown? `____`. No clicks or dropouts? `____`
+  `____`, GUARD shown? `____`. No clicks or dropouts? Every knob click landing? `____`
 - Stop JAM REC, everything back to rest. CHAIN, an entry, push A, MOVE page: D reads `TRN --`;
   turn it to `-2`, CHAIN ON, PLAY: the entry plays two steps down, the next (TRN `--`) stays
   there. `____`

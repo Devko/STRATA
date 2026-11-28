@@ -2,7 +2,7 @@
 # Everything a jam can turn up at once, in the emulator: the worst case of 2026-11-28's features
 # stacked, where each had only been measured alone (docs/BUDGET.md, "Everything turned up").
 # genload's generated parts on all eight tracks, then the line input on, REL ALL +64, LEN ALL
-# 200%, ENERGY +64, VariSpeed +12.0 (the beat at twice the tempo), TRANSPOSE +3 and JAM REC
+# well up (400% at its top), ENERGY +64, VariSpeed +12.0 (the beat at twice the tempo), TRANSPOSE +3 and JAM REC
 # running, with PERFORM on screen. Every block's cost is read for 3 s, as genload does.
 #
 # The 60% target is the cl6x build's (CLAUDE.md). This scenario fails over it with cl6x; GCC-only
@@ -14,7 +14,7 @@
 #   PLAY, the GEN presses of tests/scenario_genload.sh  -> "GEN T1 BOTH" .. "GEN T8 BOTH"
 #   CLR, MIXER, SEL< x4, push A                         -> "IN ON"
 #   FUNC + MIXER                                        -> PERFORM
-#   FUNC + turn A +40, B +32, C +40                     -> "REL ALL +64", "LEN ALL 200%",
+#   FUNC + turn A +40, B +32, C +40                     -> "REL ALL +64", "LEN ALL" past 100%,
 #                                                          "ENERGY +64"
 #   FUNC + turn VALUE +150                              -> "VARISPEED +12.0 ..."
 #   (A, C and VALUE turn past their ends, which hold: over the generated parts some quick
