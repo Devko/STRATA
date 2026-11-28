@@ -201,6 +201,33 @@ pool into one free slot, then switches to it keeping each lane's origin, so noth
 LAUNCH is PROJECT's last page so the page walks in older tests and scenarios stay valid.
 `tests/scenario_launch.sh` drives it in the emulator; CAPTURE and held pads are host-tested only.
 
+## Your own sounds and copy / paste in SOUNDS
+
+`core/usersounds.hpp` has the design and the file's bytes; `app/storage.hpp` ("your own sounds")
+the protocol. The decisions behind it:
+
+- **One file per machine, not per sound**: `SOUNDS/<MCH>.BIN`, sixteen slots, read when SOUNDS
+  opens on that machine and written whole after each save, rename or delete (a few hundred bytes,
+  one pass, through files::save's .TMP). One read per list, and no scan of sixteen files.
+- **Beside the projects, never in them**, like the kit library: every project file is unchanged,
+  so every older project opens as it did, and a sound saved once is in every project.
+- **Versioned like every STRATA file**: the container's version, and in the record its own length
+  and parameter count, so a later build can save more per sound (the WAVE scan page's bytes) and
+  this one still reads it, and a record with fewer bytes takes the machine's defaults for the rest.
+  A file this build cannot read is never written over (`failed`), so nothing a newer build or a
+  damaged card holds is lost by saving.
+- **The whole kKitParams bytes are kept; loading writes what a factory sound writes**
+  (`user_sound_owns` = `sound_preset_writes`), so the FX page, LFO and ARP stay the track's, as
+  Roland chose for the factory sounds. Kept whole so a later build may choose to load more.
+- **Loading goes as bytes, not a preset index**: `Cmd::sound_bytes` carries eight a command (b-e
+  and `u`), four commands a sound, posted together so they land in one block. No shared buffer
+  between the contexts is needed.
+- **Copy is a clipboard row, not a target picker**: FUNC+UP takes the track's sound into the UI's
+  clipboard and OK on the PASTE row loads it, so "paste" is the list's own OK. Pasting onto
+  another machine posts `Cmd::set_machine` first; `Cmd::sound_preset`'s AS WAS remembers the
+  machine too and switches it back (`Engine::switch_machine`).
+- `tests/scenario_usersounds.sh` walks save, load, copy, paste and AS WAS; UNIT_CHECKLIST W68.
+
 ## Line input as a mixer strip
 
 The jam review's idea 4. `ProjectSettings::input` holds the strip (`InputField` order, PROJECT.BIN's
@@ -214,4 +241,4 @@ level 0. The codec route is set by the UI (`service_input_route`, main context o
 strip is on and its jack or gain differs from what was last applied; RESAMPLE's own input sources
 invalidate that and win while RESAMPLE is up. The IN pages sit before MST so the scenarios that go
 round to MST and EQ still count the same; CHO moved two pages further (scenario_chorus, m7).
-UNIT_CHECKLIST W68.
+UNIT_CHECKLIST W69.

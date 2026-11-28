@@ -84,10 +84,12 @@
         if (name_entry_.active()) {
             const enaga::ui::Action action = name_entry_.key(key, down);
             if (action == enaga::ui::Action::chosen) {
-                if (entry_for_ == EntryFor::rename) {
-                    finish_rename();
-                } else {
-                    finish_save_as();
+                switch (entry_for_) {
+                    case EntryFor::rename: finish_rename(); break;
+                    case EntryFor::save_as: finish_save_as(); break;
+                    case EntryFor::sound_save:
+                    case EntryFor::sound_replace: finish_sound_save(); break;
+                    case EntryFor::sound_rename: finish_sound_rename(); break;
                 }
             }
             if (action == enaga::ui::Action::no) notice("NAME KEPT");

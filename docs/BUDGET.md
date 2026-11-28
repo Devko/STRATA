@@ -159,7 +159,7 @@ passes beside them at 23.61% cl6x, 47.81% GCC-only with the two pages moved.
 | GCC only | 45.39% | 45.52% | +0.13 points |
 
 The strip's sends are 0 in the scenario, so the delay and reverb it would feed are not in the
-figure; they cost what they cost for any track. The unit's reading is W68's.
+figure; they cost what they cost for any track. The unit's reading is W69's.
 
 ### The chorus, send C (2026-11-27, emulator)
 

@@ -588,6 +588,7 @@ const Expect kTable[] = {
     // form writes nothing, but one row covers the command: dirtying the kit for it costs a
     // rewrite of KIT.BIN at most.
     {Cmd::sound_preset, kDirtyKit, "sound_preset"},
+    {Cmd::sound_bytes, kDirtyKit, "sound_bytes"},
     {Cmd::arp_preset, kDirtyKit, "arp_preset"},
     {Cmd::set_arp_ext, kDirtyKit, "set_arp_ext"},
 
