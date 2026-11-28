@@ -70,8 +70,14 @@ export ENAGA_EMULATOR
 STRATA_EMULATOR_URL="https://github.com/seawaffle/smpltrek-re"
 STRATA_EMULATOR_COMMIT="11ac9a0ae1fb5126728950792504c9e304257101"
 
-# Build output, also off /mnt/d.
-: "${ENAGA_BUILD:=$HOME/strata-build}"
+# Build output, also off /mnt/d. A thread's worktree <...>/STRATA-wt/<name> (tools/wt.sh) gets
+# $HOME/strata-build-<name>, so two threads never build into one folder.
+if [ -z "${ENAGA_BUILD:-}" ]; then
+    case "${STRATA_ROOT%/*}" in
+        */STRATA-wt) ENAGA_BUILD="$HOME/strata-build-${STRATA_ROOT##*/}" ;;
+        *)           ENAGA_BUILD="$HOME/strata-build" ;;
+    esac
+fi
 export ENAGA_BUILD
 
 # TI's compiler is worth about 2.2x on DSP code and the 60% load target depends on

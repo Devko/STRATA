@@ -98,6 +98,7 @@ lane_checks() {
     tools/enaga_check.sh || ok=1
     python3 -B tests/test_package_release.py || ok=1
     python3 -B tests/test_enaga_cached.py || ok=1
+    bash tests/test_wt.sh || ok=1
     tools/check_scripts.sh || ok=1
     # The card builder's tests, as CI runs them (Node 22 or newer; skipped without Node).
     if command -v node > /dev/null; then
