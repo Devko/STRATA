@@ -6,8 +6,8 @@
   Notes on single features are in docs/DESIGN_NOTES.md. Ask before changing a decision these
   record, or one in docs/archive/REVIEW.md (the platform review the spec was corrected against;
   code comments cite it by section).
-- **main is frozen for 1.0**: fixes, measurements and docs only. A feature goes on its own branch
-  and waits for after 1.0 (docs/PLAN.md, "Release candidate").
+- No feature freeze: features land on main as usual (Roland lifted the 1.0 freeze on
+  2026-11-28; development comes before a stable release for now).
 - **Merge only when Roland writes "merge it"** (or an equally plain yes) in the thread that owns
   the PR. A release runs from its own thread, only when Roland says so
   (docs/release/RELEASING.md). Never re-release an existing tag: bump the patch version.

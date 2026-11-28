@@ -5,7 +5,7 @@ On a unit that still runs Enaga 0.3.0, update it to 0.4.0 first and do **the Ena
 most likely to break only on the hardware. If it passes, the walkthrough is worth its two hours;
 if an item fails, report that first.
 
-Then **the walkthrough** (W1-W60, about 194 minutes): everything merged since v0.1.0,
+Then **the walkthrough** (W1-W61, about 200 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -800,6 +800,19 @@ to reach `GUARD4` here at a 40-60% top line.
 - Push D (track 8, SAMPLE): `T8 WIDTH: POLY ONLY`, the strip shows `---`. `____`
 - With T7 in unison, the top line reads `____ %`; MAX after a minute `____ %`. Save, power
   cycle, open: WID is kept. `____`
+
+**W61. Starter content from the card builder (6 min).** A card built at strata.einblick.dev
+with all starter projects, the sample pack and the quick start ticked, copied onto the card.
+- PROJECT, SELECT_RIGHT four times: PROJECTS lists TECHNO, DEEP, DUB, DRIFT, ELECTRO, NIGHT,
+  BREAKS, STEEL, SMASH and CHAOS. Open DEEP (OK twice): it opens on A01 at 122 BPM, PLAY plays
+  it and the chain walks on through its patterns. Open CHAOS and DRIFT the same way: both
+  play, no `X` or error toast. Top line on CHAOS `____ %`, MAX after a minute `____ %`. `____`
+- Track 8 to SMP (FUNC+EDIT, A), OK: the browser opens in `/SAMPLES` with a `STRATA` folder.
+  OK into it: DRUMS, PERC, BASS, LEADS, CHORDS. In BASS push A on `MONO_ACID_C2.WAV`: it plays.
+  OK loads it; a step on C4 sounds a C2 acid note, at the same level as the other tracks give
+  or take a few dB. `____`
+- `STRATA-QUICKSTART.txt` at the card root opens on a PC and every gesture it names does what
+  it says on the unit (sections 1-7). `____`
 
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
