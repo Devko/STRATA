@@ -661,7 +661,7 @@
         paint::dotted_h(px, 0, 123, 74, 3, 2);
         for (int g = 0; g < 5; g++) {
             const int gx = g * 25;
-            const bool reads = g == 3 ? machine_has_asr_page(machine) : (g == 4 ? machine_reads_osc(machine) : true);
+            const bool reads = g == 3 ? machine_has_asr_page(machine) : (g == 4 ? machine_has_osc_page(machine) : true);
             for (int k = 0; k < 4; k++) {
                 const int x = gx + k * 5;
                 if (!reads) {

@@ -453,7 +453,8 @@
                 break;
             }
             case Page::osc:
-                if (!machine_reads_osc(id)) add("NOT ON THIS MACHINE");
+                if (machine_is_kick(id)) add("CHK  NEXT HIT CUTS");
+                else if (!machine_reads_osc(id)) add("NOT ON THIS MACHINE");
                 break;
             case Page::scn:
                 if (!machine_reads_scn(id)) {

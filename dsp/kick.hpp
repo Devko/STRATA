@@ -44,8 +44,14 @@
 // the tick (its noise has a generator of its own, so the click's noise stream never moves), and
 // DRP 0 leaves f0 alone.
 //
-// It reads the SRC page (0-3), the AMP page (8-11) and PNCH (24-27); FLTR and FX belong to the
-// insert chain.
+// And one knob on the OSC page's first slot (28), on a page of its own, CUT:
+//   CHK  choke: 0 lets a hit ring under the next as it always has; above 0 the next hit fades the
+//        sounding one out, over 60 ms at 1 down to 1 ms at 127. Sample-based techno kicks are
+//        cut at the next beat (RY Divinity's are exactly one beat long), which is what lets a long,
+//        sustained body sit under a four-on-the-floor without stacking.
+//
+// It reads the SRC page (0-3), the AMP page (8-11), PNCH (24-27) and CUT (28); FLTR and FX
+// belong to the insert chain.
 #pragma once
 
 #include <enaga/dsp.hpp>
@@ -56,6 +62,7 @@ namespace strata {
 
 // PNCH's knob curves, for the screen as well as for prepare().
 float kick_knock_seconds(uint8_t value);     // KND: 1-16 ms
+float kick_choke_seconds(uint8_t value);     // CHK: 0 off, else 60 ms at 1 to 1 ms at 127
 int kick_drop_cents(uint8_t value);          // DRP: 0 to -1200, where the fall ends
 
 class Kick final : public Machine {
@@ -104,6 +111,7 @@ private:
         int hold = 0;              // frames the phase is still pinned at 0.25
         int gate = 0;              // frames the click gate is still high
         int fade = 0;              // frames of fade left, 0 when not fading
+        float fade_step = 1.0f / 24.0f;   // gain lost a frame while fading
         int wait = 0;              // frames until `next` starts
         bool pending = false;
         Trig next{};
@@ -153,6 +161,8 @@ private:
     // The bytes PNCH's coefficients were last made from (four PNCH, then DEC), so prepare() pays
     // for its exponentials only when a knob moves. 0xFF: never made.
     uint8_t punch_bytes_[5] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    int choke_frames_ = 0;         // CHK: 0 off, else the fade a new hit gives the sounding one
+    uint8_t choke_byte_ = 0;
     bool active_ = false;
 
     float body_[kBlock] = {};

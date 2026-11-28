@@ -128,6 +128,11 @@ float kick_knock_seconds(uint8_t value) {
 
 int kick_drop_cents(uint8_t value) { return -int((int(value) * 1200 + 63) / 127); }
 
+float kick_choke_seconds(uint8_t value) {
+    // 60 ms at 1 down to 1 ms at 127, exponential: log2(60) = 5.907 octaves.
+    return value == 0 ? 0.0f : 0.060f * exp2(-5.9069f * float(value - 1) * (1.0f / 126.0f));
+}
+
 void Kick::init(float sample_rate) {
     rate_ = sample_rate > 1.0f ? sample_rate : 48000.0f;
     inv_rate_ = reciprocal(rate_);
@@ -140,6 +145,8 @@ void Kick::init(float sample_rate) {
     tick_coefficients_ = SvfCoefficients::from_g(enaga::dsp::tan_pi(kTickHz * inv_rate_), kTickK);
     tick_decay_ = exp(-inv_rate_ * reciprocal(kTickTau));
     for (uint8_t &b : punch_bytes_) b = 0xFF;   // a new rate: PNCH's coefficients are made again
+    choke_byte_ = 0;
+    choke_frames_ = 0;
     for (Voice &v : voices_) {
         v = Voice{};
         v.click_band.reset();
@@ -173,6 +180,16 @@ void Kick::prepare(const TrackParams &params) {
     const float level = params.unit(11);
     out_gain_ = level * level;
 
+    // CUT (kick.hpp): CHK, the OSC page's first slot. One byte, read every block, no exponential
+    // unless it moved.
+    {
+        const uint8_t chk = params.get(kOscFirst);
+        if (chk != choke_byte_) {
+            choke_byte_ = chk;
+            const float t = kick_choke_seconds(chk);
+            choke_frames_ = chk == 0 ? 0 : (int(t * rate_) > 0 ? int(t * rate_) : 1);
+        }
+    }
     // PNCH (kick.hpp): KNK KND TCK DRP, the ASR page's four slots. Made again only when one of
     // them, or DEC, has moved: a kick with the page at 0 pays one compare a block.
     const uint8_t bytes[5] = {params.get(kAsrFirst + 0), params.get(kAsrFirst + 1),
@@ -202,10 +219,26 @@ void Kick::trigger(const Trig &trig) {
     if (pick < 0) pick = voices_[0].amp.level() <= voices_[1].amp.level() ? 0 : 1;
 
     Voice &v = voices_[pick];
+    // CHK: every other voice still sounding is faded out over the choke time, from the new
+    // hit's frame on, so a long kick is cut at the next one as a one-beat sample is. A voice
+    // already fading keeps the shorter of its fade and this one.
+    if (choke_frames_ > 0) {
+        for (int i = 0; i < kVoices; i++) {
+            Voice &o = voices_[i];
+            if (i == pick || !o.sounding() || o.pending) continue;
+            const int frames = int(trig.frame) + choke_frames_;
+            if (o.fade == 0 || frames < o.fade) {
+                if (o.fade == 0) o.gain = 1.0f;
+                o.fade = frames;
+                o.fade_step = o.gain * reciprocal(float(frames));
+            }
+        }
+    }
     // A voice that is still loud is faded out first and the new hit starts at the end of the
     // fade. Below kFadeFloor the splice is inaudible, so it starts straight away instead.
     if (v.fade == 0 && v.sounding() && v.amp.level() > kFadeFloor) {
         v.fade = kFadeFrames;
+        v.fade_step = kFadeStep;
         v.gain = 1.0f;
     }
     v.next = trig;
@@ -389,8 +422,8 @@ void Kick::run(Voice &v, float *out, int n) {
     }
 
     if (v.fade > 0) {
-        strata_mix_ramp(out, body_, n, out_gain_ * v.gain, -out_gain_ * kFadeStep);
-        v.gain -= kFadeStep * float(n);
+        strata_mix_ramp(out, body_, n, out_gain_ * v.gain, -out_gain_ * v.fade_step);
+        v.gain -= v.fade_step * float(n);
         if (v.gain < 0.0f) v.gain = 0.0f;
     } else {
         enaga_mix(out, body_, n, out_gain_);

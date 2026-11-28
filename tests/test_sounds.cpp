@@ -234,7 +234,7 @@ bool reads_for_sound(uint8_t machine, int p) {
     if (p < 12) return true;
     if (p >= kSoundAsrFirst && p < kSoundAsrFirst + 4) return machine_has_asr_page(machine);
     if (p >= kSoundScnFirst && p < kSoundScnFirst + 4) return machine_reads_scn(machine);
-    return machine_reads_osc(machine) && p >= kSoundOscFirst && p < kSoundOscFirst + 4;
+    return machine_has_osc_page(machine) && p >= kSoundOscFirst && p < kSoundOscFirst + 4;
 }
 
 }  // namespace

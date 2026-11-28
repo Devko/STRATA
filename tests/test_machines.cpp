@@ -896,6 +896,46 @@ TEST(kick_drop_keeps_the_pitch_falling_below_tun) {
     CHECK(drop_early >= plain_early - 1 && drop_early <= plain_early + 1);
 }
 
+TEST(kick_choke_cuts_a_ringing_hit_at_the_next_one) {
+    // CHK (dsp/kick.hpp, CUT): a long kick hit twice 200 ms apart. Without the choke the first
+    // rings on under the second; with it, the first is gone within the choke's fade, so 50 ms
+    // after the second hit the output is the second hit alone.
+    static float plain[19200], choked[19200], second[19200];
+    TrackParams p = kick_909();
+    p.set(3, 0);                 // CLK off: no noise, so the three renders line up exactly
+    p.set(8, 127);               // the longest decay
+    auto two_hits = [&](const TrackParams &q, float *out, bool first) {
+        Kick m;
+        m.init(kRate);
+        m.prepare(q);
+        clear(out, 19200);
+        if (first) m.trigger(hit(60, 110, 0));
+        for (int b = 0; b < 19200 / kBlk; b++) {
+            if (b * kBlk == 9600) m.trigger(hit(60, 110, 0));
+            m.prepare(q);
+            m.render_add(out + b * kBlk, kBlk);
+        }
+    };
+    two_hits(p, plain, true);
+    two_hits(p, second, false);
+    TrackParams c = p;
+    c.set(kOscFirst, 100);       // CHK: a fade of a few ms
+    two_hits(c, choked, true);
+    float rest_plain = 0.0f, rest_choked = 0.0f;
+    for (int i = 9600 + 2400; i < 19200; i++) {
+        rest_plain += (plain[i] - second[i]) * (plain[i] - second[i]);
+        rest_choked += (choked[i] - second[i]) * (choked[i] - second[i]);
+    }
+    CHECK(rest_plain > 1e-3f);           // the first hit is still ringing without the choke
+    CHECK(rest_choked < 1e-9f);          // and gone with it
+    CHECK(finite_within(choked, 19200, 4.0f));
+    // Before the second hit nothing differs.
+    for (int i = 0; i < 9600; i++) CHECK(choked[i] == plain[i]);
+    CHECK_NEAR(kick_choke_seconds(1), 0.060f, 1e-4);
+    CHECK_NEAR(kick_choke_seconds(127), 0.001f, 1e-4);
+    CHECK_EQ(kick_choke_seconds(0), 0.0f);
+}
+
 // --- SNARE ----------------------------------------------------------------
 
 TEST(snare_carries_the_909_oscillator_ratio) {

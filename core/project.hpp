@@ -248,6 +248,10 @@ constexpr bool machine_is_kick(uint8_t id) { return id == uint8_t(MachineId::kic
 // Does this machine have the page at all, as an envelope or as KICK's PNCH? What shows, names,
 // saves and presets the page's bytes asks here.
 constexpr bool machine_has_asr_page(uint8_t id) { return machine_reads_asr(id) || machine_is_kick(id); }
+// And the OSC page: the synths and GRAIN, and KICK's CUT (CHK, dsp/kick.hpp) on its first slot.
+constexpr bool machine_has_osc_page(uint8_t id) {
+    return (machine_reads_asr(id) && id != uint8_t(MachineId::sample)) || machine_is_kick(id);
+}
 // SAMPLE's ASR page is SUS and REL alone: ATK is AMP's, and there is no fourth.
 constexpr bool machine_reads_asr_slot(uint8_t id, int slot) {
     return machine_is_kick(id) ||

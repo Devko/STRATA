@@ -860,9 +860,9 @@ TEST(ui_the_parameter_page_decides_which_parameter_an_encoder_writes) {
     // The pages wrap, so the four of them are reachable in either direction.
     key(ENAGA_KEY_SELECT_LEFT);
     CHECK_EQ(UiProbe::param_page(app), int(Page::src));
-    // KICK has seven of the pages (its ENV slot is PNCH): the keys step over OSC, the hole and
-    // SCAN.
-    for (int i = 0; i < 7; i++) key(ENAGA_KEY_SELECT_LEFT);
+    // KICK has eight of the pages (its ENV slot is PNCH, its OSC slot CUT): the keys step over
+    // the hole and SCAN.
+    for (int i = 0; i < 8; i++) key(ENAGA_KEY_SELECT_LEFT);
     CHECK_EQ(UiProbe::param_page(app), int(Page::src));
 
     // And a lock follows the same page. The step page is not open and the mode is GRID, but
@@ -5915,7 +5915,9 @@ TEST(ui_scan_is_the_wave_pairs_ninth_page_and_names_its_modes) {
 
 TEST(ui_osc_is_edits_eighth_page_and_names_its_waves_and_modes) {
     Strata &app = fresh();
-    key(ENAGA_KEY_F8);                                // EDIT, track 1: a drum
+    post_track(Cmd::set_machine, 0, uint8_t(MachineId::snare));   // a drum with no OSC page
+    pump(4);
+    key(ENAGA_KEY_F8);                                // EDIT, track 1
     goto_edit_page(app, Page::osc);
     CHECK_EQ(int(Page::osc), int(Page::scn) - 3);     // the hole's two pages between
     CHECK_EQ(int(Page::scn), kEditPages - 1);
@@ -11594,6 +11596,23 @@ TEST(ui_envelope_on_asr_holds_when_sus_is_up) {
     post_track(Cmd::set_machine, 0, uint8_t(MachineId::snare));
     pump(4);
     CHECK(screen_has(app, "NOT ON THIS MACHINE"));
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_a_kicks_osc_page_is_cut) {
+    // KICK's OSC slot is CUT (dsp/kick.hpp): CHK on A, OFF at 0, the rest empty.
+    Strata &app = fresh();
+    key(ENAGA_KEY_F8);
+    goto_edit_page(app, Page::osc);
+    CHECK_EQ(UiProbe::param_page(app), int(Page::osc));
+    check_layout(app, "EDIT CUT, KICK");
+    CHECK(screen_has(app, "CUT"));
+    CHECK(screen_has(app, "CHK"));
+    CHECK(screen_has(app, "OFF"));
+    CHECK(!screen_has(app, "NOT ON THIS MACHINE"));
+    app.on_encoder(0, +10);
+    pump();
+    CHECK(app_engine().params(0).v[kOscFirst] > 0);
     key(ENAGA_KEY_F4);
 }
 

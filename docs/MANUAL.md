@@ -665,6 +665,7 @@ distorted. Two voices, so a ratchet does not cut itself off.
 | SRC | **TUN** pitch, 25-120 Hz (55 Hz at 64) | **FMA** pitch-sweep amount, up to about +26 semitones | **FMD** sweep time, 8-128 ms | **CLK** click level |
 | AMP | **DEC** decay, 20-640 ms time constant | **TON** body low-pass: thud to open | **DRT** dirt: clean sine to soft-clipped | **LVL** |
 | PNCH | **KNK** knock: a fast second sweep, up to four octaves over the body | **KND** knock time, 1-16 ms | **TCK** tick: a 3 kHz click at the very front | **DRP** drop: the pitch keeps falling, up to an octave (in cents) |
+| CUT | **CHK** choke: `OFF`, or the next hit cuts this one over 60 ms down to 1 ms | | | |
 
 The trig note transposes the kick, so a kick follows the key. FMD in the middle of the knob is
 where the classic click lives. Add DRV on FLTR for more 909 grit.
@@ -674,6 +675,11 @@ on top of the 909 body: KNK is the mid punch you feel in the first few milliseco
 click that cuts through on small speakers, DRP the fall that makes a long kick deep rather than a
 held note. All four at 0 is the kick as it always was, so older projects sound the same. The
 SOUNDS TECHNO, WHOUSE, INDUS and MINIM use the page; RUMBLE uses DRP.
+
+**CUT** (the eighth page) has one knob, **CHK**. Sample-based techno kicks are cut off at the next
+beat, which is what lets a long, held body sit under a four-on-the-floor without stacking up.
+With CHK up, each hit fades the one still ringing out over the choke time; at `OFF` two hits
+overlap as they always have. WHOUSE and FAT use it.
 
 ### SNR: SNARE
 
@@ -1009,7 +1015,7 @@ first entry of each list is the factory kit's own sound.
 
 | Machine | Sounds |
 | --- | --- |
-| KCK | 909 (the factory kick), 808 (long boom), DEEP (rounder, darker), PUNCH (short, hard, driven), DIST (industrial, distorted), SOFT (dub, no click), RUMBLE (a rumble layer for a second kick track: no click, driven, low-passed; duck it from the main kick), TIGHT (short, clicky), BOOM (ambient: slow drop, longest tail), HARD (hard techno, fully driven), TECHNO (modern techno: full sweep, click and drive, the most knock), WHOUSE (TECHNO with a longer body), INDUS (TECHNO driven harder, more tick), MINIM (TECHNO with a shorter body), FAT (TECHNO with a long body that falls into the sub: the fat rumble kick) |
+| KCK | 909 (the factory kick), 808 (long boom), DEEP (rounder, darker), PUNCH (short, hard, driven), DIST (industrial, distorted), SOFT (dub, no click), RUMBLE (a rumble layer for a second kick track: no click, driven, low-passed; duck it from the main kick), TIGHT (short, clicky), BOOM (ambient: slow drop, longest tail), HARD (hard techno, fully driven), TECHNO (modern techno: full sweep, click and drive, the most knock), WHOUSE (a massive warehouse kick: slow wide sweep, held sub, cut at the next hit; loud, pull its fader down), INDUS (TECHNO driven harder, more tick), MINIM (TECHNO with a shorter body), FAT (TECHNO with a long body that falls into the sub: the fat rumble kick) |
 | SNR | CLAP (the factory clap), 909SN, 808SN, CLAP4 (four bursts, the smack at 1-2 kHz), RIMSN (a snare rim tick), DIRTY (noisy, driven), SHORT (a tight clap), TIGHT (a short snare), NOISE (a long noise wash), DARK (a dark, driven clap), TCLAP (the techno clap: three bursts, the smack at 1-2 kHz), CLHAT and OPHAT (closed and open hats on the snare's noise: the broad, bright hats of modern techno, where HAT's 808 model is narrow) |
 | HAT | CLOSED, OPEN (the factory pair), TIGHT, 808HH (pure squares), SHAKE (a shaker), RIDE (long, clangy), TRASH (noisy, metallic), DARK (a dark closed hat), TICK (shortest), SIZZLE (long, bright, noisy), SHIMMR (a ringing metallic cymbal) |
 | PRC | RIM (the factory rim), TOM, COWBEL, BELL, BLIP, CONGA, METAL, CLAVE, ZAP (a falling laser), DUBTOM (low, long, for the delay), CHIME (glassy, ringing), KNOCK (a metallic tick) |

@@ -119,6 +119,12 @@ drive or a loud tick overshoots the loop's mids and top by 10-20 dB while barely
 attack. Measure the attack with a window that does not fade in over its first milliseconds
 (a Hann window there hides the tick).
 
+**CUT / CHK** (slot 28): sample kicks are cut at the next beat. With CHK above 0, a trigger fades
+every other sounding voice out over 60 ms (CHK 1) down to 1 ms (127), starting at the new hit's
+frame. Two blind tests with Roland (2026-11-28) also taught a voicing rule: the kicks that passed
+as samples share one recipe (TECHNO's); variants that changed drive, dirt, sweep and length at
+once were heard as synthetic.
+
 ### SNARE — follow `synthetic_snare_drum` (909), with 808 mode ratios available
 
 Author's comment: *"Uses a few magic numbers taken from the 909 schematics"* and

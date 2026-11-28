@@ -23,6 +23,10 @@ the project file format or the controls.
   TUN of up to an octave. The benchmark found the 909's first 20 ms 11-25 dB under techno kicks
   from 250 Hz to 4 kHz. All four at 0 is the old kick, bit for bit, so saved projects are
   unchanged.
+- **KICK's CUT page**: **CHK**, a choke. Above 0 each hit fades the one still ringing out over
+  60 ms down to 1 ms, as one-beat kick samples are cut, so a long held body does not stack up.
+  0 is the old overlap. WHOUSE is now matched to the library kick Roland singled out in the blind
+  tests (3.5 dB off it, attack and loop) and uses it, as does FAT.
 - **PSH, the master push** (MIXER EQ, D): 0-12 dB of gain into the limiter. Measured against
   mastered techno, a STRATA mix sits about 4 dB less dense (crest near 12 dB against 8) and LVL
   stops at unity; FORGE at +2.5 dB reaches the reference track's loudness (-9.7 against -9.1

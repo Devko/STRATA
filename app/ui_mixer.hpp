@@ -543,6 +543,18 @@
         if (machine_is_wave(engine_.machine_id(selected_)) && append_wave_value(out, index, value)) return;
         if (machine_is_fm(engine_.machine_id(selected_)) && append_fm_value(out, index, value)) return;
         if (machine_is_grain(engine_.machine_id(selected_)) && append_grain_value(out, index, value)) return;
+        if (machine_is_kick(engine_.machine_id(selected_)) && index >= kOscFirst &&
+            index < kOscFirst + kOscParams) {
+            // KICK's CUT (dsp/kick.hpp): CHK, OFF or the choke's fade.
+            if (index != kOscFirst) {
+                append(out, "---");
+            } else if (value == 0) {
+                append(out, "OFF");
+            } else {
+                append_seconds(out, kick_choke_seconds(value));
+            }
+            return;
+        }
         if (machine_is_kick(engine_.machine_id(selected_)) && index >= kAsrFirst &&
             index < kAsrFirst + kAsrParams) {
             // KICK's PNCH (dsp/kick.hpp): KNK and TCK in percent, KND a time, DRP in cents.

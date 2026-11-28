@@ -589,7 +589,11 @@
     // GLD on WAVE MONO, DRV on WAVE POLY, FM4's DET FIN BRT CAR, or GRAIN's SCN PSP.
     const char *osc_param_name(int slot) const {
         const uint8_t id = engine_.machine_id(selected_);
-        if (!machine_reads_osc(id)) return "---";
+        if (!machine_has_osc_page(id)) return "---";
+        if (machine_is_kick(id)) {
+            static const char *const kick[kOscParams] = {"CHK", "---", "---", "---"};
+            return kick[slot];
+        }
         if (machine_is_fm(id)) {
             static const char *const fm[kOscParams] = {"DET", "FIN", "BRT", "CAR"};
             return fm[slot];

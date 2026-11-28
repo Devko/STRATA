@@ -570,12 +570,13 @@ const char *const kEditPageNames[kHelpEditPages] = {"SRC", "FLTR", "AMP", "FX", 
 // Does the machine read EDIT's page 6 (ASR), 7 (OSC) or 10 (SCAN)? Nobody reads the hole.
 bool reads_page(uint8_t machine, int page) {
     if (page == 6) return machine_has_asr_page(machine);
-    if (page == 7) return machine_reads_osc(machine);
+    if (page == 7) return machine_has_osc_page(machine);
     return page == kScanHelpPage && machine_reads_scn(machine);
 }
 
 const char *osc_words(uint8_t machine, int slot) {
-    if (!machine_reads_osc(machine)) return "";
+    if (!machine_has_osc_page(machine)) return "";
+    if (machine_is_kick(machine)) return slot == 0 ? "CHOKE" : "";
     if (machine_is_fm(machine)) return kFmOscWords[slot];
     if (machine_is_grain(machine)) return kGrainOscWords[slot];
     if (!machine_is_wave(machine)) return kOscWords[slot];
@@ -722,7 +723,9 @@ void knob_rows(const HelpPlace &place, bool slc_auto, char rows[kHelpRows][kHelp
 // The title of a page that names the EDIT page: "EDIT SRC KCK".
 void edit_title(const char *screen, const HelpPlace &place, char title[kHelpChars + 1]) {
     const int page = place.page < kHelpEditPages ? place.page : 0;
-    const char *name = page == 6 && machine_is_kick(place.machine) ? "PNCH" : kEditPageNames[page];
+    const char *name = page == 6 && machine_is_kick(place.machine)   ? "PNCH"
+                       : page == 7 && machine_is_kick(place.machine) ? "CUT"
+                                                                     : kEditPageNames[page];
     Line(title).add(screen).add(" ").add(name).add(" ").add(machine_name(place.machine));
 }
 
