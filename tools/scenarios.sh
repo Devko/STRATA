@@ -26,6 +26,7 @@ source tools/env.sh
 
 jobs="$(nproc 2>/dev/null || echo 2)"
 names=()
+full=0
 while [ $# -gt 0 ]; do
     case "$1" in
         -j)  jobs="$2"; shift 2 ;;
@@ -35,6 +36,7 @@ while [ $# -gt 0 ]; do
 done
 
 if [ ${#names[@]} -eq 0 ]; then
+    full=1
     for path in tests/scenario_*.sh; do
         name="${path#tests/scenario_}"
         names+=("${name%.sh}")
@@ -110,11 +112,16 @@ fi
 end=$(date +%s)
 
 failed=()
+worst_pct=0 worst_name=""
 for name in "${names[@]}"; do
     output=$(cat "$results/$name.out" 2>/dev/null)
     status=$(cat "$results/$name.rc" 2>/dev/null || echo 99)
     sec=$(cat "$results/$name.sec" 2>/dev/null || echo "?")
     load=$(printf '%s' "$output" | grep -oE 'peak load: [0-9.]+%' | tail -1)
+    pct=${load#peak load: }; pct=${pct%\%}
+    if [ -n "$load" ] && awk -v a="$pct" -v b="$worst_pct" 'BEGIN { exit !(a > b) }'; then
+        worst_pct=$pct worst_name=$name
+    fi
     if [ "$status" -eq 0 ]; then
         printf '%-9s OK    %4ss  %s\n' "$name" "$sec" "${load:-(no load figure)}"
     else
@@ -123,6 +130,19 @@ for name in "${names[@]}"; do
         failed+=("$name")
     fi
 done
+
+# A full pass prints its row for docs/SCENARIO_LOG.md, "Full passes", ready to paste (the Notes
+# cell is yours). The other compiler's column is left for its own run.
+if [ "$full" -eq 1 ]; then
+    commit=$("$STRATA_GIT" rev-parse --short HEAD 2>/dev/null || echo "?")
+    passed=$(( ${#names[@]} - ${#failed[@]} ))
+    cell="worst **${worst_pct}%** (\`${worst_name:-?}\`)"
+    if [ "$(strata_cgt_label)" = "cl6x" ]; then cl6x=$cell gcc="not run"; else cl6x="not run" gcc=$cell; fi
+    echo
+    echo "For docs/SCENARIO_LOG.md:"
+    printf '| %s | `%s` | %s of %s | %s | %s | %s |\n' "$(date +%F)" "$commit" "$passed" \
+        "${#names[@]}" "$cl6x" "$gcc" "${failed[*]:+failed: ${failed[*]}}"
+fi
 
 echo
 if [ ${#failed[@]} -eq 0 ]; then

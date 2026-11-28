@@ -13,7 +13,8 @@ figures are a regression guard.
 
 1. In your own worktree, `tools/scenarios.sh -j 4` with cl6x, then again with `ENAGA_TI_CGT=none`
    and its own `ENAGA_BUILD` (CLAUDE.md, "Running commands").
-2. Add a row at the top of "Full passes", and replace "The latest full pass" with the new
+2. Add a row at the top of "Full passes" (a full run prints it at the end, ready to paste: fill
+   in the other compiler's column and the notes), and replace "The latest full pass" with the new
    per-scenario figures.
 3. A failing scenario is named in the row, with the reason if known. A run of a few named
    scenarios is not a full pass: its figures go to `docs/BUDGET.md` with the change they measure.
