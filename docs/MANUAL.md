@@ -26,15 +26,15 @@ track's own settings (its speed, play order, freeze, sample reload) and GENERATE
 menu, OK held in GRID. The upper pads are
 printed TRK 1-7, but in STRATA they are the performance pads: each is lit in its own colour and
 names itself on the screen when pressed. Hold FUNC alone for a moment for help on the screen you
-are on: what the four knobs do there and the gestures it has. Keep holding FUNC and tap the screen
-keys (or LEFT/RIGHT) for more pages; the last five are the same everywhere: FUNC + each function
+are on: what the four knobs do there and the gestures it has. Keep holding FUNC and tap
+LEFT/RIGHT for more pages; the last five are the same everywhere: FUNC + each function
 key, FUNC + a knob or pad, the upper pads, and two pages on the performance mixer.
 
 ![The SmplTrek panel with STRATA's button groups: screen, knobs, screen keys, arrow pad, function block, OK and CLR, STEP keys, pad-row keys, performance pads and track pads](screens/panel.svg)
 
 <p><img src="screens/help.png" width="256" alt="FUNC held alone on GRID: what A-D do on the EDIT page they turn, and GRID's keys"> <img src="screens/menu.png" width="256" alt="The FUNC menu, opened with FUNC+HOME, on SAVE"></p>
 
-<sub>Left: FUNC held alone on GRID: A-D and their words, then GRID's keys; the screen keys turn to
+<sub>Left: FUNC held alone on GRID: A-D and their words, then GRID's keys; LEFT/RIGHT turn to
 the steps, the STEP lights and FUNC + each key.
 Right: the FUNC menu (FUNC+HOME), which always opens on SAVE.</sub>
 
@@ -1028,15 +1028,20 @@ FUNC+DOWN on one of your own sounds replaces it with what the track has now, und
 or a new one. **Push B** renames the sound under the cursor and **push C** deletes it (OK twice).
 The factory sounds cannot be renamed or deleted. Each machine keeps up to 16 of your sounds.
 
-A saved sound holds the same pages a factory sound sets, and leaves the FX page, the LFO, the
-ARP, HAT's choke group and GRAIN's POS and PIT to the track it is loaded into. SMP and MID have no
-SOUNDS list and so no saved sounds.
+A saved sound holds all of the track's sound: every page (SRC, FLTR, AMP, FX, LFO, ARP and, on
+the machines that have them, ENV, OSC and SCAN) and the settings pushed on the LFO and ARP pages
+(TRIG, the two mod slots, VAR, RHYTHM, ACCENT and RATCHET). Loading it sets all of that, so the
+track sounds and moves as it did when you saved it, pan and sends included. That is more than a
+factory sound sets: a factory sound is a starting point for any track, a saved one is a track you
+finished. What stays the track's own is the mixer's: the fader, the chorus send, WID, the duck
+depth and the choke group set on MIXER. A GRAIN sound plays the sample its new track holds. SMP
+and MID have no SOUNDS list and so no saved sounds.
 
 **FUNC+UP copies** the track's sound. A **PASTE** row then sits under AS WAS on every track
 (`PASTE T1 KCK`): OK on it gives the selected track the copied sound. On a track with another
 machine it switches the machine first (`SWITCHES MACHINE` under the bars), the way MACHINE does,
-and then sets the sound; the track keeps its mix, LFO and ARP. AS WAS takes a paste back, the
-machine included. The copy lasts until the next FUNC+UP or until STRATA is switched off.
+and then sets the sound, all of it, as loading a saved sound does. AS WAS takes a paste or a saved
+sound back, the machine, the pages and the LFO and ARP settings included. The copy lasts until the next FUNC+UP or until STRATA is switched off.
 
 Saved sounds live on the card in `ENAGA/DATA/STRATA/SOUNDS/`, one file per machine (`KCK.BIN`,
 `MNO.BIN` and so on), beside the projects and the kit library. They are not part of a project:
@@ -1520,6 +1525,37 @@ Envelope times stay as they are, and MID tracks send their notes unmoved. VariSp
 internal clock: under MIDI or SYNC it says `EXT CLOCK`, and it goes back to rest when CLOCK SRC
 changes. It is not saved, not undone and not held by a LOCK, like the tempo.
 
+### TRANSPOSE: move the melodic tracks through the key
+
+**FUNC + SEL> moves the melodic tracks up a step of the scale, FUNC + SEL< down**, on every
+screen, up to 12 steps either way. Press **both screen keys** with FUNC (the second while the
+first is still down) to go back to 0. Every note walks the project's scale, so the parts stay in
+the key and move the way a chord progression does: in A minor, two steps down takes a bass line
+on A to F and the A minor chord to F major, the key's VI, with every note still one of A minor's.
+The notice says `TRANSPOSE -2 IN KEY`, and `TRANSPOSE 0` at rest. PERFORM shows `TR-2` on its
+status line (beside `BAR` while stopped) and the live strip says `TR-2` on every screen.
+
+**For semitones**, set the FUNC menu's TRANSPOSE row (under FX GLIDE) from `SCALE` to `SEMI`.
+A step is then a semitone and the key moves with the notes: every line keeps its shape and every
+chord its colour, so A minor +3 plays C minor, and the notice names the key, `TRANSPOSE +3 C`.
+The amount stays where it is when you switch, heard in the new unit. The row is not saved:
+every start is SCALE. With the project's scale on CHROMATIC the two are the same.
+
+The tracks that move are exactly the ones that fold into the scale: VA MONO, VA POLY, WAVE MONO,
+WAVE POLY, FM4, GRAIN, and SAMPLE while it plays the sample whole (SLC 1). The drums keep their
+tuning, a sliced SAMPLE keeps its slices (there the note picks the slice) and MID tracks send
+their notes unmoved, since the instrument on the other end may be a drum machine. So the beat and
+the chopped loops stay put and the harmony moves.
+
+Everything those tracks play moves: steps, chords, the
+arp (a running arp follows at its next note), pads, KEYS, MIDI IN notes, note repeat, and what
+goes to MIDI OUT. A key you are holding keeps sounding at the pitch it started on and lets go
+cleanly after a change.
+
+Nothing is written. A note you record in KEYS while transposed is stored as the key you pressed,
+so it plays back moved with the rest, as you heard it, and at 0 everything is as programmed.
+TRANSPOSE is not saved or undone; a LOCK holds it, so a jump brings back the key you stored.
+
 ### Beat repeat, throws and auto-fill
 
 REPEAT loops the last 1/4, 1/8, 1/16 or 1/32 (or triplets) of the finished master while held;
@@ -1607,7 +1643,7 @@ over the old one.
 
 A lock holds the pattern whole (steps, locks, conditions, lengths, swing), every track's sound
 (all eight EDIT pages) and fader, the sends and the master, the mutes, and where the morph and
-the four macros are, REL ALL and LEN ALL, LIVE RND and ENERGY (FEEL is in the pattern). It does not hold the samples or the machines (a lock taken before a machine
+the four macros are, REL ALL and LEN ALL, LIVE RND, ENERGY and TRANSPOSE (FEEL is in the pattern). It does not hold the samples or the machines (a lock taken before a machine
 switch brings back the parameters only), the tempo, the kill EQ's switches, the scenes or the
 macro setup, the stored mute states or the chain. The performance mixer is not in it either: a
 jump rides the picked effect back to 0 over FX GLIDE and leaves a loop playing.

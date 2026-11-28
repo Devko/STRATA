@@ -76,6 +76,9 @@ struct UiProbe {
         app.post(Cmd::set_live_rnd, 0, 0, kLiveRndOff, kLiveRndAllTracks);
         app.energy_ = 0;                             // ENERGY to rest
         app.post(Cmd::set_energy, 0, 0, 0);
+        app.transpose_ = 0;                          // TRANSPOSE to rest, in scale steps
+        app.transpose_semis_ = false;
+        app.post(Cmd::set_transpose, 0, 0, 0, 0);
         app.vari_ = 0;                               // VariSpeed to rest
         app.post(Cmd::set_varispeed, 0, 0, 0);
     }
@@ -164,6 +167,8 @@ struct UiProbe {
     // engine's side of the macros, morph, repeat and take by its posts.
     static void view_to_defaults(Strata &app) {
         app.shown_bank_ = 0;
+        app.sel_left_down_ = false;         // a screen key a test left down (TRANSPOSE's reset)
+        app.sel_right_down_ = false;
         app.count_in_armed_ = 0;            // a count-in armed by the last test's PLAY
         app.queue_mode_ = QueueMode::end_of_pattern;
         app.echo_ = Echo::none;
@@ -409,9 +414,9 @@ void open_keys() {
 
 // The FUNC menu's rows, in order (app/ui_perfmix.hpp, MenuItem).
 enum MenuRow : int { kMenuSave, kMenuJam, kMenuArr, kMenuClick, kMenuCountIn, kMenuRecMode,
-                     kMenuQuantize, kMenuAutofill, kMenuGlide, kMenuLoopLen, kMenuChain, kMenuSong,
-                     kMenuArrUndo, kMenuProgOut, kMenuSaveAs, kMenuOpen, kMenuKits, kMenuNew,
-                     kMenuReload, kMenuClear, kMenuDemo, kMenuRowCount };
+                     kMenuQuantize, kMenuAutofill, kMenuGlide, kMenuTranspose, kMenuLoopLen,
+                     kMenuChain, kMenuSong, kMenuArrUndo, kMenuProgOut, kMenuSaveAs, kMenuOpen,
+                     kMenuKits, kMenuNew, kMenuReload, kMenuClear, kMenuDemo, kMenuRowCount };
 
 // GRID's track menu's rows, in order (app/ui_trackmenu.hpp, TrackRow).
 enum TrackMenuRow : int { kTrackGenerate, kTrackDensity, kTrackRange, kTrackLeap, kTrackWhat,
@@ -8056,14 +8061,14 @@ void let_go_of_func(Strata &app) {
     CHECK(!UiProbe::func_help(app));
 }
 
-// Every page of the help on the screen that is up, through the layout check, turning with the
-// screen key. Ends on the page it started on, so it can be called twice in a row.
+// Every page of the help on the screen that is up, through the layout check, turning with
+// RIGHT. Ends on the page it started on, so it can be called twice in a row.
 void check_help_layout(Strata &app, const char *where) {
     hold_func(app);
     for (int p = 0; p < 12; p++) {
         check_layout(app, where);
         if (screen_has(app, "PAGE 1/") && p > 0) break;   // round again: every page seen
-        key(ENAGA_KEY_SELECT_RIGHT);
+        key(ENAGA_KEY_RIGHT);
         CHECK(UiProbe::func_help(app));
     }
     let_go_of_func(app);
@@ -8080,10 +8085,13 @@ TEST(ui_the_func_help_is_for_the_screen_that_is_up) {
     CHECK(screen_has(app, "PAGE 1/12"));
     CHECK(!screen_has(app, "FUNC + KEY:"));
 
-    // The screen keys turn the help's pages while FUNC is held, and not GRID's knob page.
+    // LEFT/RIGHT turn the help's pages while FUNC is held, and not GRID's step page or knob
+    // page.
     const int knob_page = UiProbe::param_page(app);
-    key(ENAGA_KEY_SELECT_RIGHT);
+    const int step_page = UiProbe::page(app);
+    key(ENAGA_KEY_RIGHT);
     CHECK(UiProbe::func_help(app));
+    CHECK_EQ(UiProbe::page(app), step_page);
     CHECK(screen_has(app, "STEPS:"));
     CHECK(screen_has(app, "PAGE 2/12"));
     CHECK_EQ(UiProbe::param_page(app), knob_page);
@@ -8097,8 +8105,8 @@ TEST(ui_the_func_help_is_for_the_screen_that_is_up) {
     CHECK(screen_has(app, "VALUE FX MIXER:"));
     key(ENAGA_KEY_LEFT);
     CHECK(screen_has(app, "UPPER PADS TRK1-7:"));
-    key(ENAGA_KEY_SELECT_LEFT);
-    key(ENAGA_KEY_SELECT_LEFT);
+    key(ENAGA_KEY_LEFT);
+    key(ENAGA_KEY_LEFT);
     CHECK(screen_has(app, "FUNC + KEY:"));
     CHECK(screen_has(app, "MIXER  PERFORM"));
     CHECK_EQ(UiProbe::param_page(app), knob_page);
@@ -8109,12 +8117,20 @@ TEST(ui_the_func_help_is_for_the_screen_that_is_up) {
     CHECK(screen_has(app, "GRID SRC KCK"));
     let_go_of_func(app);
 
-    // FUNC + a screen key before the help is up is still a chord that does nothing to the help.
+    // FUNC + a screen key is TRANSPOSE, before the help is up or after: it never turns the
+    // help's pages, and the help stays away once it has been pressed.
     app.on_key(ENAGA_KEY_F1, true);
     key(ENAGA_KEY_SELECT_RIGHT);
     pump(800);
     CHECK(!UiProbe::func_help(app));
+    CHECK_EQ(int(UiProbe::engine(app).transpose()), 1);
     app.on_key(ENAGA_KEY_F1, false);
+    hold_func(app);
+    key(ENAGA_KEY_SELECT_LEFT);
+    CHECK(!UiProbe::func_help(app));
+    pump(2);
+    CHECK_EQ(int(UiProbe::engine(app).transpose()), 0);
+    let_go_of_func(app);
 
     // EDIT names its page and machine; the snare's knobs are the snare's.
     post_track(Cmd::set_machine, 0, uint8_t(MachineId::snare));
@@ -8513,15 +8529,12 @@ const char *quiet_reason(int s, const Probe &p, bool func) {
         return "FUNC + LEFT/RIGHT: free";
     }
 
-    // docs/CONTROLS.md: the screen keys turn pages and have no FUNC job (the track speed, which
-    // was FUNC + screen key, is in GRID's track menu).
-    if (func && p.kind == in_key &&
-        (p.id == ENAGA_KEY_SELECT_LEFT || p.id == ENAGA_KEY_SELECT_RIGHT)) {
-        return "FUNC + screen key: free";
-    }
     // The FUNC menu is a list: the arrows, A, B, OK and CLR. The STEP keys, the screen keys and
-    // the pad-row keys do nothing in it, plain or with FUNC, and C and D have nothing to turn.
-    if (s == s_menu && p.kind == in_key &&
+    // the pad-row keys do nothing in it, plain or with FUNC, and C and D have nothing to turn --
+    // but FUNC + a screen key is TRANSPOSE there too, as on every screen.
+    const bool transpose = func && p.kind == in_key &&
+                           (p.id == ENAGA_KEY_SELECT_LEFT || p.id == ENAGA_KEY_SELECT_RIGHT);
+    if (s == s_menu && p.kind == in_key && !transpose &&
         (p.id == ENAGA_KEY_SELECT_LEFT || p.id == ENAGA_KEY_SELECT_RIGHT ||
          p.id == ENAGA_KEY_OCTAVE_LEFT || p.id == ENAGA_KEY_OCTAVE_RIGHT ||
          p.id == ENAGA_KEY_STEP1 + 1)) {
@@ -9297,8 +9310,8 @@ TEST(ui_screenshots) {
     app.on_key(ENAGA_KEY_F1, true);
     write_shot(folder, "help", 800);
     CHECK(UiProbe::func_help(app));
-    // The screen keys turn it: back three pages is FUNC + each function key, on every screen.
-    for (int i = 0; i < 3; i++) key(ENAGA_KEY_SELECT_LEFT);
+    // LEFT/RIGHT turn it: back three pages is FUNC + each function key, on every screen.
+    for (int i = 0; i < 3; i++) key(ENAGA_KEY_LEFT);
     write_shot(folder, "help_keys", 1);
     CHECK(UiProbe::func_help(app));
     app.on_key(ENAGA_KEY_F1, false);
@@ -10502,6 +10515,8 @@ TEST(ui_sounds_func_down_saves_the_tracks_sound_by_name_and_ok_loads_it_back) {
     Strata &app = fresh();
     sounds_on(app, MachineId::kick);
     kick_of_my_own();
+    post_cmd_track(Cmd::set_lfo_trig, 0, kLfoTrigOneShot);   // a kit setting the sound keeps
+    pump(2);
     const TrackParams mine = app_engine().params(0);
     CHECK(app_storage().sound_bank_state(uint8_t(MachineId::kick)) == Storage::SoundBankState::ready);
 
@@ -10519,15 +10534,20 @@ TEST(ui_sounds_func_down_saves_the_tracks_sound_by_name_and_ok_loads_it_back) {
     CHECK(screen_has(app, ">+KCK 1     NOW"));
     check_layout(app, "SOUNDS with one of your own");
 
-    // Another sound, then the saved one back: exactly the bytes a sound owns.
+    // Another sound, the pan and the LFO TRIG moved, then the saved one back: all of it, the
+    // mix and the kit setting included.
     sounds_cursor_to(2);
     key(ENAGA_KEY_OK);
+    post_cmd(Cmd::set_param, uint8_t(kUserSoundFxFirst + 1), 20);
+    post_cmd_track(Cmd::set_lfo_trig, 0, kLfoTrigFree);
     pump(2);
     CHECK(!same_params(app_engine().params(0), mine));
+    CHECK(!screen_has(app, "+KCK 1     NOW"));
     sounds_cursor_to(first_user_row_on_kick());
     key(ENAGA_KEY_OK);
     pump(2);
     CHECK(same_params(app_engine().params(0), mine));
+    CHECK_EQ(int(app_engine().project().kit.tracks[0].lfo_trig), int(kLfoTrigOneShot));
     CHECK(std::strcmp(UiProbe::notice(app), "KCK 1") == 0);
 
     // FUNC + DOWN on your own row replaces it, offering its name; a second save offers KCK 2.
@@ -10614,17 +10634,24 @@ TEST(ui_sounds_func_up_copies_a_sound_and_paste_puts_it_on_any_track) {
     Strata &app = fresh();
     sounds_on(app, MachineId::kick);
     kick_of_my_own();
+    // Kit settings of its own too: a RETRIG LFO and an arp VAR, which a copy carries.
+    post_cmd_track(Cmd::set_lfo_trig, 0, kLfoTrigRetrig);
+    post_cmd_track(Cmd::set_arp_ext, 0, 0, 2);
+    pump(2);
     const TrackParams kick = app_engine().params(0);
+    const UserSoundExtras kick_extras = user_sound_extras_of(app_engine().project().kit.tracks[0]);
     shift_key(ENAGA_KEY_UP);
     CHECK(std::strcmp(UiProbe::notice(app), "COPIED T1 KCK") == 0);
 
-    // Track 2, another machine: the PASTE row under AS WAS switches it to KICK and sounds as
-    // track 1 does, its own mix kept.
+    // Track 2, another machine: the PASTE row under AS WAS switches it to KICK and is track 1's
+    // sound, all of it: every parameter, mix, LFO and ARP among them, and the kit settings.
     key(ENAGA_KEY_SELECT_RIGHT);
     pump(2);
     const uint8_t was = app_engine().machine_id(1);
     CHECK(was != uint8_t(MachineId::kick));
     const TrackParams before = app_engine().params(1);
+    const UserSoundExtras before_extras = user_sound_extras_of(app_engine().project().kit.tracks[1]);
+    CHECK(!user_sound_extras_equal(before_extras, kick_extras));
     sounds_cursor_to(1);
     CHECK(screen_has(app, ">PASTE T1 KCK"));
     check_layout(app, "SOUNDS with PASTE");
@@ -10634,18 +10661,18 @@ TEST(ui_sounds_func_up_copies_a_sound_and_paste_puts_it_on_any_track) {
     CHECK_EQ(int(app_engine().machine_id(1)), int(MachineId::kick));
     const TrackParams &now = app_engine().params(1);
     for (int p = 0; p < kTrackParams; p++) {
-        if (user_sound_owns(uint8_t(MachineId::kick), p)) {
-            CHECK_EQ(int(now.v[p]), int(kick.v[p]));
-        } else if (p >= kUserSoundFxFirst && p < kSoundAsrFirst) {
-            CHECK_EQ(int(now.v[p]), int(before.v[p]));     // its mix, LFO and ARP stay
-        }
+        if (kit_param_real(p)) CHECK_EQ(int(now.v[p]), int(kick.v[p]));
     }
+    CHECK(user_sound_extras_equal(user_sound_extras_of(app_engine().project().kit.tracks[1]),
+                                  kick_extras));
     // The list is the KICK's now, and AS WAS takes the paste back: machine and sound.
     sounds_cursor_to(0);
     key(ENAGA_KEY_OK);
     pump(2);
     CHECK_EQ(int(app_engine().machine_id(1)), int(was));
     CHECK(same_params(app_engine().params(1), before));
+    CHECK(user_sound_extras_equal(user_sound_extras_of(app_engine().project().kit.tracks[1]),
+                                  before_extras));
     key(ENAGA_KEY_CLR);
     key(ENAGA_KEY_F4);
 }
@@ -12280,6 +12307,125 @@ TEST(ui_a_lock_jump_puts_energy_back_and_the_knob_follows) {
     func_mutate_tap(app);                                     // swap back
     pump(4);
     CHECK_EQ(int(engine.energy()), 8);
+}
+
+// --- TRANSPOSE (core/transpose.hpp) -----------------------------------------------------------
+
+// FUNC + SEL< / SEL> is TRANSPOSE on every screen, a semitone a press, held to an octave; both
+// screen keys together put it back to 0. The notice names the key, PERFORM and the live strip
+// say where it is, and the screen keys without FUNC still turn pages. Nothing saved or undone.
+TEST(ui_func_and_the_screen_keys_transpose_on_every_screen) {
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+    post_cmd(Cmd::set_root, 9);                              // A
+    pump(2);
+    key(ENAGA_KEY_F4);                                       // GRID
+    const int knob_page = UiProbe::param_page(app);
+    const uint8_t undo_before = undo_depth();
+
+    // Scale steps at every start.
+    app.on_key(ENAGA_KEY_F1, true);
+    key(ENAGA_KEY_SELECT_RIGHT);
+    key(ENAGA_KEY_SELECT_RIGHT);
+    key(ENAGA_KEY_SELECT_RIGHT);
+    pump(2);
+    CHECK_EQ(int(engine.transpose()), 3);
+    CHECK(!engine.transpose_semitones());
+    CHECK(std::strcmp(UiProbe::notice(app), "TRANSPOSE +3 IN KEY") == 0);
+    CHECK_EQ(UiProbe::param_page(app), knob_page);           // no page turned
+    key(ENAGA_KEY_SELECT_LEFT);
+    pump(2);
+    CHECK_EQ(int(engine.transpose()), 2);
+    CHECK(std::strcmp(UiProbe::notice(app), "TRANSPOSE +2 IN KEY") == 0);
+    for (int i = 0; i < 20; i++) key(ENAGA_KEY_SELECT_LEFT);  // stops at -12
+    pump(2);
+    CHECK_EQ(int(engine.transpose()), -kTransposeRange);
+    CHECK(std::strcmp(UiProbe::notice(app), "TRANSPOSE -12 IN KEY") == 0);
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(1600);
+    CHECK(strip_has(app, "TR-12"));
+    CHECK_EQ(int(undo_depth()), int(undo_before));
+
+    // Both screen keys: the second press with the first still down is rest, from any screen.
+    shift_key(ENAGA_KEY_F7);                                 // PERFORM
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_key(ENAGA_KEY_SELECT_LEFT, true);
+    app.on_key(ENAGA_KEY_SELECT_RIGHT, true);
+    app.on_key(ENAGA_KEY_SELECT_RIGHT, false);
+    app.on_key(ENAGA_KEY_SELECT_LEFT, false);
+    pump(2);
+    CHECK_EQ(int(engine.transpose()), 0);
+    CHECK(std::strcmp(UiProbe::notice(app), "TRANSPOSE 0") == 0);
+    key(ENAGA_KEY_SELECT_RIGHT);
+    key(ENAGA_KEY_SELECT_RIGHT);
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(1600);
+    CHECK_EQ(int(engine.transpose()), 2);
+    CHECK(screen_has(app, "BAR 1 TR+2"));
+    CHECK(strip_has(app, "TR+2"));
+    check_layout(app, "PERFORM, TRANSPOSE up");
+
+    // In the FUNC menu as well, where the TRANSPOSE row (under FX GLIDE) switches to semitones:
+    // the amount stays, in the new unit, and the notice then names the key.
+    shift_key(ENAGA_KEY_F4);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::menu));
+    shift_key(ENAGA_KEY_SELECT_LEFT);
+    pump(2);
+    CHECK_EQ(int(engine.transpose()), 1);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::menu));
+    for (int i = 0; i < kMenuTranspose; i++) key(ENAGA_KEY_DOWN);   // SAVE .. FX GLIDE, TRANSPOSE
+    CHECK(screen_has(app, "TRANSPOSE"));
+    CHECK(screen_has(app, "SCALE"));
+    key(ENAGA_KEY_RIGHT);
+    pump(2);
+    CHECK(engine.transpose_semitones());
+    CHECK_EQ(int(engine.transpose()), 1);
+    CHECK(std::strcmp(UiProbe::notice(app), "TRANSPOSE SEMITONES") == 0);
+    CHECK(screen_has(app, "SEMI"));
+    check_layout(app, "the FUNC menu on TRANSPOSE");
+    shift_key(ENAGA_KEY_SELECT_RIGHT);
+    pump(2);
+    CHECK(std::strcmp(UiProbe::notice(app), "TRANSPOSE +2 B") == 0);   // A + 2 semitones
+    shift_key(ENAGA_KEY_SELECT_LEFT);
+    key(ENAGA_KEY_OK);                                       // OK flips it back
+    pump(2);
+    CHECK(!engine.transpose_semitones());
+    CHECK(std::strcmp(UiProbe::notice(app), "TRANSPOSE IN SCALE") == 0);
+    key(ENAGA_KEY_CLR);
+
+    // Back to rest: the strip and PERFORM say nothing.
+    shift_key(ENAGA_KEY_SELECT_LEFT);
+    pump(1600);
+    CHECK_EQ(int(engine.transpose()), 0);
+    CHECK(!strip_has(app, "TR"));
+    post_cmd(Cmd::set_root, 0);
+    pump(2);
+}
+
+// TRANSPOSE is in a LOCK: a jump puts it back and the next press goes on from there.
+TEST(ui_a_lock_jump_puts_transpose_back_and_the_keys_follow) {
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+    shift_key(ENAGA_KEY_F7);
+    for (int i = 0; i < 5; i++) shift_key(ENAGA_KEY_SELECT_RIGHT);   // +5
+    pump(2);
+    func_mutate_hold(app);                                    // store
+    pump(2);
+    for (int i = 0; i < 7; i++) shift_key(ENAGA_KEY_SELECT_LEFT);    // -2
+    pump(2);
+    CHECK_EQ(int(engine.transpose()), -2);
+    func_mutate_tap(app);                                     // jump
+    pump(4);
+    CHECK_EQ(int(engine.transpose()), 5);
+    shift_key(ENAGA_KEY_SELECT_RIGHT);                        // on from the lock's +5
+    pump(2);
+    CHECK_EQ(int(engine.transpose()), 6);
+    func_mutate_tap(app);                                     // swap back
+    pump(4);
+    CHECK_EQ(int(engine.transpose()), -2);
+    shift_key(ENAGA_KEY_SELECT_RIGHT);
+    pump(2);
+    CHECK_EQ(int(engine.transpose()), -1);
 }
 
 // FEEL on the PATTERN page: D turns it from anywhere on the page, the row is the field after

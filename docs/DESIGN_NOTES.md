@@ -75,6 +75,23 @@ left alone (no pitch bend range to rely on). Not in a LOCK, not saved: the tempo
 and the project keeps its own tempo so a save is never the moved one. Internal clock only;
 `vari_follow_source` drops it on a CLOCK SRC change. UNIT_CHECKLIST W70, `scenario_varispeed`.
 
+## TRANSPOSE
+
+**TRANSPOSE** (backlog After 1.0 > Performance, `core/transpose.hpp`, docs/CONTROLS.md
+"TRANSPOSE") is FUNC + the screen keys on every screen: the help keeps LEFT/RIGHT for its pages,
+and a gesture that sometimes paged the help would not be playable. The engine shifts AFTER the
+fold, at each place a note becomes a machine's trig on a track `transpose_moves` (=
+`machine_folds_note`) allows: `fire` (the plain note and every chord note), `arp_play` (every arp
+hit, a KEYS arp's included, so `fire` hands the arp the folded notes unmoved), `Cmd::trigger_note`
+and `roll_fire`, all through `transpose_apply`. `key_shift_[track][note]` keeps how far a held
+key moved so `Cmd::release_note` lets go of the pitch that sounded. Scale steps by default
+(Roland, 2026-11-28), `scale_step` on the folded note, with an out-of-key note (a KEYS pad)
+keeping its distance to its fold; the FUNC menu's TRANSPOSE row (not saved) makes it semitones,
+where fold(x, root) + n == fold(x + n, root + n) away from the MIDI range's edges
+(tests/test_transpose.cpp checks every note, root, scale and shift), so "the key moves with it"
+needs no second fold. The amount is in a LOCK (`LiveState` grew a byte), the row is not. A section field (NRG's sibling) is the
+natural next step and not built. UNIT_CHECKLIST W75, `scenario_transpose`.
+
 ## LIVE RND
 
 **LIVE RND** (CyDrums P1's live half, `core/liverand.hpp`, docs/CONTROLS.md "LIVE RND"): FUNC +
@@ -276,11 +293,20 @@ the protocol. The decisions behind it:
   this one still reads it, and a record with fewer bytes takes the machine's defaults for the rest.
   A file this build cannot read is never written over (`failed`), so nothing a newer build or a
   damaged card holds is lost by saving.
-- **The whole kKitParams bytes are kept; loading writes what a factory sound writes**
-  (`user_sound_owns` = `sound_preset_writes`), so the FX page, LFO and ARP stay the track's, as
-  Roland chose for the factory sounds. Kept whole so a later build may choose to load more.
+- **A saved sound is all of the sound** (Roland, 2026-11-28: "save should have all parameter of
+  a sound"): loading writes every real parameter (`user_sound_owns` = `kit_param_real`), FX, LFO
+  and ARP included, and the kit settings of the LFO and ARP pages (`UserSoundExtras`: TRIG, the
+  mod slots, VAR, RHYTHM, ACCENT, RATCHET), which travel in the file's optional section 2 (a file
+  without it loads them as a fresh track's) and reach the engine by the commands their pages post.
+  A factory sound still writes only `sound_preset_writes`. The mixer's settings (fader, chorus,
+  WID, duck, choke group) stay the track's: they are how it sits beside the others.
+- **AS WAS after a saved sound or paste puts back everything** (`Engine::sound_back_all_`, set
+  when `Cmd::sound_bytes` lands): every parameter and the kit settings as they were when the list
+  opened. After factory sounds only, it puts back just their bytes, so a pan move made while
+  trying them stays.
 - **Loading goes as bytes, not a preset index**: `Cmd::sound_bytes` carries eight a command (b-e
-  and `u`), four commands a sound, posted together so they land in one block. No shared buffer
+  and `u`), six commands a sound, then the seven kit-setting commands, posted together so they
+  land in one block. No shared buffer
   between the contexts is needed.
 - **Copy is a clipboard row, not a target picker**: FUNC+UP takes the track's sound into the UI's
   clipboard and OK on the PASTE row loads it, so "paste" is the list's own OK. Pasting onto

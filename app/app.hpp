@@ -36,6 +36,7 @@
 #include "engine.hpp"
 #include "help.hpp"         // the FUNC help's pages, one set per screen
 #include "energy.hpp"       // ENERGY: FUNC + C in PERFORM
+#include "transpose.hpp"    // TRANSPOSE: FUNC + the screen keys
 #include "varispeed.hpp"    // VariSpeed: FUNC + VALUE, tempo and pitch together
 #include "liverand.hpp"     // LIVE RND: FUNC + D in PERFORM
 #include "paint.hpp"        // the drawing kit: lines, arcs, the small font, afterglow
@@ -977,6 +978,12 @@ private:
     // ENERGY (core/energy.hpp): where FUNC + C left it, posted absolute like REL ALL and read
     // back from the engine after a LOCK jump.
     int8_t energy_ = 0;
+    // TRANSPOSE (core/transpose.hpp): where FUNC + the screen keys left it, posted absolute and
+    // read back from the engine after a LOCK jump. Which screen keys are down, for the reset.
+    int8_t transpose_ = 0;
+    bool transpose_semis_ = false;      // the FUNC menu's TRANSPOSE row: SEMI, else SCALE
+    bool sel_left_down_ = false;
+    bool sel_right_down_ = false;
     // VariSpeed (core/varispeed.hpp): tenths of a semitone, 0 rest. Not in a LOCK, not saved.
     int8_t vari_ = 0;
     uint16_t morph_ = 0;
@@ -1115,6 +1122,7 @@ private:
         uint8_t machine = 0;
         uint8_t track = 0;
         uint8_t params[kKitParams] = {};
+        UserSoundExtras extras;
     };
     SoundClip sound_clip_;
     // The name entry SOUNDS opened: which bank slot, for which machine, and (a save) the bytes
@@ -1122,6 +1130,7 @@ private:
     int sound_entry_slot_ = -1;
     uint8_t sound_entry_machine_ = 0;
     uint8_t sound_entry_params_[kKitParams] = {};
+    UserSoundExtras sound_entry_extras_ = {};
     int sound_delete_armed_ = -1;               // push C on this slot; OK twice deletes it
     int sound_delete_oks_ = 0;
     uint32_t sound_delete_ok_at_ms_ = 0;

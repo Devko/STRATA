@@ -374,10 +374,11 @@ enum class Cmd : uint8_t {
     // A saved sound (core/usersounds.hpp) or a copied one into one track: eight parameter bytes
     // a command, from parameter `step`: b c d e, then u's four bytes low first. track, a: the
     // MachineId the bytes are for -- refused if the track hosts another machine by the time it
-    // lands. Only the bytes a sound owns (user_sound_owns) are written, as for sound_preset, so
-    // the mix stays the user's. A whole sound is (kKitParams + 7) / 8 of these, posted together, so
-    // they land in one block. AS WAS (sound_preset with kSoundPresetBack) puts back what was
-    // there, the machine included when a paste switched it.
+    // lands. Every parameter a sound owns (user_sound_owns: all but the hole) is written, the mix
+    // included. A whole sound is (kKitParams + 7) / 8 of these, then its LFO and ARP kit settings
+    // by their own commands, posted together, so they land in one block. AS WAS (sound_preset
+    // with kSoundPresetBack) then puts back everything that was there: the machine when a paste
+    // switched it, every parameter, and the kit settings.
     sound_bytes,
 
     // A factory arp (core/arppresets.hpp) into one track: the ARPS list (OK on the ARP page).
@@ -431,6 +432,11 @@ enum class Cmd : uint8_t {
     // absolute (the UI keeps the position, as it does REL ALL's). Performance, not edits: no
     // file, no undo; a LOCK holds it.
     set_energy,
+    // TRANSPOSE (core/transpose.hpp), FUNC + the screen keys on every screen. a: the steps as an
+    // int8, -12 .. 12, absolute (the UI keeps it, as it does ENERGY); b: 1 semitones, 0 scale
+    // steps (the FUNC menu's row). The melodic tracks' notes, after the scale fold. Performance,
+    // not an edit: no file, no undo; a LOCK holds the amount.
+    set_transpose,
     // VariSpeed (core/varispeed.hpp), FUNC + turn VALUE. a: the amount as an int8, tenths of a
     // semitone, -120 .. 120, absolute (the UI keeps it, with the clock it sets). The pitch of
     // every machine and the delay's beat; Enaga's tempo is app/'s to set. Performance, not an

@@ -293,7 +293,7 @@ beat playing.
 **W19. Help for the screen you are on (#107, 3 min).** Hold FUNC alone on each screen below
 for a second; it shows that screen's help, with `PAGE 1/11` at its foot.
 - GRID on the kick: `GRID SRC KCK`, then `A TUN TUNE` ... `D CLK CLICK`, `PUSH A     NOTE VIEW`.
-- Still holding FUNC, tap the screen key RIGHT: `STEPS:` (`STEP+LATER STEP  LEN` among them),
+- Still holding FUNC, tap RIGHT: `STEPS:` (`STEP+LATER STEP  LEN` among them),
   `HOLD STEP + PAD:`, `RANGE AND TRACK:`, `STEP LIGHTS:`, `FUNC + KEY:`, `FUNC + KNOB OR PAD:`,
   `UPPER PADS`, `VALUE FX MIXER:`, `VALUE FX STEPS:`, and round to page 1. LEFT goes back. GRID's
   own knob page did **not** change.
@@ -904,14 +904,18 @@ Beat playing, A01, a card with some space.
   offering `KCK 1`. OK: `SAVED KCK 1`, and `+KCK 1     NOW` at the end of the list, under the
   cursor. The beat never stops or stutters. `____`
 - Down to 909, OK: the factory kick. Back to `+KCK 1`, OK: your kick again, as you left it. `____`
+- On the FX page turn PAN hard left, on the LFO page push RAT to `RETRIG` and give the LFO some
+  depth, then FUNC + DOWN on `+KCK 1`, OK (REPLACE). Pan back to the middle and TRIG to `FREE`,
+  OK on `+KCK 1`: the kick is hard left again and its LFO restarts on every hit. AS WAS: middle,
+  FREE. `____`
 - Push B on `+KCK 1`, UP once, OK: `+LCK 1`. Push C, OK, OK: `DELETED`, the row is gone. Push B
   on a factory sound: `YOUR OWN SOUNDS ONLY`. `____`
 - Save one again, then switch the unit off and on: it is still in the list, in this project and
   after NEW. On the PC the card has `ENAGA/DATA/STRATA/SOUNDS/KCK.BIN`. `____`
 - Track 6 (MNO), SOUNDS, FUNC + UP: `COPIED T6 MNO`. Screen key right to track 7 (PLY):
   `PASTE T6 MNO` under AS WAS, `SWITCHES MACHINE` under the bars. OK: track 7 plays track 6's
-  bass sound on its own notes, its pan and sends as they were. AS WAS: PLY and its stab are
-  back. `____`
+  bass sound on its own notes, with track 6's pan, sends, LFO and arp. AS WAS: PLY and its
+  stab are back, with its own pan and sends. `____`
 
 **W69. Line input as a mixer channel (6 min).** Beat playing, A01, a synth or phone on INPUT L
 and R (line level), headphones on.
@@ -1032,6 +1036,24 @@ slots, no chain.
 - Save, power cycle, open: the captured slots are still there and the chain still plays them. `____`
 - Fill every empty slot of bank A, then the same take: `LAUNCH NOT KEPT`, once, and the chain
   entry is A01. FUNC+HOME, RELOAD PROJECT. `____`
+
+**W75. TRANSPOSE (4 min).** Beat playing, A01.
+- FUNC + SEL> three times: `TRANSPOSE +1 IN KEY`, `+2`, `+3`; the bass, chords and leads walk up
+  the scale together and stay in the key, while the kick, hats, snare and a sliced loop do not
+  move. The live strip shows `TR+3`, PERFORM's status line `TR+3`. Musical? `____`
+- FUNC+HOME, DOWN to TRANSPOSE (under FX GLIDE), RIGHT: `SEMI`, `TRANSPOSE SEMITONES`; the parts
+  jump to +3 semitones, a new key. FUNC + SEL<: `TRANSPOSE +2 ..` with the key named in sharps.
+  Back to `SCALE`. `____`
+- FUNC held down, SEL< then SEL> while SEL< is still down: `TRANSPOSE 0`, A01 exactly as
+  programmed. Hold FUNC alone for a second: the help comes up, and LEFT/RIGHT (not the screen
+  keys) turn its pages. `____`
+- KEYS on the bass track: hold a pad, FUNC + SEL> twice while it sounds, let go of the pad: the
+  note ends cleanly, nothing hangs. The next pad sounds two scale steps up. With REC on, a note
+  played at +2 plays back moved with the rest; at 0 it is the pad you pressed. `____`
+- ARP on the chord track (EDIT, ARP page, MOD UP): FUNC + SEL< while it runs: the run follows at
+  its next note. `____`
+- `TRANSPOSE +5`, hold FUNC + MUTATE (a lock), go back to 0, tap FUNC + MUTATE: +5 again; tap
+  again: 0. `____`
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
 

@@ -48,6 +48,7 @@
 #include "launch.hpp"    // Track Launch: a lane playing another slot's part
 #include "moveall.hpp"   // REL ALL and LEN ALL: every track's release and note length
 #include "varispeed.hpp" // VariSpeed: every machine's pitch with the tempo
+#include "usersounds.hpp"  // UserSoundExtras: what AS WAS puts back after a user sound
 #include "arp.hpp"       // the arpeggiator's notes
 #include "arrrec.hpp"    // ARR REC: the jam written into the chain
 #include "sample.hpp"
@@ -205,6 +206,10 @@ public:
     uint8_t live_rnd_armed() const { return perform_.rnd_armed; }
     // ENERGY (core/energy.hpp): -64 .. +64, 0 is rest.
     int8_t energy() const { return perform_.energy; }
+    // TRANSPOSE (core/transpose.hpp): steps on the melodic tracks, 0 is rest; scale steps, or
+    // semitones while `transpose_semitones()`.
+    int8_t transpose() const { return transpose_; }
+    bool transpose_semitones() const { return transpose_semis_; }
     // VariSpeed (core/varispeed.hpp): tenths of a semitone on every machine, 0 is rest.
     int8_t varispeed() const { return vari_tenths_; }
     AutoFill auto_fill() const { return auto_fill_; }
@@ -644,6 +649,12 @@ private:
 
     uint8_t machine_id_[kTracks] = {};
     uint8_t sent_note_[kTracks] = {};  // see sent_note()
+    // TRANSPOSE (core/transpose.hpp), and the shift each held KEYS key or MIDI IN note took, so
+    // its release lets go of the note that sounded even after the transpose moved on.
+    int8_t transpose_ = 0;
+    bool transpose_semis_ = false;
+    int8_t key_shift_[kTracks][128] = {};
+    uint8_t transposed(int track, uint8_t note) const;
 
     // And which tracks host a VaPoly, for the same reason and recorded the same way: a chord is
     // several notes on one frame, so `fire` has to know that this track can take them. A track
@@ -714,6 +725,8 @@ private:
     TrackParams sound_back_ = {};
     int sound_back_track_ = -1;
     uint8_t sound_back_machine_ = 0;   // and its machine, which a paste may have switched
+    UserSoundExtras sound_back_extras_ = {};   // its LFO TRIG, mod slots and arp settings
+    bool sound_back_all_ = false;      // a user sound or paste landed since: AS WAS puts back all
     // And `Cmd::arp_preset`'s: the ARP bytes and the arp's kit settings when ARPS opened.
     uint8_t arp_back_[kArpBytes] = {};
     KitArp arp_back_ext_ = {};

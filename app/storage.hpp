@@ -446,7 +446,8 @@ public:
     // Change the held bank and queue its write. False, nothing changed, when the bank held is not
     // `machine`'s or not ready, with no usable card, or when core/usersounds.hpp refuses (a slot
     // that does not exist, an empty one for rename or delete, a name it cannot hold).
-    bool request_sound_store(uint8_t machine, int slot, const char *name, const uint8_t *params);
+    bool request_sound_store(uint8_t machine, int slot, const char *name, const uint8_t *params,
+                             const UserSoundExtras &extras = UserSoundExtras{});
     bool request_sound_rename(uint8_t machine, int slot, const char *name);
     bool request_sound_delete(uint8_t machine, int slot);
 

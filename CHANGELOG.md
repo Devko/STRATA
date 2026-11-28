@@ -8,6 +8,15 @@ the project file format or the controls.
 
 ### Added
 
+- **TRANSPOSE: FUNC + the screen keys, on every screen.** The melodic tracks a step of the scale
+  down (SEL<) or up (SEL>), 12 steps either way, staying in the key (`TRANSPOSE +2 IN KEY`); both
+  screen keys together go back to 0. The FUNC menu's new TRANSPOSE row switches to semitones
+  (`SEMI`), where the key moves with the notes and the notice names it in sharps
+  (`TRANSPOSE +3 C`). The tracks that move are the ones that fold into the scale (VA MONO and
+  POLY, WAVE MONO and POLY, FM4, GRAIN, SAMPLE while unsliced); drums, sliced samples and MID stay.
+  Steps, chords, the arp, pads, KEYS, MIDI IN notes and MIDI OUT all follow; a held key lets go
+  at the pitch it started. Nothing is written or saved; a LOCK holds it. PERFORM and the live
+  strip show `TR+3`. New emulator scenario `transpose`.
 - **ARR REC: a jam written into the chain.** A FUNC menu row under JAM REC. On, it keeps the
   chain for undo, empties it, and from the next PLAY (or at once, mid-pass) writes every pass of
   the jam into it as song sections: the same pattern with the same mutes, scene, morph side,
@@ -74,10 +83,12 @@ the project file format or the controls.
   the same machine, in every project. FUNC+DOWN on one of your own replaces it, push B renames and
   push C deletes it (OK twice). Up to 16 per machine, kept in `ENAGA/DATA/STRATA/SOUNDS/<MCH>.BIN`,
   a versioned file per machine beside the projects; project files do not change. A saved sound
-  sets the pages a factory sound sets.
+  is all of the track's sound: every page, FX, LFO and ARP included, and the TRIG, mod slot and
+  arp settings pushed on the LFO and ARP pages. The mixer's settings stay the track's.
 - **Copy a sound to another track.** FUNC+UP in SOUNDS copies the track's sound; a `PASTE T1 KCK`
   row then sits under AS WAS on every track, and OK on it gives that track the sound, switching
-  its machine first when it hosts another. AS WAS takes the paste back, machine included. New
+  its machine first when it hosts another; the paste is all of the sound, as a saved one is. AS
+  WAS takes a paste or a saved sound back, machine and kit settings included. New
   emulator scenario `usersounds`.
 - **Queue a pattern from any screen.** Hold PROJECT and press STEP n: slot n of the shown bank is
   queued (`A05 QUEUED END`) and the screen you play on stays up. PROJECT now opens when the key
@@ -169,6 +180,8 @@ the project file format or the controls.
 
 ### Changed
 
+- **The FUNC help turns its pages on LEFT/RIGHT only.** FUNC + a screen key is TRANSPOSE (above),
+  so holding FUNC a moment too long can never turn a transpose into a page of help.
 - **A slimmer FUNC menu.** FUNC+HOME holds the project-wide rows only, in the order a jam reaches
   for them: SAVE, JAM REC, CLICK, COUNT-IN, REC MODE, QUANTIZE, AUTO-FILL, FX GLIDE, LOOP LEN,
   CHAIN, CHAIN END, then the file rows from SAVE AS down to LOAD DEMO (UP once from SAVE). The

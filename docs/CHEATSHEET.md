@@ -74,7 +74,7 @@ each line means.
 <tr><td align="center"><img src="screens/project.png" width="200" alt="PROJECT"><br><sub>PROJECT</sub></td><td align="center"><img src="screens/chain.png" width="200" alt="CHAIN"><br><sub>CHAIN</sub></td><td align="center"><img src="screens/pattern.png" width="200" alt="PATTERN"><br><sub>PATTERN</sub></td></tr>
 <tr><td align="center"><img src="screens/setup.png" width="200" alt="SETUP"><br><sub>SETUP</sub></td><td align="center"><img src="screens/projects.png" width="200" alt="PROJECTS"><br><sub>PROJECTS</sub></td><td align="center"><img src="screens/menu.png" width="200" alt="FUNC menu (FUNC+HOME)"><br><sub>FUNC menu (FUNC+HOME)</sub></td></tr>
 <tr><td align="center"><img src="screens/help.png" width="200" alt="FUNC held alone on GRID"><br><sub>FUNC held alone (GRID)</sub></td><td align="center"><img src="screens/mutate.png" width="200" alt="MUTATE pressed"><br><sub>MUTATE pressed</sub></td><td align="center"><img src="screens/scene.png" width="200" alt="SCENE A held"><br><sub>SCENE A held</sub></td></tr>
-<tr><td align="center"><img src="screens/help_keys.png" width="200" alt="FUNC held, screen keys to FUNC + KEY"><br><sub>FUNC held, screen keys: FUNC + KEY</sub></td><td></td><td></td></tr>
+<tr><td align="center"><img src="screens/help_keys.png" width="200" alt="FUNC held, LEFT to FUNC + KEY"><br><sub>FUNC held, LEFT: FUNC + KEY</sub></td><td></td><td></td></tr>
 </table>
 
 ## Keys that work everywhere
@@ -90,17 +90,18 @@ each line means.
 | VALUE turn | Tempo, 20-300 BPM in 0.1 steps (PERFORM: morph). With a performance effect picked: its amount (below) |
 | VALUE push + turn | Pattern swing |
 | Tap VALUE, twice or more | Tap tempo where VALUE turns the tempo (`TAP 128.0`), from the last four taps; a 2 s gap starts again |
+| FUNC + SEL< / SEL> | **TRANSPOSE**: the melodic tracks (VAs, WAVEs, FM4, GRAIN, unsliced SAMPLE) a scale step down / up, -12..+12, on every screen (`TRANSPOSE +2 IN KEY`); the FUNC menu's TRANSPOSE row on SEMI makes it semitones, the key moving too (`TRANSPOSE +3 C`). Both screen keys together back to 0. Drums, sliced samples and MID stay. Not saved; in a LOCK |
 | FUNC + VALUE turn | **VariSpeed**: tempo and the pitch of every machine together, like a turntable, a tenth of a semitone a click, an octave each way (`VARISPEED +1.2 140.3`). Rest is a detent; FUNC + tap VALUE (no effect picked) snaps back. Not saved; internal clock only (`EXT CLOCK`) |
 | FUNC + push VALUE + turn | Nudge: 4% faster or slower for 250 ms a detent, then back to the set tempo (`NUDGE FASTER`) |
 | Push VALUE + STEP, CLR, LEFT/RIGHT | The performance mixer (below) |
 | FUNC + push A / B / C | Master kill EQ: kill LOW / MID / HI, again to bring it back (`KILL LOW`, `LOW BACK`). Performance only: not saved, and a load brings every band back |
 | FUNC + pad-row L/R | Selected track's length (polymeter), on every screen but the menu; hold to repeat |
 | Arrow pad | UP/DOWN move through rows, LEFT/RIGHT sideways, OK picks, CLR goes back |
-| Screen keys L/R | The screen's pages (on GRID and KEYS: the EDIT page A-D turn) |
+| Screen keys L/R | The screen's pages (on GRID and KEYS: the EDIT page A-D turn); with FUNC, TRANSPOSE |
 | Pad-row keys L/R | Which 16 the STEP keys mean: step page (GRID, KEYS, PERFORM, EDIT and the other editing screens), bank (PROJECT, CHAIN) |
 | FUNC + UP / DOWN | Copy / paste while editing; in the card lists, read again / store here |
 | FUNC tapped alone | `HOLD FUNC: HELP`: the reminder that the help is there |
-| FUNC held alone | Help for this screen: what A-D do here and its gestures. Keep holding FUNC: screen keys (or LEFT/RIGHT) turn the pages; the last five are FUNC + each function key, FUNC + a knob or pad, the upper pads, and the VALUE mixer's gestures and slots |
+| FUNC held alone | Help for this screen: what A-D do here and its gestures. Keep holding FUNC: LEFT/RIGHT turn the pages; the last five are FUNC + each function key, FUNC + a knob or pad, the upper pads, and the VALUE mixer's gestures and slots |
 
 ## Pads
 
@@ -207,9 +208,9 @@ the track menu (hold OK in GRID); the last
 three throw away unsaved work, so each needs OK twice within 2 s (OK AGAIN TO RELOAD, OK AGAIN
 FOR NEW, OK AGAIN FOR DEMO). NEW is empty; LOAD DEMO is the factory demo a first start plays.
 **FUNC menu (FUNC+HOME):** SAVE, JAM REC, ARR REC, CLICK, COUNT-IN, REC MODE, QUANTIZE, AUTO-FILL,
-FX GLIDE, LOOP LEN, CHAIN, CHAIN END, ARR UNDO, PROG CHG OUT, SAVE AS, OPEN PROJECT, KITS, NEW
-PROJECT, RELOAD PROJECT, CLEAR PATTERN, LOAD DEMO. It always opens on SAVE: DOWN once is JAM REC,
-twice ARR REC, three times CLICK; the list wraps, so
+FX GLIDE, TRANSPOSE (SCALE or SEMI), LOOP LEN, CHAIN, CHAIN END, ARR UNDO, PROG CHG OUT, SAVE AS,
+OPEN PROJECT, KITS, NEW PROJECT, RELOAD PROJECT, CLEAR PATTERN, LOAD DEMO. It always opens on SAVE:
+DOWN once is JAM REC, twice ARR REC, three times CLICK; the list wraps, so
 UP once is LOAD DEMO, twice CLEAR PATTERN. UP/DOWN or A
 scroll, OK runs the row (NEW, RELOAD, CLEAR PATTERN and LOAD DEMO need OK twice), LEFT/RIGHT or B change a
 setting row (OK steps it too), CLR or FUNC+HOME close it. **Track menu (hold OK in GRID):**
@@ -258,6 +259,10 @@ the selected track out or back in (all eight at start). Pattern untouched; not s
 **ENERGY:** in PERFORM, FUNC + turn C from a breakdown (-64: drums and lines out, pads keep their
 strongest hits; hats go first, kick last) to the peak (+64: quiet ghosts on empty off-beats, hats
 most, probabilities towards 100). `ENERGY -20`; 0 is rest and a detent; pattern untouched; in a LOCK.
+**TRANSPOSE:** FUNC + SEL< / SEL> on any screen moves the tracks that fold into the scale a step
+of the scale, staying in the key (`TRANSPOSE +2 IN KEY`); FUNC menu TRANSPOSE `SEMI` makes it a
+semitone with the key moving (`TRANSPOSE +3 C`). Both screen keys together back to 0. A held key
+is let go of at the pitch it started; recording stores the key played. Not saved; in a LOCK.
 **MACRO LEARN:** in PERFORM push a macro's knob (A-D): EDIT opens with `LEARN B n/4`; **turn** any EDIT knob (any page, the LFO's included, any track), or LOW, MID and HI on MIXER's EQ page (the kill EQ), to where the macro's top should be; OK, CLR, HOME or any screen but EDIT and MIXER ends it (`B: 3 PARAMS`) and the knobs snap back, so the macro at 0 is the old sound and at 127 the one you dialled. A push takes a parameter the macro holds off it; a fifth knob says `FULL`. An EDIT knob on a parameter a turned-up macro holds says `HELD BY MACRO x`.
 **PERFORM:** macros are set by MACRO LEARN (above); the STEP keys are steps, as in GRID;
 FUNC+STEP a trigless step, as in GRID. OK's whole capture also stores the
@@ -300,7 +305,7 @@ every pattern change sends its number 0-127 as a program change on your MIDI CH.
 | --- | --- | --- |
 | Top line | `A01 3.2 130.0 > 24%  L  T1` | Live bank+slot (lit), bar.beat, tempo (`MIDI` / `SYNC` under an outside clock), `>` playing / `.` stopped, audio load, `L` / `L+` a LOCK, the selected track (lit) |
 | Under it | a 1 px line | How far the pattern is through its pass |
-| Under it | `ARR7 K:L FX4 S40 M:AB RL- EN+ VS+ RN4 LP` | Live strip, small: an ARR REC take and its sections so far, then what is off rest (kills, perf effect, morph %, macros, REL ALL, LEN ALL, ENERGY, VariSpeed, LIVE RND, looper); not drawn at rest |
+| Under it | `ARR7 K:L FX4 S40 M:AB RL- EN+ TR+3 VS+ RN4 LP` | Live strip, small: an ARR REC take and its sections so far, then what is off rest (kills, perf effect, morph %, macros, REL ALL, LEN ALL, ENERGY, TRANSPOSE, VariSpeed, LIVE RND, looper); not drawn at rest |
 | Under it | a lit toast: `LOCK A01 STORED`, `SCENE A: STEP PICKS`, `CLOCK REFUSED` | A notice, LEARN, a scene or the MUTATE verdict, for a moment over the screen |
 | Right edge | 2 px column | Master meter: level, held peak dot, top pixel = limiter |
 | Bottom line | `SRC FLTR AMP ...`, `DROP 2`, `GUARD1` | The screen's pages as tabs, the one showing lit (the screen keys turn them); at the right DROP = edits lost to a full command ring, GUARD = the CPU guard shedding voices |

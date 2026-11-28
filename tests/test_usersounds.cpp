@@ -4,8 +4,8 @@
 // and it is versioned the way every STRATA file is -- a record from a build with fewer
 // parameters loads with the machine's defaults under the missing ones, one with more is read
 // for what this build knows, and an unknown section is stepped over. Then the command: it writes
-// the bytes a sound owns and no others, refuses another machine's sound, and AS WAS takes back a
-// paste that switched the machine. Then Storage: a save makes the file, a card swap reads it
+// every parameter but the hole, refuses another machine's sound, and AS WAS takes back all of a
+// user sound or a paste -- the machine, every parameter and the LFO and ARP kit settings. Then Storage: a save makes the file, a card swap reads it
 // back, and a file it cannot read is never written over.
 #include "check.hpp"
 #include "apprig.hpp"
@@ -41,14 +41,24 @@ void pattern_bytes(uint8_t *params, int seed) {
 // What a byte becomes in a sound: clamped to what its parameter may hold (the LFO's WAV, DST).
 int clamped(int p, int value) { return value > kit_param_max(p) ? kit_param_max(p) : value; }
 
+// Kit settings unlike a fresh track's in every field.
+UserSoundExtras some_extras(int seed) {
+    UserSoundExtras e;
+    e.lfo_trig = uint8_t(1 + seed % 2);
+    e.mod[0] = mod_slot_sanitized(kModSrcLfo, 2, uint8_t(int8_t(-40 - seed)));
+    e.mod[1] = mod_slot_sanitized(kModSrcVel, 6, uint8_t(30 + seed));
+    for (int f = 0; f < kArpExtFields; f++) arp_ext_set(e.arp, f, uint8_t(1 + (f + seed) % 3));
+    return e;
+}
+
 UserSoundBank bank_with_two(uint8_t machine) {
     UserSoundBank bank;
     user_bank_init(bank, machine);
     uint8_t a[kKitParams], b[kKitParams];
     pattern_bytes(a, 3);
     pattern_bytes(b, 11);
-    CHECK(user_sound_store(bank, 0, "MY KICK", a));
-    CHECK(user_sound_store(bank, 5, "BOOM2", b));
+    CHECK(user_sound_store(bank, 0, "MY KICK", a, some_extras(1)));
+    CHECK(user_sound_store(bank, 5, "BOOM2", b, some_extras(2)));
     return bank;
 }
 
@@ -59,6 +69,7 @@ bool same_bank(const UserSoundBank &x, const UserSoundBank &y) {
         if (!x.slots[s].used) continue;
         if (std::strcmp(x.slots[s].name, y.slots[s].name) != 0) return false;
         if (std::memcmp(x.slots[s].params, y.slots[s].params, kKitParams) != 0) return false;
+        if (!user_sound_extras_equal(x.slots[s].extras, y.slots[s].extras)) return false;
     }
     return true;
 }
@@ -216,40 +227,65 @@ TEST(usersounds_slots_store_rename_delete_and_count) {
     for (int p = 0; p < kKitParams; p++) CHECK_EQ(int(bank.slots[2].params[p]), int(kit_param_max(p)));
 }
 
-TEST(usersounds_loading_writes_the_bytes_a_factory_sound_writes_and_no_others) {
+TEST(usersounds_loading_writes_every_parameter_and_never_the_hole) {
     for (int m = 0; m < int(MachineId::count); m++) {
         const uint8_t machine = uint8_t(m);
         UserSound sound;
         sound.used = true;
         pattern_bytes(sound.params, 5);
+        sound.extras = some_extras(3);
         uint8_t track[kKitParams];
         for (int p = 0; p < kKitParams; p++) track[p] = uint8_t(127 - sound.params[p] / 2);
         uint8_t before[kKitParams];
         std::memcpy(before, track, kKitParams);
         const bool ok = user_sound_apply(machine, sound, track);
         CHECK_EQ(ok, user_sounds_supported(machine));
-        const auto mask = sound_preset_writes(machine);
         for (int p = 0; p < kKitParams; p++) {
-            const bool owns = ((mask >> p) & 1u) != 0;
+            // Roland, 2026-11-28: all of a sound -- FX, LFO and ARP too. Never the hole.
+            const bool owns = ok && kit_param_real(p);
             CHECK_EQ(user_sound_owns(machine, p), owns);
-            CHECK_EQ(int(track[p]), int(owns && ok ? sound.params[p] : before[p]));
+            CHECK_EQ(int(track[p]), int(owns ? sound.params[p] : before[p]));
         }
-        // The FX page and the LFO and ARP are never a sound's.
-        for (int p = kUserSoundFxFirst; p < kSoundAsrFirst; p++) CHECK(!user_sound_owns(machine, p));
-        CHECK_EQ(user_sound_matches(machine, sound, track), ok);
+        CHECK_EQ(user_sound_matches(machine, sound, track, sound.extras), ok);
+        // The kit settings count for NOW as much as a byte does.
+        CHECK(!user_sound_matches(machine, sound, track, UserSoundExtras{}));
         if (ok) {
-            int p = 0;
-            while (!user_sound_owns(machine, p)) p++;
-            track[p] = uint8_t(track[p] ^ 1);
-            CHECK(!user_sound_matches(machine, sound, track));
+            track[kUserSoundFxFirst + 1] = uint8_t(track[kUserSoundFxFirst + 1] ^ 1);   // pan
+            CHECK(!user_sound_matches(machine, sound, track, sound.extras));
         }
     }
     CHECK(!user_sound_owns(kKick, -1));
     CHECK(!user_sound_owns(kKick, 200));
+    CHECK(!user_sound_owns(kKick, kKitOscEnd));   // the hole
     UserSound empty;
     uint8_t track[kKitParams] = {};
     CHECK(!user_sound_apply(kKick, empty, track));
-    CHECK(!user_sound_matches(kKick, empty, track));
+    CHECK(!user_sound_matches(kKick, empty, track, UserSoundExtras{}));
+}
+
+TEST(usersounds_the_kit_settings_are_stored_safe) {
+    UserSoundBank bank;
+    user_bank_init(bank, kKick);
+    uint8_t params[kKitParams] = {};
+    const UserSoundExtras mine = some_extras(4);
+    CHECK(user_sound_store(bank, 0, "MINE", params, mine));
+    CHECK(user_sound_extras_equal(bank.slots[0].extras, mine));
+    // Damage reads as KIT.BIN's would: FREE, a slot OFF, the arp's 0.
+    UserSoundExtras wild;
+    wild.lfo_trig = 200;
+    wild.mod[0].source = 99;
+    wild.mod[0].dest = 3;
+    wild.mod[0].depth = 20;
+    wild.arp.var = 250;
+    CHECK(user_sound_store(bank, 1, "WILD", params, wild));
+    CHECK(user_sound_extras_equal(bank.slots[1].extras, UserSoundExtras{}));
+    // A track's settings are what user_sound_extras_of takes.
+    KitTrack kit;
+    kit.lfo_trig = mine.lfo_trig;
+    for (int m = 0; m < kModSlots; m++) kit.mod[m] = mine.mod[m];
+    kit.arp = mine.arp;
+    CHECK(user_sound_extras_equal(user_sound_extras_of(kit), mine));
+    CHECK(user_sound_extras_equal(user_sound_extras_of(KitTrack{}), UserSoundExtras{}));
 }
 
 // --- the file ------------------------------------------------------------------------------------
@@ -298,7 +334,7 @@ TEST(usersounds_damage_is_refused_and_leaves_the_bank_alone) {
     g_file[kVersionOffset] = 2;
     CHECK(user_bank_read(held, kKick, g_file, bytes) == SerializeResult::bad_version);
     g_file[kVersionOffset] = 1;
-    const uint32_t bank_at = kHeaderBytes + kSectionEntryBytes;
+    const uint32_t bank_at = kHeaderBytes + 2 * kSectionEntryBytes;   // after the two entries
     g_file[bank_at + 1] = uint8_t(kKitFilterLayout + 1);
     reseal(g_file, bytes);
     CHECK(user_bank_read(held, kKick, g_file, bytes) == SerializeResult::bad_version);
@@ -323,6 +359,31 @@ TEST(usersounds_an_older_record_loads_with_the_machines_defaults_under_what_it_l
         const int stored = clamped(p, 40 + (p % 50));
         CHECK_EQ(int(bank.slots[0].params[p]), (p < 24 ? stored : int(defaults[p])));
     }
+    // A file from before the kit settings section: a fresh track's.
+    CHECK(user_sound_extras_equal(bank.slots[0].extras, UserSoundExtras{}));
+}
+
+TEST(usersounds_a_shorter_or_longer_kit_settings_record_reads_what_it_has) {
+    UserSoundBank bank = bank_with_two(kKick);
+    uint32_t bytes = 0;
+    CHECK(user_bank_write(bank, g_file, sizeof g_file, &bytes) == SerializeResult::ok);
+    // The extras section is the file's last: S, E, then sixteen records of E bytes.
+    const uint32_t ext_at = bytes - (2 + uint32_t(kUserSoundSlots * kUserSoundExtraBytes));
+    CHECK_EQ(int(g_file[ext_at]), kUserSoundSlots);
+    CHECK_EQ(int(g_file[ext_at + 1]), kUserSoundExtraBytes);
+    // Read as if each record were one byte long (TRIG only): the rest is a fresh track's. Only
+    // the first sixteen bytes after S and E are records then, so slot 0's TRIG is the first.
+    g_file[ext_at + 1] = 1;
+    reseal(g_file, bytes);
+    UserSoundBank back;
+    CHECK(user_bank_read(back, kKick, g_file, bytes) == SerializeResult::ok);
+    UserSoundExtras want;
+    want.lfo_trig = some_extras(1).lfo_trig;
+    CHECK(user_sound_extras_equal(back.slots[0].extras, want));
+    // A section that claims more than it holds is damage.
+    g_file[ext_at + 1] = 200;
+    reseal(g_file, bytes);
+    CHECK(user_bank_read(back, kKick, g_file, bytes) == SerializeResult::malformed);
 }
 
 TEST(usersounds_a_newer_record_and_section_are_read_for_what_this_build_knows) {
@@ -370,6 +431,24 @@ void post_sound(int track, uint8_t machine, const uint8_t *params) {
         command.e = b[3];
         command.u = uint32_t(b[4]) | uint32_t(b[5]) << 8 | uint32_t(b[6]) << 16 | uint32_t(b[7]) << 24;
         test::engine().commands().post(command);
+    }
+}
+
+// And its kit settings after the bytes, by the commands their pages post.
+void post_extras(int track, const UserSoundExtras &x) {
+    test::post(Cmd::set_lfo_trig, uint8_t(track), 0, x.lfo_trig);
+    for (int m = 0; m < kModSlots; m++) {
+        Command c;
+        c.cmd = Cmd::set_mod_slot;
+        c.track = uint8_t(track);
+        c.a = uint8_t(m);
+        c.b = x.mod[m].source;
+        c.c = x.mod[m].dest;
+        c.d = uint8_t(x.mod[m].depth);
+        test::engine().commands().post(c);
+    }
+    for (int f = 0; f < kArpExtFields; f++) {
+        test::post(Cmd::set_arp_ext, uint8_t(track), 0, uint8_t(f), arp_ext_get(x.arp, f));
     }
 }
 
@@ -427,7 +506,7 @@ TEST(usersounds_as_was_takes_back_a_paste_that_switched_the_machine) {
     for (int p = 0; p < kTrackParams; p++) {
         if (user_sound_owns(kMono, p)) CHECK_EQ(int(e.params(2).v[p]), int(sound[p]));
     }
-    CHECK_EQ(int(e.params(2).v[kUserSoundFxFirst + 1]), 21);   // the mix stayed
+    CHECK_EQ(int(e.params(2).v[kUserSoundFxFirst + 1]), int(sound[kUserSoundFxFirst + 1]));
 
     // AS WAS: the machine and every byte as they were.
     post(Cmd::sound_preset, 2, 0, kMono, kSoundPresetBack);
@@ -435,6 +514,39 @@ TEST(usersounds_as_was_takes_back_a_paste_that_switched_the_machine) {
     CHECK_EQ(int(e.machine_id(2)), int(was));
     CHECK_EQ(int(e.project().kit.tracks[2].machine), int(was));
     for (int p = 0; p < kTrackParams; p++) CHECK_EQ(int(e.params(2).v[p]), int(mine.v[p]));
+}
+
+TEST(usersounds_as_was_takes_back_all_of_a_user_sound_and_its_kit_settings) {
+    using namespace strata::test;
+    Engine &e = fresh();
+    storage().request_new();
+    CHECK(settle());
+    const uint8_t machine = e.machine_id(4);
+    CHECK(user_sounds_supported(machine));
+    post(Cmd::set_param, 4, 0, uint8_t(kUserSoundFxFirst + 1), 21);
+    pump(2);
+    const TrackParams mine = e.params(4);
+    const UserSoundExtras mine_extras = user_sound_extras_of(e.project().kit.tracks[4]);
+    post(Cmd::sound_preset, 4, 0, 0, kSoundPresetKeep);
+
+    // The sound in: every parameter, the FX page, LFO and ARP among them, and the kit settings.
+    uint8_t sound[kKitParams];
+    pattern_bytes(sound, 6);
+    const UserSoundExtras extras = some_extras(5);
+    post_sound(4, machine, sound);
+    post_extras(4, extras);
+    pump(2);
+    for (int p = 0; p < kTrackParams; p++) {
+        if (kit_param_real(p)) CHECK_EQ(int(e.params(4).v[p]), clamped(p, sound[p]));
+    }
+    CHECK(user_sound_extras_equal(user_sound_extras_of(e.project().kit.tracks[4]), extras));
+
+    // A pan move after it, then AS WAS: everything as it was when the list opened.
+    post(Cmd::set_param, 4, 0, uint8_t(kUserSoundFxFirst + 1), 90);
+    post(Cmd::sound_preset, 4, 0, machine, kSoundPresetBack);
+    pump(2);
+    for (int p = 0; p < kTrackParams; p++) CHECK_EQ(int(e.params(4).v[p]), int(mine.v[p]));
+    CHECK(user_sound_extras_equal(user_sound_extras_of(e.project().kit.tracks[4]), mine_extras));
 }
 
 // --- the bank on the card ------------------------------------------------------------------------
