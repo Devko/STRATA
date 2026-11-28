@@ -15,6 +15,13 @@ the project file format or the controls.
   bytes (type and inversion), and drum notes mapped to tracks. `grid.py` is the shared core
   another front end (an Ableton set) feeds. CI checks its copies of the length and chord tables
   against `core/`. The MIDI itself, and anything made from third-party MIDI, stays out of git.
+- **An Ableton set as a STRATA project** (`tools/midi_import/als2strata.py`, the `.als` front end
+  of the same importer). A map fits the arrangement into eight tracks: MIDI parts on STRATA's
+  synths, one-shots as a sliced SAMPLE kit, audio loops as 4-bar blocks sliced onto a SAMPLE
+  track, the song as patterns and a chain. `build_import.sh` writes the project and its card
+  folder and renders the chain through the host Engine with the samples loaded; `ab.py`
+  compares that render with the set's own export and writes an A/B file. Tried on a 132-bar,
+  30-track techno set: 31 patterns, 30 MiB of samples, 23.4% peak in the emulator (cl6x).
 
 ### Fixed
 
