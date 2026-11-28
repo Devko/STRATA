@@ -767,6 +767,10 @@ struct Status {
     std::atomic<uint8_t> launch_event{0};
     std::atomic<uint8_t> launch_last{0};
     std::atomic<uint8_t> launch_arg{0};
+    // Bumped when a queued launch lands: PROJECT.BIN changed with no command at that moment, so
+    // the main context marks the project to save (a save between queueing and landing would
+    // otherwise have cleared the flag the launch command set).
+    std::atomic<uint8_t> launch_landed{0};
 
     // Audio context only, one writer: the payload first, so a reader that sees the new event
     // (with acquire) sees what it was.

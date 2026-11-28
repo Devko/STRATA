@@ -275,6 +275,15 @@
         service_track_menu();
         service_launch();
 
+        // A queued launch landed (Track Launch): the lane's source is saved in PROJECT.BIN.
+        {
+            const uint8_t landed = engine_.status().launch_landed.load(std::memory_order_acquire);
+            if (landed != launch_landed_seen_) {
+                launch_landed_seen_ = landed;
+                storage_.note_command(
+                    Cmd::launch, int(engine_.status().live_bank.load(std::memory_order_relaxed)));
+            }
+        }
         // EVOLVE changed a track on a pass boundary (Engine::evolve_passes): no command did it,
         // so the bank is marked here, and the log says so for the scenarios.
         {

@@ -2657,7 +2657,28 @@ void Engine::apply_perf_plan(SendSettings &sends, MasterSettings &master) const 
 // --- pattern changes ------------------------------------------------------
 
 void Engine::pattern_replaced(int bank, int slot) {
-    if (bank != int(project_.bank) || slot != int(project_.slot)) return;
+    if (bank != int(project_.bank) || slot != int(project_.slot)) {
+        // Track Launch: a lane borrowing the slot just written plays the new part from its step
+        // 1, measured again, as a launch would.
+        const uint8_t here = lane_source(bank, slot);
+        bool any = false;
+        for (int t = 0; t < kTracks; t++) {
+            if (!lane_borrowed(project_, t) || project_.settings.lane_source[t] != here) continue;
+            any = true;
+            lane_origin_[t] = tick_ + 1;     // step 1 on the next tick
+            lane_follows_ = uint8_t(lane_follows_ & ~(1u << t));
+            scheduler_.reset_lane(t, true);
+            int keep = 0;
+            for (int i = 0; i < deferred_count_; i++) {
+                if (deferred_[i].track != uint8_t(t)) deferred_[keep++] = deferred_[i];
+            }
+            deferred_count_ = keep;
+            span_[t].on = false;
+            slide_count_[t] = 0;
+        }
+        if (any) reconfigure();
+        return;
+    }
     undo_.clear();               // the history belonged to the steps just replaced
     evolve_stop_all();           // and HOME to the steps before them
     scheduler_.reset(true);
@@ -3112,6 +3133,9 @@ void Engine::resolve_tick(uint32_t tick, uint32_t frame) {
         const uint32_t start = queued.queue.start_tick;
         lane_queue_clear(queued);
         land_launch(t, source, restart, start);
+        status_.launch_landed.store(
+            uint8_t(status_.launch_landed.load(std::memory_order_relaxed) + 1),
+            std::memory_order_release);
     }
 
     // A finished song is silent until the transport stops or starts again.

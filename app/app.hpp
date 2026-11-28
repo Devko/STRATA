@@ -863,6 +863,7 @@ private:
     uint8_t launch_held_ = 0;
     bool launch_ok_held_ = false;
     uint32_t launch_ok_down_ms_ = 0;
+    uint8_t launch_landed_seen_ = 0;
     uint8_t launch_event_seen_ = 0;
     uint8_t launch_seen_[kTracks] = {};
     uint8_t launch_seen_live_ = 0;

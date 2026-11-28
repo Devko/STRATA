@@ -234,3 +234,33 @@ TEST(engine_launch_a_lock_stores_what_you_hear) {
     CHECK((e.pattern().tracks[2].steps[1].flags & kStepTrig) != 0);
     CHECK(!lane_borrowed(e.project(), 2));
 }
+
+TEST(engine_launch_a_landing_is_reported_so_the_project_saves) {
+    Engine &e = blank_set();
+    tick_at(100);
+    const uint8_t before = e.status().launch_landed.load();
+    launch(0x04, lane_source(1, 6), QueueMode::end_of_pattern);
+    CHECK_EQ(int(e.status().launch_landed.load()), int(before));   // queued, not landed
+    tick_at(1536);
+    CHECK_EQ(int(uint8_t(e.status().launch_landed.load() - before)), 1);
+}
+
+TEST(engine_launch_a_slot_rewritten_under_a_borrowing_lane_restarts_it) {
+    Engine &e = blank_set();
+    Project &project = e.project_for_load();
+    // A03: track 3 an 8-step part with a trig on step 1 only.
+    Pattern &a03 = project.patterns[0][2];
+    a03.tracks[2].length = 8;
+    a03.tracks[2].steps[0].flags = kStepTrig;
+    launch(0x04, lane_source(1, 6), QueueMode::immediate);
+    tick_at(300);
+    // COPY A03 onto B07, the slot the lane plays: the new part from its step 1, 8 steps long.
+    post(Cmd::pattern_copy, 1, 6, 0, 2);
+    pump();
+    CHECK_EQ(int(e.lane(2).tracks[2].length), 8);
+    CHECK_EQ(fired_on(2, 301), 1);
+    int between = 0;
+    for (uint32_t t = 302; t < 301 + 192; t++) between += fired_on(2, t);
+    CHECK_EQ(between, 0);
+    CHECK_EQ(fired_on(2, 301 + 192), 1);
+}
