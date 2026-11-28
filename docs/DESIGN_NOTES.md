@@ -73,7 +73,7 @@ a ratio the non-synth machines multiply in (`pitch_mod_ratio_`, exactly 1 at res
 renders are unchanged). The delay's beat is divided by the ratio in `apply_mixer_bytes`. MID is
 left alone (no pitch bend range to rely on). Not in a LOCK, not saved: the tempo is not either,
 and the project keeps its own tempo so a save is never the moved one. Internal clock only;
-`vari_follow_source` drops it on a CLOCK SRC change. UNIT_CHECKLIST W69, `scenario_varispeed`.
+`vari_follow_source` drops it on a CLOCK SRC change. UNIT_CHECKLIST W70, `scenario_varispeed`.
 
 ## LIVE RND
 
