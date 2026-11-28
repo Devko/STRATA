@@ -4,6 +4,8 @@
 #include "fm.hpp"
 
 #include <cmath>
+#include <cstdio>
+#include <initializer_list>
 
 using namespace strata;
 
@@ -155,6 +157,102 @@ TEST(fm_choke_fades_to_silence_in_its_frames) {
     for (int i = 1025; i < 1024 + FmVoice::kChokeFrames; i++) CHECK(std::fabs(out[i] - out[i - 1]) < 0.1f);
 }
 
+// The choke, sample by sample against the same voice unchoked: a straight line from full level
+// to nothing over kChokeFrames. A choke on a silent voice is nothing, a second one does not
+// restart the fade, and a new note on a choking voice cancels it.
+TEST(fm_choke_is_a_straight_fade_and_a_new_note_cancels_it) {
+    TrackParams p = fm_params();
+    p.set(2, 60);                                       // some index: not a pure sine
+    const FmSettings s = FmSettings::make(p, kRate, 1.0f / kRate);
+    static FmVoice a, b;
+    static float oa[2048], ob[2048];
+    FmVoice *both[2] = {&a, &b};
+    for (FmVoice *v : both) {
+        v->reset();
+        v->set_note(57.0f, 1.0f);
+        v->gate_on();
+    }
+    for (float &x : oa) x = 0.0f;
+    for (float &x : ob) x = 0.0f;
+    render(a, s, oa, 1024);
+    render(b, s, ob, 1024);
+    a.choke();
+    render(a, s, oa + 1024, 32);
+    a.choke();                                          // again, halfway: no restart
+    render(a, s, oa + 1056, 64);
+    render(b, s, ob + 1024, 96);
+    int wrong = 0;
+    for (int k = 0; k < 96; k++) {
+        const float gain = k < FmVoice::kChokeFrames ? 1.0f - float(k) / FmVoice::kChokeFrames : 0.0f;
+        wrong += std::fabs(oa[1024 + k] - ob[1024 + k] * gain) > 1e-6f ? 1 : 0;
+    }
+    CHECK_EQ(wrong, 0);
+    CHECK(!a.choking());
+
+    FmVoice quiet;
+    quiet.reset();
+    quiet.choke();
+    CHECK(!quiet.choking());
+
+    // b chokes, and halfway through takes a new note: it plays on at full level.
+    b.choke();
+    render(b, s, ob, 32);
+    b.set_note(60.0f, 1.0f);
+    b.gate_on();
+    CHECK(!b.choking());
+    for (float &x : ob) x = 0.0f;
+    render(b, s, ob, 1024);
+    CHECK(b.sounding());
+    float peak = 0.0f;
+    for (int i = 512; i < 1024; i++) peak = std::fabs(ob[i]) > peak ? std::fabs(ob[i]) : peak;
+    CHECK(peak > 0.05f);
+    // And a later choke fades from full level again, not from where the cancelled one stopped:
+    // against a copy of b left unchoked.
+    static FmVoice twin;
+    twin = b;
+    static float ot[64];
+    for (float &x : ob) x = 0.0f;
+    for (float &x : ot) x = 0.0f;
+    b.choke();
+    render(b, s, ob, 64);
+    render(twin, s, ot, 64);
+    wrong = 0;
+    for (int k = 0; k < 64; k++) {
+        const float gain = 1.0f - float(k) / FmVoice::kChokeFrames;
+        wrong += std::fabs(ob[k] - ot[k] * gain) > 1e-6f ? 1 : 0;
+    }
+    CHECK_EQ(wrong, 0);
+}
+
+// A voice that has rung out and takes a high note sounds exactly as a fresh voice does: the band
+// cap is cached per note, so a new note must recompute it rather than keep the last note's.
+TEST(fm_a_reused_voice_caps_its_new_note_as_a_fresh_one_does) {
+    TrackParams p = fm_params();
+    p.set(2, 127);                                      // full index: the cap binds up high
+    p.set(8, 0);                                        // the shortest DEC: rings out quickly
+    const FmSettings s = FmSettings::make(p, kRate, 1.0f / kRate);
+    static FmVoice used, fresh;
+    static float ou[4096], of[4096];
+    used.reset();
+    used.set_note(36.0f, 1.0f);
+    used.gate_on();
+    render(used, s, ou, 4096);
+    CHECK(!used.sounding());
+    fresh.reset();
+    for (FmVoice *v : {&used, &fresh}) {
+        v->set_note(108.0f, 1.0f);
+        v->gate_on();
+    }
+    for (float &x : ou) x = 0.0f;
+    for (float &x : of) x = 0.0f;
+    render(used, s, ou, 1024);
+    render(fresh, s, of, 1024);
+    int wrong = 0;
+    for (int i = 0; i < 1024; i++) wrong += ou[i] == of[i] ? 0 : 1;
+    CHECK_EQ(wrong, 0);
+    CHECK(used.last_index(2) < 0.5f * 2.0f);            // and the cap did bind
+}
+
 TEST(fm_high_notes_at_full_index_stay_bounded) {
     TrackParams p = fm_params();
     p.set(1, 127);   // RAT 14
@@ -201,6 +299,96 @@ TEST(fm_index_cap_sees_the_stack_a_pair_cap_misses) {
     CHECK(fm_index_cap(0, c5, 0.0f, 1.0f) < stack);
     // Feedback widens op 4, so it lowers the cap of a stack it feeds.
     CHECK(fm_index_cap(0, c4, 0.2f, 1.0f) < stack);
+}
+
+namespace {
+
+// The eight algorithms as the manual draws them, written out again here: which operator
+// modulates which (from > to), and which are carriers.
+struct Links {
+    bool m12, m13, m14, m23, m24, m34;
+    bool c2, c3, c4;            // operator 1 is always a carrier
+};
+constexpr Links kDrawn[8] = {
+    {true, false, false, true, false, true, false, false, false},     // 1: 4 > 3 > 2 > 1
+    {true, false, false, true, true, false, false, false, false},     // 2: (3 + 4) > 2 > 1
+    {true, false, true, true, false, false, false, false, false},     // 3: 3 > 2 > 1, 4 > 1
+    {true, true, false, false, false, true, false, false, false},     // 4: 4 > 3 > 1, 2 > 1
+    {true, false, false, false, false, true, false, true, false},     // 5: 2 > 1, 4 > 3
+    {false, false, true, false, true, true, true, true, false},       // 6: 4 > 1, 2, 3
+    {false, false, false, false, false, true, true, true, false},     // 7: 4 > 3; 1, 2 plain
+    {false, false, false, false, false, false, true, true, true},     // 8: four sines
+};
+
+// Carson's band of the highest carrier at index `turns`, with op 4's feedback.
+double drawn_band(const Links &a, const float f[4], float feedback, double turns) {
+    const double fb = 6.2831853 * feedback;
+    const double b4 = f[3] * (1.0 + fb + (fb < 1.0 ? fb : 1.0));
+    const double rad = 6.2831853 * turns;
+    const double q = rad + (rad < 1.0 ? rad : 1.0);
+    const double b3 = f[2] + (a.m34 ? q * b4 : 0.0);
+    const double b2 = f[1] + (a.m23 ? q * b3 : 0.0) + (a.m24 ? q * b4 : 0.0);
+    const double b1 = f[0] + (a.m12 ? q * b2 : 0.0) + (a.m13 ? q * b3 : 0.0) + (a.m14 ? q * b4 : 0.0);
+    double top = b1;
+    if (a.c2 && b2 > top) top = b2;
+    if (a.c3 && b3 > top) top = b3;
+    if (a.c4 && b4 > top) top = b4;
+    return top;
+}
+
+}  // namespace
+
+// The cap is the largest index (to the bisection's 2/65536) whose band stays under the limit,
+// for every algorithm, over a grid of operator frequencies and feedbacks; no index at all
+// when a modulator would be past 0.45 of the rate; the full 2 when even that fits.
+TEST(fm_index_cap_is_the_largest_index_under_the_limit_for_every_algorithm) {
+    const float freqs[] = {0.0004f, 0.003f, 0.011f, 0.04f, 0.13f, 0.3f, 0.449f, 0.45f, 0.6f};
+    const float feedbacks[] = {0.0f, 0.1f, 0.4f};
+    const double step = 2.0 / 65536.0;
+    int wrong = 0, capped = 0, refused = 0;
+    for (int alg = 0; alg < 8; alg++) {
+        const Links &a = kDrawn[alg];
+        for (int i = 0; i < 9; i++) {
+            for (int j = 0; j < 9; j++) {
+                for (int k = 0; k < 9; k++) {
+                    for (float fb : feedbacks) {
+                        const float f[4] = {freqs[(i + k) % 9] * 0.5f, freqs[i], freqs[j], freqs[k]};
+                        const float cap = fm_index_cap(alg, f, fb, 1.0f);
+                        const bool mod2 = a.m12, mod3 = a.m13 || a.m23, mod4 = a.m14 || a.m24 || a.m34;
+                        if ((mod2 && f[1] >= 0.45f) || (mod3 && f[2] >= 0.45f) ||
+                            (mod4 && f[3] >= 0.45f)) {
+                            wrong += cap == 0.0f ? 0 : 1;
+                            refused++;
+                        } else if (drawn_band(a, f, fb, 2.0) <= 1.0) {
+                            wrong += cap == 2.0f ? 0 : 1;
+                        } else if (drawn_band(a, f, fb, 0.0) >= 1.0) {
+                            wrong += cap == 0.0f ? 0 : 1;
+                        } else {
+                            capped++;
+                            const bool fits = drawn_band(a, f, fb, cap) <= 1.0 + 1e-6;
+                            const bool most = drawn_band(a, f, fb, cap + 2.0 * step) > 1.0 - 1e-6;
+                            if (!(fits && most)) {
+                                if (wrong == 0) {
+                                    std::printf("    alg %d f %g %g %g %g fb %g: cap %g\n", alg + 1,
+                                                double(f[0]), double(f[1]), double(f[2]),
+                                                double(f[3]), double(fb), double(cap));
+                                }
+                                wrong++;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // Out of range: a negative algorithm is the first, and the count wraps.
+        const float f[4] = {0.01f, 0.02f, 0.03f, 0.04f};
+        wrong += fm_index_cap(alg + 8, f, 0.1f, 1.0f) == fm_index_cap(alg, f, 0.1f, 1.0f) ? 0 : 1;
+    }
+    const float f[4] = {0.01f, 0.02f, 0.03f, 0.04f};
+    CHECK(fm_index_cap(-3, f, 0.1f, 1.0f) == fm_index_cap(0, f, 0.1f, 1.0f));
+    CHECK_EQ(wrong, 0);
+    CHECK(capped > 200);
+    CHECK(refused > 100);
 }
 
 TEST(fm_stack_at_high_index_does_not_fold_tones_under_5k) {

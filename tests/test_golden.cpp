@@ -1,5 +1,6 @@
-// Golden renders: every machine, the insert chain, the mixer and beat repeat, each pinned to the
-// output it produces today for a fixed patch.
+// Golden renders: every machine, the insert chain, the mixer and beat repeat, the ambient sends,
+// the master effects and the click, each pinned to the output it produces today for a fixed
+// patch.
 //
 // The other DSP tests measure properties -- a hit sounds, decays, a knob moves what it says --
 // and a mutation run (docs/MUTATION.md) showed what that leaves open: a coefficient off by one,
@@ -22,17 +23,22 @@
 
 #include <enaga/abi.h>
 
+#include "ambient.hpp"
 #include "buses.hpp"
 #include "chain.hpp"
+#include "click.hpp"
+#include "fmpoly.hpp"
 #include "grain.hpp"
 #include "hat.hpp"
 #include "kick.hpp"
+#include "masterfx.hpp"
 #include "perc.hpp"
 #include "repeat.hpp"
 #include "sample.hpp"
 #include "snare.hpp"
 #include "va.hpp"
 #include "vapoly.hpp"
+#include "wavetable.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -443,4 +449,230 @@ TEST(golden_a_steal_splice_sample_by_sample) {
     STRATA_FADE(VaMono, "vamono")
     STRATA_FADE(VaPoly, "vapoly")
 #undef STRATA_FADE
+}
+
+// The machines and effects added after the first renders (docs/MUTATION.md, fourth pass): FM4,
+// the WAVE machines over several tables, the LONG delay and the HALL reverb, the PERFORM master
+// effects and the click.
+
+TEST(golden_fm_machine) {
+    const Trig chord[] = {trig(48, 100, 0, false, 9000), trig(55, 100, 0, false, 18000),
+                          trig(63, 90, 0, false, 18000), trig(70, 127, 12000, true, 6000)};
+    for (int which = 0; which < 2; which++) {
+        char name[32];
+        std::snprintf(name, sizeof name, "fm4/%d", which);
+        golden_machine<FmPoly>(name, which, chord, 4);
+    }
+    // Every algorithm, on two scattered patches: byte 0 is ALG, in eight zones.
+    for (int alg = 0; alg < 8; alg++) {
+        for (int which = 2; which < 4; which++) {
+            TrackParams p = patch(which);
+            p.set(0, uint8_t(alg * 16 + 8));
+            static FmPoly fm;
+            fm.init(kRate);
+            render(fm, p, chord, 4, 12000);
+            char name[32];
+            std::snprintf(name, sizeof name, "fm4-alg%d/%d", alg + 1, which);
+            check_golden(name, g_out, 12000);
+        }
+    }
+    const Trig dense[] = {trig(60, 127, 0, false, 400),  trig(64, 60, 40, false, 900),
+                          trig(67, 127, 300, true, 0),   trig(48, 100, 650, false, 200),
+                          trig(72, 30, 700, false, 2000), trig(55, 127, 1400, true, 50),
+                          trig(36, 127, 2700, false, 0), trig(40, 120, 2700, false, 0),
+                          trig(45, 110, 2701, false, 0), trig(50, 100, 2702, false, 0),
+                          trig(53, 90, 2703, false, 0),  trig(57, 80, 2704, false, 0),
+                          trig(62, 70, 2705, false, 0),  trig(60, 127, 5000, false, 300)};
+    const int count = int(sizeof(dense) / sizeof(dense[0]));
+    for (int which = 0; which < 4; which++) {
+        TrackParams p{};
+        for (int i = 0; i < kParams; i++) {
+            p.set(i, which == 0 ? 127 : which == 1 ? 0 : uint8_t((i * (which == 2 ? 53 : 29) + 5 + which * 31) % 128));
+        }
+        static FmPoly fm;
+        fm.init(kRate);
+        render_with_releases(fm, p, dense, count, 6400);
+        char name[32];
+        std::snprintf(name, sizeof name, "dense-fm4/%d", which);
+        check_golden(name, g_out, 6400);
+    }
+}
+
+// FM4 with every page set, ASR and OSC included, over high notes where the band cap holds the
+// index down, while the knobs move under held notes: the cap has to follow each one (it is
+// cached per note and settings), and the feedback ramps to each new value.
+TEST(golden_fm_machine_moving_knobs) {
+    static FmPoly fm;
+    fm.init(kRate);
+    TrackParams p{};
+    for (int i = 0; i < kTrackParams; i++) p.set(i, uint8_t((i * 41 + 19) % 128));
+    p.set(2, 120);                                       // IDX high: the cap binds
+    p.set(kAsrFirst + 1, 110);                           // SUS: the notes hold
+    p.set(3, 0);                                         // FBK from 0: its first turn ramps up from none
+    const Trig notes[] = {trig(84, 120, 0, false, 20000), trig(96, 100, 0, false, 20000),
+                          trig(108, 90, 3000, false, 16000), trig(127, 127, 6000, true, 12000),
+                          trig(48, 110, 6000, false, 15000)};
+    const int frames = 24000;
+    for (int i = 0; i < frames; i++) g_out[i] = 0.0f;
+    for (int at = 0, block = 0; at < frames; at += kBlk, block++) {
+        // Every 24 blocks one knob moves: ALG, RAT, FBK, the OSC page's detune, fine and carrier.
+        const int turn = block / 24;
+        if (block % 24 == 0 && turn > 0) {
+            const int knob = turn % 6;
+            const int which[6] = {0, 1, 3, kOscFirst + 0, kOscFirst + 1, kOscFirst + 3};
+            p.set(which[knob], uint8_t((p.get(which[knob]) + 37 + turn * 11) % 128));
+        }
+        fm.prepare(p);
+        for (const Trig &n : notes) {
+            if (int(n.frame) >= at && int(n.frame) < at + kBlk) {
+                Trig t = n;
+                t.frame = uint32_t(int(t.frame) - at);
+                fm.trigger(t);
+            }
+        }
+        fm.render_add(g_out + at, kBlk);
+    }
+    check_golden("fm4-moving", g_out, frames);
+}
+
+TEST(golden_wave_machines) {
+    static WaveLibrary library;
+    if (!library.ready()) CHECK(library.init());
+    const WaveLibrary *before = wave_library();
+    set_wave_library(&library);
+    const Trig mono[] = {trig(48, 100, 0, false, 6000), trig(55, 120, 8000, true, 0),
+                         trig(60, 90, 16000, false, 4000)};
+    const Trig chord[] = {trig(48, 100, 0, false, 9000), trig(55, 100, 0, false, 18000),
+                          trig(63, 90, 0, false, 18000), trig(70, 127, 12000, true, 6000)};
+    // Every table, each at a position of its own, the filter and warp from the scattered patch.
+    for (int table = 0; table < kWaveTables; table++) {
+        TrackParams p = patch(1 + table % 3);
+        p.set(0, uint8_t(table * 8 + 4));                // TBL
+        p.set(1, uint8_t((table * 41) % 128));           // POS
+        char name[32];
+        static VaMono m;
+        m.set_wave(true);
+        m.init(kRate);
+        render(m, p, mono, 3, 12000);
+        std::snprintf(name, sizeof name, "wavemono/%d", table);
+        check_golden(name, g_out, 12000);
+        if (table % 4 == 0) {
+            static VaPoly poly;
+            poly.set_wave(true);
+            poly.init(kRate);
+            render(poly, p, chord, 4, 24000);
+            std::snprintf(name, sizeof name, "wavepoly/%d", table);
+            check_golden(name, g_out, 24000);
+        }
+    }
+    set_wave_library(before);
+}
+
+namespace {
+
+// Clicks and a decaying buzz: something for a delay or a reverb to repeat.
+float ambient_source(int n) {
+    const float click = (n % 9000 == 0) ? 0.9f : 0.0f;
+    const int k = n % 12000;
+    const float buzz = k < 2400 ? float((n * 7) % 100 - 50) / 80.0f * float(2400 - k) / 2400.0f
+                                : 0.0f;
+    return click + buzz;
+}
+
+}  // namespace
+
+TEST(golden_ambient_sends) {
+    // File scope would do too: each holds megabytes, and init() allocates once a process.
+    static LongDelay delay;
+    static HallReverb hall;
+    static bool ready = false;
+    if (!ready) {
+        ready = delay.init(kRate) && hall.init(kRate);
+        CHECK(ready);
+    }
+    const int frames = 2 * 24000;   // one second, l in the first half, r in the second
+    float *l = g_out, *r = g_out + 24000;
+    for (int variant = 0; variant < 2; variant++) {
+        // The LONG delay: a time that glides halfway through, wow, diffusion, ping-pong on the
+        // second, and a hold (the freeze) over the last quarter.
+        delay.hold(false);
+        delay.set(0.11f + 0.05f * variant, 0.65f, 0.3f + 0.5f * variant, 80.0f + 300.0f * variant,
+                  0.4f * variant + 0.2f, 0.7f - 0.5f * variant, variant == 1, true);
+        for (int i = 0; i < frames; i++) g_out[i] = 0.0f;
+        for (int at = 0; at < 24000; at += kBlk) {
+            if (at == 12032) {
+                delay.set(0.07f + 0.1f * variant, 0.8f, 0.6f, 120.0f, 0.6f, 0.3f, variant == 1,
+                          false);
+            }
+            delay.hold(at >= 18048);
+            float in[kBlk];
+            for (int i = 0; i < kBlk; i++) in[i] = ambient_source(at + i);
+            delay.process(in, l + at, r + at, kBlk, 0.8f);
+        }
+        char name[32];
+        std::snprintf(name, sizeof name, "long/%d", variant);
+        check_golden(name, g_out, frames);
+
+        // The HALL: decay, damping, size, mod and shimmer, the size moved without a snap.
+        hall.set(1.5f + 3.0f * variant, 0.2f + 0.6f * variant, 0.5f + 0.9f * variant,
+                 0.3f + 0.6f * variant, 0.8f * variant, true);
+        for (int i = 0; i < frames; i++) g_out[i] = 0.0f;
+        for (int at = 0; at < 24000; at += kBlk) {
+            if (at == 12032) hall.set(2.5f, 0.5f, 1.0f - 0.4f * variant, 0.5f, 0.4f, false);
+            float in[kBlk];
+            for (int i = 0; i < kBlk; i++) in[i] = ambient_source(at + i);
+            hall.process(in, l + at, r + at, kBlk, 0.7f);
+        }
+        std::snprintf(name, sizeof name, "hall/%d", variant);
+        check_golden(name, g_out, frames);
+    }
+}
+
+TEST(golden_master_effects) {
+    // Each effect alone at full depth, then all four, then all four falling back to off; a beat
+    // of 12000 frames (120 BPM), so the pump and the gate cycle twice.
+    static MasterFx fx;
+    for (int variant = 0; variant < 6; variant++) {
+        fx.init(kRate);
+        MasterFxSettings s;
+        s.pump = (variant == 0 || variant >= 4) ? 1.0f : 0.0f;
+        s.crush = (variant == 1 || variant >= 4) ? 0.8f : 0.0f;
+        s.noise = (variant == 2 || variant >= 4) ? 0.7f : 0.0f;
+        s.gate = (variant == 3 || variant >= 4) ? 0.9f : 0.0f;
+        const int frames = 24000;
+        for (int at = 0; at < frames; at += kBlk) {
+            if (variant == 5 && at == 12032) fx.set(MasterFxSettings{});
+            else if (at == 0) fx.set(s);
+            for (int i = 0; i < kBlk; i++) {
+                const int n = at + i;
+                g_out[2 * n] = float((n * 3) % 200 - 100) / 140.0f;
+                g_out[2 * n + 1] = float((n * 5) % 160 - 80) / 110.0f;
+            }
+            const float step = 1.0f / 12000.0f;
+            const float phase = float(at % 12000) * step;
+            fx.process(g_out + 2 * at, kBlk, phase, step);
+        }
+        char name[32];
+        std::snprintf(name, sizeof name, "masterfx/%d", variant);
+        check_golden(name, g_out, 2 * frames);
+    }
+}
+
+TEST(golden_click) {
+    static Click click;
+    click.init(kRate);
+    const int frames = 12000;
+    for (int i = 0; i < 2 * frames; i++) g_out[i] = 0.0f;
+    // A bar click on a block's first frame, beats mid-block, and one replacing a click still
+    // ringing.
+    const int at_frames[] = {0, 3013, 6100, 6500, 9050};
+    const bool bars[] = {true, false, false, true, false};
+    for (int at = 0, next = 0; at < frames; at += kBlk) {
+        while (next < 5 && at_frames[next] < at + kBlk) {
+            click.trigger(uint32_t(at_frames[next] - at), bars[next]);
+            next++;
+        }
+        click.render_add(g_out + 2 * at, kBlk);
+    }
+    check_golden("click", g_out, 2 * frames);
 }

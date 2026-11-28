@@ -276,6 +276,16 @@ TEST(ambient_hall_decays_at_its_decay_time) {
     CHECK(long_drop > -12.0);
 }
 
+// What init() reports it took, for tests/test_memory.cpp's itemised heap: the eight lines, the
+// four all-passes and the shimmer's ring, in floats.
+TEST(ambient_hall_reports_the_bytes_it_took) {
+    const HallReverb &h = hall(1.0f, 0.5f, 1.0f, 0.0f, 0.0f);
+    const std::size_t want = (std::size_t(STRATA_HALL_LINES) * STRATA_HALL_RING +
+                              std::size_t(STRATA_HALL_DIFFUSERS) * STRATA_HALL_DIFFUSER_RING +
+                              STRATA_SHIMMER_RING) * sizeof(float);
+    CHECK(h.bytes() == want);
+}
+
 TEST(ambient_hall_is_stereo) {
     HallReverb &h = hall(3.0f, 0.3f, 1.0f, 0.5f, 0.0f);
     float in[kFrames], l[kFrames], r[kFrames];
