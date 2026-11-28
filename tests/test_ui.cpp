@@ -388,7 +388,7 @@ void open_keys() {
 enum MenuRow : int { kMenuSave, kMenuSaveAs, kMenuOpen, kMenuNew, kMenuReload, kMenuClear,
                      kMenuKits, kMenuSample, kMenuSpeed, kMenuPlay, kMenuChain, kMenuSong,
                      kMenuAutofill, kMenuQuantize, kMenuRecMode, kMenuClick, kMenuCountIn,
-                     kMenuGlide, kMenuFreeze, kMenuLoopLen, kMenuDemo, kMenuRowCount };
+                     kMenuGlide, kMenuFreeze, kMenuLoopLen, kMenuDemo, kMenuJam, kMenuRowCount };
 
 // FUNC + HOME, then DOWN to `row`: the cursor starts on SAVE each time the menu opens.
 void menu_to(int row) {
@@ -12119,4 +12119,78 @@ TEST(ui_hold_ok_in_grid_opens_the_track_menu_for_gen_and_evolve) {
     key(ENAGA_KEY_F4);
     pump(2);
     CHECK(!screen_has(app, "OK: RUN"));
+}
+
+// JAM REC (app/storage.hpp, "jam recording"): the FUNC menu's last row, one UP from SAVE. OK
+// starts the jam and closes the menu, the row then counts the time, a dot in the top bar blinks
+// on every screen, and OK again stops it; SAVED comes once the file is closed.
+TEST(ui_jam_rec_starts_and_stops_from_the_menu_and_shows_it_is_running) {
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    key(ENAGA_KEY_F8);                                  // EDIT
+    shift_key(ENAGA_KEY_F4);
+    key(ENAGA_KEY_UP);                                  // the last row
+    CHECK_EQ(UiProbe::menu_cursor(app), int(kMenuJam));
+    CHECK(screen_has(app, "JAM REC"));
+    CHECK(screen_has(app, "OFF"));
+    key(ENAGA_KEY_OK);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::edit));      // closed, back over EDIT
+    CHECK(std::strncmp(UiProbe::notice(app), "JAM REC JAM_", 12) == 0);
+    CHECK(app_storage().jam_recording());
+    pump(2);
+    CHECK(app_engine().jam_attached());
+
+    // The dot: lit for 600 ms of each second, dark for the rest. 800 blocks of 64 frames, a
+    // second and a bit, drawn after each.
+    enaga::Canvas canvas(g_pixels);
+    int lit = 0;
+    for (int i = 0; i < 800; i++) {
+        pump();
+        app.draw(canvas);
+        lit += pixel_at(76, 3) == 15 ? 1 : 0;
+    }
+    CHECK(lit > 400 && lit < 560);
+
+    // The row counts: a second and a bit is 0:01.
+    menu_to(kMenuJam);
+    CHECK(screen_has(app, "0:01"));
+    key(ENAGA_KEY_OK);                                  // stop
+    CHECK_EQ(UiProbe::notice(app), "JAM STOPPING");
+    CHECK(UiProbe::mode(app) == int(Mode::menu));
+    bool saved = false;
+    for (int i = 0; i < 20 && !saved; i++) {
+        pump();
+        saved = std::strncmp(UiProbe::notice(app), "SAVED JAM_", 10) == 0;
+    }
+    CHECK(saved);
+    CHECK(!app_storage().jam_running());
+    CHECK(screen_has(app, "OFF"));
+    char path[64];
+    std::snprintf(path, sizeof path, "/RECORD/%s", app_storage().jam_name());
+    CHECK(host.file_bytes(path) > 44 + 800 * 64 * 6);
+    key(ENAGA_KEY_CLR);
+    lit = 0;
+    for (int i = 0; i < 1000; i += 50) {
+        pump(50);
+        app.draw(canvas);
+        lit += pixel_at(76, 3) == 15 ? 1 : 0;
+    }
+    CHECK_EQ(lit, 0);                                   // no dot once it has stopped
+    host.remove_file(path);
+}
+
+TEST(ui_jam_rec_without_a_card_says_why) {
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    host.set_card(false);
+    app.on_card(false);
+    menu_to(kMenuJam);
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK_EQ(UiProbe::notice(app), "NO CARD");
+    CHECK(!app_storage().jam_running());
+    CHECK_EQ(UiProbe::mode(app), int(Mode::menu));      // the menu stays: nothing started
+    key(ENAGA_KEY_CLR);
+    host.set_card(true);
+    app.on_card(true);
 }
