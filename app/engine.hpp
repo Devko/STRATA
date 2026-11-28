@@ -750,8 +750,9 @@ private:
 
     // Every note-on a track's machine takes -- a step, a chord, an arp or roll hit, a pad or a
     // key -- goes through here: the screen's trig light, and LFO TRIG's restart.
-    void note_started(int track, uint8_t velocity, uint32_t frame) {
-        status_.bump_triggered(track);
+    // `lit` false (an ENERGY ghost) keeps the trig light off and does the rest.
+    void note_started(int track, uint8_t velocity, uint32_t frame, bool lit = true) {
+        if (lit) status_.bump_triggered(track);
         lfo_restart_[track] = true;
         mod_velocity_[track] = velocity;
         choke_group(track, frame);

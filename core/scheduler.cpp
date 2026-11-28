@@ -448,6 +448,7 @@ int Scheduler::tick(uint32_t tick_number, uint32_t frame, const Pattern &pattern
                     event.accent = false;
                     event.slide = false;
                     event.trigless = false;
+                    event.ghost = true;
                     event.frame = frame;
                     event.ratchet_index = 0;
                     event.ratchet_count = 1;
@@ -515,6 +516,7 @@ int Scheduler::tick(uint32_t tick_number, uint32_t frame, const Pattern &pattern
                 event.accent = accent;
                 event.slide = slide;
                 event.trigless = true;
+                event.ghost = false;
                 event.frame = frame;
                 event.ratchet_index = 0;
                 event.ratchet_count = 1;
@@ -542,6 +544,7 @@ int Scheduler::tick(uint32_t tick_number, uint32_t frame, const Pattern &pattern
                 event.accent = accent;
                 event.slide = slide;
                 event.trigless = false;
+                event.ghost = false;
                 event.frame = frame;
                 event.ratchet_index = 0;
                 event.ratchet_count = 1;
@@ -567,6 +570,7 @@ int Scheduler::tick(uint32_t tick_number, uint32_t frame, const Pattern &pattern
                 event.accent = accent;
                 event.slide = slide;
                 event.trigless = false;
+                event.ghost = false;
                 event.frame = frame + ratchet_frame(hit, hits, state.step_samples);
                 event.ratchet_index = hit;
                 event.ratchet_count = hits;
@@ -604,6 +608,7 @@ bool stutter_event(const Pattern &pattern, int track, int step, uint32_t frame, 
     out.accent = (played.flags & kStepAccent) != 0;
     out.slide = (played.flags & kStepSlide) != 0;
     out.trigless = !has_trig;
+    out.ghost = false;
     out.frame = frame;
     out.ratchet_index = 0;
     out.ratchet_count = 1;

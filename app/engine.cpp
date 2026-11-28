@@ -3530,7 +3530,11 @@ void Engine::fire(const StepEvent &event) {
         const uint8_t midi_velocity = event.accent ? uint8_t(127) : event.velocity;
         const uint32_t midi_gate_frames = midi_gate(track, trig.gate_frames);
         const ArpSettings arp = arp_settings(track);
-        if (arp.on()) {
+        // An ENERGY ghost on an arp track is one note, the step's own, and leaves a running arp
+        // alone: a whole run on every filled-in off-beat is a second part, not a ghost. Only the
+        // one-note machines get ghosts (pads and MID never fill, core/energy.hpp), so the note
+        // goes down the plain path below.
+        if (arp.on() && !event.ghost) {
             // The arp takes the step: its notes (the chord on POLY, the one note elsewhere) become
             // a cycle walked at the arp's rate for the step's length -- or until the next step,
             // for a step with no length. The first hit is now, on the step's own frame.
@@ -3640,8 +3644,9 @@ void Engine::fire(const StepEvent &event) {
 
         // Once per step, not once per note: a chord is one trig as far as the screen is
         // concerned, and eight LEDs flashing six times would be a worse display, not a better
-        // one.
-        note_started(track, trig.velocity, event.frame);
+        // one. A ghost lights nothing: `event.step` is the trig it borrows from, not a step
+        // that played, and the GRID glow would mark a hit the pattern does not have.
+        note_started(track, trig.velocity, event.frame, !event.ghost);
 
         if (track == duck_source_) mixer_.trigger_duck(event.frame);
     }

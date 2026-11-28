@@ -406,6 +406,12 @@ TEST(energy_up_adds_ghosts_with_the_sound_of_the_trig_before) {
         CHECK(e.velocity >= 40 && e.velocity <= 86);
         CHECK(!e.trigless);
         CHECK(!e.accent);
+        CHECK(e.ghost);
+    }
+    // And the programmed hits are not ghosts.
+    for (int i = 0; i < log.count; i++) {
+        const int slot = int(log.ticks[i] / kStepTicks);
+        if (log.events[i].track == 0 && (slot == 0 || slot == 8)) CHECK(!log.events[i].ghost);
     }
 }
 
@@ -510,4 +516,85 @@ TEST(energy_engine_takes_the_tiers_from_the_machines) {
     strata::test::post(Cmd::set_energy, 0, 0, 0);
     strata::test::pump(2);
     CHECK(strata::test::settle());
+}
+
+// A ghost lights nothing (its `step` is the trig it borrows from, not a step that played), and on
+// a track whose arp is on it is one note, not a run. MIDI OUT counts what sounds,
+// Status::triggered what lights. Only one-note machines fill (pads and MID never do), so a line
+// is the case to hold.
+TEST(energy_ghost_lights_nothing_and_plays_one_note_with_the_arp_on) {
+    using strata::test::FakeHost;
+    {
+        const uint8_t want = uint8_t(MachineId::va_mono);
+        Engine &engine = strata::test::fresh();
+        int track = -1;
+        for (int t = 0; t < kTracks && track < 0; t++) {
+            if (engine.machine_id(t) == want) track = t;
+        }
+        CHECK(track >= 0);
+        if (track < 0) return;
+        const uint8_t tr = uint8_t(track);
+        Pattern &live = engine.project_for_load().live();
+        for (int s = 0; s < kStepsPerTrack; s++) live.tracks[track].steps[s].flags = 0;
+        strata::test::put_trig(track, 0);
+        Step &first = live.tracks[track].steps[0];
+        first.length = 8;                                    // one step
+        first.probability = 100;
+        first.condition = condition_pack(Condition::NONE);
+        first.ratchet = ratchet_pack(1, RatchetRamp::none);
+        // ARP: MOD UP, RAT 1/32 (two hits a step), one octave; MIDI OUT on channel 3.
+        auto smallest = [](int zone, int zones) { return uint8_t((zone * 128 + zones - 1) / zones); };
+        strata::test::post(Cmd::set_param, tr, 0, uint8_t(kArpFirst + 0),
+                           smallest(1, int(ArpMode::count)));
+        strata::test::post(Cmd::set_param, tr, 0, uint8_t(kArpFirst + 1), smallest(5, kArpRates));
+        strata::test::post(Cmd::set_param, tr, 0, uint8_t(kArpFirst + 2), smallest(0, kArpMaxOctaves));
+        strata::test::post(Cmd::set_param, tr, 0, uint8_t(kArpFirst + 3), 0);
+        strata::test::post(Cmd::set_midi_out, tr, 0, 3);
+        strata::test::post(Cmd::set_energy, 0, 0, uint8_t(int8_t(64)));
+        strata::test::pump(2);
+
+        // The first step a ghost lands on at +64.
+        const EnergyTier tier = energy_tier(want);
+        CHECK(tier == EnergyTier::line);
+        int ghost_step = -1;
+        for (int s = 1; s < 16 && ghost_step < 0; s++) {
+            uint8_t v = 0;
+            if (energy_ghost(64, tier, engine.pattern().seed, track, s, v)) ghost_step = s;
+        }
+        CHECK(ghost_step >= 1);
+        if (ghost_step < 1) return;
+
+        FakeHost &host = FakeHost::the();
+        host.clear_midi();
+        host.set_running(true);
+        auto window = [&](uint32_t from, uint32_t to, int &ons, int &lit) {
+            const int ons_before = host.midi_messages(0x90, 3);
+            const uint8_t lit_before =
+                engine.status().triggered[track].load(std::memory_order_relaxed);
+            for (uint32_t tick = from; tick < to; tick++) {
+                host.deliver_tick(tick, 0);
+                strata::test::pump();
+            }
+            ons = host.midi_messages(0x90, 3) - ons_before;
+            lit = int(uint8_t(engine.status().triggered[track].load(std::memory_order_relaxed) -
+                              lit_before));
+        };
+        int ons = 0, lit = 0;
+        // The programmed step: the arp's run, two hits, each lit.
+        window(0, kStepTicks, ons, lit);
+        CHECK_EQ(ons, 2);
+        CHECK_EQ(lit, 2);
+        window(kStepTicks, uint32_t(ghost_step) * kStepTicks, ons, lit);   // up to the ghost
+        // The ghost: one note, nothing lit.
+        window(uint32_t(ghost_step) * kStepTicks, uint32_t(ghost_step + 1) * kStepTicks, ons, lit);
+        CHECK_EQ(ons, 1);
+        CHECK_EQ(lit, 0);
+
+        host.set_running(false);
+        strata::test::post(Cmd::stop, 0, 0, 1);
+        strata::test::post(Cmd::set_energy, 0, 0, 0);
+        strata::test::post(Cmd::set_midi_out, tr, 0, 0);
+        strata::test::pump(2);
+        CHECK(strata::test::settle());
+    }
 }
