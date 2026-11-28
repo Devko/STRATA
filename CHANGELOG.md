@@ -173,6 +173,10 @@ the project file format or the controls.
 
 ### Fixed
 
+- **A knob in PERFORM keeps its layer while it turns.** Letting go of FUNC with C still turning
+  gave the last clicks to macro C, so ENERGY moved the macro too, and turning ENERGY back to 0
+  left the macro moved. A turn of A-D stays on the layer it started on (the macro, or REL ALL,
+  LEN ALL, ENERGY and LIVE RND with FUNC) until the knob rests for a quarter second.
 - **A section's BPM keeps VariSpeed.** With VariSpeed off rest, an entry's BPM set the clock to the
   plain tempo until VALUE was touched; it is now the tempo times VariSpeed's ratio, as VALUE's turn.
 - **A mute armed for the next bar (FUNC + pad) no longer lands on a project opened before that
