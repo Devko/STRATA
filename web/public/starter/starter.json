@@ -19,8 +19,8 @@
       "key": "A minor",
       "about": "Swung drums, FM4 electric piano chords, a walking bass, held pads.",
       "file": "DEEP.zip",
-      "bytes": 7418,
-      "sha256": "aca3b547c8a33ca61f68c1f2312a3c2362ae069f935bddabf17f0bd8c157e6d6"
+      "bytes": 7421,
+      "sha256": "7eaefb00e98b7720ae8f18b36fb57fbda21060975e6796fe729797a26f1031d3"
     },
     {
       "name": "DUB",
@@ -49,8 +49,8 @@
       "key": "E phrygian",
       "about": "808 kit, rubbery 16th bass with slides, a synced lead riff.",
       "file": "ELECTRO.zip",
-      "bytes": 7037,
-      "sha256": "6fde22366da68a265c4a0755bdef7ae1dc7607a07ee0418996840bf73c54c346"
+      "bytes": 7038,
+      "sha256": "c96be28b81eb13b3f498123d74bad8ebde62dffe0d9d00b05480674ca736d17a"
     },
     {
       "name": "NIGHT",
@@ -60,7 +60,7 @@
       "about": "Am F C G on a detuned string pad, octave bass, gliding lead.",
       "file": "NIGHT.zip",
       "bytes": 7434,
-      "sha256": "acd218e59895e0e0b6bb35910ea41a1dbefc7abd22b475d34ea05d4691c6ca6f"
+      "sha256": "72da533afe51caedbcd73df6566fae48293614cdf71f9abc136eaf2199755638"
     },
     {
       "name": "BREAKS",
@@ -79,8 +79,8 @@
       "key": "E minor",
       "about": "Straight breaks with ratchets, rolls and a driven reese.",
       "file": "STEEL.zip",
-      "bytes": 6937,
-      "sha256": "ed1e0a1880d0331eb14bc9418e03e6e30ca6eaf9201c911fe42c08f17f14f5e0"
+      "bytes": 6935,
+      "sha256": "012bb3e9a89890acb94bd2a139506840557b0c628415ca0ac07c408daea651cc"
     },
     {
       "name": "SMASH",
@@ -89,8 +89,8 @@
       "key": "F minor",
       "about": "Drum chaos, random-order ghosts and rolls, a sparse melody.",
       "file": "SMASH.zip",
-      "bytes": 7380,
-      "sha256": "830303ef2e48d5e4577f6e93353941369c2b73c3da191957df442cebab678c7f"
+      "bytes": 7381,
+      "sha256": "378dd4f4b78561618408ca3524693d21ff0b5953e13196e2890feafdfab3900c"
     },
     {
       "name": "CHAOS",
@@ -99,8 +99,8 @@
       "key": "D phrygian",
       "about": "BREAKS pulled apart: rolls down to 1/64 and constant mutation.",
       "file": "CHAOS.zip",
-      "bytes": 7265,
-      "sha256": "a20790d77857340ea77307be4a0fdf401f2e9fdd3d66d31b68426420c4ce9ba4"
+      "bytes": 7266,
+      "sha256": "b6366c78f8a851b512a4570dc2c392ac40f7016fd3919585db0eb207a134b3bd"
     }
   ],
   "samples": {
