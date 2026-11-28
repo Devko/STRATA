@@ -8,6 +8,14 @@ the project file format or the controls.
 
 ### Added
 
+- **JAM REC: the whole jam to the card.** The FUNC menu's last row (FUNC+HOME, UP, OK) records
+  everything STRATA plays to `/RECORD/JAM_<n>.WAV` until OK again: 48 kHz 24-bit stereo, about
+  1 GB an hour, up to 3 h 51 min. The finished master as RESAMPLE hears it, never the click or
+  the sample audition. A dot blinks in the top bar while it runs and the row counts the time. A
+  full card or the length limit closes the file cleanly and says so; switching off closes it
+  too. RESAMPLE, freeze and the looper still work meanwhile. Every FUNC menu row counted
+  upwards from SAVE is one further on (LOAD DEMO is UP twice now). New emulator scenario
+  `jamrec`.
 - **16th-note triplets as a track speed.** TRACK SPEED (FUNC menu) has a new **3/2** between 2
   and 1: a step every 16 ticks, six to the beat, so 24 steps make a bar. Set LEN 24 for a one-bar
   triplet hat. The arp, rolls over LEN and REPEAT already had 1/16T. No file change: a build from

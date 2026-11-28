@@ -201,11 +201,13 @@ three throw away unsaved work, so each needs OK twice within 2 s (OK AGAIN TO RE
 FOR NEW, OK AGAIN FOR DEMO). NEW is empty; LOAD DEMO is the factory demo a first start plays.
 **FUNC menu (FUNC+HOME):** SAVE, SAVE AS, OPEN PROJECT, NEW PROJECT, RELOAD PROJECT, CLEAR
 PATTERN, KITS, RELOAD SAMPLE, TRACK SPEED, TRACK PLAY, CHAIN, CHAIN END, AUTO-FILL, QUANTIZE, REC MODE, CLICK, COUNT-IN, FX GLIDE, FREEZE, LOOP
-LEN, LOAD DEMO. It always opens on SAVE, and the list wraps: UP once is LOAD DEMO, twice LOOP LEN, three times FREEZE, four times FX GLIDE. UP/DOWN or A
+LEN, LOAD DEMO, JAM REC. It always opens on SAVE, and the list wraps: UP once is JAM REC, twice LOAD DEMO, three times LOOP LEN, four times FREEZE, five times FX GLIDE. UP/DOWN or A
 scroll, OK runs the row (NEW, RELOAD, CLEAR PATTERN and LOAD DEMO need OK twice), LEFT/RIGHT or B change a
 setting row (OK steps it too), CLR or FUNC+HOME close it. FREEZE: the selected track plays a 1-8
 bar loop of itself from RAM and stops computing; OK again unfreezes. CLICK: a click on every beat (ON/OFF). COUNT-IN: OFF, 1 BAR, 2 BAR clicked
 before a PLAY from stop with REC on (`COUNT-IN 4` .. `1`); internal clock only; neither saved.
+JAM REC: OK records the finished master to `/RECORD/JAM_<n>.WAV` (24-bit, about 1 GB an hour,
+up to 3 h 51 min) until OK again; a dot blinks before the load meanwhile; no click or audition.
 **PROJECTS:** UP/DOWN or A move, LEFT/RIGHT page by 8. OK twice within 2 s opens the project
 under the cursor (AGAIN TO OPEN; it throws away unsaved work and stops the transport).
 FUNC+DOWN (or the menu's SAVE AS) is SAVE AS: A or LEFT/RIGHT move, B, VALUE or UP/DOWN change the character, OK saves

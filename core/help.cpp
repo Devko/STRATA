@@ -419,7 +419,7 @@ constexpr Text kMenu = {"FUNC MENU:", {
     "NEW RELOAD CLEAR",
     "PATTERN  OK TWICE",
     "TRACK PLAY FWD-RND16",
-    nullptr,
+    "UP OK  JAM REC ON/OFF",
 }};
 
 // The MIXER's pages, in app/app.hpp's kMixerPages order (its static_assert holds the count).
