@@ -1074,6 +1074,16 @@ slots, no chain.
 - FUNC+HOME, RELOAD PROJECT, OK: `OK AGAIN: RELOAD`; wait 3 s. PROJECT, SLOT, FUNC + LEFT:
   `LEFT AGAIN: CLEAR`; wait. Every confirmation on the unit reads `<KEY> AGAIN: <WHAT>`. `____`
 
+**W79. A project opens at rest; ENERGY ghosts skip conditional trigs (3 min).** A01 playing.
+- PERFORM: FUNC + turn C to `ENERGY -64`, FUNC + turn D to `LIVE RND4`, FUNC + turn A a few
+  clicks, FUNC + SEL> three times (`TR+3`), FUNC + turn VALUE to `VARISPEED +12.0`. FUNC+HOME,
+  LOAD DEMO, OK, OK: the demo plays at its own tempo and pitch, the full beat, and the live strip
+  shows no `EN`, `RN`, `RL`, `TR` or `VS`. Holding FUNC in PERFORM reads `0 100 0 OFF`. `____`
+- FUNC + turn C one click: `ENERGY +2`, not -62. Back to 0. `____`
+- NEW PROJECT, PLAY. GRID, select the SNARE track and clear its trigs, then hold FILL and tap
+  STEP 13: its only trig is a FILL trig. PERFORM, FUNC + turn C to `ENERGY +64`: the snare stays
+  silent (before, its ghosts played the FILL hit every bar); hold FILL and step 13 plays. `____`
+
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
 

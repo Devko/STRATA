@@ -173,6 +173,14 @@ the project file format or the controls.
 
 ### Fixed
 
+- **A project opens at rest.** ENERGY, TRANSPOSE, VariSpeed, REL ALL, LEN ALL and LIVE RND carried
+  over into the next project on an OPEN, a reload, NEW or LOAD DEMO, while the LOCKs were cleared:
+  a project could open nearly silent (ENERGY -64) or an octave up (VariSpeed +12.0). All six go
+  back to rest, and the next turn starts from there.
+- **ENERGY's ghosts no longer copy conditional or 0% trigs.** A ghost took the sound of the trig
+  before it whatever its condition or probability, so a FILL-only crash, a 1:4 hit or a step at 0%
+  played every bar once ENERGY was up. A ghost passes over those to the nearest trig that plays
+  every pass.
 - **A section's BPM keeps VariSpeed.** With VariSpeed off rest, an entry's BPM set the clock to the
   plain tempo until VALUE was touched; it is now the tempo times VariSpeed's ratio, as VALUE's turn.
 - **A mute armed for the next bar (FUNC + pad) no longer lands on a project opened before that
