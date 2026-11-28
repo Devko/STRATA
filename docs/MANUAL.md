@@ -1171,6 +1171,36 @@ and STRATA says `EXT CLOCK: BPM SKIPPED` once. On the list, `+` under an entry m
 own, `C` a CAP, and the cursor's entry lists them under MUTES (`S4 SNAP E-40 132BPM`). OK copies
 an entry with its fields. A project from before sections opens with every field `--`.
 
+### Recording a song by playing it: ARR REC
+
+**ARR REC** writes the jam into the chain while you play, so a set comes out as a song you can
+replay and edit. It records the structure, not the sound: JAM REC records the audio, and the two
+can run together. ARR REC is the FUNC menu's third row: **FUNC+HOME, DOWN, DOWN, OK**. The menu
+closes and STRATA says `ARR: PRESS PLAY` (or `ARR REC ON` with the transport running). The chain
+you had is kept for undo, the chain is emptied, and the chain is not followed while you record.
+
+Then play. At the end of every pass of the pattern, STRATA looks at what played: if it is the
+same pattern with the same mutes, scene on side B, morph side, ENERGY and tempo as the chain's
+last entry, that entry gets one more repeat; otherwise a new entry starts, holding those as its
+section fields (MUT CAP, SCN, MRP SNAP or SNAP A, NRG, BPM). A pass counts as what played at its
+start, so a mute or an ENERGY move shows from the next pass; one made a hair after the downbeat
+still belongs to the pass it was meant for. An entry holds up to X16, then a new entry of the
+same starts. The live strip shows `ARR` and how many sections are written (`ARR7`), the menu row
+`ON 7`, and the REC key blinks.
+
+STOP, OK on the row again, or turning the chain on ends the take (`ARR 23 SECTIONS`); so does a
+65th entry (`ARR FULL 64 SECTIONS`). A pass you leave before half of it has played (a pattern
+change at once, STOP) is not written; one past half is written whole. A take that kept nothing
+gives you the old chain back (`ARR NOTHING KEPT`).
+
+To hear it, set CHAIN END to SONG, turn CHAIN on and press PLAY from stop: the jam plays back with
+its patterns, mutes, scenes, breakdowns and tempo changes, quantized to whole passes. Edit any
+entry on the CHAIN page or in its SECTION view. A morph swept by hand is written as the side it
+ended a pass nearer to; set RIDE or BACK on the entry for a sweep. **ARR UNDO** (the FUNC menu,
+under CHAIN END) swaps the chain from before the take back in (`ARR UNDONE`), and OK again brings
+the take back (`ARR REDONE`). It keeps one chain until the next take or until a project is
+opened. Under an outside clock the sections carry no BPM, and the song follows the clock.
+
 ### Track Launch: one track from another pattern
 
 Play the bass of B07 under the drums of A01 without making a new pattern. Press PROJECT twice
@@ -1217,9 +1247,9 @@ can be built up one pass at a time. The edit line says `REC+` under ADD. Transpo
 MUTATE's note moves and turning NOTE move the whole chord. VA MONO, WAVE MONO, SAMPLE, GRAIN and
 the drums keep one note a step: the last one played.
 
-<p><img src="screens/menu_click.png" width="256" alt="The FUNC menu on CLICK, with JAM REC above and COUNT-IN below"></p>
+<p><img src="screens/menu_click.png" width="256" alt="The FUNC menu on CLICK, with ARR REC above and COUNT-IN below"></p>
 
-**CLICK and COUNT-IN** (FUNC menu, the two rows under JAM REC). CLICK `ON` clicks every beat while the transport runs, a
+**CLICK and COUNT-IN** (FUNC menu, the two rows under ARR REC). CLICK `ON` clicks every beat while the transport runs, a
 higher click on each bar's first beat. COUNT-IN `1 BAR` or `2 BAR` makes a PLAY from stop with REC
 on click that many bars first (the notice counts `COUNT-IN 4` .. `1`), whether CLICK is on or not;
 the pattern then starts on step 1 on the next beat, and nothing is recorded during the clicks

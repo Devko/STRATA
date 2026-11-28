@@ -971,6 +971,27 @@ filters closed, scene 4 open and wet; something different in A02.
 - Save, power cycle, open: the sections are still there and play the same. Open a project saved
   by v0.5.0: its chain plays as it did, every field `--`. `____`
 
+**W72. ARR REC: a jam into the chain (6 min).** A project with a chain of its own, the beat
+stopped on A01, scenes 3 and 4 as in W71.
+- FUNC+HOME, DOWN, DOWN: `ARR REC OFF`. OK: the menu closes, `ARR: PRESS PLAY`, the strip reads
+  `ARR`, the REC key blinks dim red. `____`
+- PLAY. Two passes as it is; then mute track 1 in the middle of a pass; one pass later turn
+  ENERGY down (FUNC + C in PERFORM); then queue A02 (END) and play two passes of it with the
+  morph pushed to B. The strip counts up (`ARR1` .. `ARR4`). `____`
+- Mute a track just after a downbeat (a hair late): that pass is written with it muted. `____`
+- STOP: `ARR 4 SECTIONS` (or as many as you made). PROJECT, CHAIN: one entry per change, X2 on
+  the first, `C` marks (CAP) under each; push A on one: MUT CAP, SCN, MRP SNAP or SNAP A, NRG and
+  BPM filled in. `____`
+- CHAIN END SONG, CHAIN ON, PLAY from stop: the jam plays back as played, mute and breakdown at
+  the pass lines, the morph on B in A02, and the song stops at the end. `____`
+- FUNC menu ARR UNDO: `ARR UNDONE`, the chain you had before. OK again: `ARR REDONE`. `____`
+- ARR REC on and straight off again: `ARR NOTHING KEPT`, the chain unchanged; ARR UNDO says
+  `NO ARR TO UNDO`. `____`
+- One pattern left playing for 17 passes: X16 and then X1 of the same. `____`
+- CLOCK SRC MIDI with a running outside clock: record two sections; their BPM reads `--`. Back to
+  INTERNAL. With JAM REC also running, both blink and both keep recording. `____`
+- Save, power cycle, open: the recorded chain is there. `____`
+
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
 
