@@ -23,9 +23,30 @@ TEST(taptempo_the_first_tap_only_starts_the_count) {
     CHECK_EQ(tap.count, 0);
 }
 
-TEST(taptempo_two_taps_half_a_second_apart_are_120_bpm) {
+TEST(taptempo_two_taps_set_nothing_and_a_third_that_agrees_sets_120_bpm) {
+    // The review's M5: two stray taps used to set and save 60000 / gap BPM.
     TapTempo tap;
-    CHECK_EQ(taps(tap, 5000, 500, 2), 1200u);
+    CHECK_EQ(taps(tap, 5000, 500, 2), 0u);
+    CHECK_EQ(tap_tempo(tap, 6000), 1200u);
+}
+
+TEST(taptempo_a_third_tap_that_disagrees_sets_nothing_and_pairs_with_the_next) {
+    TapTempo tap;
+    // 1.2 s then 0.5 s: off by more than a quarter, nothing set (it would have been 50 BPM).
+    CHECK_EQ(taps(tap, 0, 1200, 2), 0u);
+    CHECK_EQ(tap_tempo(tap, 1700), 0u);
+    CHECK_EQ(tap.count, 1);
+    // The next tap 500 ms on agrees with the kept 500: 120.
+    CHECK_EQ(tap_tempo(tap, 2200), 1200u);
+}
+
+TEST(taptempo_two_intervals_a_quarter_apart_still_agree) {
+    TapTempo tap;
+    taps(tap, 0, 400, 2);
+    CHECK(tap_tempo(tap, 400 + 500) != 0u);    // 500 against 400: exactly 25%
+    TapTempo off;
+    taps(off, 0, 400, 2);
+    CHECK_EQ(tap_tempo(off, 400 + 501), 0u);   // just over
 }
 
 TEST(taptempo_steady_taps_give_the_tempo_to_a_tenth) {
@@ -69,22 +90,23 @@ TEST(taptempo_a_long_gap_starts_a_new_count) {
     CHECK_EQ(tap_tempo(tap, 1500 + kTapTimeoutMs + 1), 0u);
     CHECK_EQ(tap.count, 0);
     // And the next tap counts from the one after the gap, not from the old taps.
-    CHECK_EQ(tap_tempo(tap, 1500 + kTapTimeoutMs + 1 + 400), 1500u);
+    CHECK_EQ(tap_tempo(tap, 1500 + kTapTimeoutMs + 1 + 400), 0u);
+    CHECK_EQ(tap_tempo(tap, 1500 + kTapTimeoutMs + 1 + 800), 1500u);
 }
 
 TEST(taptempo_a_gap_of_exactly_the_timeout_still_counts) {
     TapTempo tap;
-    tap_tempo(tap, 0);
-    CHECK_EQ(tap_tempo(tap, kTapTimeoutMs), 300u);   // 2 s a beat: 30 BPM
+    taps(tap, 0, kTapTimeoutMs, 2);
+    CHECK_EQ(tap_tempo(tap, 2 * kTapTimeoutMs), 300u);   // 2 s a beat: 30 BPM
 }
 
 TEST(taptempo_a_tap_at_twice_the_tempo_starts_again_rather_than_averaging) {
     TapTempo tap;
     taps(tap, 0, 600, 4);                      // 100 BPM
     // Then the hand taps eighths: 250 ms is under half of 600, a new count from it.
-    const uint32_t result = tap_tempo(tap, 1800 + 250);
-    CHECK_EQ(result, 2400u);
+    CHECK_EQ(tap_tempo(tap, 1800 + 250), 0u);
     CHECK_EQ(tap.count, 1);
+    CHECK_EQ(tap_tempo(tap, 1800 + 500), 2400u);   // and the eighths, once two agree
 }
 
 TEST(taptempo_two_taps_in_one_millisecond_restart_rather_than_divide_by_nothing) {
@@ -96,15 +118,15 @@ TEST(taptempo_two_taps_in_one_millisecond_restart_rather_than_divide_by_nothing)
 
 TEST(taptempo_the_tempo_is_clamped_to_the_clocks_range) {
     TapTempo fast;
-    CHECK_EQ(taps(fast, 0, 150, 2), kTempoTenthsMax);     // 400 BPM asked, 300 given
+    CHECK_EQ(taps(fast, 0, 150, 3), kTempoTenthsMax);     // 400 BPM asked, 300 given
     TapTempo slow;
-    CHECK_EQ(taps(slow, 0, 1999, 2), 300u);              // 30.0: inside, not clamped
+    CHECK_EQ(taps(slow, 0, 1999, 3), 300u);              // 30.0: inside, not clamped
 }
 
 TEST(taptempo_it_keeps_counting_across_the_millisecond_counters_wrap) {
     TapTempo tap;
-    tap_tempo(tap, 0xFFFFFF00u);
-    CHECK_EQ(tap_tempo(tap, 0xFFFFFF00u + 500u), 1200u);  // wraps past 0
+    taps(tap, 0xFFFFFE00u, 500, 2);
+    CHECK_EQ(tap_tempo(tap, 0xFFFFFE00u + 1000u), 1200u);  // wraps past 0
 }
 
 TEST(taptempo_reset_forgets_the_count) {
