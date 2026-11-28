@@ -426,6 +426,10 @@ void InsertChain::process_pair(float *left, float *right, int frames, const Chai
         strata_chain_lofi(right, frames, lofi_increment_, lofi_levels_, lofi_step_, kLofiCeiling,
                           &phase_r, &lofi_hold_r_);
     }
+    // A bounce's tap: the pair's middle before the duck, as process() takes it.
+    if (out.tap != nullptr) {
+        for (int i = 0; i < frames; i++) out.tap[i] = 0.5f * (left[i] + right[i]);
+    }
     if (duck_depth_ > 0.0f && out.duck != nullptr) {
         strata_chain_duck(left, out.duck, frames, duck_depth_);
         strata_chain_duck(right, out.duck, frames, duck_depth_);
@@ -444,11 +448,8 @@ void InsertChain::process_pair(float *left, float *right, int frames, const Chai
     gain_l_ = target_l_;
     gain_r_ = target_r_;
 
-    // The middle, for the sends and a bounce: they are mono, as every track's are.
+    // The middle, for the sends: they are mono, as every track's are.
     strata_pair_mid(left, right, frames);
-    if (out.tap != nullptr) {
-        for (int i = 0; i < frames; i++) out.tap[i] = left[i];
-    }
     if (send_a_gain_ > 0.0f && out.send_a != nullptr) enaga_mix(out.send_a, left, frames, send_a_gain_);
     if (send_b_gain_ > 0.0f && out.send_b != nullptr) enaga_mix(out.send_b, left, frames, send_b_gain_);
     if (send_c_gain_ > 0.0f && out.send_c != nullptr) enaga_mix(out.send_c, left, frames, send_c_gain_);
