@@ -46,7 +46,7 @@ pads and the performance mixer.
 | SOUNDS | OK in EDIT or MACHINE on a drum, VA, WAVE or FM4 track; OK in EDIT on a GRN track | Load a factory sound into that track only; AS WAS puts yours back |
 | MIXER | MIXER | Levels, the sidechain duck, delay, reverb, routing, master, kill EQ |
 | PERFORM | FUNC+MIXER | Scenes, morph, macros, mutation |
-| Track menu | **Hold OK** in GRID | GENERATE a drum or melodic part (DENSITY, RANGE, LEAP, WHAT); EVOLVE every 1-8 loops (mutation MIX: a different one each turn), ORBIT or DRIFT, KEEP or HOME; saved with the project |
+| Track menu | **Hold OK** in GRID (a tap says `HOLD OK: TRACK MENU`) | GENERATE a drum or melodic part (DENSITY, RANGE, LEAP, WHAT); EVOLVE every 1-8 loops (mutation MIX: a different one each turn), ORBIT or DRIFT, KEEP or HOME; saved with the project |
 | PROJECT | PROJECT | Banks and patterns, key and scale, the card. On the slots: **hold OK** for the pattern menu (COPY, PASTE, CLEAR, DOUBLE; OK runs, PASTE/CLEAR/DOUBLE twice). Shortcuts: FUNC+UP copies, FUNC+DOWN twice pastes, FUNC+LEFT twice clears |
 | CHAIN | PROJECT, then screen key RIGHT | The pattern chain as a list |
 | PATTERN | PROJECT, screen key RIGHT twice | Master length (LEN), swing (SWG), FEEL and each track's own swing of the playing pattern |
@@ -95,6 +95,7 @@ each line means.
 | Screen keys L/R | The screen's pages (on GRID and KEYS: the EDIT page A-D turn) |
 | Pad-row keys L/R | Which 16 the STEP keys mean: step page (GRID, KEYS, PERFORM, EDIT and the other editing screens), bank (PROJECT, CHAIN) |
 | FUNC + UP / DOWN | Copy / paste while editing; in the card lists, read again / store here |
+| FUNC tapped alone | `HOLD FUNC: HELP`: the reminder that the help is there |
 | FUNC held alone | Help for this screen: what A-D do here and its gestures. Keep holding FUNC: screen keys (or LEFT/RIGHT) turn the pages; the last five are FUNC + each function key, FUNC + a knob or pad, the upper pads, and the VALUE mixer's gestures and slots |
 
 ## Pads

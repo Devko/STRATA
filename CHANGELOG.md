@@ -8,6 +8,9 @@ the project file format or the controls.
 
 ### Added
 
+- **Two reminders on the screen.** A quick tap of FUNC alone says `HOLD FUNC: HELP`, and a tap of
+  OK in GRID says `HOLD OK: TRACK MENU`. Both keys did nothing visible on their own, and nothing
+  on the panel pointed at the FUNC help or the GEN and EVOLVE menu. Neither covers another notice.
 - **JAM REC: the whole jam to the card.** The FUNC menu's last row (FUNC+HOME, UP, OK) records
   everything STRATA plays to `/RECORD/JAM_<n>.WAV` until OK again: 48 kHz 24-bit stereo, about
   1 GB an hour, up to 3 h 51 min. The finished master as RESAMPLE hears it, never the click or

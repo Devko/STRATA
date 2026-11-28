@@ -298,6 +298,7 @@ for a second; it shows that screen's help, with `PAGE 1/11` at its foot.
   `UPPER PADS`, `VALUE FX MIXER:`, `VALUE FX STEPS:`, and round to page 1. LEFT goes back. GRID's
   own knob page did **not** change.
 - Let go of FUNC: GRID is back. Hold again: page 1 again.
+- Tap FUNC quickly on its own: the toast says `HOLD FUNC: HELP`. FUNC + MIXER: PERFORM, no such toast.
 - EDIT on track 2 (snare): `EDIT SRC SNR`, `B SNP SNAPPY`. Screen key RIGHT to ENV (without FUNC),
   hold FUNC: `ASR: SYNTHS GRN SMP`. Track 7: `A ATK ATTACK`, `SUS 0  ONE-SHOT`.
 - MIXER DUCK: `A SRC SOURCE TRACK`. PERFORM: `PUSH A-D   LEARN`. Push A (LEARN), hold FUNC:
@@ -714,7 +715,7 @@ hit, a 44.1 kHz loop and a long stem (a minute or more). Beat stopped, A01.
 - Save, power cycle: the arp's settings and the loaded arp come back. `____`
 
 **W52. GEN and EVOLVE (4 min).** Beat playing, A01, GRID.
-- Tap OK: nothing opens. Hold OK half a second: the track menu, `>GENERATE`, footer `T1  OK: RUN`.
+- Tap OK: nothing opens, the toast says `HOLD OK: TRACK MENU`. Hold OK half a second: the track menu, `>GENERATE`, footer `T1  OK: RUN`.
   OK: `GEN T1 BOTH`, a new kick part that starts on step 1. OK again: another one. Close with CLR
   and FUNC + CLR: the part before. `____`
 - Screen key down to T6 (the bass), hold OK, OK: a bass line in the key (KEY on PROJECT), starting

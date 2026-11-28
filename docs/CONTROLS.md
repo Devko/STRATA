@@ -297,7 +297,8 @@ ALL. FUNC + turn C in PERFORM only duplicated the macro before, so no gesture ch
 
 Roland, 2026-11-27: generate a drum or melodic part, random but in the key, and let it mutate on
 its own every few loops. `core/generate.hpp`, `core/evolve.hpp`, `app/ui_trackmenu.hpp`. OK in
-GRID with nothing held did nothing, so the hold costs no gesture; a tap still does nothing.
+GRID with nothing held did nothing, so the hold costs no gesture; a tap says where the menu is
+(`HOLD OK: TRACK MENU`).
 
 | Row | Does | Says |
 | --- | --- | --- |
@@ -635,6 +636,10 @@ pages**, as they turn every screen's pages; the help's last line says
 `PAGE 1/11`. The last five pages are the same everywhere: FUNC + each function key,
 FUNC + a knob or pad, the upper pads, and the performance mixer's gestures and slots
 (`VALUE FX MIXER:`, `VALUE FX STEPS:`). Every hold starts on the screen's own page.
+
+A quick tap of FUNC alone (let go before the help shows, nothing else pressed) says
+`HOLD FUNC: HELP`, unless another notice or a MUTATE waiting for OK or CLR is up: nothing else
+on the panel says the help is there.
 
 FUNC + a screen key or LEFT/RIGHT does nothing anywhere else, and the help only takes them once
 it is up, so no chord changes meaning. Any other key, knob or pad, or letting go of FUNC, takes
