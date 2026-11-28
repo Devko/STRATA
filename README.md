@@ -64,7 +64,10 @@ Read the [safety checks](docs/INSTALL.md#before-you-install) before step 1. Upda
 STRATA 0.4.0 or earlier needs step 1 too (they ran on older Enaga versions); after that, an update is
 step 3 only while the Enaga version stays the same, and your projects stay on the card. An
 official SmplTrek update restores the unit completely, because neither Enaga nor STRATA writes
-the SPI flash. [docs/INSTALL.md](docs/INSTALL.md) has every step, switching apps and going back.
+the SPI flash or touches the bootloader; Enaga's developer reports that flashing back and forth
+is pretty safe as long as the bootloader is left alone
+([details](docs/INSTALL.md#installing-strata-on-a-smpltrek)). A community tester reported that
+STRATA also runs on a CyDrums. [docs/INSTALL.md](docs/INSTALL.md) has every step, switching apps and going back.
 
 ## Highlights
 
