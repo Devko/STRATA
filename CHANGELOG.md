@@ -148,6 +148,8 @@ the project file format or the controls.
 
 - **A section's BPM keeps VariSpeed.** With VariSpeed off rest, an entry's BPM set the clock to the
   plain tempo until VALUE was touched; it is now the tempo times VariSpeed's ratio, as VALUE's turn.
+- **A mute armed for the next bar (FUNC + pad) no longer lands on a project opened before that
+  bar.**
 - **The first pass after STOP and PLAY ends on its own boundary.** It lasted until the tick the
   previous run would have ended it on, so a chain started on the pattern already playing held its
   first entry longer than its repeats.

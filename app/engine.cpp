@@ -2332,6 +2332,9 @@ bool Engine::apply_project(const Command &command, int, int) {
             }
             lane_follows_ = 0xFF;
             chain_.active = false;
+            // A mute armed for the next bar (FUNC + pad) was for the project just left: landing
+            // on this one's mutes would flip a track nobody asked for.
+            mute_latch_ = MuteLatch{};
             // ARR REC: a take and its undo belong to the project they were made in.
             arr_ = ArrRec{};
             arr_backup_.valid = false;

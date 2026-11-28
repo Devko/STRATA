@@ -2312,6 +2312,21 @@ TEST(engine_a_pass_after_stop_and_play_ends_on_its_own_boundary) {
     pump();
 }
 
+TEST(engine_a_mute_armed_for_the_bar_does_not_survive_a_project_load) {
+    Engine &engine = clean();
+    post(Cmd::set_mute, 1, 0, 1, 1);             // FUNC + pad: track 2 at the next bar
+    pump();
+    post(Cmd::project_loaded);
+    pump();
+    FakeHost::the().set_running(true);
+    tick_at(0);
+    tick_at(kTicksPerBar);
+    tick_at(2 * kTicksPerBar);
+    CHECK(!engine.muted(1));
+    FakeHost::the().set_running(false);
+    pump();
+}
+
 TEST(engine_starting_an_empty_chain_is_refused) {
     Engine &engine = clean();
     CHECK_EQ(chain_length(engine.project()), 0);
