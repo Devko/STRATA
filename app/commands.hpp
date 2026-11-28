@@ -396,7 +396,7 @@ enum class Cmd : uint8_t {
     audition_start,
     audition_stop,
 
-    // JAM REC (app/storage.hpp, "jam recording"), the FUNC menu's last row: the finished master
+    // JAM REC (app/storage.hpp, "jam recording"), the FUNC menu's second row: the finished master
     // to /RECORD as one long WAV through an Enaga recording stream. `jam_start` is posted by the
     // card side once Engine::jam_writer() is created; from the next block the audio side writes
     // every block into it. `jam_stop` ends that, and the audio side bumps Status::jam_epoch once

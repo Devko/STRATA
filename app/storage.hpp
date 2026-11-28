@@ -322,7 +322,7 @@ public:
         return e;
     }
 
-    // --- jam recording: JAM REC, the FUNC menu's last row ---
+    // --- jam recording: JAM REC, the FUNC menu's second row ---
     //
     // The whole jam to the card: the finished master (what RESAMPLE's MASTER take hears, so never
     // the click or the audition) to /RECORD/JAM_<n>.WAV, 48 kHz 24-bit stereo, for as long as it

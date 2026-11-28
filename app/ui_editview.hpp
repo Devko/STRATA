@@ -35,8 +35,8 @@
         if (frozen(selected_)) {
             // A frozen track plays its loop, not these knobs (dsp/frozen.hpp).
             draw_knob_line(canvas, kFootY, 0x8u);
-            canvas.rect(8, 54, 108, 13, 15);
-            canvas.text(11, 57, "FROZEN: FUNC+HOME", 0);
+            canvas.rect(4, 54, 120, 13, 15);
+            canvas.text(7, 57, "FROZEN: TRACK MENU", 0);   // hold OK in GRID
             return;
         }
 
