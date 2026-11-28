@@ -266,7 +266,12 @@ TEST(overview_a_refusal_mid_load_sticks_and_a_finished_head_is_final) {
         builder.feed(g_pcm, 0, 500, 1);
         if (how == 0) builder.feed(g_pcm + 500, 500, 10, 3);
         if (how == 1) builder.feed(nullptr, 500, 1, 1);
-        if (how == 2) builder.feed(g_pcm + 500, 500, 501, 1);
+        if (how == 2) {                            // one frame more than the sample has
+            builder.feed(g_pcm + 500, 500, 501, 1);
+            builder.finish(1001);
+            CHECK(!out.ready);
+            continue;
+        }
         builder.feed(g_pcm + 500, 500, 500, 1);
         builder.finish(1000);
         CHECK(!out.ready);
@@ -276,9 +281,10 @@ TEST(overview_a_refusal_mid_load_sticks_and_a_finished_head_is_final) {
     builder.begin(out, 124000);
     builder.feed(g_pcm, 0, 1000, 1);
     builder.finish_head();
+    CHECK(out.ready);                              // one column is a head to draw
     CHECK_EQ(int(out.filled), 1);
     builder.feed(g_pcm, 1000, 1000, 1);
-    CHECK_EQ(int(out.hi[5]), 0);
+    CHECK_EQ(int(out.hi[1]), 0);
     CHECK_EQ(int(out.filled), 1);
 }
 
