@@ -19,6 +19,7 @@
 | [HANDOFF.md](HANDOFF.md) | **Start here.** Where it stands and what comes next |
 | [BUILDING.md](BUILDING.md) | Building, testing, CI and the source layout |
 | [../CLAUDE.md](../CLAUDE.md) | The rules every change follows |
+| [DESIGN_NOTES.md](DESIGN_NOTES.md) | Feature by feature: protocols, file bytes and traps the code does not spell out |
 | [CONTROLS.md](CONTROLS.md) | The controls concept: why each button does what it does |
 | [SCREENS.md](SCREENS.md) | Every screen's pixel spec: rows, columns and what each part is drawn from |
 | [SPEC.md](SPEC.md) | The design: sound architecture, sequencer, panel mapping, data model |
