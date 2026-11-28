@@ -2363,6 +2363,19 @@ bool Engine::apply_project(const Command &command, int, int) {
             undo_.clear();
             // Locks are RAM only and belong to the project they were taken in.
             locks_.clear();
+            // And so do the live moves a lock holds, and VariSpeed: none is saved, so the
+            // project opens at rest, as it was written. Left as they were, ENERGY -64 opened a
+            // project nearly silent and VariSpeed +12.0 an octave up. The UI's copies follow
+            // from Status::project_loads, bumped at the end of this case.
+            rel_all_ = 0;
+            len_all_ = 0;
+            perform_.rnd_unit = kLiveRndOff;
+            perform_.rnd_armed = kLiveRndAllTracks;
+            perform_.energy = 0;
+            transpose_ = 0;                 // the mode (SCALE or SEMI) is the user's, and stays
+            vari_tenths_ = 0;
+            vari_semis_ = 0.0f;
+            vari_inv_ratio_ = 1.0f;
             // So is EVOLVE's HOME: each track the file says evolves takes the pattern as loaded
             // as its HOME, with the file's mode, mutation and amount.
             evolve_from_settings();

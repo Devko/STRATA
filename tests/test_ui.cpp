@@ -85,6 +85,10 @@ struct UiProbe {
         app.post(Cmd::set_varispeed, 0, 0, 0);
     }
     static int vari(const Strata &app) { return app.vari_; }
+    static int rel_all_knob(const Strata &app) { return app.rel_all_; }
+    static int len_all_knob(const Strata &app) { return app.len_all_; }
+    static int rnd_unit(const Strata &app) { return app.rnd_unit_; }
+    static int transpose_keys(const Strata &app) { return app.transpose_; }
     static int selected(const Strata &app) { return app.selected_; }
     static int page(const Strata &app) { return app.page_; }
     static int param_page(const Strata &app) { return app.param_page_; }
@@ -12693,6 +12697,66 @@ TEST(ui_a_lock_jump_puts_transpose_back_and_the_keys_follow) {
     shift_key(ENAGA_KEY_SELECT_RIGHT);
     pump(2);
     CHECK_EQ(int(engine.transpose()), -1);
+}
+
+// The live moves and VariSpeed belong to the set being played, not to the project: a NEW or an
+// OPEN starts at rest, engine and knobs both, as the LOCKs are cleared. Left as they were, ENERGY
+// at -64 opened a project nearly silent and VariSpeed +12.0 an octave up.
+TEST(ui_a_project_load_puts_the_moves_and_varispeed_back_to_rest) {
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+    FakeHost &host = FakeHost::the();
+    shift_key(ENAGA_KEY_F7);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::perform));
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_encoder(0, -5);                                    // REL ALL
+    app.on_encoder(1, +4);                                    // LEN ALL
+    app.on_encoder(2, -10);                                   // ENERGY -20
+    app.on_encoder(3, +2);                                    // LIVE RND on
+    app.on_encoder(4, +50);                                   // VariSpeed +5.0
+    app.on_key(ENAGA_KEY_F1, false);
+    for (int i = 0; i < 3; i++) shift_key(ENAGA_KEY_SELECT_RIGHT);   // TRANSPOSE +3
+    pump(2);
+    CHECK(engine.rel_all() != 0);
+    CHECK(engine.len_all() != 0);
+    CHECK_EQ(int(engine.energy()), -20);
+    CHECK(engine.live_rnd_unit() != kLiveRndOff);
+    CHECK_EQ(int(engine.transpose()), 3);
+    CHECK_EQ(int(engine.varispeed()), 50);
+    CHECK(UiProbe::vari(app) == 50);
+
+    UiProbe::storage(app).request_new();
+    CHECK(pump_until_idle());
+    pump(4);
+
+    CHECK_EQ(int(engine.rel_all()), 0);
+    CHECK_EQ(int(engine.len_all()), 0);
+    CHECK_EQ(int(engine.energy()), 0);
+    CHECK_EQ(int(engine.live_rnd_unit()), int(kLiveRndOff));
+    CHECK_EQ(int(engine.live_rnd_armed()), int(kLiveRndAllTracks));
+    CHECK_EQ(int(engine.transpose()), 0);
+    CHECK_EQ(int(engine.varispeed()), 0);
+    CHECK_EQ(UiProbe::rel_all_knob(app), 0);
+    CHECK_EQ(UiProbe::len_all_knob(app), 0);
+    CHECK_EQ(int(UiProbe::energy(app)), 0);
+    CHECK_EQ(UiProbe::rnd_unit(app), int(kLiveRndOff));
+    CHECK_EQ(UiProbe::transpose_keys(app), 0);
+    CHECK_EQ(UiProbe::vari(app), 0);
+    // The clock is the new project's own tempo, VariSpeed's ratio gone.
+    CHECK_NEAR(host.tempo(), float(engine.project().settings.tempo_centi_bpm) * 0.01f, 0.01);
+
+    // And the next turn starts from rest, not from where the last project left the knob.
+    CHECK_EQ(UiProbe::mode(app), int(Mode::perform));
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_encoder(2, +1);
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(2);
+    CHECK_EQ(int(engine.energy()), 2);
+    shift_key(ENAGA_KEY_SELECT_LEFT);
+    pump(2);
+    CHECK_EQ(int(engine.transpose()), -1);
+    UiProbe::moves_to_rest(app);
+    pump(2);
 }
 
 // FEEL on the PATTERN page: D turns it from anywhere on the page, the row is the field after

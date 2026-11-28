@@ -267,7 +267,7 @@ changed meaning. C and D with FUNC are ENERGY and LIVE RND (below).
 - **Rest is 0, and 0 is a detent**: a turn that would cross it stops on it. At rest the sound is
   the programmed one to the bit (the rule the macros and the morph keep).
 - **Two counts a click**, like the macros. Not saved, not undone; a LOCK holds both (D4), and a
-  jump or swap puts them where the lock had them.
+  jump or swap puts them where the lock had them. A project load or NEW puts both back to rest.
 - **On screen**: PERFORM's line under the macros reads `FUNC+A/B REL/LEN ALL` at rest and
   `REL -12 LEN 71%` away from it; the live strip adds `RL-` / `RL+` and `LN-` / `LN+`.
 - **A turn keeps its layer**: a knob still turning stays on the layer its turn started on, the
@@ -302,7 +302,8 @@ all bands on every screen.
 - **Recoverable**: the pattern is never written. OFF is the programmed order from the next slot;
   a track's own mode (REV, PING ...) comes back with it.
 - **Not saved, not undone**, like REL ALL. A LOCK holds the unit and the armed set (D4); a jump
-  or swap puts both back. Live recording lands a hit on the step that was sounding.
+  or swap puts both back. A project load or NEW turns it OFF, with every track but the kicks to
+  come in. Live recording lands a hit on the step that was sounding.
 - **On screen**: PERFORM's line under the macros reads `LIVE RND4 FUNC+D`, or `REL -12 LEN 71% R4`
   with REL/LEN ALL away from rest; the track meters mark the armed tracks with a dot; the live
   strip adds `RN4`. The FUNC help's second PERFORM page lists both gestures.
@@ -316,7 +317,7 @@ ALL. FUNC + turn C in PERFORM only duplicated the macro before, so no gesture ch
 | Direction | Does |
 | --- | --- |
 | Down (-2 .. -64) | Every track drops its weakest hits first: 16ths, then 8ths, then beats, the one last, an accent counting for more. The tracks go in an order from their machines: HAT at once, then PERC, SNARE and SAMPLE (and MID), the MONO lines, the pads (POLY, WAVE POLY, FM4, GRAIN), and KICK from -40. At -64 the drums and lines are silent and the pads keep only their strongest hits |
-| Up (+2 .. +64) | Empty steps may get a quiet ghost (velocity about 40-86) with the note, length and locks of the trig before it on that track, off-beats first: HAT fills most, then PERC, SNARE and SAMPLE, the MONO lines; KICK only above +32; pads and MID never. A track with no trig stays silent. A ghost is one note with the arp on, and lights no step or trig glow. Step probabilities lift towards 100 (a 50% step plays every pass at +64) |
+| Up (+2 .. +64) | Empty steps may get a quiet ghost (velocity about 40-86) with the note, length and locks of the trig before it on that track that plays every pass (no condition, a probability above 0: a FILL-only crash or a 1:4 hit is never copied), off-beats first: HAT fills most, then PERC, SNARE and SAMPLE, the MONO lines; KICK only above +32; pads and MID never. A track with no trig stays silent. A ghost is one note with the arp on, and lights no step or trig glow. Step probabilities lift towards 100 (a 50% step plays every pass at +64) |
 
 - **Rest is 0, and 0 is a detent**, two counts a click, like REL ALL. At rest the part is the
   programmed one to the bit.
@@ -326,7 +327,7 @@ ALL. FUNC + turn C in PERFORM only duplicated the macro before, so no gesture ch
 - **What it never touches**: the pattern (nothing is written, saved or undone), trigless steps,
   conditions and the PRE/NEI chain (a thinned hit still counts as a pass), the recorder. A kept
   step keeps its ratchet; a thinned one loses it whole.
-- **A LOCK holds it**, and a jump or swap puts it back.
+- **A LOCK holds it**, and a jump or swap puts it back. A project load or NEW puts it to 0.
 - **On screen**: the notice `ENERGY -20` / `ENERGY +12`, `EN-20` on PERFORM's status line (the
   `BAR` line while stopped), `EN-` / `EN+` in the live strip. The FUNC help's third PERFORM page
   lists it.
@@ -355,7 +356,8 @@ effect picked or not (a picked effect owns VALUE's plain turn, not FUNC's).
   played.
 - **Internal clock only** (Enaga owns the clock): under MIDI or SYNC the turn says `EXT CLOCK`,
   and a change of CLOCK SRC takes VariSpeed to rest (`VARISPEED 0 EXT CLOCK`).
-- **Not saved, not undone, not in a LOCK**, like the tempo.
+- **Not saved, not undone, not in a LOCK**, like the tempo. A project load or NEW puts it to rest,
+  and the clock runs at the new project's tempo.
 - **On screen**: the top bar shows the tempo the clock runs at; the live strip adds `VS+` / `VS-`.
   The FUNC help's FUNC + KNOB OR PAD page lists it.
 
@@ -390,7 +392,8 @@ moment too long would not be one you can play.
   key keeps the pitch it started at and is let go of there.
 - **Nothing is written.** A KEYS note recorded while transposed is stored as the key played and
   plays back moved, as it was heard. Not saved, not undone; a LOCK holds the amount (not the
-  row), and a jump or swap puts it back. The FUNC menu row is not saved either.
+  row), and a jump or swap puts it back; a project load or NEW puts it to 0. The FUNC menu row is
+  not saved either, and keeps its setting across a load.
 - **On screen**: the notice; `TR+3` on PERFORM's status line (beside `BAR` while stopped) and in
   the live strip on every screen. The FUNC help's FUNC + KNOB OR PAD page lists it.
 - **In a song**: a section's TRN sets it as the entry starts (SECTION, below), and ARR REC records

@@ -1112,7 +1112,17 @@ A01 at 130.0, no chain.
   and a smaller amount; at the next entry with a slower BPM, `VARISPEED +5.0 ...` again.
   FUNC + tap VALUE. `____`
 
-**W81. Everything up at once, and the review's fixes (8 min).** A project filled the way
+**W81. A project opens at rest; ENERGY ghosts skip conditional trigs (3 min).** A01 playing.
+- PERFORM: FUNC + turn C to `ENERGY -64`, FUNC + turn D to `LIVE RND4`, FUNC + turn A a few
+  clicks, FUNC + SEL> three times (`TR+3`), FUNC + turn VALUE to `VARISPEED +12.0`. FUNC+HOME,
+  LOAD DEMO, OK, OK: the demo plays at its own tempo and pitch, the full beat, and the live strip
+  shows no `EN`, `RN`, `RL`, `TR` or `VS`. Holding FUNC in PERFORM reads `0 100 0 OFF`. `____`
+- FUNC + turn C one click: `ENERGY +2`, not -62. Back to 0. `____`
+- NEW PROJECT, PLAY. GRID, select the SNARE track and clear its trigs, then hold FILL and tap
+  STEP 13: its only trig is a FILL trig. PERFORM, FUNC + turn C to `ENERGY +64`: the snare stays
+  silent (before, its ghosts played the FILL hit every bar); hold FILL and step 13 plays. `____`
+
+**W82. Everything up at once, and the review's fixes (8 min).** A project filled the way
 `scenario_stack` does: GEN (DENSITY 100, RANGE 3 OCT, LEAP 100) on all eight tracks, PLAY.
 - The line input on (MIXER IN, push A), PERFORM, FUNC + turn A, B and C to the top (`REL ALL +64`,
   `LEN ALL 400%`, `ENERGY +64`), FUNC + turn VALUE to `VARISPEED +12.0`, FUNC + SEL> three times,

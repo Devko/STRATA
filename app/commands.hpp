@@ -843,7 +843,8 @@ struct Status {
     std::atomic<uint8_t> tempo_due{0};
     std::atomic<uint8_t> morph_riding{0};
     // Bumped as the last thing Cmd::project_loaded does: the main context takes the loaded
-    // project's tempo on the change. A counter rather than a comparison with the engine's copy
+    // project's tempo on the change, and puts its copies of the live moves and VariSpeed to rest
+    // as the engine did. A counter rather than a comparison with the engine's copy
     // of the tempo, which lags every tempo the UI posts by a block and read as a change back.
     std::atomic<uint8_t> project_loads{0};
 

@@ -194,6 +194,14 @@ the project file format or the controls.
 - Docs: the FUNC menu table in CONTROLS lists PROG CHG OUT, and the CHEATSHEET's mode table lists
   TRANSPOSE.
 
+- **A project opens at rest.** ENERGY, TRANSPOSE, VariSpeed, REL ALL, LEN ALL and LIVE RND carried
+  over into the next project on an OPEN, a reload, NEW or LOAD DEMO, while the LOCKs were cleared:
+  a project could open nearly silent (ENERGY -64) or an octave up (VariSpeed +12.0). All six go
+  back to rest, and the next turn starts from there.
+- **ENERGY's ghosts no longer copy conditional or 0% trigs.** A ghost took the sound of the trig
+  before it whatever its condition or probability, so a FILL-only crash, a 1:4 hit or a step at 0%
+  played every bar once ENERGY was up. A ghost passes over those to the nearest trig that plays
+  every pass.
 - **A song no longer rewrites the project's tempo.** A section's BPM plays and shows on the
   screen, but a save during or after the song keeps the tempo the project was set to.
 - **ARR REC writes a BPM only where the tempo changed.** A take at one tempo has no BPM in any

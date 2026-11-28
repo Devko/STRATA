@@ -170,7 +170,14 @@ int energy_source_step(const TrackPattern &track, int length, int step) {
     for (int back = 1; back <= n; back++) {
         int s = index - back;
         if (s < 0) s += n;
-        if ((track.steps[s].flags & kStepTrig) != 0) return s;
+        // A trig that does not play every pass lends nothing: a FILL-only crash, a 1:4 hit or a
+        // 0% step copied onto empty steps would play every bar once ENERGY is up. The walk goes
+        // on back to a plain trig. A step at 1-99% still lends, as ENERGY lifts it anyway.
+        const Step &candidate = track.steps[s];
+        if ((candidate.flags & kStepTrig) == 0) continue;
+        if (condition_kind(candidate.condition) != Condition::NONE) continue;
+        if (candidate.probability == 0) continue;
+        return s;
     }
     return -1;
 }

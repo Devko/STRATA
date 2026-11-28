@@ -1468,7 +1468,8 @@ always stops on rest for one click (a detent), so you can find it without lookin
 
 While either is away from rest, PERFORM's line under the macros shows both (`REL -12 LEN 71%`)
 and the live strip under the top line says `RL-` / `RL+` and `LN-` / `LN+`. Neither is saved or undone, like a macro's position;
-a LOCK holds them, so a jump puts them back where they were.
+a LOCK holds them, so a jump puts them back where they were. Opening a project, or NEW, puts both
+back to rest.
 
 ### LIVE RND: shuffle the beat from PERFORM
 
@@ -1495,7 +1496,8 @@ way every time you play it.
 While it is on, PERFORM's line under the macros reads `LIVE RND4 FUNC+D` (or ends `R4` beside
 REL ALL and LEN ALL), the track meters mark the armed tracks with a dot, and the live strip says `RN4`.
 LIVE RND is not saved or undone; a LOCK holds the unit and which tracks are in, so a jump brings
-back the shuffle you stored, and the swap-back the one you had. A hit recorded while it is on goes
+back the shuffle you stored, and the swap-back the one you had. Opening a project, or NEW, turns it
+OFF and puts back the starting set of tracks. A hit recorded while it is on goes
 on the step that was sounding.
 
 ### ENERGY: from breakdown to peak on one knob
@@ -1510,7 +1512,8 @@ snare and the samples, the bass and lead lines, the pads, and the kick last, fro
 drums and lines are gone and only the pads and textures play, on their strongest hits.
 
 **Turn it up and the beat fills in.** Empty steps get quiet ghost hits, off-beats first, with the
-sound of the hit before them on the same track, so a ghost on a tuned kick is the same kick and a
+sound of the hit before them on the same track (one that plays every pass: a crash that plays only
+with FILL, a 1:4 hit or a step at 0% is passed over), so a ghost on a tuned kick is the same kick and a
 ghost on a bass line repeats the note it follows. The hats fill most, then the percussion, the
 snare and the samples, and the lines; the kick only in the top half, and pads and MID tracks
 never. A track with nothing on it stays silent. A ghost is one note even on a track whose arp is
@@ -1522,7 +1525,8 @@ Each position of the knob plays the same groove every bar: turning one click fur
 pattern is never changed, so at 0 the beat is exactly as programmed. Trigless steps (a programmed
 filter sweep) and conditions are left alone. While it is away from rest, PERFORM shows `EN-20` on
 its status line (beside `BAR` while stopped) and the live strip says `EN-` or `EN+`. ENERGY is not
-saved or undone; a LOCK holds it, so a jump brings back the energy you stored.
+saved or undone; a LOCK holds it, so a jump brings back the energy you stored. Opening a project,
+or NEW, puts it to 0.
 
 ### VariSpeed: the whole unit faster or slower
 
@@ -1545,7 +1549,8 @@ returns (`VARISPEED +5.0 135.0`).
 
 Envelope times stay as they are, and MID tracks send their notes unmoved. VariSpeed needs the
 internal clock: under MIDI or SYNC it says `EXT CLOCK`, and it goes back to rest when CLOCK SRC
-changes. It is not saved, not undone and not held by a LOCK, like the tempo.
+changes. It is not saved, not undone and not held by a LOCK, like the tempo. Opening a project, or NEW, puts
+it to rest, so the project plays at its own tempo and pitch.
 
 ### TRANSPOSE: move the melodic tracks through the key
 
@@ -1577,7 +1582,8 @@ cleanly after a change.
 Nothing is written. A note you record in KEYS while transposed is stored as the key you pressed,
 so it plays back moved with the rest, as you heard it, and at 0 everything is as programmed.
 TRANSPOSE is not saved or undone; a LOCK holds it, so a jump brings back the key you stored. A
-song section's TRN sets it as the entry starts, and ARR REC records it there.
+song section's TRN sets it as the entry starts, and ARR REC records it there. Opening a project,
+or NEW, puts it to 0.
 
 ### Beat repeat, throws and auto-fill
 

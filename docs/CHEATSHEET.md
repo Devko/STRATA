@@ -260,7 +260,7 @@ or 16 steps (`LIVE RND4 7 TRK`), OFF puts the programmed order back at once; FUN
 that track out or back in (every track but the kick at start). Pattern untouched; not saved; in a LOCK.
 **ENERGY:** in PERFORM, FUNC + turn C from a breakdown (-64: drums and lines out, pads keep their
 strongest hits; hats go first, kick last) to the peak (+64: quiet ghosts on empty off-beats, hats
-most, probabilities towards 100). `ENERGY -20`; 0 is rest and a detent; pattern untouched; in a LOCK.
+most, probabilities towards 100). `ENERGY -20`; 0 is rest and a detent; pattern untouched; in a LOCK; 0 after a load or NEW.
 **TRANSPOSE:** FUNC + SEL< / SEL> on any screen moves the tracks that fold into the scale a step
 of the scale, staying in the key (`TRANSPOSE +2 IN KEY`); FUNC menu TRANSPOSE `SEMI` makes it a
 semitone with the key moving (`TRANSPOSE +3 C`). Both screen keys together back to 0, no step
