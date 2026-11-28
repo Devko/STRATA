@@ -106,6 +106,15 @@ constexpr SoundPreset kSnarePresets[] = {
     // The techno clap: three bursts, voiced like CLAP4 (TUN 40, the body nearly gone), short.
     // Scored against the benchmark's claps: 8, where CLAP scores 18.
     {"TCLAP", {40, 127, 12, 64}, FLAT, {48, 22, 10, 127}, NO_ASR, NO_OSC},
+    // Hats on the snare's noise (the techno benchmark, 2026-11-28). Modern techno hats are
+    // broadband noise rising to 8 kHz with real energy from 1 kHz up; HAT's 808 model is a narrow
+    // band over six squares, and its CLOSED scores 33 against them (mean dB off, attack + loop).
+    // All noise (SNP 127, no body), TUN 70 puts the noise's high-pass near 3.5 kHz and its band
+    // wide open: 5. A closed hat, short, for the offbeat and the 16ths.
+    {"CLHAT", {70, 127, 64, 0}, FLAT, {10, 28, 0, 61}, NO_ASR, NO_OSC},
+    // And open: tuned a little lower, a 60 ms hold before a longer fall. Under 2 dB from the
+    // references' open hats from 500 Hz up, where HAT's OPEN is 5-20 dB thin.
+    {"OPHAT", {60, 127, 64, 0}, FLAT, {60, 28, 0, 68}, NO_ASR, NO_OSC},
 };
 
 // --- HAT: TUN TON NOI DTN / DEC CHO CHK LVL (dsp/hat.cpp) -----------------
@@ -245,6 +254,11 @@ constexpr SoundPreset kPolyPresets[] = {
     {"HOOVER", {64, 64, 80, 40}, VOICE, {60, 60, 40, 70}, {10, 100, 40, 60}, {0, 60, 0, 60}},
     // An organ: a square with the sub, the filter open, held while the key is. Chords.
     {"ORGAN", {64, 70, 90, 10}, VOICE, {64, 0, 30, 47}, {0, 127, 20, 64}, {40, 0, 80, 0}},
+    // The techno stab (the benchmark, 2026-11-28, against Riemann's chords and RY Divinity's
+    // stabs): STAB's sub under every voice is mud and its top stops short of 8 kHz. One saw a
+    // voice, no sub, the filter higher (CUT 76) with a wider, shorter sweep, a little drive and TON
+    // 80 (a high-pass near 60 Hz) to keep it off the kick and bass. Scores 5.5 where STAB scores 10.
+    {"TSTAB", {64, 70, 76, 40}, {0, 80, 0, 0}, {55, 75, 28, 105}, NO_ASR, {0, 0, 0, 30}},
 };
 
 // --- WAVE MONO: TBL POS CUT RES / DEC ENV MOT LVL, ASR, OSC WRP DET SUB GLD (dsp/va.cpp) ----

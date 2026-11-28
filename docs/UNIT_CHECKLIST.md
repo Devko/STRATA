@@ -1151,7 +1151,9 @@ A01 at 130.0, no chain.
 - Track 5, FUNC+EDIT to KCK, SOUNDS RUMBLE, duck it from track 1 (MIXER DCK): a low growl under
   the kick that breathes with it, no click of its own. `____`
 - Track 2, SOUNDS: TCLAP, CLAP4, DARK: the smack is in the middle (1-2 kHz), not a boxy 200 Hz
-  thud under a hiss. `____`
+  thud under a hiss. CLHAT and OPHAT on tracks 3 and 4 (FUNC+EDIT to SNR first): bright, full
+  hats, fuller than HAT's CLOSED and OPEN. `____`
+- Track 7, SOUNDS TSTAB: a bright stab with no boom under it; STAB beside it is muddier. `____`
 - Track 6, SOUNDS ACID, transpose the bass up an octave (or play KEYS around C3): it squelches
   in the mids rather than booming. `____`
 - Track 1 back to 909, EDIT, RIGHT to the seventh page: it reads `PNCH`, KNK KND TCK DRP at 0

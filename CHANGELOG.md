@@ -13,7 +13,10 @@ the project file format or the controls.
   KCK adds TECHNO, WHOUSE, INDUS and MINIM: the full sweep and click, the chain's drive, a long
   body and the new PNCH page, within a few dB of the references in a four-on-the-floor loop and
   5-13 dB under them at 1-4 kHz in the first 20 ms (909: 11-25 dB under). They are 4-6 dB louder
-  than the older kicks, as long modern kicks are. SNR adds TCLAP. 125 factory sounds in all.
+  than the older kicks, as long modern kicks are. SNR adds TCLAP and two hats on the snare's
+  noise, CLHAT and OPHAT, which score 5 against techno hats where HAT's CLOSED scores 33 (its
+  808 model is a narrow band; theirs are broad). PLY adds TSTAB, a techno stab with no sub under
+  its voices (5.5 against STAB's 10). 128 factory sounds in all.
 - **KICK's PNCH page** (EDIT, where the synths have ENV): **KNK** a fast second pitch sweep (the
   mid punch), **KND** its time, **TCK** a 3 kHz tick (the top click), **DRP** a pitch fall below
   TUN of up to an octave. The benchmark found the 909's first 20 ms 11-25 dB under techno kicks
