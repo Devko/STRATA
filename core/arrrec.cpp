@@ -30,7 +30,43 @@ void restore(Project &project, const ArrBackup &backup) {
     project.settings.chain_length = backup.length;
 }
 
+bool same_mix(const ArrState &a, const ArrState &b) {
+    if (a.bank != b.bank || a.slot != b.slot) return false;
+    for (int t = 0; t < kTracks; t++) {
+        if (a.lanes[t] != b.lanes[t]) return false;
+    }
+    return true;
+}
+
+bool borrows(const ArrState &state) {
+    for (int t = 0; t < kTracks; t++) {
+        if (state.lanes[t] != kLaneOwn) return true;
+    }
+    return false;
+}
+
+// CAPTURE what `pass` played into a free slot of its bank, avoiding both what it played and
+// what plays now (core/launch.hpp). The slot, or -1 when none is free or the locks do not fit.
+int capture_pass(Project &project, const ArrState &pass) {
+    uint8_t avoid[kTracks + 1];
+    avoid[0] = lane_source(pass.bank, pass.slot);
+    for (int t = 0; t < kTracks; t++) avoid[t + 1] = pass.lanes[t];
+    const int slot = launch_capture_slot_avoiding(project, pass.bank, avoid, kTracks + 1);
+    if (slot < 0) return -1;
+    if (!launch_compose_lanes(project, avoid[0], pass.lanes, project.patterns[pass.bank][slot])) {
+        return -1;
+    }
+    project.bank_dirty[pass.bank] = true;
+    return slot;
+}
+
 }  // namespace
+
+void arr_state_lanes(ArrState &state, const Project &project) {
+    for (int t = 0; t < kTracks; t++) {
+        state.lanes[t] = lane_borrowed(project, t) ? project.settings.lane_source[t] : kLaneOwn;
+    }
+}
 
 ArrState arr_state(uint8_t bank, uint8_t slot, uint8_t mutes, uint8_t scene_b, uint16_t morph,
                    int energy, uint16_t tempo_centi, bool external) {
@@ -78,6 +114,7 @@ void arr_pass_begin(ArrRec &rec, const ArrState &state, uint32_t tick, uint32_t 
 }
 
 ArrPass arr_pass_end(Project &project, ArrRec &rec, uint32_t tick) {
+    rec.launch = ArrLaunch::none;
     if (!rec.on || !rec.pass_open) return ArrPass::none;
     rec.pass_open = false;
     // A transport that went backwards has recorded nothing of this pass.
@@ -85,23 +122,54 @@ ArrPass arr_pass_end(Project &project, ArrRec &rec, uint32_t tick) {
     // At least half of the pass, compared without a divide (this chip has none for integers).
     if (uint64_t(played) * 2u < uint64_t(rec.pass_loop)) return ArrPass::dropped;
 
+    // The pattern this pass goes into the chain as: the one the same mix went into last time,
+    // the playing pattern when no lane is borrowed, or (below) a capture.
+    bool known = false;
+    uint8_t bank = rec.pass.bank;
+    uint8_t slot = rec.pass.slot;
+    if (rec.last_known && same_mix(rec.last, rec.pass)) {
+        known = true;
+        bank = rec.target_bank;
+        slot = rec.target_slot;
+    } else if (!borrows(rec.pass)) {
+        known = true;
+    }
+
     const int length = chain_length(project);
-    if (rec.extending && length > 0) {
+    if (known && rec.extending && length > 0) {
         ChainEntry &last = project.chain[length - 1];
-        if (last.bank == rec.pass.bank && last.slot == rec.pass.slot && last.mutes == 0 &&
+        if (last.bank == bank && last.slot == slot && last.mutes == 0 &&
             same_fields(project.chain_extra[length - 1], rec.pass.fields) &&
             int(last.repeats) < kChainRepeatsMax) {
             last.repeats = uint8_t(last.repeats + 1);
             return ArrPass::extended;
         }
     }
+    // Full before a capture, so a take that is over does not fill a slot for nothing.
     if (length >= kChainEntries) return ArrPass::full;
+    ArrLaunch launch = ArrLaunch::none;
+    if (!known) {
+        const int captured = capture_pass(project, rec.pass);
+        if (captured >= 0) {
+            slot = uint8_t(captured);
+            launch = ArrLaunch::kept;
+        } else {
+            launch = ArrLaunch::lost;
+        }
+    }
     // A pattern that cannot exist (damage) is not written; nothing else is refused.
-    if (!chain_insert(project, length, rec.pass.bank, rec.pass.slot, 1, 0, &rec.pass.fields)) {
+    if (!chain_insert(project, length, bank, slot, 1, 0, &rec.pass.fields)) {
         return ArrPass::dropped;
     }
     rec.extending = true;
     rec.written = uint8_t(rec.written + 1);
+    rec.last_known = true;
+    rec.last = rec.pass;
+    rec.target_bank = bank;
+    rec.target_slot = slot;
+    rec.launch = launch;
+    rec.launch_bank = bank;
+    rec.launch_slot = slot;
     return ArrPass::added;
 }
 
@@ -111,7 +179,13 @@ int arr_finish(Project &project, ArrRec &rec, ArrBackup &backup, uint32_t tick) 
     if (!rec.on) return 0;
     arr_pass_end(project, rec, tick);
     const int written = int(rec.written);
+    const ArrLaunch launch = rec.launch;
+    const uint8_t launch_bank = rec.launch_bank;
+    const uint8_t launch_slot = rec.launch_slot;
     rec = ArrRec{};
+    rec.launch = launch;
+    rec.launch_bank = launch_bank;
+    rec.launch_slot = launch_slot;
     if (written == 0 && backup.valid) {
         restore(project, backup);
         backup.valid = false;
