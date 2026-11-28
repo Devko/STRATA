@@ -14,14 +14,14 @@
 #
 # Keys (third_party/enaga/include/enaga/abi.h): F5 = 22 PLAY, F8 = 28 EDIT, UP = 17, OK = 23,
 # PUSH_A = 1. The first press comes late: the panel link is not streaming in the first ~200 M
-# cycles.
+# cycles; PLAY before 300 M leaves no trace in the log.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 # shellcheck source=tools/env.sh
 source tools/env.sh
 
-CYCLES=940000000
+CYCLES=1000000000
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -59,12 +59,12 @@ PY
 echo "running the emulator for $CYCLES cycles: PLAY, EDIT, track 8, SAMPLES, push A twice ..."
 python3 -B tools/enaga_cached.py emulate "$STAGE" --cycles "$CYCLES" \
     --file "/SAMPLES/TONE.WAV=$TONE" \
-    --key 22@250000000 \
-    --key 28@300000000 \
-    --key 17@360000000 \
-    --key 23@420000000 \
-    --key 1@560000000 \
-    --key 1@700000000 \
+    --key 22@300000000 \
+    --key 28@360000000 \
+    --key 17@420000000 \
+    --key 23@480000000 \
+    --key 1@620000000 \
+    --key 1@760000000 \
     > "$LOG" 2>&1 || {
     echo "FAIL: emulate.py exited non-zero" >&2
     tail -30 "$LOG" >&2
