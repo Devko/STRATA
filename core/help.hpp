@@ -30,6 +30,7 @@ enum class HelpScreen : uint8_t {
     mixer,
     perform,
     project,      // PROJECT's slots
+    launch,       // PROJECT's LAUNCH page (Track Launch)
     chain,
     pattern,
     setup,

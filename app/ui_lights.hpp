@@ -273,6 +273,7 @@
 
         service_slot_menu();
         service_track_menu();
+        service_launch();
 
         // EVOLVE changed a track on a pass boundary (Engine::evolve_passes): no command did it,
         // so the bank is marked here, and the log says so for the scenarios.
@@ -586,7 +587,8 @@
         }
 
         const Status &status = engine_.status();
-        const Pattern &pattern = engine_.pattern();
+        // The selected track's part as it plays: a launched lane's from its own pattern.
+        const Pattern &pattern = engine_.lane(selected_);
         const uint8_t playhead = status.playhead[selected_].load(std::memory_order_relaxed);
 
         // A compact signature of what is being edited, logged only when it changes.
@@ -685,6 +687,7 @@
             if (step == playhead && status.running.load(std::memory_order_relaxed)) red = 10;
             leds_.step(i, red, green);
         }
+        if (launch_page() && !value_pushed_) light_launch_steps();
         if (value_pushed_ && !mute_mode_ && mode_ != Mode::menu) light_perf_steps();
 
         for (int t = 0; t < kTracks && mode_ != Mode::keys; t++) {
