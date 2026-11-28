@@ -160,6 +160,7 @@ FM4 and GRAIN machines.
 | **REL ALL / LEN ALL**: every track's release (FUNC + A) and every note's length (FUNC + B) in PERFORM | #152 | ○ (W29) | Live only; LEN ALL leaves gateless notes (drums, arp) alone |
 | **LIVE RND**: FUNC + turn D in PERFORM shuffles every armed track in blocks of 1-16 steps, FUNC + push D arms the selected track; OFF is the grid at once | #166 | ○ (W36) | Live only, in a LOCK; the pattern is never written |
 | **ENERGY**: FUNC + turn C in PERFORM thins every track in tier order down to a breakdown, or adds ghosts and lifts probabilities up to the peak | #224 | ○ (W62) | Live only, in a LOCK; the pattern is never written |
+| **VariSpeed**: FUNC + turn VALUE on every screen moves the tempo and every machine's pitch together, an octave each way in tenths of a semitone; FUNC + tap VALUE snaps back | Unreleased | ○ (W71) | Internal clock only. Not saved, not in a LOCK; the project keeps its tempo. MID notes are not moved. No CPU at rest; at +12 SAMPLE and GRAIN read twice as fast (scenario_varispeed) |
 | Pad pressure bends macro A | v0.1.0 | ○ ("Pad feel") | |
 | THROW to delay or reverb | v0.1.0 | ◐ | |
 | MUTATE (rotate, density, velocity, micro, chance, notes), OK keeps, CLR reverts | v0.1.0 | ○ (10) | |
@@ -216,14 +217,14 @@ FM4 and GRAIN machines.
 | Feature | Since | Unit | Known limits / notes |
 | --- | --- | --- | --- |
 | Follows the unit's clock: internal, MIDI clock, SYNC IN; refuses tempo/transport under external clock | v0.1.0 | ○ (M7) | STRATA cannot set CLOCK SRC (Enaga has no setter). SYNC polarity not selectable (Enaga) |
-| Tap tempo on VALUE, nudge on FUNC + push VALUE + turn | Unreleased | ○ (W70) | Internal clock only; the nudge is 4% for 250 ms a detent |
+| Tap tempo on VALUE, nudge on FUNC + push VALUE + turn | Unreleased | ○ (W71) | Internal clock only; the nudge is 4% for 250 ms a detent |
 | MIDI OUT per track (OFF/1-16): steps, chords, ratchets, arp, note repeat, pads, KEYS, MIDI IN | v0.1.0 | ○ (8d) | **On Enaga 0.2.0 (v0.1.0-v0.3.1):** with USB connected to a computer not reading, DIN out stalls; unplug USB. Fixed in Enaga 0.3.0, which `main` needs |
 | Every note gets its note-off; second STOP sends All Notes Off | v0.1.0 | ○ (8d) | Slide is not sent as legato |
 | MIDI IN notes (ch 1-8 = tracks, others = selected), held to note-off | v0.1.0 | ○ (8d) | No pitch bend or aftertouch |
 | MIDI IN CC 16-31 = track parameters, CC 120/123 release | v0.1.0 | ○ (8d) | |
 | MIDI IN program change queues a pattern | v0.1.0 | ○ (8d) | |
-| MIDI IN song position pointer: chain entry and pass, or the pattern from the top | Unreleased | ○ (W70) | MIDI clock only; Enaga takes an SPP only while stopped |
-| PROG CHG OUT: each pattern change sends a program change on MIDI CH | Unreleased | ○ (W70) | Off by default; saved with the project |
+| MIDI IN song position pointer: chain entry and pass, or the pattern from the top | Unreleased | ○ (W71) | MIDI clock only; Enaga takes an SPP only while stopped |
+| PROG CHG OUT: each pattern change sends a program change on MIDI CH | Unreleased | ○ (W71) | Off by default; saved with the project |
 | Sending MIDI clock | — | — | Enaga's CLOCK OUT does it, not STRATA |
 
 ## Storage, projects and kits

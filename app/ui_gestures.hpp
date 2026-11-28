@@ -124,15 +124,20 @@
                 // holds the tempo 4% faster or slower for a quarter of a second, then it goes
                 // back, so the beat moves against a source that sends no clock and the tempo
                 // stays where it was set. Not saved. Beside swing (push + turn), the other
-                // timing move; FUNC + turn VALUE is left to VariSpeed (Roland, 2026-11-28).
+                // timing move; FUNC + turn VALUE is VariSpeed (Roland, 2026-11-28).
                 if (enaga::clock::source() != ENAGA_CLOCK_INTERNAL) {
                     clock_refused_ = true;
                     notice("EXT CLOCK");
                     return;
                 }
+                // Times VariSpeed's ratio, as every clock tempo is (set_clock_tempo), but straight
+                // to the clock: through set_clock_tempo a nudge near 300 BPM would pull
+                // VariSpeed back for good, where it only has to clamp for a quarter second.
                 nudge_turn(nudge_, delta, last_ms_);
-                clock_refused_ =
-                    !enaga::clock::set_tempo(nudged_bpm(tempo_tenths_, nudge_.direction));
+                float bpm = nudged_bpm(tempo_tenths_, nudge_.direction) * vari_ratio(vari_);
+                if (bpm < float(kTempoTenthsMin) * 0.1f) bpm = float(kTempoTenthsMin) * 0.1f;
+                if (bpm > float(kTempoTenthsMax) * 0.1f) bpm = float(kTempoTenthsMax) * 0.1f;
+                clock_refused_ = !enaga::clock::set_tempo(bpm);
                 notice_logged(nudge_.direction > 0 ? "NUDGE FASTER" : "NUDGE SLOWER");
                 return;
             }
@@ -143,11 +148,11 @@
                 return;
             }
             if (shift_) {
-                // FUNC + VALUE was the master DJ filter until 2026-11-25 (backlog D1): the
-                // filter's live home is the mixer's slots 1 and 2, and its setting MIXER's MST
-                // page. Free for now, so it says where the filter went rather than turning the
-                // tempo.
-                notice_logged("DJ FILTER: SLOT 1/2");
+                // FUNC + VALUE is VariSpeed (core/varispeed.hpp): VALUE is the tempo, and with
+                // FUNC the pitch moves with it, like a record's speed. It was the master DJ
+                // filter until 2026-11-25 (backlog D1), whose live home is the mixer's slots 1
+                // and 2, and then free, naming those slots.
+                vari_turn_by(delta);
                 return;
             }
             // REFUSED under an external clock, rather than moved and then ignored. docs/SPEC.md:
@@ -169,7 +174,7 @@
             if (tenths > 3000) tenths = 3000;
             tempo_tenths_ = uint32_t(tenths);
             // Main context again.
-            clock_refused_ = !enaga::clock::set_tempo(float(tempo_tenths_) * 0.1f);
+            clock_refused_ = !set_clock_tempo(tempo_tenths_ * 10u);      // times VariSpeed's
             // And the project, which is where the tempo is SAVED. Nothing posted this before, so
             // `ProjectSettings::tempo_centi_bpm` round-tripped through the serializer while
             // holding the default for ever: a project saved at 142 reopened at 130. The engine

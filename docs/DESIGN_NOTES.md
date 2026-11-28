@@ -60,6 +60,21 @@ on the PATTERN page (`core/timing.hpp` feel_offset, pattern file section 5, D tu
 `scenario_moveall` turns REL/LEN ALL in the emulator (`move_all_notice` logs each click);
 `scenario_feel` walks FEEL. UNIT_CHECKLIST W29 walks both.
 
+## VariSpeed
+
+**VariSpeed** (CyDrums P7, `core/varispeed.hpp`, docs/CONTROLS.md "VariSpeed") is the whole
+unit, not samples only: a turntable moves everything, and a sample-only speed would leave the
+drums and synths at the old pitch against a moved tempo. FUNC + turn VALUE, because VALUE is
+already the tempo and FUNC + VALUE was free since D1 (it only named the DJ filter's slots). The
+app sets Enaga's clock to the project's tempo times the ratio (`set_clock_tempo`, the one path
+every tempo change takes) and posts `Cmd::set_varispeed`; the engine adds the semitones to the
+LFO's pitch in `run_lfos` and hands the sum to `Machine::set_pitch_mod`, whose default now keeps
+a ratio the non-synth machines multiply in (`pitch_mod_ratio_`, exactly 1 at rest, so the golden
+renders are unchanged). The delay's beat is divided by the ratio in `apply_mixer_bytes`. MID is
+left alone (no pitch bend range to rely on). Not in a LOCK, not saved: the tempo is not either,
+and the project keeps its own tempo so a save is never the moved one. Internal clock only;
+`vari_follow_source` drops it on a CLOCK SRC change. UNIT_CHECKLIST W70, `scenario_varispeed`.
+
 ## LIVE RND
 
 **LIVE RND** (CyDrums P1's live half, `core/liverand.hpp`, docs/CONTROLS.md "LIVE RND"): FUNC +
@@ -209,7 +224,7 @@ says VALUE turns the tempo, is a tap, stamped at the press (`value_down_ms_`). I
 the way a VALUE turn does (`set_tempo`, `post_tempo`, `adopted_tempo_centi_`). **The nudge** is
 main context only: FUNC + push VALUE + turn sets the clock to `nudged_bpm` and `update()` puts
 `tempo_tenths_` back once `nudge_due`; nothing is posted, so the project's tempo and the
-tempo-synced delay never see it. FUNC + turn VALUE without the push is left free for VariSpeed.
+tempo-synced delay never see it. FUNC + turn VALUE without the push is VariSpeed; the nudge and the end of it go through VariSpeed's ratio (the release through `set_clock_tempo`), and tap tempo sets the clock through `set_clock_tempo` as a turn does.
 
 **PROG CHG OUT** is sent from `Engine::switch_pattern`, so every path that changes the live
 pattern sends it, a program change IN included (same channel, same number: a MIDI loop back into

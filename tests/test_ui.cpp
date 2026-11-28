@@ -76,7 +76,10 @@ struct UiProbe {
         app.post(Cmd::set_live_rnd, 0, 0, kLiveRndOff, kLiveRndAllTracks);
         app.energy_ = 0;                             // ENERGY to rest
         app.post(Cmd::set_energy, 0, 0, 0);
+        app.vari_ = 0;                               // VariSpeed to rest
+        app.post(Cmd::set_varispeed, 0, 0, 0);
     }
+    static int vari(const Strata &app) { return app.vari_; }
     static int selected(const Strata &app) { return app.selected_; }
     static int page(const Strata &app) { return app.page_; }
     static int param_page(const Strata &app) { return app.param_page_; }
@@ -1155,7 +1158,9 @@ TEST(ui_func_fill_turns_note_repeat_on_and_a_held_pad_rolls) {
 TEST(ui_the_retired_chords_say_where_their_moves_went_and_do_nothing_else) {
     // Backlog D1 and D5 (2026-11-25): FUNC + VALUE (the DJ filter), FUNC + push D (the tape
     // stop) and FUNC + MUTATE (the delay freeze) retired for the mixer's slots 1-2, 8 and 5.
-    // Each names its slot, and none falls through to the tempo, a page's push or a mutation.
+    // FUNC + VALUE is VariSpeed since (core/varispeed.hpp): it moves no DJ filter and not the
+    // project's tempo. The other two name their slot, and fall through to no page's push or
+    // mutation.
     Strata &app = fresh();
     pump(2);
     const uint8_t undo_before = undo_depth();
@@ -1166,7 +1171,8 @@ TEST(ui_the_retired_chords_say_where_their_moves_went_and_do_nothing_else) {
     pump(2);
     CHECK_EQ(int(app_engine().project().settings.master[int(MasterField::dj)]), 64);
     CHECK_EQ(UiProbe::tempo_tenths(app), tempo);
-    CHECK_EQ(UiProbe::notice(app), "DJ FILTER: SLOT 1/2");
+    CHECK_EQ(UiProbe::vari(app), 10);
+    UiProbe::moves_to_rest(app);
 
     app.on_key(ENAGA_KEY_PUSH_D, true);
     pump(2);
@@ -1411,6 +1417,118 @@ TEST(ui_the_value_encoder_is_the_tempo_and_a_refused_transport_is_recorded) {
     CHECK(!UiProbe::clock_refused(app));
     key(ENAGA_KEY_F6);
     CHECK(!host.running());
+}
+
+TEST(ui_func_value_is_varispeed_the_clock_and_every_pitch_together) {
+    // core/varispeed.hpp: FUNC + turn VALUE moves the clock and every machine's pitch by one
+    // ratio, the project keeps its tempo, FUNC + tap VALUE snaps back, and an outside clock
+    // refuses it and takes it back to rest.
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    pump(2);
+    const uint32_t tempo = UiProbe::tempo_tenths(app);
+    const uint16_t saved = app_engine().project().settings.tempo_centi_bpm;
+    CHECK_EQ(int(tempo), 1300);
+
+    // An octave up in twelve clicks of ten: twice the tempo on the clock, the project's alone.
+    app.on_key(ENAGA_KEY_F1, true);
+    for (int i = 0; i < 12; i++) app.on_encoder(4, 10);
+    pump(2);
+    CHECK_EQ(UiProbe::vari(app), 120);
+    CHECK_EQ(int(app_engine().varispeed()), 120);
+    CHECK_NEAR(host.tempo(), 260.0f, 0.01);
+    CHECK_EQ(UiProbe::tempo_tenths(app), tempo);
+    CHECK_EQ(app_engine().project().settings.tempo_centi_bpm, saved);
+    CHECK_EQ(UiProbe::notice(app), "VARISPEED +12.0 260.0");
+    CHECK(!UiProbe::clock_refused(app));
+    char strip[64];
+    CHECK(UiProbe::live_strip(app, strip));
+    CHECK(std::strstr(strip, "VS+") != nullptr);
+    // Held at the octave.
+    app.on_encoder(4, 5);
+    CHECK_EQ(UiProbe::vari(app), 120);
+
+    // Back down through 0 stops on it (the eleventh click, from +1.0), and on past it the next.
+    for (int i = 0; i < 11; i++) app.on_encoder(4, -11);
+    pump(2);
+    CHECK_EQ(UiProbe::vari(app), 0);
+    CHECK_NEAR(host.tempo(), 130.0f, 0.01);
+    CHECK_EQ(UiProbe::notice(app), "VARISPEED 0 130.0");
+    app.on_encoder(4, -5);
+    pump(2);
+    CHECK_EQ(UiProbe::vari(app), -5);
+    CHECK_NEAR(host.tempo(), 130.0f * vari_ratio(-5), 0.01);
+    CHECK_EQ(UiProbe::notice(app), "VARISPEED -0.5 126.3");
+    CHECK(UiProbe::live_strip(app, strip));
+    CHECK(std::strstr(strip, "VS-") != nullptr);
+
+    // VALUE alone turns the project's tempo, and the clock follows it times the ratio.
+    app.on_key(ENAGA_KEY_F1, false);
+    app.on_encoder(4, 100);                          // ten BPM
+    pump(2);
+    CHECK_EQ(int(UiProbe::tempo_tenths(app)), 1400);
+    CHECK_EQ(int(app_engine().project().settings.tempo_centi_bpm), 14000);
+    CHECK_NEAR(host.tempo(), 140.0f * vari_ratio(-5), 0.01);
+
+    // FUNC + tap VALUE (nothing picked): back to rest, the project's tempo on the clock.
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_key(ENAGA_KEY_PUSH_VALUE, true);
+    app.on_key(ENAGA_KEY_PUSH_VALUE, false);
+    pump(2);
+    CHECK_EQ(UiProbe::vari(app), 0);
+    CHECK_EQ(int(app_engine().varispeed()), 0);
+    CHECK_NEAR(host.tempo(), 140.0f, 0.01);
+    CHECK_EQ(UiProbe::notice(app), "VARISPEED 0 140.0");
+
+    // Near the top of the clock's range the turn stops where the tempo still fits.
+    app.on_key(ENAGA_KEY_F1, false);
+    for (int i = 0; i < 1400; i++) {
+        app.on_encoder(4, +1);
+        if ((i & 63) == 63) pump();
+    }
+    pump();
+    CHECK_EQ(int(UiProbe::tempo_tenths(app)), 2800);
+    app.on_key(ENAGA_KEY_F1, true);
+    for (int i = 0; i < 20; i++) app.on_encoder(4, 1);
+    pump(2);
+    CHECK(UiProbe::vari(app) > 0 && UiProbe::vari(app) < 20);
+    CHECK(host.tempo() <= 300.0f);
+    CHECK(280.0f * vari_ratio(int8_t(UiProbe::vari(app) + 1)) > 300.0f);
+    // And a faster project tempo brings it back towards 0 rather than past 300.
+    app.on_key(ENAGA_KEY_F1, false);
+    app.on_encoder(4, 200);                          // 300 BPM
+    pump(2);
+    CHECK_EQ(UiProbe::vari(app), 0);
+    CHECK_EQ(int(app_engine().varispeed()), 0);
+    CHECK_NEAR(host.tempo(), 300.0f, 0.01);
+
+    // Under an outside clock it is refused, and it drops back when the source changes.
+    for (int i = 0; i < 1700; i++) {
+        app.on_encoder(4, -1);
+        if ((i & 63) == 63) pump();
+    }
+    pump();
+    CHECK_EQ(int(UiProbe::tempo_tenths(app)), 1300);
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_encoder(4, 30);
+    pump(2);
+    CHECK_EQ(UiProbe::vari(app), 30);
+    host.set_source(ENAGA_CLOCK_MIDI);
+    pump(2);
+    CHECK_EQ(UiProbe::vari(app), 0);
+    CHECK_EQ(int(app_engine().varispeed()), 0);
+    CHECK_EQ(UiProbe::notice(app), "VARISPEED 0 EXT CLOCK");
+    app.on_encoder(4, 10);
+    pump(2);
+    CHECK_EQ(UiProbe::vari(app), 0);
+    CHECK_EQ(UiProbe::notice(app), "EXT CLOCK");
+    CHECK(UiProbe::clock_refused(app));
+    // Back on INTERNAL the clock takes the project's tempo again.
+    host.set_source(ENAGA_CLOCK_INTERNAL);
+    pump(2);
+    CHECK_NEAR(host.tempo(), 130.0f, 0.01);
+    CHECK(!UiProbe::clock_refused(app));
+    app.on_key(ENAGA_KEY_F1, false);
 }
 
 TEST(ui_stop_under_a_running_outside_clock_resets_nothing_until_the_clock_stops) {
@@ -13269,6 +13387,40 @@ TEST(ui_func_push_value_and_turn_nudges_the_tempo_for_a_moment_and_lets_it_go) {
     app.on_key(ENAGA_KEY_F1, false);
     CHECK_EQ(UiProbe::notice(app), "EXT CLOCK");
     host.set_source(ENAGA_CLOCK_INTERNAL);
+}
+
+TEST(ui_the_nudge_and_tap_tempo_ride_on_varispeed_and_leave_it_where_it_is) {
+    // The clock is the project's tempo times VariSpeed's ratio (App::set_clock_tempo); a nudge
+    // bends that, and its end and a tapped tempo come back to it, VariSpeed untouched.
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    pump(2);
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_encoder(4, 12);                         // VariSpeed +1.2
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(2);
+    CHECK_EQ(UiProbe::vari(app), 12);
+    const float moved = host.tempo();
+    CHECK(moved > float(UiProbe::tempo_tenths(app)) * 0.1f);
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_key(ENAGA_KEY_PUSH_VALUE, true);
+    app.on_encoder(4, 1);
+    app.on_key(ENAGA_KEY_PUSH_VALUE, false);
+    app.on_key(ENAGA_KEY_F1, false);
+    CHECK_NEAR(host.tempo(), moved * 1.04f, 0.05f);
+    g_ms += 300;
+    pump(2);
+    CHECK_NEAR(host.tempo(), moved, 0.05f);
+    CHECK_EQ(UiProbe::vari(app), 12);
+
+    tap_value_after(app, 3000);                    // taps at 120
+    tap_value_after(app, 500);
+    tap_value_after(app, 500);
+    pump(2);
+    CHECK_EQ(UiProbe::tempo_tenths(app), 1200u);
+    CHECK_EQ(UiProbe::vari(app), 12);
+    CHECK_NEAR(host.tempo(), 120.0f * 1.0717735f, 0.05f);   // 2^(1.2/12)
+    UiProbe::moves_to_rest(app);
 }
 
 TEST(ui_the_menus_prog_chg_out_row_switches_program_changes_out) {

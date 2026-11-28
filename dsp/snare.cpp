@@ -271,7 +271,7 @@ void Snare::run(Voice &v, float *out, int n) {
 
     // Note-dependent coefficients: control rate, once per voice per block, because every one of
     // them is a multiple of f0 and the trig note moves f0.
-    const float f0 = clamp(base_hz_ * v.note_ratio, 20.0f, 2000.0f);
+    const float f0 = clamp(base_hz_ * v.note_ratio * pitch_mod_ratio_, 20.0f, 2000.0f);
     const float f0_norm = f0 * inv_rate_;
     const float dp_a = f0_norm > 0.5f ? 0.5f : f0_norm;
     const float dp_b = clamp(f0_norm * v.ratio, 0.0f, 0.5f);

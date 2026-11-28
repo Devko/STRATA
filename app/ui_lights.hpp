@@ -506,9 +506,10 @@
             }
         }
 
-        // A tempo nudge (FUNC + turn VALUE) that has run out: back to the set tempo.
+        // A tempo nudge (FUNC + push VALUE + turn) that has run out: back to the set tempo,
+        // times VariSpeed's.
         if (nudge_due(nudge_, last_ms_)) {
-            clock_refused_ = !enaga::clock::set_tempo(float(tempo_tenths_) * 0.1f);
+            clock_refused_ = !set_clock_tempo(adopted_tempo_centi_);
         }
 
         // The tempo a LOADED project brought with it. PROJECT.BIN has always had the field and
@@ -526,7 +527,7 @@
                 tempo_tenths_ = uint32_t(project_centi) / 10;
                 // Refused under an outside clock, which is not an error: the project's tempo is
                 // simply not what is playing, and the screen already says EXT.
-                clock_refused_ = !enaga::clock::set_tempo(float(project_centi) * 0.01f);
+                clock_refused_ = !set_clock_tempo(project_centi);      // times VariSpeed's
             }
         }
 
@@ -537,6 +538,7 @@
             const enaga::clock::State clock = enaga::clock::state();
             const bool running = clock.running != 0;
             const int source = int(clock.source);
+            if (source != logged_source_ && logged_source_ >= 0) vari_follow_source(source);
             if (running != logged_running_ || source != logged_source_) {
                 // A start begins a fresh MAX, so the figure on screen belongs to what is playing
                 // now and not to a load or an earlier pattern. Here rather than in on_transport

@@ -44,12 +44,12 @@ constexpr Text kFuncKnobs = {"FUNC + KNOB OR PAD:", {
     "LOWER PAD  BAR MUTE",
     "STEP       TRIGLESS",
     "TURN A-C  EUCLID GRID",
-    "PUSH+TURN VALUE NUDGE",
+    "VALUE VARI/PUSH NUDGE",
     "WITHOUT FUNC:",
     "VALUE  TURN/TAP TEMPO",
     "PUSH+TURN VALUE SWING",
     "LOWER PAD  TRACK",
-    "PROJ+STEP QUEUE SLOT",
+    "HOLD PROJ+STEP QUEUE",
 }};
 
 constexpr Text kUpperPads = {"UPPER PADS TRK1-7:", {
@@ -75,7 +75,7 @@ constexpr Text kValueMixer = {"VALUE FX MIXER:", {
     "  HOLD STEP  PUSH IN",
     "VALUE  AMOUNT 0 = DRY",
     "TAP VALUE  RIDE TO 0",
-    "FUNC+TAP VALUE  CUT",
+    "FUNC+TAP  CUT/VARI 0",
     "PUSH+LEFT/RIGHT  NEXT",
     "PUSH+CLR  ALL OFF",
     "  AGAIN  CLEARS LOOP",
