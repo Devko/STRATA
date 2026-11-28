@@ -12141,16 +12141,16 @@ TEST(ui_jam_rec_starts_and_stops_from_the_menu_and_shows_it_is_running) {
     pump(2);
     CHECK(app_engine().jam_attached());
 
-    // The dot: lit for 600 ms of each second, dark for the rest. 800 blocks of 64 frames, a
-    // second and a bit, drawn after each.
+    // The dot: lit for 600 ms of each second, dark for the rest. A whole second of the test's
+    // clock (a millisecond a block), drawn after each block, whatever phase it starts in.
     enaga::Canvas canvas(g_pixels);
     int lit = 0;
-    for (int i = 0; i < 800; i++) {
+    for (int i = 0; i < 1000; i++) {
         pump();
         app.draw(canvas);
         lit += pixel_at(76, 3) == 15 ? 1 : 0;
     }
-    CHECK(lit > 400 && lit < 560);
+    CHECK(lit >= 595 && lit <= 605);
 
     // The row counts: a second and a bit is 0:01.
     menu_to(kMenuJam);
@@ -12169,7 +12169,7 @@ TEST(ui_jam_rec_starts_and_stops_from_the_menu_and_shows_it_is_running) {
     CHECK(screen_has(app, "OFF"));
     char path[64];
     std::snprintf(path, sizeof path, "/RECORD/%s", app_storage().jam_name());
-    CHECK(host.file_bytes(path) > 44 + 800 * 64 * 6);
+    CHECK(host.file_bytes(path) > 44 + 1000 * 64 * 6);
     key(ENAGA_KEY_CLR);
     lit = 0;
     for (int i = 0; i < 1000; i += 50) {
