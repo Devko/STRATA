@@ -329,7 +329,7 @@ for a second; it shows that screen's help, with `PAGE 1/11` at its foot.
 - Push VALUE + CLR: `FX OFF`. Again: `LOOP CLEARED`. MAX meanwhile: `________ %` (U11 is in 13o).
 
 **W20b. Gestures that moved, MUTE BUS and MORPH (#145, 3 min).** A01 playing, the chord's SnA up.
-- FUNC + turn VALUE: `DJ FILTER: SLOT 1/2`, the tempo and the sound unchanged. FUNC + push D:
+- FUNC + turn VALUE is VariSpeed since (W68): the DJ filter does not move. FUNC + push D:
   `TAPE STOP: SLOT 8`. FUNC + MUTATE is LOCK now (W20c): tapped with no lock it says
   `NO LOCK: HOLD STORES` and freezes or mutates nothing.
 - Push VALUE + STEP 7 (`7 MUTE BUS`), turn VALUE up slowly: every track fades out evenly and the
@@ -899,6 +899,20 @@ Beat playing, A01, a card with some space.
   at the end of the pattern. `____`
 - Tap PROJECT: PROJECT opens as the key comes up, no slower than before to the hand. FUNC +
   PROJECT: SAMPLES at once. `____`
+
+**W68. VariSpeed (3 min).** A01 playing at 130, internal clock.
+- Hold FUNC, turn VALUE up slowly: `VARISPEED +0.1 130.8` and on, the beat speeding up AND every
+  track rising in pitch together, the kick, the sample loop and the chords alike, like a record
+  sped up. No clicks or dropouts as it moves; held chords bend with it. The top bar shows the
+  moved tempo, the live strip `VS+`. `____`
+- Up to `VARISPEED +12.0 260.0`: an octave up, still in time, the delay echoes on the beat. MAX
+  from SETUP there: `________ %`. Turn back down: it stops on `VARISPEED 0 130.0` and only goes
+  below on the next click (`VS-`, slower and lower). `____`
+- With it at -3.0 or so, FUNC + tap VALUE: straight back to `VARISPEED 0 130.0`, the beat as
+  programmed. VALUE alone still turns the tempo. Save with VariSpeed up, reload: the project
+  opens at its own tempo. `____`
+- SETUP, CLOCK SRC to MIDI with VariSpeed up: `VARISPEED 0 EXT CLOCK`; FUNC + turn VALUE says
+  `EXT CLOCK`. Back to INTERNAL: 130 again. `____`
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
 
@@ -2766,8 +2780,8 @@ records where each gesture went and why.
       through to the track faders underneath.
 - [ ] On MST, A is the DJ filter, B the glue compressor, C the limiter threshold, D the output
       level. A reads `OFF` at centre, `LP nn` below it and `HP nn` above.
-- [ ] FUNC + VALUE is no longer the DJ filter (since #145, backlog D1): it says
-      `DJ FILTER: SLOT 1/2` and moves nothing. The tempo must not move with it.
+- [ ] FUNC + VALUE is no longer the DJ filter (since #145, backlog D1): it is VariSpeed (W68)
+      and moves no MST byte.
 - [ ] Save, power cycle, reopen: every one of the fourteen comes back. Before this they did not
       exist in any file.
 - [ ] **The kill EQ** (added 2026-11-22): MIXER's seventh page, `EQ`, LOW MID HI on A B C, flat at

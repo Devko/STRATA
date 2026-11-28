@@ -8,6 +8,15 @@ the project file format or the controls.
 
 ### Added
 
+- **VariSpeed: FUNC + turn VALUE, on every screen.** The whole unit faster or slower like a
+  turntable: the tempo and the pitch of every machine move together, an octave either way in
+  tenths of a semitone (`VARISPEED +1.2 140.3`, the amount and the tempo it runs at). The drums,
+  SAMPLE and GRAIN read faster, the synths and FM4 move by semitones, held notes and ringing hits
+  included, and the delay's echoes keep to the moved tempo. The project keeps its own tempo, so a
+  save stores the tempo the song was written at; VALUE alone still turns it. Rest is a detent,
+  and FUNC + tap VALUE (with no effect picked) snaps back. Internal clock only: refused with
+  `EXT CLOCK`, and back to rest when CLOCK SRC changes. The live strip says `VS+` or `VS-`. FUNC
+  + VALUE used to say `DJ FILTER: SLOT 1/2`. New emulator scenario `varispeed`.
 - **Queue a pattern from any screen.** Hold PROJECT and press STEP n: slot n of the shown bank is
   queued (`A05 QUEUED END`) and the screen you play on stays up. PROJECT now opens when the key
   comes up, and not at all when a STEP was pressed while it was held. The FUNC help's FUNC + KNOB

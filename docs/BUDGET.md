@@ -1735,6 +1735,21 @@ in the same loop (`strata_chain_drive`): about 4 more flops a sample, on a track
 
 Within the half point a peak moves between runs.
 
+### VariSpeed (2026-11-28, host only)
+
+FUNC + turn VALUE (`core/varispeed.hpp`) adds **nothing at rest and nothing per sample**: the
+engine hands each machine the amount once when it changes (`Machine::set_pitch_mod`), and the
+machines fold it into a multiply they already do at control rate (the drums' f0, SAMPLE's and
+GRAIN's read step, FM4's and the VAs' note). What it can cost is what it plays: at +12.0 the clock
+runs twice as fast, so twice the triggers a second, and SAMPLE and GRAIN read twice the frames
+(PIT +24 already allowed four times). A streamed sample read faster drains its fifo faster, as a
+high PIT does. `scenario_varispeed` holds the default beat an octave up; its figures are owed on
+Roland's PC, both compilers.
+
+| Build | cl6x | GCC only |
+| --- | --- | --- |
+| `scenario_varispeed.sh`, default beat at +12.0 | owed | owed |
+
 ### Later milestones
 
 | Milestone | Target | Measured (cl6x) | Measured (GCC) | Date |

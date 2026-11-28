@@ -1352,6 +1352,26 @@ filter sweep) and conditions are left alone. While it is away from rest, PERFORM
 its status line (beside `BAR` while stopped) and the live strip says `EN-` or `EN+`. ENERGY is not
 saved or undone; a LOCK holds it, so a jump brings back the energy you stored.
 
+### VariSpeed: the whole unit faster or slower
+
+**FUNC + turn VALUE is VariSpeed**, on every screen. VALUE alone is the tempo; with FUNC the pitch
+moves with it, the way a turntable's speed control or a tape machine's varispeed moves both. Every
+machine follows: the drums, SAMPLE and GRAIN read faster or slower, the synths and FM4 move by the
+same interval, held notes and ringing hits included, and the delay's echoes keep to the new
+tempo. One click is a tenth of a semitone and the range is an octave either way; the notice says
+the amount and the tempo it runs at (`VARISPEED +1.2 140.3`), the top bar shows that tempo, and
+the live strip says `VS+` or `VS-`.
+
+Rest is a detent: turning back stops on 0, the project's own tempo and pitch. **FUNC + tap VALUE**
+snaps straight back to it when no performance effect is picked (with one picked, the tap cuts the
+effect, as above). The project keeps its tempo underneath, so a save stores the tempo the song was
+written at, and VALUE on its own still turns that tempo with VariSpeed riding on top. Near the
+ends of the clock's 20-300 BPM the turn stops where the tempo still fits.
+
+Envelope times stay as they are, and MID tracks send their notes unmoved. VariSpeed needs the
+internal clock: under MIDI or SYNC it says `EXT CLOCK`, and it goes back to rest when CLOCK SRC
+changes. It is not saved, not undone and not held by a LOCK, like the tempo.
+
 ### Beat repeat, throws and auto-fill
 
 REPEAT loops the last 1/4, 1/8, 1/16 or 1/32 (or triplets) of the finished master while held;
@@ -1513,7 +1533,7 @@ effect still in (`MORPH 64` as you turn). Push VALUE + STEP 13 again lets go and
 morph where it is (`MORPH KEPT: VALUE TEMPO`). The looper (16) is the other slot like it.
 
 The stutter is the REPEAT pad's, and the master DJ filter is slots 1 and 2 (its saved setting
-is MIXER's MST page): FUNC + VALUE only says `DJ FILTER: SLOT 1/2`.
+is MIXER's MST page). FUNC + VALUE is VariSpeed (below).
 
 **The looper (STEP 16).** Push VALUE + STEP 16 with the beat running: from the next bar line the
 whole mix is recorded for 4 bars (`LOOP 4 BAR: NEXT BAR`; set 1, 2, 4 or 8 in the FUNC menu's

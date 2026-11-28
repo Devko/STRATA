@@ -60,6 +60,21 @@ on the PATTERN page (`core/timing.hpp` feel_offset, pattern file section 5, D tu
 `scenario_moveall` turns REL/LEN ALL in the emulator (`move_all_notice` logs each click);
 `scenario_feel` walks FEEL. UNIT_CHECKLIST W29 walks both.
 
+## VariSpeed
+
+**VariSpeed** (CyDrums P7, `core/varispeed.hpp`, docs/CONTROLS.md "VariSpeed") is the whole
+unit, not samples only: a turntable moves everything, and a sample-only speed would leave the
+drums and synths at the old pitch against a moved tempo. FUNC + turn VALUE, because VALUE is
+already the tempo and FUNC + VALUE was free since D1 (it only named the DJ filter's slots). The
+app sets Enaga's clock to the project's tempo times the ratio (`set_clock_tempo`, the one path
+every tempo change takes) and posts `Cmd::set_varispeed`; the engine adds the semitones to the
+LFO's pitch in `run_lfos` and hands the sum to `Machine::set_pitch_mod`, whose default now keeps
+a ratio the non-synth machines multiply in (`pitch_mod_ratio_`, exactly 1 at rest, so the golden
+renders are unchanged). The delay's beat is divided by the ratio in `apply_mixer_bytes`. MID is
+left alone (no pitch bend range to rely on). Not in a LOCK, not saved: the tempo is not either,
+and the project keeps its own tempo so a save is never the moved one. Internal clock only;
+`vari_follow_source` drops it on a CLOCK SRC change. UNIT_CHECKLIST W68, `scenario_varispeed`.
+
 ## LIVE RND
 
 **LIVE RND** (CyDrums P1's live half, `core/liverand.hpp`, docs/CONTROLS.md "LIVE RND"): FUNC +
