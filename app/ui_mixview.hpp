@@ -533,18 +533,18 @@
         }
         // The duck: how far it goes down, and how far it is down now.
         const int depth = int(input_byte(InputField::duck));
-        const int dx = 100;
-        canvas.rect(dx + 4, kTop, 1, kRows, 3);
-        paint::small_text(px, dx, kTop + kRows + 2, "DCK", 7);
+        const int dx = 100, dtop = kTop + 9, drows = kRows - 9;
+        paint::small_text(px, dx, kTop, "DCK", 7);
+        canvas.rect(dx + 4, dtop, 1, drows, 3);
         if (depth > 0) {
             const Kit &kit = engine_.project().kit;
             const int source_track = kit.duck.source < kTracks ? int(kit.duck.source) : 0;
             const bool running = enaga::clock::state().running != 0;
             const float dip = running && on ? duck_gain_now(source_track) : 0.0f;
-            const int reach = depth * (kRows - 1) / 100;
-            frame_rect(px, dx + 1, kTop, 7, reach + 1, 6);
+            const int reach = depth * (drows - 1) / 100;
+            frame_rect(px, dx + 1, dtop, 7, reach + 1, 6);
             const int now = int(dip * float(reach));
-            if (now > 0) canvas.rect(dx + 2, kTop + 1, 5, now, 12);
+            if (now > 0) canvas.rect(dx + 2, dtop + 1, 5, now, 12);
         }
     }
 

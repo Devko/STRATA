@@ -8934,6 +8934,18 @@ TEST(ui_screenshots) {
     write_shot(folder, "mixer_dck");
     mixer_page(app, kMixerDuckPage);
     write_shot(folder, "mixer_duck");
+    // The line input on, with some of each send and a duck, as a set would have it; put back after.
+    mixer_page(app, kMixerInputPage);
+    {
+        static const int moves[][2] = {{int(InputField::on), 1},    {int(InputField::delay), 40},
+                                       {int(InputField::reverb), 70}, {int(InputField::chorus), 20},
+                                       {int(InputField::duck), 50},  {int(InputField::pan), -10}};
+        for (const auto &m : moves) post_cmd(Cmd::set_input, uint8_t(m[0]), uint8_t(int8_t(m[1])));
+        pump(2);
+        write_shot(folder, "mixer_in");
+        for (const auto &m : moves) post_cmd(Cmd::set_input, uint8_t(m[0]), uint8_t(int8_t(-m[1])));
+        pump(2);
+    }
     mixer_page(app, kMixerPageCount - 2);
     write_shot(folder, "mixer_mst");
     mixer_page(app, kMixerEqPage);
