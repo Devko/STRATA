@@ -881,7 +881,7 @@ Beat playing, A01, a card with some space.
 
 **W66. The slimmer FUNC menu and the track menu's new rows (4 min).** Beat playing, A01.
 - FUNC+HOME: SAVE, then JAM REC, CLICK, COUNT-IN, REC MODE, QUANTIZE, AUTO-FILL, FX GLIDE,
-  LOOP LEN, CHAIN, CHAIN END, then the file rows down to LOAD DEMO (UP once from SAVE). No
+  LOOP LEN, CHAIN, CHAIN END, PROG CHG OUT, then the file rows down to LOAD DEMO (UP once from SAVE). No
   TRACK SPEED, TRACK PLAY, FREEZE or RELOAD SAMPLE. CLR.
 - GRID, lower pad 3, hold OK: the track menu on `T3`. UP from GENERATE: RELOAD SAMPLE, FREEZE,
   PLAY, SPEED. On SPEED, LEFT: `T3 LEN 16 X3/2`, the hats in triplets; RIGHT back to `X1`.
@@ -899,6 +899,22 @@ Beat playing, A01, a card with some space.
   at the end of the pattern. `____`
 - Tap PROJECT: PROJECT opens as the key comes up, no slower than before to the hand. FUNC +
   PROJECT: SAMPLES at once. `____`
+
+**W68. Tap tempo, the nudge, PROG CHG OUT and the song position (8 min).** Beat playing on
+GRID, CLOCK SRC INTERNAL. For the last two, a computer or a second unit on MIDI.
+- Tap VALUE four times at about 120: `TAP TEMPO`, then `TAP 120.x`, and the beat follows from the
+  second tap. Taps at twice the pace start again rather than landing in between. In PERFORM a
+  VALUE tap is still `MORPH 0`. `____`
+- FUNC + turn VALUE one click right: `NUDGE FASTER`, the top line reads 4% more for a moment and
+  comes back to the set tempo; a few clicks left pull the beat back. Easy to line up with a
+  record playing beside it? `____`
+- FUNC menu, PROG CHG OUT, OK: `PROG OUT CH n` (your MIDI CH). With a MIDI monitor on MIDI OUT,
+  queue A05: one program change 4 on that channel as it lands; a chain moving on sends each
+  entry's number. A second STRATA on the same channel follows the pattern changes. Off again:
+  nothing is sent. `____`
+- CLOCK SRC MIDI, a DAW sending clock with the chain on (three entries). Stop the DAW, move its
+  playhead into the second entry's bars, play: STRATA comes in on that entry, on the beat. Back
+  to bar 1 and play: entry 1. Chain off: the pattern's steps line up with the DAW's bars. `____`
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
 

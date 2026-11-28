@@ -89,6 +89,8 @@ each line means.
 | FUNC+CLR / FUNC+OK | Undo / redo, in every mode and page |
 | VALUE turn | Tempo, 20-300 BPM in 0.1 steps (PERFORM: morph). With a performance effect picked: its amount (below) |
 | VALUE push + turn | Pattern swing |
+| Tap VALUE, twice or more | Tap tempo where VALUE turns the tempo (`TAP 128.0`), from the last four taps; a 2 s gap starts again |
+| FUNC + turn VALUE | Nudge: 4% faster or slower for 250 ms a detent, then back to the set tempo (`NUDGE FASTER`) |
 | Push VALUE + STEP, CLR, LEFT/RIGHT | The performance mixer (below) |
 | FUNC + push A / B / C | Master kill EQ: kill LOW / MID / HI, again to bring it back (`KILL LOW`, `LOW BACK`). Performance only: not saved, and a load brings every band back |
 | FUNC + pad-row L/R | Selected track's length (polymeter), on every screen but the menu; hold to repeat |
@@ -131,7 +133,7 @@ a time; nothing of it is saved or undone.
 | Push VALUE + STEP 13 | The A/B morph on any screen (`MORPH 64`), the effect that was up left as it is. Again: let go, the morph stays (`MORPH KEPT: VALUE TEMPO`) |
 | Push VALUE + STEP 16 | The looper: records LOOP LEN bars (FUNC menu, 1/2/4/8, default 4) of the mix from the next bar line; then VALUE is the loop's mix, 0 live, 127 loop only (`LOOP MIX 64`). Again: leaves the looper (`LOOP OFF`; the loop is kept, silent, and VALUE + CLR throws it away for a new take; during the count-in or the take, `LOOP CANCELLED`). Effects picked after it play over the loop |
 | Push VALUE + LEFT / RIGHT | Previous / next effect, keeping the amount (crossfaded over FX GLIDE) |
-| Tap VALUE (let go within 0.5 s) | Back to 0, riding out over at most a 1/16: the effect's amount, the loop's mix; or the morph (`MORPH 0`, in PERFORM or with slot 13 picked). Never the tempo or swing. FUNC + tap: a cut |
+| Tap VALUE (let go within 0.5 s) | Back to 0, riding out over at most a 1/16: the effect's amount, the loop's mix; or the morph (`MORPH 0`, in PERFORM or with slot 13 picked). Never swing. FUNC + tap: a cut |
 | Push VALUE + CLR | Everything off, loop mix 0, riding (`FX OFF`); again: the loop is thrown away (`LOOP CLEARED`) |
 | FUNC menu FX GLIDE | How long those button jumps (and a slot change, leaving a playing loop, a LOCK jump) ride: OFF, 1/16, 1 BEAT (default), 1 BAR; back to 0 they take at most a 1/16. Turning VALUE never glides |
 | VALUE held | The STEP keys show the slots: dim amber, the effect that is up bright amber, the one VALUE is on bright green; STEP 16 red blinking armed, red recording, green holding a loop |
@@ -203,7 +205,7 @@ the track menu (hold OK in GRID); the last
 three throw away unsaved work, so each needs OK twice within 2 s (OK AGAIN TO RELOAD, OK AGAIN
 FOR NEW, OK AGAIN FOR DEMO). NEW is empty; LOAD DEMO is the factory demo a first start plays.
 **FUNC menu (FUNC+HOME):** SAVE, JAM REC, CLICK, COUNT-IN, REC MODE, QUANTIZE, AUTO-FILL, FX
-GLIDE, LOOP LEN, CHAIN, CHAIN END, SAVE AS, OPEN PROJECT, KITS, NEW PROJECT, RELOAD PROJECT, CLEAR
+GLIDE, LOOP LEN, CHAIN, CHAIN END, PROG CHG OUT, SAVE AS, OPEN PROJECT, KITS, NEW PROJECT, RELOAD PROJECT, CLEAR
 PATTERN, LOAD DEMO. It always opens on SAVE: DOWN once is JAM REC, twice CLICK; the list wraps, so
 UP once is LOAD DEMO, twice CLEAR PATTERN. UP/DOWN or A
 scroll, OK runs the row (NEW, RELOAD, CLEAR PATTERN and LOAD DEMO need OK twice), LEFT/RIGHT or B change a
@@ -273,6 +275,9 @@ MIDI port open on the computer) when driving gear from the DIN jack; Enaga 0.3.0
 **MIDI in:** channels 1-8 play tracks 1-8, other channels play the selected track. Notes are
 held until their note-off. CC 16-31 set the track's 16 parameters (SRC, FLTR, AMP, FX in order);
 CC 120/123 let go of held notes. Program change 1-128 on your MIDI CH queues pattern A01-H16.
+Under CLOCK SRC MIDI a song position pointer puts the chain on its entry and pass (chain off:
+the pattern from the top of the song). **PROG CHG OUT** (FUNC menu, saved, off in a new project):
+every pattern change sends its number 0-127 as a program change on your MIDI CH.
 
 ## The screen
 

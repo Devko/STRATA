@@ -8,6 +8,17 @@ the project file format or the controls.
 
 ### Added
 
+- **Tap tempo and nudge.** Tap VALUE in time, twice or more, wherever VALUE turns the tempo
+  (`TAP 128.0`); the tempo follows the last four taps. FUNC + turn VALUE nudges: 4% faster or
+  slower for a quarter of a second a detent, then back to the set tempo, to line STRATA up by ear
+  with something that sends no clock. FUNC + VALUE used to say `DJ FILTER: SLOT 1/2`.
+- **MIDI song position pointer.** Under MIDI clock, a master that moves its song position while
+  stopped puts STRATA's chain on the entry and pass that position falls in (with the chain off,
+  the pattern runs from the top of the song), so a CONTINUE from the middle of a song plays the
+  right section.
+- **PROG CHG OUT.** A FUNC menu row: every pattern change sends the pattern's number as a program
+  change on your MIDI CH, so a second STRATA or a sequencer follows. Off in a new project; saved
+  on the end of PROJECT.BIN's MIDI section (451 bytes), which older builds skip.
 - **Queue a pattern from any screen.** Hold PROJECT and press STEP n: slot n of the shown bank is
   queued (`A05 QUEUED END`) and the screen you play on stays up. PROJECT now opens when the key
   comes up, and not at all when a STEP was pressed while it was held. The FUNC help's FUNC + KNOB
