@@ -2009,7 +2009,7 @@ Enaga's menu and start STRATA6.
 | U12 MAX with a MIN11 chord on OS2 sync, DRV and SUB up, over A01 (13p) | |
 | E14 WAVE, `scenario_wave.sh` vs `scenario_factory.sh`; boot cycles before/after, cl6x / GCC (PC) | |
 | U13 MAX with WMN GROWL and WPL PAD, over A01 (W23) | |
-| E17 WAVE scan, `scenario_wavescan.sh` vs `scenario_wave.sh`, cl6x / GCC (PC) | |
+| E18 WAVE scan, `scenario_wavescan.sh` vs `scenario_wave.sh`, cl6x / GCC (PC) | |
 | U15 MAX with WMN WOBBLE and WPL DRIFT, over A01 (W73) | |
 | E15 FM4, `scenario_fm.sh` vs `scenario_factory.sh`; `ti_loops.py` FM loops, cl6x / GCC (PC) | |
 | U14 MAX with FM4 PAD on track 7, over A01 (W24) | |

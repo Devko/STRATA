@@ -1174,7 +1174,7 @@ scene or knob really did move: those prepare as before.
 | E12 | The ASR page | `tests/scenario_asr.sh`, then the held-chord `factory_kit` edit in "The ASR page" above, `scenario_factory.sh`, both compilers; revert | **done 2026-11-23:** off = A01 (26.15% / 49.32%); held +3.60 cl6x / +4.71 GCC (see "The ASR page") |
 | E13 | The OSC page and the VA rework | `tests/scenario_osc.sh` against `scenario_factory.sh` before it, then the worst-case `factory_kit` edit in "The OSC page" below, both compilers; revert | **done 2026-11-28:** `osc` = the beat (23.62% / 45.36%); worst case +2.22 cl6x / +8.92 GCC (see "The owed figures") |
 | E14 | WAVE MONO and WAVE POLY | `tests/scenario_wave.sh` (tracks 6 and 7 switched to WMN and WPL on keys) against `scenario_factory.sh` on the same commit, both compilers; and the time from the switch to `wav FM1` (the first table ready) | **done 2026-11-28:** +2.56 cl6x / +4.67 GCC over the beat; the time to the first table not taken |
-| E17 | WAVE scan | `tests/scenario_wavescan.sh` (track 6 to WMN, WOBBLE, the SCAN page) against `tests/scenario_wave.sh` on the same commit, both compilers | done 2026-11-28: `scenario_wavescan` 25.65% cl6x, 45.52% GCC (`scenario_wave` 26.40% / 50.44%, `scenario_factory` 23.80% / 45.51%); scan within noise, see "WAVE scan" below |
+| E18 | WAVE scan | `tests/scenario_wavescan.sh` (track 6 to WMN, WOBBLE, the SCAN page) against `tests/scenario_wave.sh` on the same commit, both compilers | done 2026-11-28: `scenario_wavescan` 25.65% cl6x, 45.52% GCC (`scenario_wave` 26.40% / 50.44%, `scenario_factory` 23.80% / 45.51%); scan within noise, see "WAVE scan" below |
 | E15 | FM4 | `tests/scenario_fm.sh` (track 7 switched to FM4 on keys) against `scenario_factory.sh` on the same commit, both compilers; and `tools/ti_loops.py` for `strata_fm_add` and `strata_fm_add_free` | **done 2026-11-27, again 2026-11-28:** +1.06 cl6x / +4.38 GCC over the beat; `ti_loops.py` not run |
 | E16 | The GRAIN rework | `tests/scenario_grain.sh` (track 8 switched to GRAIN, SHIMMR loaded on keys) against `scenario_factory.sh` on the same commit, both compilers | **done 2026-11-28:** +0.75 cl6x / +6.68 GCC over the beat |
 | E5 | Load time of a 15 s 96 kHz stereo WAV (30 s of the file now loads too: `kSrcFrames` is 30 s of 96 kHz frames since 2026-11-22) | through the emulator's card, cl6x vs GCC | wall time to playable; screen should not stall |
@@ -1667,7 +1667,7 @@ ramped between, two a block. So a scanning voice costs up to about 6% more than 
 scaled from the WAVE estimate above, about 0.15 points a voice with cl6x, under 2 points for all
 12 POLY voices scanning. MOD OFF costs nothing.
 
-**E17, emulator on Roland's PC (2026-11-28, `68ff9dd`), peak load, all passed:**
+**E18, emulator on Roland's PC (2026-11-28, `68ff9dd`), peak load, all passed:**
 
 | Build | cl6x | GCC only |
 | --- | --- | --- |
