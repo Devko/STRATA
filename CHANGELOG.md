@@ -32,8 +32,9 @@ the project file format or the controls.
   with a detent). Down, every track drops its weakest hits first, in an order: hats at once, then
   percussion, snare and samples, the lines, the pads (which keep their strongest hits), and the
   kick last. Up, empty off-beats get quiet ghosts with the sound of the hit before them (hats most,
-  the kick only near the top, pads never) and probabilities lift towards 100. Each position plays
-  the same groove every bar; the pattern is never written, and a LOCK holds it. New emulator
+  the kick only near the top, pads never; one note on an arp track, lighting no step or glow) and
+  probabilities lift towards 100. Each position plays the same groove every bar; the pattern is
+  never written, and a LOCK holds it. New emulator
   scenario `energy`.
 - **Starter content in the card builder.** strata.einblick.dev can now put something to play on
   the card with STRATA: ten starter projects to open and jam on (TECHNO, DEEP, DUB, DRIFT,
