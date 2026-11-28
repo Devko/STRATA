@@ -292,6 +292,49 @@ TEST(width_a_pair_with_the_same_block_on_both_sides_is_the_mono_track) {
     }
 }
 
+TEST(width_a_chain_going_wide_mid_note_carries_on_from_its_mono_state) {
+    // WID turned up from 0 while a note rings through a resonant filter: a sounding voice keeps
+    // its centre place, so the block after the switch is the same on both sides and the pair must
+    // give what the mono chain would have. A right side starting cold (the first time) or from
+    // the last time the track was wide (the second) clicks. Mono, wide, mono, wide, against a
+    // chain that stays mono throughout.
+    TrackParams p = uniform(0);
+    p.set(4, 70);       // DRV: the DC blocker's state
+    p.set(5, 50);       // CUT
+    p.set(6, 110);      // RES: a filter that rings
+    p.set(7, 30);       // MOD: a 24 dB mode, both SVFs
+    p.set(12, 40);      // LOF: the held sample
+    p.set(13, 64);      // PAN
+    ChainMix mix;
+    static InsertChain mono, sw;
+    mono.init(kRate);
+    sw.init(kRate);
+    float a_l[kBlk], a_r[kBlk], b_l[kBlk], b_r[kBlk];
+    float in[kBlk], left[kBlk], right[kBlk];
+    float worst = 0.0f;
+    for (int b = 0; b < 40; b++) {
+        const bool wide = (b / 10) % 2 == 1;    // blocks 10-19 and 30-39
+        mono.prepare(p, mix);
+        sw.prepare(p, mix);
+        for (int i = 0; i < kBlk; i++) {
+            in[i] = 0.7f * enaga::dsp::sin_turns(float(b * kBlk + i) * 0.021f);
+            left[i] = in[i];
+            right[i] = in[i];
+            a_l[i] = a_r[i] = b_l[i] = b_r[i] = 0.0f;
+        }
+        ChainOut oa{a_l, a_r, nullptr, nullptr, nullptr, nullptr, nullptr};
+        ChainOut ob{b_l, b_r, nullptr, nullptr, nullptr, nullptr, nullptr};
+        mono.process(in, kBlk, oa);
+        if (wide) sw.process_pair(left, right, kBlk, ob);
+        else sw.process(left, kBlk, ob);
+        for (int i = 0; i < kBlk; i++) {
+            const float d = absolute(a_l[i] - b_l[i]) + absolute(a_r[i] - b_r[i]);
+            if (d > worst) worst = d;
+        }
+    }
+    CHECK(worst < 1e-5f);
+}
+
 TEST(width_pan_is_a_balance_on_a_pair) {
     // Hard left on PAN: the right side of the pair does not reach the bus.
     TrackParams p = uniform(0);
