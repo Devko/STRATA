@@ -881,7 +881,7 @@ Beat playing, A01, a card with some space.
 
 **W66. The slimmer FUNC menu and the track menu's new rows (4 min).** Beat playing, A01.
 - FUNC+HOME: SAVE, then JAM REC, CLICK, COUNT-IN, REC MODE, QUANTIZE, AUTO-FILL, FX GLIDE,
-  LOOP LEN, CHAIN, CHAIN END, then the file rows down to LOAD DEMO (UP once from SAVE). No
+  LOOP LEN, CHAIN, CHAIN END, PROG CHG OUT, then the file rows down to LOAD DEMO (UP once from SAVE). No
   TRACK SPEED, TRACK PLAY, FREEZE or RELOAD SAMPLE. CLR.
 - GRID, lower pad 3, hold OK: the track menu on `T3`. UP from GENERATE: RELOAD SAMPLE, FREEZE,
   PLAY, SPEED. On SPEED, LEFT: `T3 LEN 16 X3/2`, the hats in triplets; RIGHT back to `X1`.
@@ -971,7 +971,34 @@ filters closed, scene 4 open and wet; something different in A02.
 - Save, power cycle, open: the sections are still there and play the same. Open a project saved
   by v0.5.0: its chain plays as it did, every field `--`. `____`
 
-**W72. WAVE scan modes: the SCAN page (4 min).** Beat playing, A01.
+**Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
+`W14: MAX 61.2`.
+
+---
+
+**W72. Tap tempo, the nudge, PROG CHG OUT and the song position (8 min).** Beat playing on
+GRID, CLOCK SRC INTERNAL. For the last two, a computer or a second unit on MIDI.
+- Tap VALUE four times at about 120: `TAP TEMPO`, then `TAP 120.x`, and the beat follows from the
+  second tap. Taps at twice the pace start again rather than landing in between. In PERFORM a
+  VALUE tap is still `MORPH 0`. `____`
+- Hold FUNC, push VALUE and turn it one click right: `NUDGE FASTER`, the top line reads 4% more for a moment and
+  comes back to the set tempo; a few clicks left pull the beat back. Easy to line up with a
+  record playing beside it? `____`
+- FUNC menu, PROG CHG OUT, OK: `PROG OUT CH n` (your MIDI CH). With a MIDI monitor on MIDI OUT,
+  queue A05: one program change 4 on that channel as it lands; a chain moving on sends each
+  entry's number. A second STRATA on the same channel follows the pattern changes. Off again:
+  nothing is sent. `____`
+- CLOCK SRC MIDI, a DAW sending clock with the chain on (three entries). Stop the DAW, move its
+  playhead into the second entry's bars, play: STRATA comes in on that entry, on the beat. Back
+  to bar 1 and play: entry 1. Chain off: the pattern's steps line up with the DAW's bars. `____`
+# The full walkthrough (first written 2026-11-22)
+
+Written for the v0.1.0 card and kept up to date section by section since. Sections 0-13 are
+the first evening's tour; 8b-8d, 13b-13q and 14-16 the deeper checks for each feature, which the
+walkthrough above points to (`13j`, `13o` ...). Where a line here contradicts the walkthrough
+above, the walkthrough above is right.
+
+**W73. WAVE scan modes: the SCAN page (4 min).** Beat playing, A01.
 - Lower pad 6, FUNC+EDIT (MACHINE), DOWN three times: `WMN`. EDIT, then SELECT_LEFT from SRC:
   the SCAN tab, `MOD OFF`, `SCAN OFF: TURN MOD`. On a drum track SCAN never comes up. `____`
 - OK (SOUNDS): WOBBLE (the growl opens and closes once a beat, on the beat), SCANLD (each note
@@ -982,18 +1009,6 @@ filters closed, scene 4 open and wet; something different in A02.
 - Track 7, MACHINE: `WPL`, OK: DRIFT and SWIRL, held chords: all notes move together, no clicks
   or zipper on the sweeps. 30 s with WOBBLE on track 6 and DRIFT on track 7: **MAX `____ %`**
   (against W23's). FUNC+HOME, RELOAD PROJECT puts the beat back.
-**Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
-`W14: MAX 61.2`.
-
----
-
-# The full walkthrough (first written 2026-11-22)
-
-Written for the v0.1.0 card and kept up to date section by section since. Sections 0-13 are
-the first evening's tour; 8b-8d, 13b-13q and 14-16 the deeper checks for each feature, which the
-walkthrough above points to (`13j`, `13o` ...). Where a line here contradicts the walkthrough
-above, the walkthrough above is right.
-
 ## On the PC, before building the card (15 min, plus E2-E5 if there is time)
 
 From `D:\DEV\STRATA` through WSL, as in CLAUDE.md (`wsl.exe -d Ubuntu -- bash -c 'cd
@@ -1993,7 +2008,7 @@ Enaga's menu and start STRATA6.
 | E14 WAVE, `scenario_wave.sh` vs `scenario_factory.sh`; boot cycles before/after, cl6x / GCC (PC) | |
 | U13 MAX with WMN GROWL and WPL PAD, over A01 (W23) | |
 | E17 WAVE scan, `scenario_wavescan.sh` vs `scenario_wave.sh`, cl6x / GCC (PC) | |
-| U15 MAX with WMN WOBBLE and WPL DRIFT, over A01 (W72) | |
+| U15 MAX with WMN WOBBLE and WPL DRIFT, over A01 (W73) | |
 | E15 FM4, `scenario_fm.sh` vs `scenario_factory.sh`; `ti_loops.py` FM loops, cl6x / GCC (PC) | |
 | U14 MAX with FM4 PAD on track 7, over A01 (W24) | |
 | MAX straight after a kit recall (15) | |

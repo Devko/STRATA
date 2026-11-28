@@ -1455,6 +1455,20 @@ bool Engine::apply_notes(const Command &command, int track, int) {
             break;
         }
 
+        case Cmd::set_program_out:
+            project_.settings.program_out = command.a != 0;
+            // Turned off, a change still waiting to leave stays behind.
+            if (!project_.settings.program_out) program_pending_ = -1;
+            break;
+
+        case Cmd::set_midi_channel:
+            midi_channel_ = uint8_t(command.a & 0x0Fu);
+            break;
+
+        case Cmd::locate:
+            locate(command.u);
+            break;
+
         default:
             return false;
     }
@@ -2899,6 +2913,12 @@ void Engine::switch_pattern(int bank, int slot) {
     const int old_slot = int(project_.slot);
     project_.bank = uint8_t(bank);
     project_.slot = uint8_t(slot);
+    // PROG CHG OUT: the new pattern's number, whoever changed it -- a press, a queue landing, a
+    // chain moving on, a program change in. Sent at once, ahead of the new pattern's first notes.
+    if (project_.settings.program_out) {
+        program_pending_ = int16_t(bank * kPatternsPerBank + slot);
+        send_program_pending();
+    }
     // Track Launch: unpinned lanes come home to the new pattern's parts and restart with it; a
     // pinned lane keeps what it plays, and its place. A lane that followed the pattern's start
     // and is kept gets that start as its own, since `origin_` is about to move.
@@ -4371,6 +4391,8 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     // MIDI out's note-offs that fall in this block, and any a full queue refused earlier.
     // Before this block's trigs, so a note ending as the same pitch starts again is ended first.
     midi_out_.begin_block(midi_sink_, frames);
+    // A program change a full queue refused (switch_pattern), tried again each block.
+    send_program_pending();
 
     // The kit with the morph, the macros and any throw over it. Control rate, and only when one
     // of them has moved.
@@ -4813,6 +4835,56 @@ void Engine::drain_commands_for_shutdown() {
 void Engine::end_midi_for_shutdown() {
     midi_out_.release_all(midi_sink_);
     midi_all_notes_off();
+}
+
+void Engine::send_program_pending() {
+    if (program_pending_ < 0) return;
+    uint8_t bytes[2];
+    midi_program(bytes, uint8_t(midi_channel_ + 1u), uint8_t(program_pending_));
+    if (midi_sink_.send(bytes, 2)) program_pending_ = -1;
+}
+
+// An outside clock's song position pointer: Enaga moved the clock while it was stopped (it
+// locates only then) and the CONTINUE that follows resumes from `tick`. Everything STRATA counts
+// from a start is put where an uninterrupted run from 0 would have it at that tick: the chain's
+// entry and pass, the pattern's origin and so its steps and pass count, the bars. What was
+// waiting on the old position goes, as on a restart (Cmd::restart). With no chain the playing
+// pattern runs from 0, so its steps fall where the outside song's bars do.
+void Engine::locate(uint32_t tick) {
+    count_in_end_ = 0;
+    deferred_count_ = 0;
+    span_clear();
+    for (int t = 0; t < kTracks; t++) {
+        seq_arp_[t].on = false;
+        lane_queue_clear(lane_queue_[t]);
+    }
+    song_over_ = false;
+    uint32_t origin = 0;
+    if (chain_.active) {
+        bool over = false;
+        if (chain_locate(project_, tick, chain_, origin, over)) {
+            const ChainEntry &entry = project_.chain[chain_.entry];
+            switch_pattern(int(entry.bank), int(entry.slot));
+            chain_entry_started();
+            // Past a song's end: silent until the outside transport stops or starts again, as a
+            // song that played out is.
+            song_over_ = over;
+        }
+        queue_clear(queue_);          // the song position decides the pattern, not a queue
+    } else if (queue_.pending) {
+        // A change queued for a boundary of the old position: it happens now, as a jump back
+        // makes it (resolve_tick).
+        switch_pattern(int(queue_.bank), int(queue_.slot));
+        queue_clear(queue_);
+    }
+    origin_ = origin;
+    for (int t = 0; t < kTracks; t++) lane_origin_[t] = origin;
+    tick_ = tick;
+    // 1ST is true only if the position is in the pattern's first pass.
+    const uint32_t into = tick >= origin ? tick - origin : 0u;
+    scheduler_.reset(into < uint32_t(master_loop_ticks(live())));
+    boundary_known_ = false;
+    bar_known_ = false;
 }
 
 void Engine::midi_all_notes_off() {

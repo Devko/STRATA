@@ -47,6 +47,7 @@
 #include "stepnotes.hpp"    // a chord step's extra notes: counted on the step page, not as locks
 #include "storage.hpp"      // projects, autosave and the sample loader: the card side
 #include "tuning.hpp"       // TUN and PIT as notes: the NOTE view
+#include "taptempo.hpp"     // tap tempo on VALUE, the nudge on FUNC + push VALUE + turn
 
 #include <enaga/app.hpp>
 #include <enaga/clock.hpp>
@@ -1314,6 +1315,12 @@ private:
 
     LedShadow leds_;
     uint32_t tempo_tenths_ = 1300;
+    // Tap tempo (a VALUE tap while VALUE is on the tempo) and the nudge (FUNC + push VALUE + turn),
+    // core/taptempo.hpp.
+    TapTempo tap_;
+    Nudge nudge_;
+    // The MIDI CH last posted to the engine, -1 before the first.
+    int posted_midi_channel_ = -1;
 
     bool logged_running_ = false;
     int logged_source_ = -1;

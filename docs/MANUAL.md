@@ -518,7 +518,8 @@ short blips until you give it a sample (section 6).
 Press **PLAY**. A01 starts; the top line reads `A01 1.1 130.0 > 20%` (pattern, bar.beat, tempo, `>`
 playing, audio load) with the selected track's badge at the right, a thin line under it runs
 across the pattern, the tabs along the bottom are the screen's pages, and the column at the right
-edge is the master level. Turn **VALUE** to change the tempo; push and turn VALUE for swing. **STOP** stops
+edge is the master level. Turn **VALUE** to change the tempo, or tap VALUE in time to set it
+("Tap tempo and nudge", section 5); push and turn VALUE for swing. **STOP** stops
 and lets tails ring; STOP again cuts them.
 
 ### 2. Edit steps
@@ -1271,6 +1272,19 @@ MIDI IN (the DIN jack, or USB MIDI) plays STRATA like the pads:
   that channel. Enaga sends 123 by itself when a keyboard's active sensing stops.
 - **Program change** on your MIDI CH (the Enaga menu, SETUP shows it) queues pattern 1-128,
   which is A01 to H16, in the queue mode PROJECT has set, exactly as pressing the slot would.
+- **Song position pointer**, under CLOCK SRC MIDI: when the master moves its song position while
+  stopped, STRATA goes where that position falls before the master continues. With the chain
+  on, that is the chain entry and its pass, as if the chain had played from the top without a
+  break (past the end of a song, STRATA stays quiet until the next start). With the chain off,
+  the playing pattern runs from the top of the song, so its steps fall on the master's bars. A
+  pattern change still queued happens at once.
+
+**PROG CHG OUT** (FUNC menu, `OFF` or `ON`) sends a program change on your MIDI CH every time the
+playing pattern changes, whatever changed it: a press, a queued change landing, the chain moving
+on, a program change in. The number is the pattern's, 0-127 for A01-H16, the same numbers MIDI IN
+takes, so a second STRATA or any sequencer that follows program changes changes pattern with
+this one. It is off in a new project, since a synth listening on your MIDI CH would change its
+sound instead, and it is saved with the project.
 
 ---
 
@@ -1287,6 +1301,20 @@ The seven upper pads are the same in every mode:
 | 5 SCENE B | The same for side B | |
 | 6 THROW | Selected track's delay send to full while held | Reverb instead |
 | 7 MUTATE | Mutate the selected track; OK keeps, CLR reverts | **LOCK**: held, store; tapped, jump back or swap back (below) |
+
+### Tap tempo and nudge
+
+**Tap VALUE** in time, at least twice, to set the tempo (`TAP TEMPO` on the first tap, then
+`TAP 128.0`). The tempo follows the last four taps, so one early or late tap moves it a little;
+a pause of more than two seconds, or a tap at half or twice the pace, starts a new count. It
+works wherever VALUE turns the tempo: not in PERFORM (where a VALUE tap resets the morph), not on
+PROJECT's CHAIN and PATTERN pages, and not with an effect picked on VALUE. The tapped tempo is set
+and saved as a turn of VALUE sets it.
+
+**FUNC + push VALUE + turn** nudges: hold FUNC, push VALUE and turn it, and each detent plays 4% faster (`NUDGE FASTER`) or slower (`NUDGE
+SLOWER`) for a quarter of a second, then the tempo goes back to where it was set. The beat ends
+up a little earlier or later and the tempo stays put, which is how to line STRATA up by ear with
+a turntable or a band that sends no clock. Both are refused under an outside clock (`EXT CLOCK`).
 
 ### Mutes
 
@@ -1615,7 +1643,8 @@ effect still in (`MORPH 64` as you turn). Push VALUE + STEP 13 again lets go and
 morph where it is (`MORPH KEPT: VALUE TEMPO`). The looper (16) is the other slot like it.
 
 The stutter is the REPEAT pad's, and the master DJ filter is slots 1 and 2 (its saved setting
-is MIXER's MST page). FUNC + VALUE is VariSpeed (below).
+is MIXER's MST page). FUNC + turn VALUE is VariSpeed (below), and FUNC + push VALUE + turn the
+tempo nudge ("Tap tempo and nudge").
 
 **The looper (STEP 16).** Push VALUE + STEP 16 with the beat running: from the next bar line the
 whole mix is recorded for 4 bars (`LOOP 4 BAR: NEXT BAR`; set 1, 2, 4 or 8 in the FUNC menu's

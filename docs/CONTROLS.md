@@ -90,11 +90,17 @@ HOME "system", PLAY "◀◀", STOP "▶▶", MIXER "fx", EDIT "rec src".
      (13) or the looper (16), on every screen (the performance mixer, below). With nothing
      picked it is the tempo (PERFORM: the morph; CHAIN/PATTERN: the field under the cursor).
      Push + turn = swing. FUNC + turn = **VariSpeed** (below): the tempo with the pitch tied to
-     it. It was the DJ filter until D1 (2026-11-25), then free.
+     it. It was the DJ filter until D1 (2026-11-25), then free. **FUNC + push + turn = the tempo
+     nudge** (2026-11-28, core/taptempo.hpp): each detent plays 4% faster or slower for 250 ms,
+     then the set tempo comes back (`NUDGE FASTER`, `NUDGE SLOWER`); not saved, `EXT CLOCK` under
+     an outside clock.
      **A press of VALUE alone** (let go within half a second, with nothing turned or pressed
      meanwhile) resets what it is on to 0: a picked effect's amount, the looper's mix, the morph
-     (PERFORM, or slot 13 picked). Never the tempo, swing or a field, and nothing while a STEP
-     is held. With FUNC: a cut of the picked effect, or with none picked VariSpeed back to 0.
+     (PERFORM, or slot 13 picked). Never swing or a field, and nothing while a STEP is held.
+     With FUNC: a cut of the picked effect, or with none picked VariSpeed back to 0.
+     **Where VALUE is the tempo, the press is tap tempo** (2026-11-28): from the second tap the
+     tempo follows the last four taps (`TAP TEMPO`, then `TAP 128.0`), set and saved as a turn
+     sets it; a gap over 2 s or a tap at half or twice the pace starts a new count.
    - **STEP keys:** the sixteen of whatever the pad-row keys chose. **On every playing screen,
      PERFORM and KEYS included, they are steps** (D12, 2026-11-25): tap, hold + knob, hold + OK
      work as on GRID. MUTE MODE (STEP 1-8 the mute states), a held scene pad, push VALUE (the
@@ -201,8 +207,9 @@ Printed labels (above), and the moves made while playing:
 
 Retired 2026-11-25 (backlog D1, D5; CHANGELOG "Gestures that moved"): FUNC + VALUE (DJ filter,
 now slots 1-2), FUNC + hold push D (tape stop, slot 8) and FUNC + hold MUTATE (delay freeze,
-slot 5). Each now only names its slot (`DJ FILTER: SLOT 1/2`, `TAPE STOP: SLOT 8`,
-`FREEZE: SLOT 5`), apart from FUNC + MUTATE, which is LOCK since the next change (below); FUNC +
+slot 5). Each now only names its slot (`TAPE STOP: SLOT 8`, `FREEZE: SLOT 5`), apart from
+FUNC + MUTATE, which is LOCK since the next change (below), and FUNC + push VALUE + turn, the tempo
+nudge since 2026-11-28; FUNC +
 push D with a STEP held toggles the slide of that step's D lock, as FUNC + push A-C do theirs.
 
 ## LOCK (FUNC + MUTATE)

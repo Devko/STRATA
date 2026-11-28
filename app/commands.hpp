@@ -345,6 +345,17 @@ enum class Cmd : uint8_t {
     // the channel they were sent on.
     set_midi_out,
 
+    // PROG CHG OUT (core/project.hpp, `program_out`): a: 1 on, 0 off. Every change of the playing
+    // pattern then sends its number, 0-127 for A01-H16, as a program change on the user's MIDI CH.
+    set_program_out,
+    // The user's MIDI CH (Enaga's setting, 0-15), which only the main context reads: posted at
+    // start and whenever it changes. a: the channel. Live state, not saved.
+    set_midi_channel,
+    // An outside clock's song position pointer moved the clock (ENAGA_TRANSPORT_LOCATE under MIDI
+    // clock, only while stopped). u: the position in ticks. The pattern, or the chain and its
+    // entry, are put where that position falls, so the CONTINUE that follows plays from there.
+    locate,
+
     // A factory sound (core/sounds.hpp) into one track: the SOUNDS list (OK from EDIT or MACHINE).
     // track, a: the MachineId it was picked for, b: the preset's index -- refused if the track
     // hosts another machine by the time it lands. b = kSoundPresetKeep remembers the track's

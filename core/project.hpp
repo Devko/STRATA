@@ -645,6 +645,13 @@ struct ProjectSettings {
     // kit must not re-route the synths on stage.
     uint8_t midi_out[kTracks] = {};
 
+    // PROG CHG OUT: every change of the playing pattern sends a program change, 0-127 for
+    // A01-H16, on the user's MIDI CH (Enaga's setting) -- the same number a program change in
+    // queues, so a second STRATA or any sequencer that follows program changes changes with it.
+    // Off by default: a synth listening on that channel would otherwise change its sound.
+    // Cabling, so in the project with the channels above, saved on the end of their section.
+    bool program_out = false;
+
     // EVOLVE (core/evolve.hpp), saved so a set comes back evolving (Roland, 2026-11-27). Each
     // track's period as kEvolvePeriod's index (0 OFF, then 1, 2, 4 or 8 loops), and the mode,
     // mutation and amount every track shares. The mutation and amount are also PERFORM's MUTATE
@@ -774,8 +781,9 @@ constexpr uint16_t kSectionProjectLive = 4;
 // Song mode: the SONG switch and each chain entry's mute recall (`ChainEntry::mutes`). Optional
 // on read: an older file has a looping chain with no mute recalls, which is what zeroes mean.
 constexpr uint16_t kSectionProjectSong = 5;
-// Each track's MIDI OUT channel (core/midiout.hpp): eight bytes, 0 off or 1-16. Optional on read
-// like the ones above: an older file has every track's MIDI out off, which is what it played.
+// Each track's MIDI OUT channel (core/midiout.hpp): eight bytes, 0 off or 1-16, then PROG CHG OUT
+// (one byte, 1 on). Optional on read like the ones above: an older file has every track's MIDI out
+// off, which is what it played; a section of eight bytes is from before PROG CHG OUT, which is off.
 constexpr uint16_t kSectionProjectMidi = 6;
 // EVOLVE (core/evolve.hpp): each track's period and the shared mode, mutation and amount.
 // Optional on read like the ones above: an older file has every track's EVOLVE off, ORBIT,
