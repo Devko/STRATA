@@ -51,13 +51,16 @@ any machine. The factory kit:
   WAVE machines, which have a filter of their own), lo-fi, amp envelope, sidechain duck, pan,
   level, an **LFO** (six shapes, free or synced), two **MOD slots**, a **choke group** and an
   **arpeggiator** with rhythms, accents, ratchets and fourteen factory arps.
+- **Stereo width** on VA POLY, WAVE POLY and FM4: chord notes spread across the field, or each
+  note in unison, two detuned voices panned hard left and right.
 - **Sends and master:** a tempo-synced ping-pong delay with a LONG mode (up to 12 s, tape wow), a
-  reverb with a HALL mode (shimmer), a DJ filter, a three-band kill EQ, a glue compressor and a
-  limiter.
+  reverb with a HALL mode (shimmer), a stereo chorus, a DJ filter, a three-band kill EQ, a glue
+  compressor and a limiter.
 
 ## Sequencer
 
-- Up to 64 steps per track, with per-track length, speed, swing (polymeter) and play mode
+- Up to 64 steps per track, with per-track length, speed (16th-note triplets among them), swing
+  (polymeter) and play mode
   (forward, reverse, ping-pong, or random steps or blocks, seeded), and micro-timing
 - Parameter locks, trig conditions, probability, ratchets and rolls over a step's length,
   accents, slides and chords
@@ -97,6 +100,8 @@ any machine. The factory kit:
   for memory streamed from the card
 - Projects with autosave, a project browser (open, save as, rename, delete), and a kit library
   shared by all projects
+- **Starter content** from the card builder: ten starter projects from techno to ambient and
+  breakbeat, and a sample pack of 105 files rendered by STRATA's own machines
 - MIDI out per track; MIDI in for notes, CCs and program changes; follows the unit's clock
   (internal, MIDI clock or SYNC IN)
 - **Help on every screen:** hold FUNC for what the knobs and keys do where you are
