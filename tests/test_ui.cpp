@@ -74,6 +74,8 @@ struct UiProbe {
         app.rnd_unit_ = kLiveRndOff;                 // LIVE RND off, every track armed
         app.rnd_armed_ = kLiveRndAllTracks;
         app.post(Cmd::set_live_rnd, 0, 0, kLiveRndOff, kLiveRndAllTracks);
+        app.energy_ = 0;                             // ENERGY to rest
+        app.post(Cmd::set_energy, 0, 0, 0);
     }
     static int selected(const Strata &app) { return app.selected_; }
     static int page(const Strata &app) { return app.page_; }
@@ -11122,6 +11124,92 @@ TEST(ui_a_lock_jump_puts_live_rnd_back_and_the_knob_follows) {
     func_mutate_tap(app);                                     // and to the lock again
     pump(4);
     CHECK_EQ(int(engine.live_rnd_unit()), 4);
+}
+
+// --- ENERGY (core/energy.hpp) -----------------------------------------------------------------
+
+// FUNC + turn C in PERFORM is ENERGY: two counts a click, a detent at rest, held to +-64. The
+// notice, the BAR line and the live strip say where it is; without FUNC, C is still its macro,
+// and nothing is saved or undone.
+TEST(ui_func_c_in_perform_is_energy_with_a_detent_at_rest) {
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+    shift_key(ENAGA_KEY_F7);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::perform));
+    pump(1600);
+    CHECK_EQ(int(engine.energy()), 0);
+    const uint8_t macro_c = engine.macro_position(2);
+    const uint8_t undo_before = undo_depth();
+
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_encoder(2, -10);
+    pump(2);
+    CHECK_EQ(int(engine.energy()), -20);
+    CHECK(std::strcmp(UiProbe::notice(app), "ENERGY -20") == 0);
+    CHECK_EQ(int(engine.macro_position(2)), int(macro_c));   // not the macro
+    app.on_encoder(2, -40);                                   // stops at the bottom
+    pump(2);
+    CHECK_EQ(int(engine.energy()), -kEnergyRange);
+    app.on_encoder(2, +40);                                   // and on rest, crossing it
+    pump(2);
+    CHECK_EQ(int(engine.energy()), 0);
+    CHECK(std::strcmp(UiProbe::notice(app), "ENERGY 0") == 0);
+    app.on_encoder(2, +6);
+    pump(2);
+    CHECK_EQ(int(engine.energy()), 12);
+    CHECK(std::strcmp(UiProbe::notice(app), "ENERGY +12") == 0);
+    app.on_key(ENAGA_KEY_F1, false);
+
+    pump(1600);
+    CHECK(screen_has(app, "BAR 1 EN+12"));
+    CHECK(strip_has(app, "EN+"));
+    check_layout(app, "PERFORM, ENERGY up");
+
+    // Without FUNC, C is the macro again, and nothing went on the undo history.
+    app.on_encoder(2, +1);
+    pump(2);
+    CHECK_EQ(int(engine.energy()), 12);
+    CHECK(engine.macro_position(2) != macro_c);
+    app.on_encoder(2, -1);
+    CHECK_EQ(int(undo_depth()), int(undo_before));
+
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_encoder(2, -30);
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(1600);
+    CHECK_EQ(int(engine.energy()), 0);                        // the detent caught it
+    CHECK(!strip_has(app, "EN"));
+    CHECK(!screen_has(app, "EN+"));
+}
+
+// ENERGY is in a LOCK: a jump puts it back and the UI's knob follows.
+TEST(ui_a_lock_jump_puts_energy_back_and_the_knob_follows) {
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+    shift_key(ENAGA_KEY_F7);
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_encoder(2, -8);                                    // -16
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(2);
+    func_mutate_hold(app);                                    // store
+    pump(2);
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_encoder(2, +8);                                    // rest
+    app.on_encoder(2, +4);                                    // +8
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(2);
+    CHECK_EQ(int(engine.energy()), 8);
+    func_mutate_tap(app);                                     // jump
+    pump(4);
+    CHECK_EQ(int(engine.energy()), -16);
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_encoder(2, -1);                                    // on from the lock's -16
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(2);
+    CHECK_EQ(int(engine.energy()), -18);
+    func_mutate_tap(app);                                     // swap back
+    pump(4);
+    CHECK_EQ(int(engine.energy()), 8);
 }
 
 // FEEL on the PATTERN page: D turns it from anywhere on the page, the row is the field after

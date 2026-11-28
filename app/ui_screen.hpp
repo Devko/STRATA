@@ -313,6 +313,8 @@
         // notes. Two letters, so they cannot be read as the repeat rate's R1/16.
         if (engine_.rel_all() != 0) add(engine_.rel_all() < 0 ? "RL-" : "RL+");
         if (engine_.len_all() != 0) add(engine_.len_all() < 0 ? "LN-" : "LN+");
+        // ENERGY away from rest: EN- thinner, EN+ fuller (core/energy.hpp).
+        if (engine_.energy() != 0) add(engine_.energy() < 0 ? "EN-" : "EN+");
         // LIVE RND on: its unit, "RN4". Not "R4", which the repeat rate could be read as.
         if (engine_.live_rnd_unit() != kLiveRndOff) {
             p = part;
