@@ -971,11 +971,6 @@ filters closed, scene 4 open and wet; something different in A02.
 - Save, power cycle, open: the sections are still there and play the same. Open a project saved
   by v0.5.0: its chain plays as it did, every field `--`. `____`
 
-**Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
-`W14: MAX 61.2`.
-
----
-
 **W72. Tap tempo, the nudge, PROG CHG OUT and the song position (8 min).** Beat playing on
 GRID, CLOCK SRC INTERNAL. For the last two, a computer or a second unit on MIDI.
 - Tap VALUE four times at about 120: `TAP TEMPO`, then `TAP 120.x`, and the beat follows from the
@@ -991,12 +986,6 @@ GRID, CLOCK SRC INTERNAL. For the last two, a computer or a second unit on MIDI.
 - CLOCK SRC MIDI, a DAW sending clock with the chain on (three entries). Stop the DAW, move its
   playhead into the second entry's bars, play: STRATA comes in on that entry, on the beat. Back
   to bar 1 and play: entry 1. Chain off: the pattern's steps line up with the DAW's bars. `____`
-# The full walkthrough (first written 2026-11-22)
-
-Written for the v0.1.0 card and kept up to date section by section since. Sections 0-13 are
-the first evening's tour; 8b-8d, 13b-13q and 14-16 the deeper checks for each feature, which the
-walkthrough above points to (`13j`, `13o` ...). Where a line here contradicts the walkthrough
-above, the walkthrough above is right.
 
 **W73. WAVE scan modes: the SCAN page (4 min).** Beat playing, A01.
 - Lower pad 6, FUNC+EDIT (MACHINE), DOWN three times: `WMN`. EDIT, then SELECT_LEFT from SRC:
@@ -1009,6 +998,19 @@ above, the walkthrough above is right.
 - Track 7, MACHINE: `WPL`, OK: DRIFT and SWIRL, held chords: all notes move together, no clicks
   or zipper on the sweeps. 30 s with WOBBLE on track 6 and DRIFT on track 7: **MAX `____ %`**
   (against W23's). FUNC+HOME, RELOAD PROJECT puts the beat back.
+
+**Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
+`W14: MAX 61.2`.
+
+---
+
+# The full walkthrough (first written 2026-11-22)
+
+Written for the v0.1.0 card and kept up to date section by section since. Sections 0-13 are
+the first evening's tour; 8b-8d, 13b-13q and 14-16 the deeper checks for each feature, which the
+walkthrough above points to (`13j`, `13o` ...). Where a line here contradicts the walkthrough
+above, the walkthrough above is right.
+
 ## On the PC, before building the card (15 min, plus E2-E5 if there is time)
 
 From `D:\DEV\STRATA` through WSL, as in CLAUDE.md (`wsl.exe -d Ubuntu -- bash -c 'cd
