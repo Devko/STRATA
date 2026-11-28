@@ -1074,7 +1074,7 @@ slots, no chain.
 - FUNC+HOME, RELOAD PROJECT, OK: `OK AGAIN: RELOAD`; wait 3 s. PROJECT, SLOT, FUNC + LEFT:
   `LEFT AGAIN: CLEAR`; wait. Every confirmation on the unit reads `<KEY> AGAIN: <WHAT>`. `____`
 
-**W79. A project opens at rest; ENERGY ghosts skip conditional trigs (3 min).** A01 playing.
+**W78. A project opens at rest; ENERGY ghosts skip conditional trigs (3 min).** A01 playing.
 - PERFORM: FUNC + turn C to `ENERGY -64`, FUNC + turn D to `LIVE RND4`, FUNC + turn A a few
   clicks, FUNC + SEL> three times (`TR+3`), FUNC + turn VALUE to `VARISPEED +12.0`. FUNC+HOME,
   LOAD DEMO, OK, OK: the demo plays at its own tempo and pitch, the full beat, and the live strip
