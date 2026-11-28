@@ -514,6 +514,28 @@
             clock_refused_ = !set_clock_tempo(adopted_tempo_centi_);
         }
 
+        // A project loaded (OPEN, reload, NEW, LOAD DEMO): the engine put the live moves and
+        // VariSpeed back to rest, as it clears the LOCKs, and the knobs the UI shadows follow, so
+        // the next turn starts from rest rather than from where the last project left them.
+        // Clearing the adopted tempo has the block below set the clock afresh, at the project's
+        // own tempo with VariSpeed's ratio gone, even when the tempo is the same as before.
+        {
+            const uint8_t loads =
+                engine_.status().project_loads.load(std::memory_order_acquire);
+            if (loads != project_loads_seen_) {
+                project_loads_seen_ = loads;
+                rel_all_ = 0;
+                len_all_ = 0;
+                rnd_unit_ = kLiveRndOff;
+                rnd_armed_ = kLiveRndAllTracks;
+                rnd_armed_chosen_ = false;
+                energy_ = 0;
+                transpose_ = 0;
+                vari_ = 0;
+                adopted_tempo_centi_ = 0;
+            }
+        }
+
         // Song sections (core/project.hpp, SectionExtra). An entry that started with fields of
         // its own moved the morph and ENERGY on the audio side: the knobs the UI shadows follow,
         // as after a LOCK jump, and so does the morph all the way through a RIDE or BACK, so a

@@ -19,10 +19,17 @@
 #   run "peak" (1.9 G cycles)
 #     PLAY, FUNC + MIXER     -> PERFORM
 #     FUNC + turn C +32      -> "ENERGY +64", left on to the end: the load with the ghosts
+#   run "load" (1.2 G cycles)
+#     PLAY, FUNC + MIXER     -> PERFORM
+#     FUNC + turn C -5       -> "ENERGY -10"
+#     FUNC + HOME, UP, OK, OK -> LOAD DEMO (tests/scenario_clear.sh: UP from SAVE is LOAD DEMO)
+#     FUNC + turn C +1       -> "ENERGY +2": the load put ENERGY back to rest, so the click
+#                               starts from 0 and not from -10
 #
 # -64 and the order the tracks thin in are tests/test_energy.cpp's.
 #
-# Keys (third_party/enaga/include/enaga/abi.h): F5 = 22, F1 = 19, F7 = 21; encoder C is 2. The
+# Keys (third_party/enaga/include/enaga/abi.h): F5 = 22, F1 = 19, F7 = 21, F4 = 27, UP = 17,
+# OK = 23; encoder C is 2. The
 # first press must come LATE (tests/scenario_m1.sh).
 set -euo pipefail
 
@@ -31,7 +38,7 @@ cd "$(dirname "$0")/.."
 source tools/env.sh
 
 # Both runs together, for tools/scenarios.sh's longest-first order.
-CYCLES=2800000000
+CYCLES=4000000000
 export CYCLES
 if [ $# -gt 0 ]; then
     echo "error: unknown argument: $1" >&2
@@ -51,6 +58,7 @@ STAGE="$ENAGA_BUILD/stage/STRATA"
 mkdir -p "$ENAGA_BUILD"
 LOG="$ENAGA_BUILD/scenario_energy.log"
 LOG_WALK="$ENAGA_BUILD/scenario_energy_walk.log"
+LOG_LOAD="$ENAGA_BUILD/scenario_energy_load.log"
 : > "$LOG"
 
 emulate() {   # emulate LOGFILE CYCLES KEYS...
@@ -77,8 +85,18 @@ emulate "$LOG" 1900000000 \
     --key 19@380000000 --key 21@385000000 \
     --key 19@460000000 --turn 2:32@462000000
 
+echo "running the emulator: ENERGY across LOAD DEMO ..."
+emulate "$LOG_LOAD" 1200000000 \
+    --key 22@300000000 \
+    --key 19@380000000 --key 21@385000000 \
+    --key 19@460000000 --turn 2:-5@462000000 \
+    --key 19@560000000 --key 27@565000000 \
+    --key 17@640000000 \
+    --key 23@720000000 --key 23@780000000 \
+    --key 19@1000000000 --turn 2:1@1002000000
+
 rc=0
-python3 - "$LOG_WALK" "$LOG" <<'PY' || rc=$?
+python3 - "$LOG_WALK" "$LOG" "$LOG_LOAD" <<'PY' || rc=$?
 import json, os, re, sys
 
 CYCLES_PER_BLOCK = 496_000
@@ -135,6 +153,14 @@ log = common(peak_run, "peak")
 check("ENERGY +64" in log, "peak: FUNC + turn C took ENERGY to +64", f"log={log}")
 check("ENERGY +66" not in log, "peak: and it stopped there", f"log={log}")
 
+load_run = load(sys.argv[3])
+log = common(load_run, "load")
+before = index(log, "ENERGY -10")
+after = index(log, "ENERGY +2", before)
+check(before >= 0, "load: ENERGY down to -10 before the load", f"log={log}")
+check(after > before, "load: after LOAD DEMO one click up reads +2, from rest", f"log={log}")
+check(index(log, "ENERGY -8", before) < 0, "load: not on from -10", f"log={log}")
+
 peak = peak_run.get("audio_cycles_peak", 0)
 percent = 100.0 * peak / CYCLES_PER_BLOCK
 check(percent > 5.0, "the beat was sounding", f"{percent:.2f}% peak")
@@ -155,7 +181,7 @@ PY
 
 echo
 if [ "$rc" -ne 0 ]; then
-    echo "SCENARIO FAILED; logs: $LOG_WALK $LOG" >&2
+    echo "SCENARIO FAILED; logs: $LOG_WALK $LOG $LOG_LOAD" >&2
     exit 1
 fi
-echo "SCENARIO OK  (logs: $LOG_WALK $LOG)"
+echo "SCENARIO OK  (logs: $LOG_WALK $LOG $LOG_LOAD)"

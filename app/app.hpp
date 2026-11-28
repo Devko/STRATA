@@ -848,6 +848,7 @@ private:
     // this run of the transport has already said a section's BPM was refused (once a song).
     uint8_t section_event_seen_ = 0;
     uint8_t tempo_due_seen_ = 0;
+    uint8_t project_loads_seen_ = 0;   // Status::project_loads as last acted on
     bool bpm_skip_said_ = false;
     // ARR REC: Status::arr_event and Status::arr_passes as last acted on.
     uint8_t arr_event_seen_ = 0;

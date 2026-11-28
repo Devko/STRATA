@@ -841,6 +841,11 @@ struct Status {
     std::atomic<uint8_t> tempo_due{0};
     std::atomic<uint8_t> morph_riding{0};
 
+    // Bumped at the end of each Cmd::project_loaded (an OPEN, a reload, NEW, LOAD DEMO), after
+    // the engine put the live moves and VariSpeed back to rest: the UI's copies follow, and the
+    // clock drops VariSpeed's ratio.
+    std::atomic<uint8_t> project_loads{0};
+
     // ARR REC (core/arrrec.hpp). `arr_on`: 1 while a take is on (armed or recording);
     // `arr_written`: the entries it has written so far. `arr_event` is bumped for each thing the
     // UI says, `arr_last` an ArrEvent and `arr_arg` its count of entries. `arr_undo_ready`: 1
@@ -894,6 +899,12 @@ struct Status {
         arr_arg.store(arg, std::memory_order_relaxed);
         arr_event.store(uint8_t(arr_event.load(std::memory_order_relaxed) + 1),
                         std::memory_order_release);
+    }
+
+    // Audio context only, one writer, as bump_song_end.
+    void bump_project_loads() {
+        project_loads.store(uint8_t(project_loads.load(std::memory_order_relaxed) + 1),
+                            std::memory_order_release);
     }
 
     // Audio context only, one writer, as bump_song_end.
