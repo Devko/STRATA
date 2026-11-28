@@ -1023,20 +1023,6 @@ stopped on A01, scenes 3 and 4 as in W71.
 - CLOCK SRC MIDI with a running outside clock: record two sections; their BPM reads `--`. Back to
   INTERNAL. With JAM REC also running, both blink and both keep recording. `____`
 - Save, power cycle, open: the recorded chain is there. `____`
-**W75. ARR REC keeps Track Launch (4 min).** The factory beat stopped on A01, bank A with free
-slots, no chain.
-- PROJECT twice (LAUNCH), track 3, STEP 7: `T3 < A07 AT END`. FUNC+HOME, DOWN, DOWN, OK:
-  `ARR: PRESS PLAY`. PLAY: track 3 plays A07's part from the start. `____`
-- At the end of the first pass: `LAUNCH IN A..` (the first free slot); the pattern shown is still
-  A01 and track 3 still borrows. Two more passes: no second toast. `____`
-- On LAUNCH, CLR on track 3 (`T3 < OWN`), one pass; then STEP 7 again, one pass: the
-  second launched section takes another slot (`LAUNCH IN A..`). STOP: `ARR 3 SECTIONS`. `____`
-- PROJECT, CHAIN: the captured slot X3, A01 X1, the second slot X1. CHAIN END SONG, CHAIN ON, PLAY
-  from stop: it sounds as played, track 3's part on the captured slots, with no lane borrowed. `____`
-- Save, power cycle, open: the captured slots are still there and the chain still plays them. `____`
-- Fill every empty slot of bank A, then the same take: `LAUNCH NOT KEPT`, once, and the chain
-  entry is A01. FUNC+HOME, RELOAD PROJECT. `____`
-
 **W75. TRANSPOSE (4 min).** Beat playing, A01.
 - FUNC + SEL> three times: `TRANSPOSE +1 IN KEY`, `+2`, `+3`; the bass, chords and leads walk up
   the scale together and stay in the key, while the kick, hats, snare and a sliced loop do not
@@ -1054,6 +1040,20 @@ slots, no chain.
   its next note. `____`
 - `TRANSPOSE +5`, hold FUNC + MUTATE (a lock), go back to 0, tap FUNC + MUTATE: +5 again; tap
   again: 0. `____`
+**W76. ARR REC keeps Track Launch (4 min).** The factory beat stopped on A01, bank A with free
+slots, no chain.
+- PROJECT twice (LAUNCH), track 3, STEP 7: `T3 < A07 AT END`. FUNC+HOME, DOWN, DOWN, OK:
+  `ARR: PRESS PLAY`. PLAY: track 3 plays A07's part from the start. `____`
+- At the end of the first pass: `LAUNCH IN A..` (the first free slot); the pattern shown is still
+  A01 and track 3 still borrows. Two more passes: no second toast. `____`
+- On LAUNCH, CLR on track 3 (`T3 < OWN`), one pass; then STEP 7 again, one pass: the
+  second launched section takes another slot (`LAUNCH IN A..`). STOP: `ARR 3 SECTIONS`. `____`
+- PROJECT, CHAIN: the captured slot X3, A01 X1, the second slot X1. CHAIN END SONG, CHAIN ON, PLAY
+  from stop: it sounds as played, track 3's part on the captured slots, with no lane borrowed. `____`
+- Save, power cycle, open: the captured slots are still there and the chain still plays them. `____`
+- Fill every empty slot of bank A, then the same take: `LAUNCH NOT KEPT`, once, and the chain
+  entry is A01. FUNC+HOME, RELOAD PROJECT. `____`
+
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
 
