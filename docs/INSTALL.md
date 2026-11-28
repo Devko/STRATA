@@ -156,7 +156,7 @@ with your projects as they were.
 ## Where STRATA keeps its files
 
 Projects, the autosave and the kit library live on the SD card under `/ENAGA/DATA/STRATA/`, and
-resampled takes go to `/RECORD`. Samples come from `/SAMPLES` (the starter sample pack is in
+resampled takes and JAM REC recordings go to `/RECORD`. Samples come from `/SAMPLES` (the starter sample pack is in
 `/SAMPLES/STRATA`), and the sample browser also reads
 the stock SmplTrek folders. [MANUAL.md](MANUAL.md), "On the card", has the full layout.
 

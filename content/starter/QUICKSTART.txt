@@ -48,6 +48,8 @@ Lost? Hold FUNC alone for help on the screen you are on. FUNC+CLR undoes anythin
    FUNC+HOME, OK saves the project. A changed starter project is yours: save it, or
    SAVE AS a new name on PROJECTS (FUNC+DOWN) to keep the original.
    FUNC+REC (RESAMPLE) records the output to a WAV file or onto a track.
+   FUNC+HOME, UP, OK starts JAM REC: the whole jam to /RECORD on the card, until
+   FUNC+HOME, UP, OK again.
 
 More: the manual, https://github.com/Devko/STRATA/blob/main/docs/MANUAL.md
 and the cheatsheet, https://github.com/Devko/STRATA/blob/main/docs/CHEATSHEET.md

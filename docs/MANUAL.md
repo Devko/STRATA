@@ -474,6 +474,7 @@ you, with starter projects, a sample pack and a quick start if you tick them;
 /ENAGA/DATA/STRATA/AUTOSAVE/                   the working copy, same files
 /ENAGA/DATA/STRATA/KITS/KIT_01.BIN ... KIT_16.BIN   the kit library
 /RECORD/STRATA_<n>.WAV                         resampled takes
+/RECORD/JAM_<n>.WAV                            JAM REC recordings
 /SAMPLES/STRATA/                               the starter sample pack, if the card builder added it
 ```
 

@@ -97,7 +97,7 @@ is pretty safe as long as the bootloader is left alone
   filter, kill EQ, compressor and limiter.
 - **Samples and projects:** a sample browser that also reaches the stock SmplTrek folders,
   slicing (SLC AUTO cuts a break at its hits), streaming for long files, resampling, freeze and
-  bounce, and projects with autosave.
+  bounce, JAM REC (the whole set to a WAV on the card, for hours), and projects with autosave.
 - **Timing is sacred:** steps land on an exact sample of Enaga's clock, and MIDI clock or SYNC IN
   can lead.
 - **Help on every screen:** hold FUNC to see what the knobs and keys do where you are.
@@ -128,7 +128,7 @@ The full tour, with the factory kit and every effect, is in
 **[v0.5.0](https://github.com/Devko/STRATA/releases/tag/v0.5.0)** is the current
 release and the **release candidate for 1.0**, for **Enaga 0.4.0**: GEN and EVOLVE, chord
 recording, choke groups, arp depth and more since 0.4.0. Development continues on `main` before
-a stable 1.0 (ENERGY, a chorus, stereo width and triplet speeds so far; CHANGELOG.md, "Unreleased"), and
+a stable 1.0 (ENERGY, JAM REC, a chorus, stereo width and triplet speeds so far; CHANGELOG.md, "Unreleased"), and
 [docs/PLAN.md](docs/PLAN.md) has the way to 1.0. Earlier releases have run on the unit: the default beat loads the
 CPU under 30%, and long, heavy play on an earlier build peaked at 84.3% with no dropouts. The
 features new in 0.5 are still being walked through on the hardware

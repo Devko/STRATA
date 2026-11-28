@@ -95,6 +95,8 @@ any machine. The factory kit:
   again to swap back
 - **Freeze** a track to a loop in memory to save CPU, **resample** the master or an input, or
   **bounce** one track to a file or another track
+- **JAM REC:** the finished master to a WAV on the card for as long as the set runs (up to
+  3 h 51 min), started and stopped from the FUNC menu
 
 ## Samples, projects and MIDI
 
