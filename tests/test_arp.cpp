@@ -285,6 +285,104 @@ TEST(arp_kit_settings_sanitize_name_and_round_trip_by_field) {
     }
 }
 
+// RND's notes and RND2/RND3's ratchets are drawn from the seed: a saved project plays the same
+// draws after an update, so they are pinned here, hit by hit.
+TEST(arp_random_draws_are_the_same_in_every_build) {
+    const char *rnd3_seed5 = "1111131113111121213111111112231112113121111111111113311111121111";
+    const char *rnd3_seed99 = "1111311212131111311112211121111111121131113321113111111321122111";
+    for (uint32_t slot = 0; slot < 64; slot++) {
+        CHECK_EQ(arp_ratchet_count(7, slot, 5), rnd3_seed5[slot] - '0');
+        CHECK_EQ(arp_ratchet_count(7, slot, 99), rnd3_seed99[slot] - '0');
+        // RND2 ratchets the same slots, always into two.
+        const int two = arp_ratchet_count(6, slot, 99);
+        CHECK_EQ(two, rnd3_seed99[slot] == '1' ? 1 : 2);
+    }
+    const uint8_t cycle[5] = {60, 62, 64, 65, 67};
+    const int drawn[24] = {0, 4, 2, 7, 0, 4, 5, 7, 4, 0, 7, 0, 4, 7, 5, 0, 0, 4, 4, 7, 7, 7, 7, 2};
+    for (uint32_t h = 0; h < 24; h++) CHECK_EQ(int(arp_note(cycle, 5, ArpMode::random, h, 3)) - 60, drawn[h]);
+}
+
+// Every table's edge: one past the last entry is off (or plays, for a rhythm), and so is an
+// unknown field.
+TEST(arp_kit_settings_one_past_each_table_is_off) {
+    KitArp a;
+    a.var = kArpVars;
+    a.rhythm = kArpRhythms;
+    a.accent = kArpAccents;
+    a.ratchet = kArpRatchets;
+    const KitArp s = kit_arp_sanitized(a);
+    CHECK_EQ(int(s.var), 0);
+    CHECK_EQ(int(s.rhythm), 0);
+    CHECK_EQ(int(s.accent), 0);
+    CHECK_EQ(int(s.ratchet), 0);
+    a.var = kArpVars - 1;
+    a.accent = kArpAccents - 1;
+    a.ratchet = kArpRatchets - 1;
+    const KitArp t = kit_arp_sanitized(a);
+    CHECK_EQ(int(t.var), kArpVars - 1);
+    CHECK_EQ(int(t.accent), kArpAccents - 1);
+    CHECK_EQ(int(t.ratchet), kArpRatchets - 1);
+    for (int f = 0; f < kArpExtFields; f++) {
+        KitArp b;
+        arp_ext_set(b, f, uint8_t(arp_ext_count(f) - 1));
+        CHECK_EQ(int(arp_ext_get(b, f)), arp_ext_count(f) - 1);
+        arp_ext_set(b, f, uint8_t(arp_ext_count(f)));
+        CHECK_EQ(int(arp_ext_get(b, f)), 0);
+        CHECK(std::strcmp(arp_ext_name(f, uint8_t(arp_ext_count(f))), arp_ext_name(f, 0)) == 0);
+    }
+    KitArp c;
+    c.var = 3;
+    CHECK_EQ(arp_ext_count(kArpExtFields), 1);
+    CHECK_EQ(int(arp_ext_get(c, kArpExtFields)), 0);
+    for (uint32_t slot = 0; slot < 16; slot++) {
+        CHECK(arp_rhythm_plays(kArpRhythms, slot));
+        CHECK(!arp_accent_on(kArpAccents, slot, 0, 4));
+        CHECK_EQ(arp_ratchet_count(kArpRatchets, slot, 0), 1);
+        // 2:8 is a fixed slot, never drawn: the eighth of every eight, twice.
+        CHECK_EQ(arp_ratchet_count(2, slot, slot * 7u + 1u), slot % 8 == 7 ? 2 : 1);
+    }
+    // RAT's ticks clamp at both ends.
+    CHECK_EQ(int(arp_rate_ticks(-1)), 96);
+    CHECK_EQ(int(arp_rate_ticks(kArpRates)), 8);
+    CHECK_EQ(int(arp_rate_ticks(kArpRates + 5)), 8);
+    CHECK_EQ(int(arp_rate_ticks(kArpRates - 2)), 12);
+    // GATE from its byte.
+    const uint8_t bytes[kArpBytes] = {30, 0, 0, 127};
+    CHECK_EQ(int(ArpSettings::make(bytes).gate_percent), 99);
+}
+
+TEST(arp_cycle_edges_octaves_top_note_and_short_cycles) {
+    uint8_t out[kArpMaxWalk];
+    const uint8_t notes[3] = {60, 64, 67};
+    uint8_t one[kArpMaxWalk];
+    const int n1 = arp_cycle(notes, 3, settings(ArpMode::up, 1), one);
+    // OCT below 1 plays one octave; above the most plays the most.
+    CHECK_EQ(arp_cycle(notes, 3, settings(ArpMode::up, 0), out), n1);
+    for (int i = 0; i < n1; i++) CHECK_EQ(int(out[i]), int(one[i]));
+    uint8_t most[kArpMaxWalk];
+    const int nm = arp_cycle(notes, 3, settings(ArpMode::up, kArpMaxOctaves), most);
+    CHECK_EQ(arp_cycle(notes, 3, settings(ArpMode::up, kArpMaxOctaves + 3), out), nm);
+    for (int i = 0; i < nm; i++) CHECK_EQ(int(out[i]), int(most[i]));
+    // 127 is played; an octave above it is not.
+    const uint8_t top[2] = {115, 127};
+    CHECK_EQ(arp_cycle(top, 2, settings(ArpMode::up, 2), out), 3);
+    CHECK_EQ(int(out[0]), 115);
+    CHECK_EQ(int(out[1]), 127);
+    CHECK_EQ(int(out[2]), 127);
+    // THUMB finds the lowest note wherever ORD puts it.
+    ArpSettings thumb = settings(ArpMode::order, 1);
+    thumb.var = ArpVar::thumb;
+    const uint8_t ord[3] = {64, 60, 67};
+    CHECK_EQ(arp_cycle(ord, 3, thumb, out), 4);
+    const int want[4] = {60, 64, 60, 67};
+    for (int i = 0; i < 4; i++) CHECK_EQ(int(out[i]), want[i]);
+    // A cycle of one note is that note; none (or no cycle) is middle C.
+    const uint8_t c1[1] = {72};
+    CHECK_EQ(int(arp_note(c1, 1, ArpMode::up, 5, 0)), 72);
+    CHECK_EQ(int(arp_note(c1, 0, ArpMode::up, 5, 0)), 60);
+    CHECK_EQ(int(arp_note(nullptr, 4, ArpMode::up, 5, 0)), 60);
+}
+
 // --- the factory arps (core/arppresets.hpp) ------------------------------------------------------
 
 TEST(arp_presets_are_named_drawably_and_uniquely_and_each_is_an_arp) {
@@ -340,4 +438,26 @@ TEST(arp_presets_write_their_bytes_and_settings_and_match_after) {
     CHECK_EQ(int(bytes[0]), 9);
     CHECK(!arp_preset_apply(0, nullptr, ext));
     CHECK(!arp_preset_matches(-1, bytes, ext));
+}
+
+// A preset matches only when all four bytes and all four kit fields are its own: any one of
+// them changed, first or last, and it does not.
+TEST(arp_presets_match_only_when_every_byte_and_field_is_theirs) {
+    for (int p = 0; p < arp_preset_count(); p++) {
+        uint8_t bytes[kArpBytes];
+        KitArp ext;
+        CHECK(arp_preset_apply(p, bytes, ext));
+        CHECK(arp_preset_matches(p, bytes, ext));
+        for (int i = 0; i < kArpBytes; i++) {
+            uint8_t other[kArpBytes];
+            std::memcpy(other, bytes, sizeof other);
+            other[i] ^= 1;
+            CHECK(!arp_preset_matches(p, other, ext));
+        }
+        for (int f = 0; f < kArpExtFields; f++) {
+            KitArp changed = ext;
+            arp_ext_set(changed, f, uint8_t((arp_ext_get(ext, f) + 1) % arp_ext_count(f)));
+            CHECK(!arp_preset_matches(p, bytes, changed));
+        }
+    }
 }
