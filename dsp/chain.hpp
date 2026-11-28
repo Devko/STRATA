@@ -175,6 +175,10 @@ private:
     uint32_t lofi_increment_ = 0xFFFFFFFFu, lofi_phase_ = 0xFFFFFFFFu;
     float lofi_hold_ = 0.0f;
     float lofi_hold_r_ = 0.0f;    // the right side's held sample; the clock is shared
+    // Whether the last block went through process_pair. A track goes stereo when WID leaves 0,
+    // often with a note sounding: the right side then takes over the left's state, which is what
+    // the mono chain was holding, instead of starting cold or from the last time it was wide.
+    bool pair_ = false;
 
     // duck
     float duck_depth_ = 0.0f;

@@ -45,7 +45,8 @@ the project file format or the controls.
   (after DUCK): 0 mono, 1-63 spread, 64-127 unison; a push steps OFF, spread, unison. Unison
   holds three notes a track and counts two voices a note against the shared 12. Saved in the kit,
   in a new optional KIT.BIN section; older kits open mono. MIXER's DLY to EQ pages are two
-  further on. New emulator scenario `width`.
+  further on. Turning WID up from 0 under a ringing filter does not click, and RESAMPLE from a
+  wide track records it before the duck, as from a mono one. New emulator scenario `width`.
 - **A chorus, the third send.** MIXER has three new pages after ROUTE: CHO 1-4 and CHO 5-8 set
   how much of each track goes to the chorus (push a knob for OFF or half), and CHO sets its sweep
   rate, depth, return and how much of it feeds the reverb. One stereo chorus serves every track
