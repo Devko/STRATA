@@ -12,7 +12,7 @@ import { onRequestGet } from "../functions/api/asset/[id].js";
 import { onRequestGet as releases } from "../functions/api/releases.js";
 
 const ROOT = fileURLToPath(new URL("../public/", import.meta.url));
-const TYPES = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json" };
+const TYPES = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json", ".txt": "text/plain; charset=utf-8" };
 
 export function startServer(port = 8788) {
   const server = createServer(async (req, res) => {

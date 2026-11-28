@@ -1,0 +1,15 @@
+{
+  "_comment": "The starter projects the card builder offers (web/README.md, 'Starter content'), in the order the page lists them. name is the folder in projects/ and on the card; the rest is what the page shows. tests/test_starter.cpp opens every folder in projects/ through app/storage.cpp.",
+  "projects": [
+    { "name": "TECHNO",  "genre": "Techno",       "bpm": 132, "key": "G minor",    "about": "Driving groove techno: rolling bass, sparse stab, sidechain." },
+    { "name": "DEEP",    "genre": "Deep house",   "bpm": 122, "key": "A minor",    "about": "Swung drums, FM4 electric piano chords, a walking bass, held pads." },
+    { "name": "DUB",     "genre": "Dub techno",   "bpm": 118, "key": "F minor",    "about": "One chord thrown into a long dark echo, breathing on an LFO." },
+    { "name": "DRIFT",   "genre": "Ambient",      "bpm": 80,  "key": "D dorian",   "about": "WAVE POLY chords and a drone in the HALL; polymeter chimes." },
+    { "name": "ELECTRO", "genre": "Electro",      "bpm": 128, "key": "E phrygian", "about": "808 kit, rubbery 16th bass with slides, a synced lead riff." },
+    { "name": "NIGHT",   "genre": "Synthwave",    "bpm": 132, "key": "A minor",    "about": "Am F C G on a detuned string pad, octave bass, gliding lead." },
+    { "name": "BREAKS",  "genre": "Breakbeat",    "bpm": 134, "key": "A minor",    "about": "A synthesized break that changes bar to bar by chance." },
+    { "name": "STEEL",   "genre": "Breakbeat",    "bpm": 140, "key": "E minor",    "about": "Straight breaks with ratchets, rolls and a driven reese." },
+    { "name": "SMASH",   "genre": "Breakbeat",    "bpm": 155, "key": "F minor",    "about": "Drum chaos, random-order ghosts and rolls, a sparse melody." },
+    { "name": "CHAOS",   "genre": "Breakbeat",    "bpm": 150, "key": "D phrygian", "about": "BREAKS pulled apart: rolls down to 1/64 and constant mutation." }
+  ]
+}
