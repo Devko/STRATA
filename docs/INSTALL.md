@@ -17,7 +17,7 @@ SmplTrek. Installing it takes two downloads from two places:
 | What | Where | What is in it |
 | --- | --- | --- |
 | **Enaga 0.4.0**, the firmware | [Enaga's v0.4.0 release](https://github.com/seawaffle/enaga/releases/tag/v0.4.0): `enaga-v0.4.0-smpltrek.zip` | `SmplTrek.bin` |
-| **STRATA**, the app | [STRATA's releases](https://github.com/Devko/STRATA/releases): `STRATA-v0.5.0-smpltrek.zip` | `SD-CARD/ENAGA/APPS/STRATA/APP.ENA`, a README.txt with these steps, the changelog and the licences |
+| **STRATA**, the app | [STRATA's releases](https://github.com/Devko/STRATA/releases): `STRATA-v0.6.0-smpltrek.zip` | `SD-CARD/ENAGA/APPS/STRATA/APP.ENA`, a README.txt with these steps, the changelog and the licences |
 
 The STRATA zip does not carry Enaga's firmware: you get that from its authors, not from a copy
 of ours. (v0.1.0 to v0.3.1 did include Enaga 0.2.0's `SmplTrek.bin`.) Releases are
@@ -110,7 +110,7 @@ from [Enaga's v0.3.0 release](https://github.com/seawaffle/enaga/releases/tag/v0
 
 ## Step 2: copy STRATA to the card
 
-1. Download `STRATA-v0.5.0-smpltrek.zip` from
+1. Download `STRATA-v0.6.0-smpltrek.zip` from
    [STRATA's releases](https://github.com/Devko/STRATA/releases) and unzip it on your computer.
    (Optional: compare its SHA-256 with the `.sha256` file next to it on the release page.)
 2. Copy `SD-CARD/ENAGA/APPS/STRATA/APP.ENA` from the zip to the card, at exactly this path:

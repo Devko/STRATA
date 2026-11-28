@@ -6,7 +6,7 @@ the project file format or the controls.
 
 ## [Unreleased]
 
-## [0.6.0] - {{RELEASE_DATE}}
+## [0.6.0] - 2026-11-28
 
 Everything merged since 0.5.0 (#211 to #262). 0.5.0 was planned as the release candidate for
 1.0; on 2026-11-28 the feature freeze was lifted, and 0.6.0 is the features that came after it:
@@ -332,7 +332,7 @@ Release notes: [docs/release/v0.6.0.md](docs/release/v0.6.0.md).
 
 ### Known limits
 
-- Tested on one SmplTrek, with the {{BUILD}} build. {{UNIT_LOAD}} Nothing added since 0.5.0 is
+- Tested on one SmplTrek, with the cl6x build. On the unit, a build from main with 0.5.0's features read 15-28% on A01 and 40-60% with generated parts on every track (top line, 2026-11-27, before the CPU guard fix); 0.6.0's own load is not measured on the unit yet. Nothing added since 0.5.0 is
   checked on the unit yet. Every other load figure comes from the emulator, which models no
   caches.
 - **Enaga 0.4.0 exactly.** Enaga's loader checks only the ABI number, which 0.2.0, 0.3.0 and

@@ -59,7 +59,7 @@ pack rendered by STRATA's own machines, and a one-page quick start.
    [Enaga's v0.4.0 release](https://github.com/seawaffle/enaga/releases/tag/v0.4.0), copy the
    `SmplTrek.bin` inside it to the root of the SD card, hold **HOME** while switching on, and
    choose **SYSTEM UPDATE**.
-2. **Download STRATA**: `STRATA-v0.5.0-smpltrek.zip` from
+2. **Download STRATA**: `STRATA-v0.6.0-smpltrek.zip` from
    [Releases](https://github.com/Devko/STRATA/releases).
 3. **Copy the app** `SD-CARD/ENAGA/APPS/STRATA/APP.ENA` to `/ENAGA/APPS/STRATA/APP.ENA` on the
    card, and switch on. The factory project plays on PLAY.
@@ -127,7 +127,7 @@ The full tour, with the factory kit and every effect, is in
 ## Status
 
 <!-- release-status: tools/publish_release.sh rewrites the next line -->
-**[v0.5.0](https://github.com/Devko/STRATA/releases/tag/v0.5.0)**, released 2026-11-27, is the current release, for **Enaga 0.4.0**.
+**[v0.6.0](https://github.com/Devko/STRATA/releases/tag/v0.6.0)**, released 2026-11-28, is the current release, for **Enaga 0.4.0**.
 Development continues on `main` before a stable 1.0 ([CHANGELOG.md](CHANGELOG.md), "Unreleased",
 has what is new since the release), and [docs/PLAN.md](docs/PLAN.md) has the way to 1.0.
 Releases have run on the unit: the default beat loads the CPU under 30%, and long, heavy play on

@@ -23,6 +23,14 @@
   },
   "strata": [
     {
+      "version": "0.6.0",
+      "tag": "v0.6.0",
+      "date": "2026-11-28",
+      "asset": "STRATA-v0.6.0-smpltrek.zip",
+      "sha256": "f9df5865327064c613f8e1cb3ed24d0c441254e21abdaf33924bfe917c129735",
+      "enaga": "0.4.0"
+    },
+    {
       "version": "0.5.0",
       "tag": "v0.5.0",
       "date": "2026-11-27",
