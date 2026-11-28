@@ -9,7 +9,8 @@ on single features (LFO, MOD slots, LOCK, choke, arps and the rest) are in
 not append a history. Measurements go to `docs/BUDGET.md`, releases to `CHANGELOG.md`.
 
 **STRATA runs on the unit and has six releases**, v0.1.0 to v0.5.0 (`docs/PLAN.md` has the
-table). **v0.5.0 (2026-11-27, Enaga 0.4.0) is the release candidate for 1.0.** Since the tag,
+table). **v0.5.0 (2026-11-27, Enaga 0.4.0) was planned as the release candidate for 1.0**; Roland lifted
+the feature freeze on 2026-11-28. Since the tag,
 `main` has gained the CPU guard fix (#211), 16th-note triplets, stereo width and the chorus send
 (#213-#216, `CHANGELOG.md` "Unreleased"). On the unit, v0.3.1 and builds from `main` boot and
 play; A01 reads 15-28% on the top line and dense generated parts 40-60% (Roland, 2026-11-27).
@@ -35,9 +36,9 @@ the top of `docs/UNIT_CHECKLIST.md` is the next pass.
 
 ## What to do next, in order
 
-0. **The release candidate**, `docs/PLAN.md` "Release candidate": its step 1 items are merged;
-   what is left is the unit (steps 3 and 5). No thread tags or releases on its own: a release runs
-   from its own thread when Roland says so (`docs/release/RELEASING.md`).
+0. **There is no feature freeze** (Roland, 2026-11-28: development comes before a stable
+   release). Features keep landing on `main`; 1.0 comes when Roland says so. No thread tags or
+   releases on its own: a release runs from its own thread (`docs/release/RELEASING.md`).
 1. **On the unit: the walkthrough** at the top of `docs/UNIT_CHECKLIST.md`: N1-N7 (Enaga 0.4),
    the smoke test S1-S20, then W1-W60, on a cl6x build from `main` with Enaga 0.4.0 firmware.
 2. **Write the readings down where they belong**: unit rows in `docs/BUDGET.md` (MAX from SETUP
