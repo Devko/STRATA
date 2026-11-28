@@ -144,3 +144,111 @@ TEST(onsets_a_gap_or_a_wrong_total_gives_no_points_rather_than_wrong_ones) {
     finder.finish(kFrames, out);
     CHECK_EQ(int(out.count), 1);
 }
+
+namespace {
+
+// Silence, and square bursts a whole number of hops long: every hop's energy is exact.
+void silence() {
+    for (int16_t &s : g_pcm) s = 0;
+}
+void burst(uint32_t hop, uint32_t hops, int16_t level, int channels, int only_channel = -1) {
+    for (uint32_t f = hop * OnsetFinder::kHop; f < (hop + hops) * OnsetFinder::kHop; f++) {
+        for (int c = 0; c < channels; c++) {
+            if (only_channel < 0 || c == only_channel) g_pcm[f * uint32_t(channels) + uint32_t(c)] = level;
+        }
+    }
+}
+uint32_t at_hop(uint32_t hop) { return hop * OnsetFinder::kHop; }
+
+}  // namespace
+
+TEST(onsets_the_floor_is_exact_for_mono_and_stereo) {
+    const int16_t floor = int16_t(OnsetFinder::kFloorPerFrame);
+    for (int channels = 1; channels <= 2; channels++) {
+        silence();
+        burst(10, 1, floor, channels);
+        CHECK_EQ(int(find(kFrames, channels).count), 1);
+        silence();
+        burst(10, 1, int16_t(floor - 1), channels);
+        CHECK_EQ(int(find(kFrames, channels).count), 0);
+    }
+    // A hit in the right channel alone is a hit.
+    silence();
+    burst(10, 1, 20000, 2, 1);
+    CHECK_EQ(int(find(kFrames, 2).count), 1);
+}
+
+TEST(onsets_a_gap_of_exactly_the_minimum_is_two_hits) {
+    silence();
+    burst(20, 1, 20000, 1);
+    burst(20 + OnsetFinder::kMinGapHops, 1, 20000, 1);
+    CHECK_EQ(int(find(kFrames, 1).count), 2);
+    silence();
+    burst(20, 1, 20000, 1);
+    burst(20 + OnsetFinder::kMinGapHops - 1, 1, 20000, 1);
+    CHECK_EQ(int(find(kFrames, 1).count), 1);
+}
+
+// Strength is the rise above what came before: the same burst over a steady bed ranks below
+// one over silence.
+TEST(onsets_strength_is_the_rise_above_the_recent_mean) {
+    silence();
+    burst(20, 1, 4000, 1);
+    burst(100, 200, 1000, 1);                    // a bed from hop 100 (itself an onset)
+    burst(200, 1, 4000, 1);
+    const SlicePoints p = find(kFrames, 1);
+    CHECK_EQ(int(p.count), 3);
+    CHECK_EQ(p.at[0], at_hop(20));
+    CHECK_EQ(p.at[1], at_hop(100));
+    CHECK_EQ(p.at[2], at_hop(200));
+    CHECK_EQ(int(p.rank[0]), 0);
+    CHECK_EQ(int(p.rank[2]), 1);
+    CHECK_EQ(int(p.rank[1]), 2);
+}
+
+// Full: a sixteenth hit takes the weakest's place -- the first of two equally weak -- only when
+// it is stronger, and the points come out in order however the table was filled.
+TEST(onsets_a_full_table_swaps_out_exactly_the_weakest) {
+    struct Case { int weak_a, weak_b; int16_t last; int replaced; };   // -1: nothing replaced
+    const Case cases[] = {
+        {0, -1, 1500, 0},
+        {1, -1, 1500, 1},
+        {4, -1, 1000, -1},                       // the same as the weakest: the earlier stays
+        {0, 3, 1500, 0},                         // a tie: the first of them goes
+    };
+    for (const Case &c : cases) {
+        silence();
+        for (int i = 0; i < 15; i++) {
+            const bool weak = i == c.weak_a || i == c.weak_b;
+            burst(uint32_t(20 + 20 * i), 1, weak ? 1000 : 2000, 1);
+        }
+        burst(20 + 20 * 15, 1, c.last, 1);
+        const SlicePoints p = find(kFrames, 1);
+        CHECK_EQ(int(p.count), 15);
+        int k = 0;
+        for (int i = 0; i < 16; i++) {
+            const bool gone = c.replaced < 0 ? i == 15 : i == c.replaced;
+            if (gone) continue;
+            CHECK_EQ(p.at[k], at_hop(uint32_t(20 + 20 * i)));
+            k++;
+        }
+    }
+}
+
+// Broken stays broken until a feed from frame 0: a gap, a null block or a channel change, then
+// the right frames after it, still give no points.
+TEST(onsets_once_broken_later_feeds_do_not_mend_it) {
+    silence();
+    burst(20, 1, 20000, 1);
+    for (int how = 0; how < 3; how++) {
+        OnsetFinder finder;
+        SlicePoints out;
+        finder.feed(g_pcm, 0, 1000, 1);
+        if (how == 0) finder.feed(g_pcm + 5000, 5000, 1000, 1);
+        if (how == 1) finder.feed(nullptr, 1000, 1000, 1);
+        if (how == 2) finder.feed(g_pcm + 1000, 1000, 1000, 2);
+        finder.feed(g_pcm + 1000, 1000, kFrames - 1000, 1);
+        finder.finish(kFrames, out);
+        CHECK_EQ(int(out.count), 0);
+    }
+}
