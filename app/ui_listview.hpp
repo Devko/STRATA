@@ -489,7 +489,7 @@
         caption_right(px, line, 10);
         out = line;
         if (sound_delete_armed_ >= 0) {
-            append(out, sound_delete_oks_ > 0 ? "OK AGAIN: DELETE" : "DELETE? OK TWICE");
+            append(out, sound_delete_oks_ > 0 ? "OK AGAIN: DELETE" : "OK TWICE: DELETE");
         } else if (storage_.sound_bank_state(machine) == Storage::SoundBankState::failed) {
             append(out, "SOUND FILE: ");
             append_shown(out, storage_.sound_bank_error() != nullptr ? storage_.sound_bank_error() : "BAD", 8);

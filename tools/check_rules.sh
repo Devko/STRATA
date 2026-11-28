@@ -15,6 +15,9 @@
 #   5. The walkthrough items of docs/UNIT_CHECKLIST.md (**W1.**, **W20b.**) are numbered
 #      once each, in order. Two PRs open side by side both take the next free number (W61 twice,
 #      2026-11-28), and .gitattributes merges the file without a conflict, so this is what notices.
+#   6. Every two-press confirmation reads `<KEY> AGAIN: <WHAT>` (or `<KEY> TWICE: <WHAT>` for the
+#      prompt of a three-press delete), so the app's strings hold no `AGAIN TO`, `AGAIN FOR`,
+#      `AGAIN:` without a key before it, or `<WHAT>? OK TWICE` (U3, 2026-11-28).
 #
 # Only #include lines and calls are looked at, so a rule named in a comment does not trip it.
 #
@@ -61,5 +64,8 @@ hits=$(grep -noE '^\*\*[NSW][0-9]+[a-z]?\.' docs/UNIT_CHECKLIST.md | awk -F: '
           print "line " $1 ": " item " follows " letter last[letter]
       if (suffix == "") last[letter] = n }' || true)
 report "UNIT_CHECKLIST items numbered once each, in order" "$hits"
+
+hits=$(grep -nE '"[^"]*(AGAIN (TO|FOR) |\? OK TWICE|TWICE OPENS)|"AGAIN' $(sources app) | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(//|\*)' || true)
+report "two-press confirmations read <KEY> AGAIN: <WHAT>" "$hits"
 
 exit $fail

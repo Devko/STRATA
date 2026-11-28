@@ -797,7 +797,7 @@
                 leave_mode();
                 project_page_ = ProjectPage::files;
                 list_projects();
-                notice("OK TWICE OPENS");
+                notice("OK TWICE: OPEN");
                 break;
             case MenuItem::fresh:
             case MenuItem::demo:
@@ -920,7 +920,7 @@
                     storage_.request_kit_load(kit_cursor_);
                     notice("LOADING KIT");
                 } else {
-                    notice("OK AGAIN TO LOAD");
+                    notice("OK AGAIN: LOAD");
                 }
                 return true;
             }
@@ -951,7 +951,7 @@
                         storage_.request_kit_save(kit_cursor_);
                         notice("SAVING KIT");
                     } else {
-                        notice("AGAIN TO OVERWRITE");
+                        notice("DOWN AGAIN: REPLACE");
                     }
                 }
                 return true;

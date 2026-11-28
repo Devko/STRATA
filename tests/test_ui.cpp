@@ -937,7 +937,7 @@ TEST(ui_project_slots_copy_paste_and_clear_a_pattern) {
     key(ENAGA_KEY_RIGHT);
     key(ENAGA_KEY_RIGHT);                            // A03
     shift_key(ENAGA_KEY_DOWN);
-    CHECK_EQ(UiProbe::notice(app), "AGAIN: PASTE TO A03");
+    CHECK_EQ(UiProbe::notice(app), "DOWN AGAIN: PASTE");
     pump(2);
     CHECK(!(project.patterns[0][2].tracks[0].steps[0].flags & kStepTrig));   // armed only
     shift_key(ENAGA_KEY_DOWN);
@@ -948,7 +948,7 @@ TEST(ui_project_slots_copy_paste_and_clear_a_pattern) {
 
     // FUNC + LEFT twice clears it; once only arms.
     shift_key(ENAGA_KEY_LEFT);
-    CHECK_EQ(UiProbe::notice(app), "AGAIN: CLEAR A03");
+    CHECK_EQ(UiProbe::notice(app), "LEFT AGAIN: CLEAR");
     pump(2);
     CHECK(project.patterns[0][2].tracks[0].steps[0].flags & kStepTrig);
     shift_key(ENAGA_KEY_LEFT);
@@ -2585,7 +2585,7 @@ TEST(ui_play_is_refused_while_a_project_is_loading) {
     CHECK(app_storage().last_error() == nullptr);
 
     menu_run(kMenuReload);                         // RELOAD PROJECT, OK twice
-    CHECK_EQ(UiProbe::notice(app), "OK AGAIN TO RELOAD");
+    CHECK_EQ(UiProbe::notice(app), "OK AGAIN: RELOAD");
     key(ENAGA_KEY_OK);
     CHECK_EQ(UiProbe::notice(app), "RELOADING");
     pump();                                        // one pass of service(): the load starts
@@ -5165,7 +5165,7 @@ TEST(ui_the_chain_page_sets_mute_recalls_and_song_mode) {
     key(ENAGA_KEY_CLR);
     pump(2);
     CHECK_EQ(chain_length(project), 2);
-    CHECK_EQ(UiProbe::notice(app), "AGAIN TO REMOVE");
+    CHECK_EQ(UiProbe::notice(app), "CLR AGAIN: REMOVE");
     // Too late: past two seconds the first press is forgotten and this one only arms again.
     pump(2100);
     key(ENAGA_KEY_CLR);
@@ -5384,15 +5384,15 @@ TEST(ui_undo_and_redo_work_in_project_and_the_card_actions_are_in_the_menu) {
     // One OK on NEW PROJECT only arms; a stray press does not throw the project away.
     menu_run(kMenuNew);
     pump(2);
-    CHECK_EQ(UiProbe::notice(app), "OK AGAIN FOR NEW");
+    CHECK_EQ(UiProbe::notice(app), "OK AGAIN: NEW");
     CHECK_EQ(int(pattern.master_length), length - 2);
     // Moving to another row disarms it: NEW, RELOAD, NEW is three first presses.
     key(ENAGA_KEY_DOWN);
     key(ENAGA_KEY_OK);
-    CHECK_EQ(UiProbe::notice(app), "OK AGAIN TO RELOAD");
+    CHECK_EQ(UiProbe::notice(app), "OK AGAIN: RELOAD");
     key(ENAGA_KEY_UP);
     key(ENAGA_KEY_OK);
-    CHECK_EQ(UiProbe::notice(app), "OK AGAIN FOR NEW");
+    CHECK_EQ(UiProbe::notice(app), "OK AGAIN: NEW");
     key(ENAGA_KEY_OK);
     CHECK_EQ(UiProbe::notice(app), "NEW PROJECT");
     CHECK_EQ(UiProbe::mode(app), int(Mode::project));  // the menu closed, back on PROJECT
@@ -5407,7 +5407,7 @@ TEST(ui_undo_and_redo_work_in_project_and_the_card_actions_are_in_the_menu) {
 
     // LOAD DEMO, the last row (UP from SAVE), brings the factory project back, two OKs too.
     menu_run(kMenuDemo);
-    CHECK_EQ(UiProbe::notice(app), "OK AGAIN FOR DEMO");
+    CHECK_EQ(UiProbe::notice(app), "OK AGAIN: DEMO");
     key(ENAGA_KEY_OK);
     CHECK_EQ(UiProbe::notice(app), "DEMO PROJECT");
     CHECK(pump_until_idle());
@@ -5447,7 +5447,7 @@ TEST(ui_clear_pattern_in_the_menu_empties_every_track_in_one_undo_level) {
     // One OK only arms, and says so.
     menu_run(kMenuClear);
     pump(2);
-    CHECK_EQ(UiProbe::notice(app), "OK AGAIN TO CLEAR");
+    CHECK_EQ(UiProbe::notice(app), "OK AGAIN: CLEAR");
     CHECK_EQ(UiProbe::mode(app), int(Mode::menu));
     CHECK(trig_at(0, 0));
 
@@ -5480,7 +5480,7 @@ TEST(ui_clear_pattern_in_the_menu_empties_every_track_in_one_undo_level) {
     for (int i = 0; i < 2100; i++) pump();
     key(ENAGA_KEY_OK);
     pump(2);
-    CHECK_EQ(UiProbe::notice(app), "OK AGAIN TO CLEAR");
+    CHECK_EQ(UiProbe::notice(app), "OK AGAIN: CLEAR");
     CHECK(trig_at(0, 0));
     key(ENAGA_KEY_CLR);                               // close the menu
 }
@@ -6080,7 +6080,7 @@ TEST(ui_a_kit_is_saved_with_f1_down_and_recalled_with_ok_twice) {
 
     // Over a kit, only on the second press.
     shift_key(ENAGA_KEY_DOWN);
-    CHECK_EQ(UiProbe::notice(app), "AGAIN TO OVERWRITE");
+    CHECK_EQ(UiProbe::notice(app), "DOWN AGAIN: REPLACE");
 
     post_cmd(Cmd::set_param, 0, 11);
     pump(2);
@@ -6089,7 +6089,7 @@ TEST(ui_a_kit_is_saved_with_f1_down_and_recalled_with_ok_twice) {
     // OK once arms; OK again within the window recalls.
     pump(2100);                                    // the overwrite arm lapses
     key(ENAGA_KEY_OK);
-    CHECK_EQ(UiProbe::notice(app), "OK AGAIN TO LOAD");
+    CHECK_EQ(UiProbe::notice(app), "OK AGAIN: LOAD");
     pump(6);
     CHECK_EQ(int(app_engine().params(0).v[0]), 11);            // once is not a recall
     key(ENAGA_KEY_OK);
@@ -6102,7 +6102,7 @@ TEST(ui_a_kit_is_saved_with_f1_down_and_recalled_with_ok_twice) {
     key(ENAGA_KEY_DOWN);
     key(ENAGA_KEY_UP);
     key(ENAGA_KEY_OK);
-    CHECK_EQ(UiProbe::notice(app), "OK AGAIN TO LOAD");
+    CHECK_EQ(UiProbe::notice(app), "OK AGAIN: LOAD");
 
     // An empty slot says so and loads nothing.
     key(ENAGA_KEY_DOWN);
@@ -6356,7 +6356,7 @@ TEST(ui_samples_push_a_while_playing_takes_a_second_push) {
 
     // One push: nothing heard, a toast says how.
     key(ENAGA_KEY_PUSH_A);
-    CHECK_EQ(UiProbe::notice(app), "A AGAIN TO HEAR");
+    CHECK_EQ(UiProbe::notice(app), "A AGAIN: HEAR");
     CHECK(!app_storage().auditioning());
     pump(8);
     CHECK(!app_storage().auditioning());
@@ -6366,14 +6366,14 @@ TEST(ui_samples_push_a_while_playing_takes_a_second_push) {
     g_ms += 2500;
     pump();                                        // the app reads the time in update()
     key(ENAGA_KEY_PUSH_A);
-    CHECK_EQ(UiProbe::notice(app), "A AGAIN TO HEAR");
+    CHECK_EQ(UiProbe::notice(app), "A AGAIN: HEAR");
     CHECK(!app_storage().auditioning());
 
     // Moving away and back lets the first push go.
     key(ENAGA_KEY_DOWN);
     key(ENAGA_KEY_UP);
     key(ENAGA_KEY_PUSH_A);
-    CHECK_EQ(UiProbe::notice(app), "A AGAIN TO HEAR");
+    CHECK_EQ(UiProbe::notice(app), "A AGAIN: HEAR");
     CHECK(!app_storage().auditioning());
 
     // In time, on the same file: heard.
@@ -6992,7 +6992,7 @@ TEST(ui_projects_ok_twice_opens_another_project) {
     app.on_encoder(0, first - UiProbe::project_cursor(app));
     CHECK_EQ(UiProbe::project_cursor(app), first);
     key(ENAGA_KEY_OK);
-    CHECK(std::strcmp(UiProbe::notice(app), "AGAIN TO OPEN") == 0);
+    CHECK(std::strcmp(UiProbe::notice(app), "OK AGAIN: OPEN") == 0);
     pump(4);
     CHECK(std::strcmp(app_storage().project_name(), "SECOND") == 0);   // once is not enough
     key(ENAGA_KEY_OK);
@@ -7015,7 +7015,7 @@ TEST(ui_projects_a_press_on_another_entry_disarms_the_open) {
     key(ENAGA_KEY_DOWN);
     key(ENAGA_KEY_UP);
     key(ENAGA_KEY_OK);                               // armed again, not opened
-    CHECK(std::strcmp(UiProbe::notice(app), "AGAIN TO OPEN") == 0);
+    CHECK(std::strcmp(UiProbe::notice(app), "OK AGAIN: OPEN") == 0);
     pump(4);
     CHECK(std::strcmp(app_storage().project_name(), "SECOND") == 0);
     key(ENAGA_KEY_CLR);
@@ -7198,10 +7198,10 @@ TEST(ui_projects_push_c_then_ok_twice_deletes) {
     to_projects_page(app);
     cursor_to(app, "FIRST");
     key(ENAGA_KEY_PUSH_C);
-    CHECK(std::strcmp(UiProbe::notice(app), "DELETE? OK TWICE") == 0);
+    CHECK(std::strcmp(UiProbe::notice(app), "OK TWICE: DELETE") == 0);
     check_layout(app, "PROJECTS, a delete asked");
     key(ENAGA_KEY_OK);
-    CHECK(std::strcmp(UiProbe::notice(app), "OK AGAIN TO DELETE") == 0);
+    CHECK(std::strcmp(UiProbe::notice(app), "OK AGAIN: DELETE") == 0);
     check_layout(app, "PROJECTS, a delete once confirmed");
     pump(4);
     CHECK(!app_storage().project_op_pending());      // once is not enough
@@ -7240,7 +7240,7 @@ TEST(ui_projects_a_delete_is_called_off_by_clr_or_another_key) {
     key(ENAGA_KEY_UP);                               // moving on lets it go
     cursor_to(app, "SECOND");
     key(ENAGA_KEY_OK);
-    CHECK(std::strcmp(UiProbe::notice(app), "AGAIN TO OPEN") == 0);
+    CHECK(std::strcmp(UiProbe::notice(app), "OK AGAIN: OPEN") == 0);
     pump(8);
     CHECK(!app_storage().project_op_pending());
     CHECK(app_storage().browse_list().find("SECOND") >= 0);
@@ -10590,7 +10590,7 @@ TEST(ui_sounds_push_b_renames_and_push_c_deletes_only_your_own) {
     // Push C: OK twice deletes; CLR, or any other key, lets it go.
     sounds_cursor_to(first_user_row_on_kick());
     key(ENAGA_KEY_PUSH_C);
-    CHECK(std::strcmp(UiProbe::notice(app), "DELETE? OK TWICE") == 0);
+    CHECK(std::strcmp(UiProbe::notice(app), "OK TWICE: DELETE") == 0);
     check_layout(app, "SOUNDS asking to delete");
     key(ENAGA_KEY_CLR);
     CHECK(std::strcmp(UiProbe::notice(app), "DELETE OFF") == 0);
@@ -11076,7 +11076,7 @@ TEST(ui_hold_ok_on_a_slot_opens_the_pattern_menu_and_double_doubles) {
     key(ENAGA_KEY_DOWN);
     key(ENAGA_KEY_DOWN);
     key(ENAGA_KEY_OK);
-    CHECK_EQ(UiProbe::notice(app), "AGAIN: DOUBLE A01");
+    CHECK_EQ(UiProbe::notice(app), "OK AGAIN: DOUBLE A01");
     key(ENAGA_KEY_OK);
     CHECK_EQ(UiProbe::notice(app), "A01 DOUBLED");
     pump(2);
