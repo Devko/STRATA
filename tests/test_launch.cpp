@@ -235,9 +235,8 @@ TEST(launch_scheduler_the_other_lanes_keep_the_master_pattern) {
     put_trig(borrowed, 2, 0, 50);
     const Run run = run_lane(master, borrowed, 2, 0, 0, 384);
     CHECK_EQ(run.count, 1);
-    const Run kick = run_lane(master, borrowed, 2, 0, 0, 384);
-    (void)kick;
-    // Lane 0 from the master: run it as the "launched" lane with the master itself.
+    CHECK_EQ(int(run.first_note), 50);
+    // Lane 0 plays the master: B's note 99 on track 1 is never heard.
     const Run own = run_lane(master, master, 0, 0, 0, 384);
     CHECK_EQ(own.count, 1);
     CHECK_EQ(int(own.first_note), 36);

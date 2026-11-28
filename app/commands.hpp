@@ -110,6 +110,16 @@ enum class Cmd : uint8_t {
     cancel_queue,
     set_chain,         // a: 0 off, 1 on (starting one jumps to its first entry)
 
+    // Track Launch (core/launch.hpp), PROJECT's LAUNCH page. Armed on the audio side like a
+    // queued pattern change, from the tick the sequencer is on.
+    // launch: a: the lanes (bit t = lane t), b: the source (0 own, 1-128 A01-H16), c: QueueMode.
+    launch,
+    launch_cancel,     // a: the lanes whose queued launch is dropped
+    launch_pin,        // track: PIN on or off
+    // CAPTURE: what every lane plays, written into the first free slot of bank `track`, which then
+    // plays with every lane on its own part. Status::launch_event says how it went.
+    launch_capture,
+
     // The kit the machines read (`params_`) and the kit a file holds (`project_.kit`) are
     // different structures in different layers, so they are copied across explicitly: `store`
     // before a save, `recall` after a load. Both run on the audio side, which owns both.
@@ -545,6 +555,16 @@ using Commands = CommandRing<256>;
 // exist and the app fails to LINK (it compiles fine, which makes it a confusing failure). Plain
 // loads and stores of a single word are fine, and with one writer per field the load-then-store
 // pair below is correct without an RMW.
+// What Status::launch_event reports (Track Launch). `arg` is a track for the first two, a slot
+// for `captured`.
+enum class LaunchEvent : uint8_t {
+    read_only,       // an edit on lane `arg` was refused: it plays another pattern's part
+    frozen,          // a launch landed on frozen lane `arg`: heard after UNFREEZE
+    captured,        // CAPTURE wrote slot `arg` of the bank asked for, which now plays
+    no_slot,         // CAPTURE found no free slot in the bank
+    locks_full,      // CAPTURE: the parts' locks do not fit in one pattern
+};
+
 struct Status {
     std::atomic<uint32_t> tick{0};             // the clock's position, for the playhead
     // COUNT-IN (Engine::count_in_end_): the beats still to click before the pattern starts, 0
@@ -741,6 +761,21 @@ struct Status {
     // Song mode. Bumped by the audio side when a song reaches its end: the main context watches
     // for the change and stops the transport, which only it can do (<enaga/clock.hpp>).
     std::atomic<uint8_t> song_end{0};
+
+    // Track Launch. Bumped by the audio side for each thing the UI says: `launch_last` is a
+    // LaunchEvent, `launch_arg` its track or the slot CAPTURE wrote.
+    std::atomic<uint8_t> launch_event{0};
+    std::atomic<uint8_t> launch_last{0};
+    std::atomic<uint8_t> launch_arg{0};
+
+    // Audio context only, one writer: the payload first, so a reader that sees the new event
+    // (with acquire) sees what it was.
+    void bump_launch_event(uint8_t last, uint8_t arg) {
+        launch_last.store(last, std::memory_order_relaxed);
+        launch_arg.store(arg, std::memory_order_relaxed);
+        launch_event.store(uint8_t(launch_event.load(std::memory_order_relaxed) + 1),
+                           std::memory_order_release);
+    }
 
     // Audio context only, one writer, as bump_triggered.
     void bump_song_end() {

@@ -113,26 +113,16 @@ int launch_capture_slot(const Project &project, int bank) {
     return -1;
 }
 
-CaptureResult launch_capture(Project &project, int bank, int slot) {
-    if (!project_index_valid(bank, slot)) return CaptureResult::no_slot;
-    // The destination must not be read while it is written: not the playing pattern and not any
-    // lane's source. And it must be empty, so nothing the user made is overwritten.
-    const uint8_t here = lane_source(bank, slot);
-    for (int t = 0; t < kTracks; t++) {
-        if (lane_playing_source(project, t) == here) return CaptureResult::no_slot;
-    }
-    if (pattern_has_steps(project.patterns[bank][slot])) return CaptureResult::no_slot;
-
+bool launch_compose(const Project &project, Pattern &out) {
     // Count first: nothing is written unless every part's locks fit in one pool.
     uint32_t needed = 0;
     for (int t = 0; t < kTracks; t++) {
         const Pattern &from = lane_pattern(project, t);
         for (int s = 0; s < kStepsPerTrack; s++) needed += pattern_step_locks(from, t, s).count;
     }
-    if (needed > uint32_t(kLockPool)) return CaptureResult::locks_full;
+    if (needed > uint32_t(kLockPool)) return false;
 
     const Pattern &live = project.live();
-    Pattern &out = project.patterns[bank][slot];
     out.master_length = live.master_length;
     out.swing = live.swing;
     out.root = live.root;
@@ -152,6 +142,20 @@ CaptureResult launch_capture(Project &project, int bank, int slot) {
         }
     }
     out.locks_used = used;
+    return true;
+}
+
+CaptureResult launch_capture(Project &project, int bank, int slot) {
+    if (!project_index_valid(bank, slot)) return CaptureResult::no_slot;
+    // The destination must not be read while it is written: not the playing pattern and not any
+    // lane's source. And it must be empty, so nothing the user made is overwritten.
+    const uint8_t here = lane_source(bank, slot);
+    for (int t = 0; t < kTracks; t++) {
+        if (lane_playing_source(project, t) == here) return CaptureResult::no_slot;
+    }
+    if (pattern_has_steps(project.patterns[bank][slot])) return CaptureResult::no_slot;
+
+    if (!launch_compose(project, project.patterns[bank][slot])) return CaptureResult::locks_full;
     project.bank_dirty[bank] = true;
     return CaptureResult::ok;
 }

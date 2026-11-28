@@ -624,6 +624,12 @@ const Expect kTable[] = {
     {Cmd::evolve_config, kDirtyProject, "evolve_config"},
     {Cmd::evolve_keep, kDirtyProject, "evolve_keep"},
     {Cmd::evolve_home, kDirtyBank | kDirtyProject, "evolve_home"},
+    // Track Launch: the lanes and pins are PROJECT.BIN's; a queued launch dropped changes
+    // nothing; CAPTURE writes a slot and moves the live pattern there.
+    {Cmd::launch, kDirtyProject, "launch"},
+    {Cmd::launch_cancel, 0u, "launch_cancel"},
+    {Cmd::launch_pin, kDirtyProject, "launch_pin"},
+    {Cmd::launch_capture, kDirtyBank | kDirtyProject, "launch_capture"},
 };
 
 // A command added without an entry here does not compile, which is the whole point of the table:

@@ -496,6 +496,7 @@ void Engine::apply(const Command &command) {
     }
     const int track = int(command.track);
     const int step = int(command.step);
+    if (launch_refuses(command, track)) return;
 
     // Every command belongs to exactly one family below; the first that knows it applies
     // it. The order is only the likeliest first (an encoder sweep is set_param or a delta).
@@ -1802,6 +1803,7 @@ bool Engine::apply_arrangement(const Command &command, int, int) {
             // Mutation-equivalent (docs/MUTATION.md): resolve_tick already sends an origin past
             // the new tick back to 0. Kept so that this case says everything a restart resets.
             origin_ = 0;
+            for (int t = 0; t < kTracks; t++) lane_origin_[t] = 0;
             song_over_ = false;
             boundary_known_ = false;
             bar_known_ = false;
@@ -1869,9 +1871,90 @@ bool Engine::apply_arrangement(const Command &command, int, int) {
 
         case Cmd::cancel_queue:
             // Unconditional: cancelling a queue that is not armed is what the UI does when the
-            // user presses the same pattern twice, and it is not an error.
+            // user presses the same pattern twice, and it is not an error. Queued launches go
+            // with it (FUNC + STOP, CLR on SLOT).
             queue_clear(queue_);
+            for (int t = 0; t < kTracks; t++) lane_queue_clear(lane_queue_[t]);
             break;
+
+        case Cmd::launch: {
+            const uint8_t lanes = command.a;
+            const uint8_t source = command.b;
+            const QueueMode mode = command.c < uint8_t(QueueMode::count)
+                                       ? QueueMode(command.c)
+                                       : QueueMode::end_of_pattern;
+            if (!lane_source_valid(source) || lanes == 0) {
+                status_.bump_refused();
+                break;
+            }
+            for (int t = 0; t < kTracks; t++) {
+                if ((lanes >> t & 1u) == 0) continue;
+                // Stopped, there is no boundary to wait for, as for a pattern change; the lane
+                // then starts with the pattern on PLAY. NOW keeps the lane's place.
+                if (!enaga::clock::running()) {
+                    lane_queue_clear(lane_queue_[t]);
+                    land_launch(t, source, false, tick_);
+                    lane_follows_ = uint8_t(lane_follows_ | (1u << t));
+                    continue;
+                }
+                if (mode == QueueMode::immediate) {
+                    lane_queue_clear(lane_queue_[t]);
+                    land_launch(t, source, false, tick_);
+                    continue;
+                }
+                // The playing pattern's queue arithmetic: its master loop, from its start.
+                if (!lane_queue_arm(lane_queue_[t], source, mode, tick_,
+                                    master_loop_ticks(live()), origin_)) {
+                    status_.bump_refused();
+                }
+            }
+            break;
+        }
+
+        case Cmd::launch_cancel:
+            for (int t = 0; t < kTracks; t++) {
+                if ((command.a >> t & 1u) != 0) lane_queue_clear(lane_queue_[t]);
+            }
+            break;
+
+        case Cmd::launch_pin:
+            launch_toggle_pin(project_, int(command.track));
+            break;
+
+        case Cmd::launch_capture: {
+            const int bank = int(command.track);   // as the slot edits, for the dirty bank
+            const int slot = launch_capture_slot(project_, bank);
+            if (slot < 0) {
+                status_.bump_launch_event(uint8_t(LaunchEvent::no_slot), 0);
+                break;
+            }
+            if (launch_capture(project_, bank, slot) != CaptureResult::ok) {
+                status_.bump_launch_event(uint8_t(LaunchEvent::locks_full), 0);
+                break;
+            }
+            // The captured slot plays, every lane on its own part, and nothing heard changes:
+            // each lane keeps the start it counted from (so no scheduler reset), only its pattern
+            // moves. Like a pattern change for what belonged to the pattern left: undo, LOCK's
+            // swap-back and EVOLVE's HOME.
+            project_.bank = uint8_t(bank);
+            project_.slot = uint8_t(slot);
+            launch_all_own(project_);
+            for (int t = 0; t < kTracks; t++) {
+                if ((lane_follows_ >> t & 1u) == 0) continue;
+                lane_origin_[t] = origin_;
+            }
+            lane_follows_ = 0;
+            undo_.clear();
+            locks_.pattern_changed();
+            for (int t = 0; t < kTracks; t++) {
+                const int period = int(evolve_[t].period);
+                evolve_keep(evolve_[t]);
+                evolve_set(evolve_[t], live(), t, period);
+            }
+            reconfigure();
+            status_.bump_launch_event(uint8_t(LaunchEvent::captured), uint8_t(slot));
+            break;
+        }
 
         case Cmd::set_chain:
             if (command.a != 0) {
@@ -1999,6 +2082,12 @@ bool Engine::apply_project(const Command &command, int, int) {
             // as its HOME, with the file's mode, mutation and amount.
             evolve_from_settings();
             queue_clear(queue_);
+            // Track Launch: the file's lanes play from the pattern's start; nothing queued.
+            for (int t = 0; t < kTracks; t++) {
+                lane_queue_clear(lane_queue_[t]);
+                lane_origin_[t] = 0;
+            }
+            lane_follows_ = 0xFF;
             chain_.active = false;
             // A project saved with its chain running reopens with it running. The flag was
             // written by every save and read by nothing, so the chain came back off while the
@@ -2448,7 +2537,7 @@ void Engine::apply_duck() {
 uint32_t Engine::gate_frames_for(int track, uint8_t length_index) const {
     if (!length_valid(length_index) || samples_per_tick_ <= 0.0f) return 0;
 
-    const int ticks = ticks_per_step(Speed(live().tracks[track].speed));
+    const int ticks = ticks_per_step(Speed(lane(track).tracks[track].speed));
     const float sixteenths = float(length_sixteenths(length_index));
     // sixteenths/16 of a step, a step being `ticks` ticks. One multiply by 1/16 rather than a
     // divide: this runs per trig, but there is no reason to divide where a constant will do.
@@ -2596,8 +2685,23 @@ void Engine::switch_pattern(int bank, int slot) {
         evolve_keep(evolve_[t]);
     }
 
+    const int old_bank = int(project_.bank);
+    const int old_slot = int(project_.slot);
     project_.bank = uint8_t(bank);
     project_.slot = uint8_t(slot);
+    // Track Launch: unpinned lanes come home to the new pattern's parts and restart with it; a
+    // pinned lane keeps what it plays, and its place. A lane that followed the pattern's start
+    // and is kept gets that start as its own, since `origin_` is about to move.
+    const uint8_t restarted = launch_pattern_changed(project_, old_bank, old_slot);
+    for (int t = 0; t < kTracks; t++) {
+        const uint8_t bit = uint8_t(1u << t);
+        if ((restarted & bit) != 0) {
+            lane_follows_ = uint8_t(lane_follows_ | bit);
+        } else if ((lane_follows_ & bit) != 0) {
+            lane_origin_[t] = origin_;
+            lane_follows_ = uint8_t(lane_follows_ & ~bit);
+        }
+    }
 
     // The undo history belonged to the pattern just left. Restoring it over this one would
     // overwrite a different pattern with another's steps, which core/undo.hpp's clear() exists
@@ -2607,8 +2711,11 @@ void Engine::switch_pattern(int bank, int slot) {
     locks_.pattern_changed();
 
     // A pattern change is what the 1ST condition tests for, and the scheduler's PRE/NEI chain
-    // was resolved against a pattern that is no longer playing.
-    scheduler_.reset(true);
+    // was resolved against a pattern that is no longer playing. Not for a pinned lane, which
+    // plays on as it was.
+    for (int t = 0; t < kTracks; t++) {
+        if ((restarted >> t & 1u) != 0) scheduler_.reset_lane(t, true);
+    }
     reconfigure();
     clear_slides();
 
@@ -2736,6 +2843,9 @@ void Engine::evolve_lead() {
         const uint8_t bit = uint8_t(1u << t);
         if ((evolve_turned_ & bit) != 0 || !evolve_due(evolve_[t])) continue;
         evolve_turned_ = uint8_t(evolve_turned_ | bit);
+        // EVOLVE pauses on a lane playing another pattern's part (core/launch.hpp): its own
+        // part is not heard, and the borrowed one is read-only.
+        if (lane_borrowed(project_, t)) continue;
         if (evolve_turn(evolve_[t], live(), t, evolve_mode_, evolve_kind_, int(evolve_amount_),
                         evolve_variant_++)) {
             status_.bump_evolve_turns();
@@ -2750,6 +2860,7 @@ void Engine::evolve_passes() {
     bool turned = false;
     for (int t = 0; t < kTracks; t++) {
         if (!evolve_[t].on() || (evolve_turned_ >> t & 1u) != 0) continue;
+        if (lane_borrowed(project_, t)) continue;   // paused, as in evolve_lead
         if (!evolve_due(evolve_[t])) {
             evolve_count(evolve_[t]);
             continue;
@@ -2812,7 +2923,78 @@ Project &Engine::project_for_load() { return project_; }
 // was real, from M2 -- changing a track's length flattened its ratchets until the next tempo
 // change, which is about as quiet as a bug gets.
 void Engine::reconfigure() {
-    scheduler_.configure(live(), samples_per_tick_);
+    const Pattern *lanes[kTracks];
+    lane_patterns(lanes);
+    scheduler_.configure(live(), lanes, samples_per_tick_);
+}
+
+void Engine::lane_patterns(const Pattern *lanes[kTracks]) const {
+    for (int t = 0; t < kTracks; t++) lanes[t] = &lane(t);
+}
+
+// --- Track Launch (core/launch.hpp) -------------------------------------------
+
+void Engine::land_launch(int track, uint8_t source, bool restart, uint32_t start) {
+    if (track < 0 || track >= kTracks || !launch_set(project_, track, source)) return;
+    const uint8_t bit = uint8_t(1u << track);
+    if (restart) {
+        // From its step 1 on the boundary it was queued for: its own start, passes and 1ST.
+        lane_origin_[track] = start <= tick_ ? start : tick_;
+        lane_follows_ = uint8_t(lane_follows_ & ~bit);
+        scheduler_.reset_lane(track, true);
+    } else if ((lane_follows_ & bit) != 0) {
+        // NOW keeps its place: it goes on counting from where it counted.
+        lane_origin_[track] = origin_;
+        lane_follows_ = uint8_t(lane_follows_ & ~bit);
+    }
+    // What was waiting for the part it left: a ratchet hit, a roll, slides. Fired later they
+    // would read the new part's step at that index, a hit of neither.
+    int keep = 0;
+    for (int i = 0; i < deferred_count_; i++) {
+        if (deferred_[i].track != uint8_t(track)) deferred_[keep++] = deferred_[i];
+    }
+    deferred_count_ = keep;
+    span_[track].on = false;
+    slide_count_[track] = 0;
+    reconfigure();
+    if (frozen_[track].on()) status_.bump_launch_event(uint8_t(LaunchEvent::frozen), uint8_t(track));
+}
+
+// The read-only guard (Roland, 2026-11-27): a lane playing another pattern's part takes no edit
+// until CAPTURE makes it a part of its own. The borrowed pattern is never changed by being
+// borrowed, and undo stays one pattern's history.
+bool Engine::launch_refuses(const Command &command, int track) {
+    switch (command.cmd) {
+        case Cmd::toggle_trig:
+        case Cmd::clear_lock:
+        case Cmd::lock_range_delta:
+        case Cmd::lock_slide:
+        case Cmd::step_field_delta:
+        case Cmd::lock_delta:
+        case Cmd::record_hit:
+        case Cmd::record_length:
+        case Cmd::set_step_length:
+        case Cmd::euclid:
+        case Cmd::mutate:
+        case Cmd::generate:
+        case Cmd::set_track_length:
+        case Cmd::set_track_speed:
+        case Cmd::set_track_play:
+        case Cmd::set_track_swing:
+        case Cmd::range_copy:
+        case Cmd::range_paste:
+        case Cmd::range_erase:
+        case Cmd::track_erase:
+        case Cmd::range_transpose:
+        case Cmd::range_nudge:
+            break;
+        default:
+            return false;
+    }
+    if (!lane_borrowed(project_, track)) return false;
+    status_.bump_refused();
+    status_.bump_launch_event(uint8_t(LaunchEvent::read_only), uint8_t(track));
+    return true;
 }
 
 // --- the tick -------------------------------------------------------------
@@ -2836,6 +3018,14 @@ void Engine::resolve_tick(uint32_t tick, uint32_t frame) {
     if (tick < origin_) {
         origin_ = 0;
         boundary_known_ = false;
+    }
+    for (int t = 0; t < kTracks; t++) {
+        if (tick < lane_origin_[t]) lane_origin_[t] = 0;
+    }
+    // Queued launches were armed for a boundary of the old position, and they go (Track Launch:
+    // a jump back drops them, as FUNC + STOP does).
+    if (jumped_back) {
+        for (int t = 0; t < kTracks; t++) lane_queue_clear(lane_queue_[t]);
     }
 
     // A queued change takes effect BEFORE the tick is resolved, so this tick plays the new
@@ -2912,6 +3102,18 @@ void Engine::resolve_tick(uint32_t tick, uint32_t frame) {
     // turning auto-fill on takes effect at the next bar rather than mid-bar.
     perform_.fill = fill_held_ || auto_fill_active(auto_fill_, bar_);
 
+    // Track Launch: launches due on this tick land after any pattern change on it, so a launch
+    // queued with a pattern change plays over the new pattern rather than being sent home by it.
+    for (int t = 0; t < kTracks; t++) {
+        LaneQueue &queued = lane_queue_[t];
+        if (!lane_queue_due(queued, tick)) continue;
+        const uint8_t source = queued.source;
+        const bool restart = queued.queue.restart;
+        const uint32_t start = queued.queue.start_tick;
+        lane_queue_clear(queued);
+        land_launch(t, source, restart, start);
+    }
+
     // A finished song is silent until the transport stops or starts again.
     if (song_over_) return;
 
@@ -2923,9 +3125,16 @@ void Engine::resolve_tick(uint32_t tick, uint32_t frame) {
         }
     }
 
-    // The pattern's own tick: steps, passes and conditions all count from where it started.
-    const int count =
-        scheduler_.tick(tick - origin_, frame, live(), perform_, events_, kMaxEventsPerTick);
+    // The pattern's own tick: steps, passes and conditions all count from where it started --
+    // and a launched lane's from where its part started (core/launch.hpp).
+    uint32_t lane_ticks[kTracks];
+    const Pattern *lanes[kTracks];
+    for (int t = 0; t < kTracks; t++) {
+        lane_ticks[t] = tick - ((lane_follows_ >> t & 1u) != 0 ? origin_ : lane_origin_[t]);
+        lanes[t] = &lane(t);
+    }
+    const int count = scheduler_.tick(lane_ticks, frame, live(), lanes, perform_, events_,
+                                      kMaxEventsPerTick);
     // A stuttering track's own steps are silent: the scheduler still resolved them, so its
     // playhead, conditions and passes run on and the release lands back in the beat.
     const uint32_t silenced = stutter_step_ >= 0 ? uint32_t(stutter_tracks_) : 0u;
@@ -3006,7 +3215,7 @@ void Engine::span_start(int track, const StepEvent &event) {
     if (arp_settings(track).on()) return;           // the arp takes the step
     run.rate = event.span_ticks;
     run.ramp = RatchetRamp(event.span_ramp);
-    run.velocity = live().tracks[track].steps[event.step].velocity;
+    run.velocity = lane(track).tracks[track].steps[event.step].velocity;
     run.hit = 1;
     run.count = event.span_hits;
     run.inv_count = 1.0f / float(event.span_hits);  // once a roll, not a hit
@@ -3111,7 +3320,7 @@ void Engine::stutter_fire(uint32_t frame) {
     for (int t = 0; t < kTracks; t++) {
         if ((stutter_tracks_ >> t & 1u) == 0) continue;
         StepEvent event;
-        if (stutter_event(live(), t, stutter_step_, frame, event)) dispatch(event, block_frames_);
+        if (stutter_event(lane(t), t, stutter_step_, frame, event)) dispatch(event, block_frames_);
     }
 }
 
@@ -3340,7 +3549,7 @@ void Engine::arp_held_changed(int track) {
 void Engine::start_slides(int track, const StepEvent &event) {
     slide_count_[track] = 0;
     if (event.glide_frames == 0u) return;
-    const Pattern &pattern = live();
+    const Pattern &pattern = lane(track);
     const LockView locks = pattern_step_locks(pattern, track, int(event.step));
     // One reciprocal per step at control rate; the per-block move is a multiply.
     const float step = enaga::dsp::reciprocal(float(event.glide_frames));
@@ -3422,7 +3631,9 @@ void Engine::fire(const StepEvent &event) {
     // sound a step starts from, and only the step's own locks go over the top of them.
     for (int p = 0; p < kTrackParams; p++) effective_[track].v[p] = performed_[track][p];
 
-    const LockView locks = pattern_step_locks(live(), track, int(event.step));
+    // The lane's own pattern (core/launch.hpp): a launched part brings its locks.
+    const Pattern &playing = lane(track);
+    const LockView locks = pattern_step_locks(playing, track, int(event.step));
     int applied = 0;
     uint64_t locked = 0;
     // The values first, then the random ranges over them (core/pattern.hpp's lock byte): a range
@@ -3441,7 +3652,7 @@ void Engine::fire(const StepEvent &event) {
         locked = locked | (uint64_t(1) << param);
     }
     if (ranged != 0u) {
-        const uint32_t seed = live().seed;
+        const uint32_t seed = playing.seed;
         for (const Lock *lock = locks.begin(); lock != locks.end(); ++lock) {
             const uint8_t param = lock_param(lock->param);
             if (!lock_is_range(lock->param) || param >= kTrackParams) continue;
@@ -3502,7 +3713,7 @@ void Engine::fire(const StepEvent &event) {
         // History: `core/chord`'s `chord_expand` folds the step's note even for a type-`none`
         // chord, so before this the same step data played folded on a POLY track and as written
         // on a MONO one.
-        const Pattern &folding = live();
+        const Pattern &folding = playing;
         const uint8_t key_root_now = key_root();
         const int key_scale_now = int(key_scale());
         const int slices = pool_[track].sampler.slices();
@@ -4418,7 +4629,11 @@ void Engine::watch_streams() {
 // macro positions); these two gather it into one LiveState and put one back.
 
 void Engine::capture_live(LiveState &state) const {
-    __builtin_memcpy(&state.pattern, &live(), sizeof state.pattern);
+    // What you hear, launched lanes included (core/launch.hpp); a jump back plays it with every
+    // lane on its own part. Parts whose locks do not fit one pattern store the playing pattern.
+    if (lane_borrowed_mask(project_) == 0 || !launch_compose(project_, state.pattern)) {
+        __builtin_memcpy(&state.pattern, &live(), sizeof state.pattern);
+    }
     static_assert(kKitParams == kTrackParams, "a lock holds the kit's bytes as the engine has them");
     for (int t = 0; t < kTracks; t++) {
         __builtin_memcpy(state.params[t], params_[t].v, kKitParams);
@@ -4442,6 +4657,9 @@ void Engine::capture_live(LiveState &state) const {
 // lock taken before a machine switch restores the parameters only (docs/MANUAL.md).
 void Engine::apply_live(const LiveState &state) {
     __builtin_memcpy(&live(), &state.pattern, sizeof state.pattern);
+    // A lock is what was heard, as one pattern: every lane plays its own part again, each from
+    // where it counted.
+    launch_all_own(project_);
     deferred_count_ = 0;                 // ratchet hits of the steps just replaced
     span_clear();   // and the rolls of spanning ratchets
     for (int t = 0; t < kTracks; t++) {

@@ -123,6 +123,13 @@ enum class CaptureResult : uint8_t {
     locks_full,    // the parts' locks together do not fit in one pattern's pool
 };
 
+// Write what every lane plays into `out`, which must be none of the project's patterns that a
+// lane reads (the playing pattern or a source): each lane's part with its locks compacted into
+// `out`'s pool, and the playing pattern's master length, swing, FEEL, key, scale and seed. False,
+// writing nothing, when the parts' locks together do not fit in one pool. CAPTURE and LOCK both
+// take what you hear through this.
+bool launch_compose(const Project &project, Pattern &out);
+
 // Write what every lane plays into pattern `bank`/`slot`: each lane's part from its source, with
 // its locks moved into the new pattern's pool (compacted), and the playing pattern's master
 // length, swing, FEEL, key, scale and seed. Nothing is written unless all of it fits. The
