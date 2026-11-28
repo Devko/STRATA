@@ -1,23 +1,24 @@
 #!/usr/bin/env bash
-# Song sections in the emulator: CHAIN, OK adds the playing pattern as entry 1, push A opens its
-# SECTION view ("SECT 1/1"), D turns SCN to 3, the screen key goes to MOVE ("MOVE PAGE"), B turns
+# Song sections in the emulator: CHAIN (the factory project's five entries), OK copies entry 1 as
+# entry 2 under the cursor, push A opens its
+# SECTION view ("SECT 2/6"), D turns SCN to 3, the screen key goes to MOVE ("MOVE PAGE"), B turns
 # NRG off `--` and push B puts it back ("NRG --"), A turns MRP to SNAP, CLR goes back ("CHAIN").
-# Then the FUNC menu's CHAIN row starts the chain on entry 1, which applies the section's fields
-# on the audio side and logs "SECTION 1 S3 SNAP". What each field does to the sound is
+# Then the FUNC menu's CHAIN row starts the chain; entry 2 applies the section's fields on the
+# audio side and logs "SECTION 2 S3 SNAP". What each field does to the sound is
 # tests/test_engine.cpp's; this proves the view draws on the C674x and that a section reaches the
 # engine and back, under the load target and without an overrun. The emulator cannot hold OK for
 # 0.5 s, so the quick fill is host-tested only (tests/test_ui.cpp, ui_section_*).
 #
 #   PLAY                        -> the factory beat
 #   PROJECT, SELECT_RIGHT       -> CHAIN
-#   OK                          -> one entry
-#   push A                      -> SECT 1/1
+#   OK                          -> entry 2 of 6
+#   push A                      -> SECT 2/6
 #   turn D +3                   -> SCN 3
 #   SELECT_RIGHT                -> MOVE PAGE
 #   turn B +1, push B           -> NRG --
 #   turn A +1                   -> MRP SNAP
 #   CLR                         -> CHAIN
-#   FUNC + HOME, DOWN x9, OK    -> CHAIN ON: SECTION 1 S3 SNAP
+#   FUNC + HOME, DOWN x9, OK    -> CHAIN ON: SECTION 2 S3 SNAP
 #
 # Keys (third_party/enaga/include/enaga/abi.h): F5 = 22, F3 = 20, SELECT_RIGHT = 9, OK = 23,
 # push A = 1, push B = 0, CLR = 30, F1 = 19, F4 = 27, DOWN = 25. Encoders: A 0, B 1, D 3. A chord
@@ -93,13 +94,13 @@ check(report.get("app_status") == "APP RUNNING", "app is running",
       f'status={report.get("app_status")!r}')
 check(not report.get("crash_reason"), "no crash", f'reason={report.get("crash_reason")!r}')
 # The log ring keeps the last 16 lines; this run writes about a dozen after PLAY.
-check("SECT 1/1" in log, "push A on CHAIN opened the SECTION view", f"log={log}")
+check("SECT 2/6" in log, "push A on CHAIN opened the SECTION view", f"log={log}")
 check("MOVE PAGE" in log, "the screen key turned to MOVE", f"log={log}")
 check("NRG --" in log, "push B put NRG back to --", f"log={log}")
 check("CHAIN" in log, "CLR went back to the list", f"log={log}")
-check("SECTION 1 S3 SNAP" in log, "the chain's start applied entry 1's fields", f"log={log}")
-if "SECT 1/1" in log and "SECTION 1 S3 SNAP" in log:
-    check(log.index("SECT 1/1") < log.index("SECTION 1 S3 SNAP"), "edited before it played",
+check("SECTION 2 S3 SNAP" in log, "the chain's start applied entry 2's fields", f"log={log}")
+if "SECT 2/6" in log and "SECTION 2 S3 SNAP" in log:
+    check(log.index("SECT 2/6") < log.index("SECTION 2 S3 SNAP"), "edited before it played",
           f"log={log}")
 
 blocks = report.get("audio_blocks", 0)
