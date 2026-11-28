@@ -2010,6 +2010,37 @@ TEST(engine_section_edits_copy_and_quick_fill) {
     section_chain_done();
 }
 
+TEST(engine_a_pass_after_stop_and_play_ends_on_its_own_boundary) {
+    // A plain STOP and PLAY puts the clock back to 0 with the pattern's origin already at 0, and
+    // the end of the pass known from the old run stood: a chain started on the pattern already
+    // playing (no switch to re-derive it) held its first entry until the old run's boundary.
+    Engine &engine = clean();
+    Project &incoming = engine.project_for_load();
+    incoming.settings.chain_length = 2;
+    incoming.chain[0] = ChainEntry{0, 0, 1, 0};
+    incoming.chain[1] = ChainEntry{0, 1, 1, 0};
+    for (int i = 2; i < kChainEntries; i++) incoming.chain[i] = ChainEntry{};
+    for (int i = 0; i < kChainEntries; i++) incoming.chain_extra[i] = SectionExtra{};
+    post(Cmd::project_loaded);
+    pump();
+    FakeHost::the().set_running(true);
+    tick_at(0);
+    tick_at(1536 * 2 + 100);                     // two passes in: the next end is 4608
+    FakeHost::the().set_running(false);
+    pump();
+    FakeHost::the().set_running(true);
+    tick_at(0);
+    post(Cmd::set_chain, 0, 0, 1);
+    pump();
+    CHECK_EQ(live_slot(), 0);
+    tick_at(1);
+    tick_at(1536);
+    CHECK_EQ(live_slot(), 1);
+    post(Cmd::set_chain, 0, 0, 0);
+    FakeHost::the().set_running(false);
+    pump();
+}
+
 TEST(engine_starting_an_empty_chain_is_refused) {
     Engine &engine = clean();
     CHECK_EQ(chain_length(engine.project()), 0);

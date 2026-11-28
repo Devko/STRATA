@@ -3287,6 +3287,11 @@ void Engine::resolve_tick(uint32_t tick, uint32_t frame) {
         origin_ = 0;
         boundary_known_ = false;
     }
+    // And any jump back re-derives the end of the pass: the one known was measured on the old
+    // position. With the origin at 0 (a plain STOP and PLAY), the stale boundary used to stand,
+    // so the first pass after a PLAY lasted until the tick the old run would have ended it on,
+    // and a chain started on the pattern already playing held its first entry that much longer.
+    if (jumped_back) boundary_known_ = false;
     for (int t = 0; t < kTracks; t++) {
         if (tick < lane_origin_[t]) lane_origin_[t] = 0;
     }
