@@ -48,7 +48,8 @@ can keep evolving without stopping.
 browser fetches STRATA and the Enaga firmware it needs from their official GitHub releases,
 checks both, and hands you one zip: copy everything in it to the root of the SD card, hold
 **HOME** while switching on, choose **SYSTEM UPDATE**, and switch on again. For an update on the
-same Enaga version, tick "STRATA only". Tick the starter content too for ten projects to jam on
+same Enaga version, tick "STRATA only". The starter content, ticked by default, adds ten
+projects to jam on
 (techno, deep house, dub, ambient, electro, synthwave, breakbeat), a sample pack rendered by
 STRATA's own machines, and a one-page quick start.
 

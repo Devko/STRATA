@@ -61,7 +61,8 @@ against its hash.
 
 ## Starter content
 
-The page can add three optional things to the card, each a tick box (section 2 of the page):
+The page can add three optional things to the card, all behind one tick box, "Include starter
+and demo files" (section 2 of the page, ticked by default):
 
 ```text
 ENAGA/DATA/STRATA/PROJECTS/<NAME>/   starter projects, 11 files each (STRATA 0.5.0 and newer)

@@ -805,7 +805,7 @@ to reach `GUARD4` here at a 40-60% top line.
   cycle, open: WID is kept. `____`
 
 **W61. Starter content from the card builder (6 min).** A card built at strata.einblick.dev
-with all starter projects, the sample pack and the quick start ticked, copied onto the card.
+with "Include starter and demo files" ticked, copied onto the card.
 - PROJECT, SELECT_RIGHT four times: PROJECTS lists TECHNO, DEEP, DUB, DRIFT, ELECTRO, NIGHT,
   BREAKS, STEEL, SMASH and CHAOS. Open DEEP (OK twice): it opens on A01 at 122 BPM, PLAY plays
   it and the chain walks on through its patterns. Open CHAOS and DRIFT the same way: both

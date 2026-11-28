@@ -38,7 +38,8 @@ ENAGA-LICENSE.txt            Enaga's licence
 STRATA-LICENSES.txt          STRATA's licence and every third-party notice
 ```
 
-Three tick boxes add starter content to the same zip, for STRATA 0.5.0 and newer:
+One tick box, "Include starter and demo files" (ticked by default), adds starter content to the
+same zip; for releases before 0.5.0 it adds the sample pack only:
 
 ```text
 ENAGA/DATA/STRATA/PROJECTS/<NAME>/   ten starter projects: TECHNO, DEEP, DUB, DRIFT, ELECTRO,

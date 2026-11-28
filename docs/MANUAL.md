@@ -461,7 +461,7 @@ or VA track lists ready-made sounds for its machine and loads one into that trac
 
 Everything STRATA keeps is on the SD card, never in the unit's flash. (To put STRATA on a card
 in the first place, [strata.einblick.dev](https://strata.einblick.dev) builds the card zip for
-you, with starter projects, a sample pack and a quick start if you tick them;
+you, with starter projects, a sample pack and a quick start unless you untick them;
 [INSTALL.md](INSTALL.md) has the steps.)
 
 ```text
