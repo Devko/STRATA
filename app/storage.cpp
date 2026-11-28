@@ -124,6 +124,8 @@ bool mutates_kit(Cmd cmd) {
         case Cmd::set_machine:
         // A factory sound writes a track's parameters, as a knob does.
         case Cmd::sound_preset:
+        // And a saved or copied sound, eight bytes a command.
+        case Cmd::sound_bytes:
         // And an arp preset and the arp's settings, the ARP page's bytes and kit fields.
         case Cmd::arp_preset:
         case Cmd::set_arp_ext:
@@ -864,6 +866,10 @@ void Storage::on_card(bool usable) {
     // Whatever the kit library said is about a card that may no longer be in the slot.
     for (int i = 0; i < kKitSlots; i++) kit_slots_[i] = KitSlot{};
     kit_save_slot_ = kit_load_slot_ = -1;
+    // And the sounds bank: read again from whatever card is there when SOUNDS next asks. A write
+    // still waiting is dropped with it: it was meant for the card that went.
+    sound_bank_state_ = SoundBankState::none;
+    sound_read_pending_ = sound_write_pending_ = false;
 
     card_usable_ = usable;
     if (usable) {
@@ -1193,6 +1199,17 @@ void Storage::service() {
         case Job::kit_save:
         case Job::kit_load:
         case Job::idle: break;
+    }
+
+    // Your own sounds: one small file, no engine state, so the ring need not be empty. Not while
+    // a sample read is in flight, which owns the card until its callback.
+    if (sound_write_pending_ && card_usable_ && !read_in_flight_) {
+        run_sound_write();
+        return;
+    }
+    if (sound_read_pending_ && card_usable_ && !read_in_flight_) {
+        run_sound_read();
+        return;
     }
 
     // Idle. A save or a load may only start once the ring is empty: see the protocols in
@@ -1548,6 +1565,136 @@ bool Storage::request_kit_load(int slot) {
     kit_load_slot_ = slot;
     kit_save_slot_ = -1;
     return true;
+}
+
+// --- your own sounds ---------------------------------------------------------
+//
+// app/storage.hpp has the protocol, core/usersounds.hpp the bytes.
+
+bool Storage::sound_bank_path(char *out, uint32_t max, uint8_t machine, bool folder_only) const {
+    if (max == 0) return false;
+    char file[16];
+    if (!user_bank_file_name(machine, file, int(sizeof file))) return false;
+    char *p = out;
+    const char *end = out + max - 1;
+    append_text(p, enaga::files::data_folder(), end);
+    append_text(p, "/SOUNDS", end);
+    if (!folder_only) {
+        append_text(p, "/", end);
+        append_text(p, file, end);
+    }
+    if (p >= end) return false;
+    *p = '\0';
+    return true;
+}
+
+void Storage::want_sound_bank(uint8_t machine) {
+    if (!card_usable_ || !user_sounds_supported(machine)) return;
+    if (sound_bank_machine_ == machine && sound_bank_state_ != SoundBankState::none) return;
+    // Another machine's bank is let go of: a write it still owes goes first (run_sound_write
+    // writes the bank held, whatever is asked next), so only a read is queued here.
+    if (sound_write_pending_) return;
+    sound_bank_machine_ = machine;
+    sound_bank_state_ = SoundBankState::reading;
+    sound_read_pending_ = true;
+}
+
+Storage::SoundBankState Storage::sound_bank_state(uint8_t machine) const {
+    return sound_bank_machine_ == machine ? sound_bank_state_ : SoundBankState::none;
+}
+
+bool Storage::sound_bank_editable(uint8_t machine) const {
+    return card_usable_ && sound_bank_machine_ == machine &&
+           sound_bank_state_ == SoundBankState::ready;
+}
+
+bool Storage::request_sound_store(uint8_t machine, int slot, const char *name,
+                                  const uint8_t *params) {
+    if (!sound_bank_editable(machine)) return false;
+    if (!user_sound_store(sound_bank_, slot, name, params)) return false;
+    sound_write_pending_ = true;
+    return true;
+}
+
+bool Storage::request_sound_rename(uint8_t machine, int slot, const char *name) {
+    if (!sound_bank_editable(machine)) return false;
+    if (!user_sound_rename(sound_bank_, slot, name)) return false;
+    sound_write_pending_ = true;
+    return true;
+}
+
+bool Storage::request_sound_delete(uint8_t machine, int slot) {
+    if (!sound_bank_editable(machine)) return false;
+    if (!user_sound_delete(sound_bank_, slot)) return false;
+    sound_write_pending_ = true;
+    return true;
+}
+
+void Storage::run_sound_read() {
+    sound_read_pending_ = false;
+    sound_bank_error_ = nullptr;
+    const uint8_t machine = sound_bank_machine_;
+    char path[ENAGA_FILE_PATH_MAX + 1];
+    if (!sound_bank_path(path, sizeof path, machine, false)) {
+        sound_bank_state_ = SoundBankState::failed;
+        sound_bank_error_ = "BAD PATH";
+        return;
+    }
+    const int32_t got = enaga::files::read_all(path, file_, kFileBytes);
+    if (got == ENAGA_FILE_NOT_FOUND) {
+        // No sounds saved for this machine yet: an empty bank, and the first save makes the file.
+        user_bank_init(sound_bank_, machine);
+        sound_bank_state_ = SoundBankState::ready;
+        return;
+    }
+    if (got < 0) {
+        sound_bank_state_ = SoundBankState::failed;
+        sound_bank_error_ = enaga::files::error_name(got);
+        return;
+    }
+    const SerializeResult res = user_bank_read(sound_bank_, machine, file_, uint32_t(got));
+    if (res != SerializeResult::ok) {
+        sound_bank_state_ = SoundBankState::failed;
+        sound_bank_error_ = serialize_result_name(res);
+        return;
+    }
+    sound_bank_state_ = SoundBankState::ready;
+}
+
+void Storage::run_sound_write() {
+    sound_write_pending_ = false;
+    sound_bank_error_ = nullptr;
+    const uint8_t machine = sound_bank_machine_;
+    char path[ENAGA_FILE_PATH_MAX + 1];
+    if (!sound_bank_path(path, sizeof path, machine, true)) {
+        sound_bank_error_ = "BAD PATH";
+        return;
+    }
+    const int32_t made = enaga::files::make_folder(path);
+    if (made < 0) {
+        sound_bank_error_ = enaga::files::error_name(made);
+        return;
+    }
+    if (!sound_bank_path(path, sizeof path, machine, false)) {
+        sound_bank_error_ = "BAD PATH";
+        return;
+    }
+    uint32_t bytes = 0;
+    const SerializeResult res = user_bank_write(sound_bank_, file_, kFileBytes, &bytes);
+    if (res != SerializeResult::ok) {
+        sound_bank_error_ = serialize_result_name(res);
+        return;
+    }
+    const int32_t wrote = enaga::files::save(path, file_, bytes);
+    if (wrote < 0) {
+        // What the list shows is no longer what the card holds: read it again on the next ask.
+        sound_bank_error_ = enaga::files::error_name(wrote);
+        sound_bank_state_ = SoundBankState::none;
+        enaga::log("sounds write failed");
+        return;
+    }
+    // For the emulator scenario (tests/scenario_usersounds.sh), which cannot see the card.
+    enaga::log("sounds written");
 }
 
 void Storage::step_kit_scan() {

@@ -42,6 +42,7 @@
 #include "spectrum.hpp"     // the output's spectrum for MIXER's master pages
 #include "record.hpp"       // live recording's stamping and quantizing, used from here only
 #include "sounds.hpp"       // SOUNDS: the factory sounds for one track
+#include "usersounds.hpp"   // and your own, saved on the card
 #include "arppresets.hpp"   // ARPS: the factory arps for one track
 #include "stepnotes.hpp"    // a chord step's extra notes: counted on the step page, not as locks
 #include "storage.hpp"      // projects, autosave and the sample loader: the card side
@@ -992,7 +993,9 @@ private:
     enaga::ui::TextEntry name_entry_;
     // What the name entry is for: SAVE AS (FUNC+DOWN, the menu) or a rename (push B), and the
     // project the rename is of.
-    enum class EntryFor : uint8_t { save_as, rename };
+    // SOUNDS uses it too: saving the track's sound (FUNC+DOWN), replacing one of yours with it,
+    // or renaming one (push B).
+    enum class EntryFor : uint8_t { save_as, rename, sound_save, sound_replace, sound_rename };
     EntryFor entry_for_ = EntryFor::save_as;
     char rename_from_[Storage::kNameBytes] = {};
     bool projects_op_reread_ = false;  // list again once a rename or delete is done
@@ -1048,6 +1051,22 @@ private:
     int sound_track_ = -1;                      // the track whose sound the engine remembers
     Mode sounds_return_ = Mode::edit;           // where CLR goes back to
     bool sounds_arps_ = false;                  // the list is ARPS (core/arppresets.hpp)
+    // SOUNDS' clipboard (FUNC+UP): a track's sound and the machine it is for.
+    struct SoundClip {
+        bool has = false;
+        uint8_t machine = 0;
+        uint8_t track = 0;
+        uint8_t params[kKitParams] = {};
+    };
+    SoundClip sound_clip_;
+    // The name entry SOUNDS opened: which bank slot, for which machine, and (a save) the bytes
+    // taken when FUNC+DOWN was pressed, so a knob turned while naming does not change what saves.
+    int sound_entry_slot_ = -1;
+    uint8_t sound_entry_machine_ = 0;
+    uint8_t sound_entry_params_[kKitParams] = {};
+    int sound_delete_armed_ = -1;               // push C on this slot; OK twice deletes it
+    int sound_delete_oks_ = 0;
+    uint32_t sound_delete_ok_at_ms_ = 0;
     KitAction kit_armed_ = KitAction::none;     // KIT: OK or F1 + DOWN pressed once
     uint32_t kit_armed_at_ms_ = 0;
     static constexpr uint32_t kSaveArmMs = 2000;

@@ -83,7 +83,8 @@ HOME "system", PLAY "◀◀", STOP "▶▶", MIXER "fx", EDIT "rec src".
      EDIT, GRID and KEYS. OK on the ARP page opens ARPS, the factory arps, as OK on the sound
      pages opens SOUNDS (same keys, AS WAS first).
      On PROJECTS, where only A turns, push B renames and push C deletes the project under the
-     cursor (delete then asks for OK twice).
+     cursor (delete then asks for OK twice). SOUNDS does the same for your own saved sounds
+     (core/usersounds.hpp); on a factory sound or in ARPS they say `YOUR OWN SOUNDS ONLY`.
    - **VALUE is the crossfader.** Push VALUE + STEP picks what it fades: an effect, the morph
      (13) or the looper (16), on every screen (the performance mixer, below). With nothing
      picked it is the tempo (PERFORM: the morph; CHAIN/PATTERN: the field under the cursor).
@@ -183,7 +184,7 @@ Printed labels (above), and the moves made while playing:
 | Chord | Does |
 | --- | --- |
 | FUNC + CLR / OK | undo / redo |
-| FUNC + UP / DOWN | copy / paste (editing screens; on PROJECT's slots a whole pattern, the paste twice). Card lists: read again / store here (KIT save, PROJECTS save as). FUNC + LEFT twice on PROJECT's slots clears the pattern under the cursor |
+| FUNC + UP / DOWN | copy / paste (editing screens; on PROJECT's slots a whole pattern, the paste twice). Card lists: read again / store here (KIT save, PROJECTS save as). SOUNDS: copy the track's sound (the PASTE row under AS WAS loads it, on any track) / store it as your own, named (on one of your own: replace it). ARPS: `ARPS: NOT SAVED`. FUNC + LEFT twice on PROJECT's slots clears the pattern under the cursor |
 | FUNC + lower pad | mute that track on the next bar (at once while stopped). Several pads before the bar all land; the same pad twice takes it back |
 | FUNC + FILL / REPEAT / THROW | note repeat on/off / pitched-down repeat / reverb throw |
 | FUNC + push A / B / C | kill LOW / MID / HI |
