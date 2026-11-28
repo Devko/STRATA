@@ -35,8 +35,32 @@
       </fieldset>
     </section>
 
+    <section class="card" aria-labelledby="starter" id="starter-section" hidden>
+      <h2 id="starter">2. Add starter content</h2>
+      <p class="small">
+        Something to play from the first minute, all made with STRATA's own machines: projects to
+        open and jam on, a sample pack for the SAMPLE machine, and a one-page quick start.
+      </p>
+      <p id="starter-note" class="small" hidden></p>
+      <fieldset class="choice" id="starter-projects-box">
+        <legend>Starter projects <span class="small">(about 8 KB each)</span></legend>
+        <label class="all"><input type="checkbox" id="starter-all" checked>
+          <span><strong>All projects</strong></span></label>
+        <div id="starter-projects" class="projects"></div>
+        <p class="small">A project on your card with the same name is replaced when you copy.</p>
+      </fieldset>
+      <fieldset class="choice">
+        <legend>Also</legend>
+        <label><input type="checkbox" id="starter-samples" checked>
+          <span><strong>Sample pack</strong>: <span id="starter-samples-info"></span>, in <code>/SAMPLES/STRATA</code></span></label>
+        <label id="starter-qs-row"><input type="checkbox" id="starter-quickstart" checked>
+          <span><strong>Quick start</strong>: one page, <code>STRATA-QUICKSTART.txt</code>
+          (<a href="starter/QUICKSTART.txt" target="_blank" rel="noopener">read it</a>)</span></label>
+      </fieldset>
+    </section>
+
     <section class="card" aria-labelledby="build">
-      <h2 id="build">2. Build the zip</h2>
+      <h2 id="build"><span class="num">2</span>. Build the zip</h2>
       <p class="small">
         Your browser downloads both release zips from GitHub, checks each against its published
         SHA-256, and puts the card files together. Nothing is uploaded, and nothing is kept on
@@ -51,7 +75,7 @@
     </section>
 
     <section class="card" aria-labelledby="install">
-      <h2 id="install">3. Put it on the card</h2>
+      <h2 id="install"><span class="num">3</span>. Put it on the card</h2>
       <p class="warn">
         <strong>At your own risk.</strong> Neither Enaga nor STRATA is made, supported or endorsed
         by Sonicware. Before you start: SYSTEM INFO shows <strong>BOOT 1.0.17</strong>, a second
@@ -65,6 +89,8 @@
         <li id="step-fw">Hold <strong>HOME (F4)</strong> while switching on, choose <strong>SYSTEM UPDATE</strong>,
           and let it finish. This installs Enaga.</li>
         <li>Switch on. <strong>F1 + POWER</strong> opens the Enaga menu, which lists the apps.</li>
+        <li id="step-starter" hidden>Open a starter project: <strong>PROJECT</strong>, the screen key
+          <strong>RIGHT</strong> four times (PROJECTS), pick one, <strong>OK</strong> twice.</li>
       </ol>
       <p class="small">
         The zip's <code>STRATA-README.txt</code> has the same steps, and the full guide is
