@@ -25,7 +25,7 @@ Lost? Hold FUNC alone for help on the screen you are on. FUNC+CLR undoes anythin
    EDIT: the selected track's sound. Screen keys L/R walk the pages, A-D turn.
    OK in EDIT opens SOUNDS: ready-made sounds for that track. AS WAS puts yours back.
    FUNC+EDIT (MACHINE): pick the machine on each track with A.
-   MIXER: levels, delay, reverb, the sidechain duck and the master.
+   MIXER: levels, the sidechain duck, stereo width, delay, reverb, chorus, the master.
 
 5. PERFORM
    Upper pads: FILL, REPEAT, MUTE, SCENE A, SCENE B, THROW, MUTATE.
@@ -33,13 +33,14 @@ Lost? Hold FUNC alone for help on the screen you are on. FUNC+CLR undoes anythin
    Push VALUE + STEP 1-15: an effect (sweeps, risers, tape stop...). VALUE is its amount;
    tap VALUE to bring it back to dry. Push VALUE + STEP 16: the looper.
    FUNC+MIXER (PERFORM): scenes, the A/B morph on VALUE, four macros on A-D.
+   In PERFORM, FUNC + turn C is ENERGY: down to a breakdown, up to the peak, 0 as written.
    Hold OK on GRID: GENERATE a part for the track, or let it EVOLVE as it plays.
 
 6. USE THE SAMPLE PACK
    The pack is in /SAMPLES/STRATA on the card: drums, perc, bass, leads and chords, all
    rendered by STRATA's own machines. On MACHINE (FUNC+EDIT) set a track to SMP with A,
    then OK opens the sample browser in /SAMPLES: OK on STRATA opens the pack, push A
-   hears a file, OK loads it.
+   hears a file (twice while the beat plays), OK loads it.
    Melodic files name their note (MONO_ACID_C2): played at C4 they sound at that note.
    M7 files are C minor seventh chords.
 
@@ -47,6 +48,8 @@ Lost? Hold FUNC alone for help on the screen you are on. FUNC+CLR undoes anythin
    FUNC+HOME, OK saves the project. A changed starter project is yours: save it, or
    SAVE AS a new name on PROJECTS (FUNC+DOWN) to keep the original.
    FUNC+REC (RESAMPLE) records the output to a WAV file or onto a track.
+   FUNC+HOME, UP, OK starts JAM REC: the whole jam to /RECORD on the card, until
+   FUNC+HOME, UP, OK again.
 
 More: the manual, https://github.com/Devko/STRATA/blob/main/docs/MANUAL.md
 and the cheatsheet, https://github.com/Devko/STRATA/blob/main/docs/CHEATSHEET.md
