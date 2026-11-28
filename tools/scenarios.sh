@@ -15,7 +15,7 @@
 #   tools/scenarios.sh -j 1       one at a time, in $ENAGA_BUILD itself, as before
 #   tools/scenarios.sh -j 4 m3    at most four at once
 #
-# Every scenario takes one of $STRATA_EMU_SLOTS slots (default: the cores less two) shared by
+# Every scenario takes one of $STRATA_EMU_SLOTS slots (default: seven of every eight cores) shared by
 # every run on the machine (lock files in ~/strata-build/slots), so threads in several worktrees
 # running scenarios at once queue for the cores instead of all slowing down together: five runs
 # at -j 4 on Roland's 16 threads sent single scenarios from 49 s to 226 s (2026-11-28). The load
@@ -85,7 +85,8 @@ results="$(mktemp -d "${TMPDIR:-/tmp}/strata-scenarios.XXXXXX")"
 trap 'rm -rf "$results"' EXIT
 
 # One of $STRATA_EMU_SLOTS machine-wide slots, held until this shell exits (flock on an fd).
-slots="${STRATA_EMU_SLOTS:-$(( $(nproc 2>/dev/null || echo 4) > 3 ? $(nproc 2>/dev/null || echo 4) - 2 : 1 ))}"
+cores=$(nproc 2>/dev/null || echo 4)
+slots="${STRATA_EMU_SLOTS:-$(( cores - cores / 8 ))}"
 slot_dir="${STRATA_SLOT_DIR:-$HOME/strata-build/slots}"
 take_slot() {
     local i waited=0

@@ -1896,7 +1896,7 @@ So the scenarios are the cost, then the uncached cl6x build. What the check loop
   after a DSP change and four smoke scenarios (`tools/scenario_pick.py`). A one-file core change
   picks 5 of 66, a DSP file about 11, a change to the harness all of them. The full pass moved to
   `main` after a batch of merges, before a card and before a release.
-- **Machine-wide emulator slots** (`STRATA_EMU_SLOTS`, the cores less two): scenario runs from
+- **Machine-wide emulator slots** (`STRATA_EMU_SLOTS`, seven of every eight cores): scenario runs from
   every worktree queue for the cores instead of all slowing down at once.
 - **The device build caches each object** (`~/strata-build/cache/obj`, keyed by the source, every
   header beside it and in Enaga's `include/`, the compiler and its flags without the include

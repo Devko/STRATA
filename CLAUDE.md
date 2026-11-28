@@ -80,7 +80,7 @@ batch of merges, before a card goes to the unit and before a release, from the t
 and is logged in docs/SCENARIO_LOG.md. A change to the harness itself (tools/env.sh, build.sh,
 enaga_cached.py, emu_drive.py, scenarios.sh, Enaga) makes `--changed` pick every scenario.
 
-Scenarios queue for machine-wide emulator slots (`STRATA_EMU_SLOTS`, default the cores less two),
+Scenarios queue for machine-wide emulator slots (`STRATA_EMU_SLOTS`, default seven of every eight cores),
 so run them at any `-j` from any worktree: parallel threads take turns instead of slowing every
 run down. The device build caches each object by its inputs, shared by every worktree
 (`~/strata-build/cache/obj`), and compiles the rest in parallel; `STRATA_ENAGA_CACHE=off` builds
