@@ -88,3 +88,52 @@ TEST(scope_the_history_holds_the_newest_frames_newest_first) {
     CHECK_EQ(g_history.left(ScopeHistory::kHistory - 1), expect(3198 - 2 * (ScopeHistory::kHistory - 1)));
     CHECK_EQ(g_history.left(ScopeHistory::kHistory), 0);   // past the history
 }
+
+// A push that straddles the ring's end splits in the right place, a push that half fits counts
+// only the half it drops, and one drain takes everything waiting even past the history's wrap.
+TEST(scope_a_push_across_the_end_and_a_drain_past_the_wrap_lose_nothing) {
+    static ScopeRing ring;
+    float block[2 * 64];
+    int16_t l[ScopeRing::kFrames], r[ScopeRing::kFrames];
+    ramp_block(block, 2, 0);
+    ring.push(block, 2);                                 // one frame: the blocks no longer align
+    for (uint32_t b = 0; b < 63; b++) {
+        ramp_block(block, 64, b * 64);
+        ring.push(block, 64);
+    }
+    CHECK_EQ(ring.take(l, r, ScopeRing::kFrames), 1u + 63u * 32u);
+    // The write position is 2017: this block's 32 frames go 31 before the end and 1 after.
+    ramp_block(block, 64, 5000);
+    ring.push(block, 64);
+    CHECK_EQ(ring.take(l, r, ScopeRing::kFrames), 32u);
+    for (uint32_t i = 0; i < 32; i++) {
+        CHECK_EQ(l[i], expect(5000 + 2 * i));
+        CHECK_EQ(r[i], int16_t(-expect(5000 + 2 * i)));
+    }
+    // Room for 16 frames, a block of 32: 16 kept, 16 dropped.
+    for (uint32_t b = 0; b < 63; b++) ring.push(block, 64);
+    ring.push(block, 32);
+    CHECK_EQ(ring.dropped(), 0u);
+    ring.push(block, 64);
+    CHECK_EQ(ring.dropped(), 16u);
+    CHECK_EQ(ring.take(l, r, ScopeRing::kFrames), ScopeRing::kFrames);
+
+    static ScopeRing full;
+    static ScopeHistory history;
+    for (uint32_t b = 0; b < 47; b++) {                  // 1,504 frames, more than the history
+        ramp_block(block, 64, b * 64);
+        full.push(block, 64);
+    }
+    history.drain(full);
+    CHECK_EQ(history.arrived(), 1504u);
+    CHECK_EQ(history.left(0), expect(2 * 1503));
+    for (uint32_t b = 0; b < 20; b++) {                  // 640 more, from a head past the wrap
+        ramp_block(block, 64, 4000 + b * 64);
+        full.push(block, 64);
+    }
+    history.drain(full);
+    CHECK_EQ(history.arrived(), 2144u);
+    CHECK_EQ(history.left(0), expect(4000 + 2 * 639));
+    CHECK_EQ(history.left(639), expect(4000));
+    CHECK_EQ(history.left(640), expect(2 * 1503));
+}
