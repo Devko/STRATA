@@ -268,6 +268,9 @@ changed meaning. C and D with FUNC are ENERGY and LIVE RND (below).
   jump or swap puts them where the lock had them.
 - **On screen**: PERFORM's line under the macros reads `FUNC+A/B REL/LEN ALL` at rest and
   `REL -12 LEN 71%` away from it; the live strip adds `RL-` / `RL+` and `LN-` / `LN+`.
+- **A turn keeps its layer**: a knob still turning stays on the layer its turn started on, the
+  macro or this one, until it rests for a quarter second. FUNC let go (or pressed) with the knob
+  still moving does not hand the last clicks to the other layer. The same for ENERGY and LIVE RND.
 - **While FUNC is held** in PERFORM the four gauges are this layer (U1, 2026-11-28): `REL`,
   `LEN`, `NRG` and `RND` under the letters, each gauge with its value (`-12`, `71`, `+40`, `4`,
   `OFF`), lit away from rest; the hint line gives way to them. Let go, and the macros are back.

@@ -12101,6 +12101,7 @@ TEST(ui_func_turn_a_and_b_in_perform_are_rel_all_and_len_all) {
     app.on_encoder(0, -1);
     pump(2);
     CHECK_EQ(int(engine.macro_position(0)), int(macro_a));
+    pump(300);                                    // the knob rests: the next turn picks its layer
 
     // Back to rest, both: the hint returns and the strip is empty of them.
     app.on_key(ENAGA_KEY_F1, true);
@@ -12244,6 +12245,7 @@ TEST(ui_func_d_in_perform_is_live_rnd_and_func_lower_pad_arms_a_track) {
     CHECK(engine.macro_position(3) != macro_d);
     app.on_encoder(3, -1);
     CHECK_EQ(int(undo_depth()), int(undo_before));
+    pump(300);                                    // the knob rests: the next turn picks its layer
 
     app.on_key(ENAGA_KEY_F1, true);
     app.on_pad_press(pad_for_track(1), 100);
@@ -12354,6 +12356,7 @@ TEST(ui_func_c_in_perform_is_energy_with_a_detent_at_rest) {
     CHECK(engine.macro_position(2) != macro_c);
     app.on_encoder(2, -1);
     CHECK_EQ(int(undo_depth()), int(undo_before));
+    pump(300);                                    // the knob rests: the next turn picks its layer
 
     app.on_key(ENAGA_KEY_F1, true);
     app.on_encoder(2, -30);
@@ -12362,6 +12365,77 @@ TEST(ui_func_c_in_perform_is_energy_with_a_detent_at_rest) {
     CHECK_EQ(int(engine.energy()), 0);                        // the detent caught it
     CHECK(!strip_has(app, "EN"));
     CHECK(!screen_has(app, "EN+"));
+}
+
+// A knob still turning keeps the layer its turn started on (Roland on the unit, 2026-11-28:
+// "energy also changes macro C"). FUNC let go with C still moving gives the last clicks to
+// ENERGY, not to macro C; FUNC pressed mid-turn leaves the macro turn on the macro. Once the knob
+// has rested a quarter second, FUNC picks the layer again.
+TEST(ui_a_knob_still_turning_keeps_its_layer_across_func) {
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+    shift_key(ENAGA_KEY_F7);
+    pump(1600);
+    const uint8_t macro_c = engine.macro_position(2);
+
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_encoder(2, -4);                                    // ENERGY -8
+    pump(30);
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(30);
+    app.on_encoder(2, -1);                                    // the knob still moving
+    pump(30);
+    app.on_encoder(2, -1);
+    pump(2);
+    CHECK_EQ(int(engine.energy()), -12);
+    CHECK_EQ(int(engine.macro_position(2)), int(macro_c));    // macro C never moved
+
+    pump(300);                                                // rested: C is the macro again
+    app.on_encoder(2, +3);
+    pump(2);
+    CHECK_EQ(int(engine.energy()), -12);
+    CHECK_EQ(int(engine.macro_position(2)), int(macro_c) + 6);
+    pump(30);
+    app.on_key(ENAGA_KEY_F1, true);                           // FUNC pressed mid-turn
+    pump(30);
+    app.on_encoder(2, -3);
+    pump(2);
+    CHECK_EQ(int(engine.energy()), -12);
+    CHECK_EQ(int(engine.macro_position(2)), int(macro_c));
+    pump(300);                                                // rested, FUNC still held
+    app.on_encoder(2, +6);
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(2);
+    CHECK_EQ(int(engine.energy()), 0);
+    CHECK_EQ(int(engine.macro_position(2)), int(macro_c));
+}
+
+// A, B and D take the same path as C: FUNC let go mid-turn, the last click still reaches REL ALL,
+// LEN ALL and LIVE RND, and the macro under the knob never moves.
+TEST(ui_a_b_and_d_still_turning_keep_their_layer_across_func) {
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+    shift_key(ENAGA_KEY_F7);
+    pump(1600);
+    for (int knob : {0, 1, 3}) {
+        const uint8_t macro = engine.macro_position(knob);
+        app.on_key(ENAGA_KEY_F1, true);
+        app.on_encoder(knob, -1);
+        pump(30);
+        app.on_key(ENAGA_KEY_F1, false);
+        pump(30);
+        app.on_encoder(knob, knob == 3 ? +2 : -1);            // still turning: the FUNC layer
+        pump(2);
+        CHECK_EQ(int(engine.macro_position(knob)), int(macro));
+        if (knob == 0) CHECK_EQ(int(engine.rel_all()), -4);
+        if (knob == 1) CHECK(engine.len_all() < 0);
+        if (knob == 3) CHECK(engine.live_rnd_unit() != kLiveRndOff);
+        pump(300);                                            // rested: the macro again
+        app.on_encoder(knob, +1);
+        pump(2);
+        CHECK_EQ(int(engine.macro_position(knob)), int(macro) + 2);
+        pump(300);
+    }
 }
 
 // ENERGY is in a LOCK: a jump puts it back and the UI's knob follows.

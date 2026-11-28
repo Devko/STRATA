@@ -1083,6 +1083,15 @@ its own; A07's track 3 a different part.
 - STEP 7 on track 3 again, tap FUNC + MUTATE twice, then CLR on track 3: A01's own track 3 is
   still its own part, not A07's. Save, RELOAD PROJECT: the same. `____`
 
+**W79. A knob keeps its layer through FUNC (2 min).** A01 playing, PERFORM.
+- Hold FUNC, turn C down steadily and let go of FUNC while still turning, for about half a
+  second more: ENERGY goes on going down (`ENERGY -30`), and after letting go macro C's gauge has
+  not moved. Turn C back up with FUNC to `ENERGY 0`: the part is as programmed, the dub delay as
+  before. `____`
+- Rest the knob a moment, then turn C without FUNC: `MACRO C` and a number, macro C moves at once. Turn it
+  and press FUNC mid-turn: macro C goes on; rest, then turn: ENERGY. The same with A (REL ALL) and
+  D (LIVE RND). `____`
+
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
 
