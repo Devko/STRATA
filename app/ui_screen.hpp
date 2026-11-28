@@ -268,6 +268,14 @@
             append(out, text);
         };
 
+        // ARR REC first while a take is on, with the sections written so far: ARR, ARR7.
+        if (arr_on()) {
+            p = part;
+            append(p, "ARR");
+            if (arr_written() > 0) append_number(p, uint32_t(arr_written()));
+            *p = 0;
+            add(part);
+        }
         // Where the hand is now, first: the stutter's step and the rate under REPEAT or a roll.
         if (stutter_raw_ >= 0) {
             p = part;

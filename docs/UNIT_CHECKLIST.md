@@ -904,14 +904,18 @@ Beat playing, A01, a card with some space.
   offering `KCK 1`. OK: `SAVED KCK 1`, and `+KCK 1     NOW` at the end of the list, under the
   cursor. The beat never stops or stutters. `____`
 - Down to 909, OK: the factory kick. Back to `+KCK 1`, OK: your kick again, as you left it. `____`
+- On the FX page turn PAN hard left, on the LFO page push RAT to `RETRIG` and give the LFO some
+  depth, then FUNC + DOWN on `+KCK 1`, OK (REPLACE). Pan back to the middle and TRIG to `FREE`,
+  OK on `+KCK 1`: the kick is hard left again and its LFO restarts on every hit. AS WAS: middle,
+  FREE. `____`
 - Push B on `+KCK 1`, UP once, OK: `+LCK 1`. Push C, OK, OK: `DELETED`, the row is gone. Push B
   on a factory sound: `YOUR OWN SOUNDS ONLY`. `____`
 - Save one again, then switch the unit off and on: it is still in the list, in this project and
   after NEW. On the PC the card has `ENAGA/DATA/STRATA/SOUNDS/KCK.BIN`. `____`
 - Track 6 (MNO), SOUNDS, FUNC + UP: `COPIED T6 MNO`. Screen key right to track 7 (PLY):
   `PASTE T6 MNO` under AS WAS, `SWITCHES MACHINE` under the bars. OK: track 7 plays track 6's
-  bass sound on its own notes, its pan and sends as they were. AS WAS: PLY and its stab are
-  back. `____`
+  bass sound on its own notes, with track 6's pan, sends, LFO and arp. AS WAS: PLY and its
+  stab are back, with its own pan and sends. `____`
 
 **W69. Line input as a mixer channel (6 min).** Beat playing, A01, a synth or phone on INPUT L
 and R (line level), headphones on.
@@ -999,7 +1003,28 @@ GRID, CLOCK SRC INTERNAL. For the last two, a computer or a second unit on MIDI.
   or zipper on the sweeps. 30 s with WOBBLE on track 6 and DRIFT on track 7: **MAX `____ %`**
   (against W23's). FUNC+HOME, RELOAD PROJECT puts the beat back.
 
-**W74. TRANSPOSE (4 min).** Beat playing, A01.
+**W74. ARR REC: a jam into the chain (6 min).** A project with a chain of its own, the beat
+stopped on A01, scenes 3 and 4 as in W71.
+- FUNC+HOME, DOWN, DOWN: `ARR REC OFF`. OK: the menu closes, `ARR: PRESS PLAY`, the strip reads
+  `ARR`, the REC key blinks dim red. `____`
+- PLAY. Two passes as it is; then mute track 1 in the middle of a pass; one pass later turn
+  ENERGY down (FUNC + C in PERFORM); then queue A02 (END) and play two passes of it with the
+  morph pushed to B. The strip counts up (`ARR1` .. `ARR4`). `____`
+- Mute a track just after a downbeat (a hair late): that pass is written with it muted. `____`
+- STOP: `ARR 4 SECTIONS` (or as many as you made). PROJECT, CHAIN: one entry per change, X2 on
+  the first, `C` marks (CAP) under each; push A on one: MUT CAP, SCN, MRP SNAP or SNAP A, NRG and
+  BPM filled in. `____`
+- CHAIN END SONG, CHAIN ON, PLAY from stop: the jam plays back as played, mute and breakdown at
+  the pass lines, the morph on B in A02, and the song stops at the end. `____`
+- FUNC menu ARR UNDO: `ARR UNDONE`, the chain you had before. OK again: `ARR REDONE`. `____`
+- ARR REC on and straight off again: `ARR NOTHING KEPT`, the chain unchanged; ARR UNDO says
+  `NO ARR TO UNDO`. `____`
+- One pattern left playing for 17 passes: X16 and then X1 of the same. `____`
+- CLOCK SRC MIDI with a running outside clock: record two sections; their BPM reads `--`. Back to
+  INTERNAL. With JAM REC also running, both blink and both keep recording. `____`
+- Save, power cycle, open: the recorded chain is there. `____`
+
+**W75. TRANSPOSE (4 min).** Beat playing, A01.
 - FUNC + SEL> three times: `TRANSPOSE +1 IN KEY`, `+2`, `+3`; the bass, chords and leads walk up
   the scale together and stay in the key, while the kick, hats, snare and a sliced loop do not
   move. The live strip shows `TR+3`, PERFORM's status line `TR+3`. Musical? `____`
@@ -1010,13 +1035,12 @@ GRID, CLOCK SRC INTERNAL. For the last two, a computer or a second unit on MIDI.
   programmed. Hold FUNC alone for a second: the help comes up, and LEFT/RIGHT (not the screen
   keys) turn its pages. `____`
 - KEYS on the bass track: hold a pad, FUNC + SEL> twice while it sounds, let go of the pad: the
-  note ends cleanly, nothing hangs. The next pad sounds two semitones up. With REC on, a note
+  note ends cleanly, nothing hangs. The next pad sounds two scale steps up. With REC on, a note
   played at +2 plays back moved with the rest; at 0 it is the pad you pressed. `____`
 - ARP on the chord track (EDIT, ARP page, MOD UP): FUNC + SEL< while it runs: the run follows at
   its next note. `____`
 - `TRANSPOSE +5`, hold FUNC + MUTATE (a lock), go back to 0, tap FUNC + MUTATE: +5 again; tap
   again: 0. `____`
-
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
 

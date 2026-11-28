@@ -528,7 +528,7 @@
                 const UserSound &sound = storage_.sound_bank().slots[index];
                 *out++ = '+';
                 name = sound.name;
-                matches = user_sound_matches(machine, sound, now);
+                matches = user_sound_matches(machine, sound, now, user_sound_extras_of(engine_.project().kit.tracks[selected_]));
                 width = kUserSoundNameChars;
             }
             append(out, name);
@@ -649,7 +649,8 @@
             for (int g = 0; g < 5; g++) values[g] = bytes + firsts[g];
             if (kind == SoundRow::user) {
                 title = storage_.sound_bank().slots[index].name;
-                playing = user_sound_matches(machine, storage_.sound_bank().slots[index], now);
+                playing = user_sound_matches(machine, storage_.sound_bank().slots[index], now,
+                                             user_sound_extras_of(engine_.project().kit.tracks[selected_]));
             } else {
                 title = "PASTE";
                 // The copied sound draws in the machine it is for, which a paste switches to.

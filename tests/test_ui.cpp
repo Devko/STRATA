@@ -413,10 +413,10 @@ void open_keys() {
 }
 
 // The FUNC menu's rows, in order (app/ui_perfmix.hpp, MenuItem).
-enum MenuRow : int { kMenuSave, kMenuJam, kMenuClick, kMenuCountIn, kMenuRecMode, kMenuQuantize,
-                     kMenuAutofill, kMenuGlide, kMenuTranspose, kMenuLoopLen, kMenuChain, kMenuSong,
-                     kMenuProgOut, kMenuSaveAs, kMenuOpen, kMenuKits, kMenuNew, kMenuReload, kMenuClear, kMenuDemo,
-                     kMenuRowCount };
+enum MenuRow : int { kMenuSave, kMenuJam, kMenuArr, kMenuClick, kMenuCountIn, kMenuRecMode,
+                     kMenuQuantize, kMenuAutofill, kMenuGlide, kMenuTranspose, kMenuLoopLen,
+                     kMenuChain, kMenuSong, kMenuArrUndo, kMenuProgOut, kMenuSaveAs, kMenuOpen,
+                     kMenuKits, kMenuNew, kMenuReload, kMenuClear, kMenuDemo, kMenuRowCount };
 
 // GRID's track menu's rows, in order (app/ui_trackmenu.hpp, TrackRow).
 enum TrackMenuRow : int { kTrackGenerate, kTrackDensity, kTrackRange, kTrackLeap, kTrackWhat,
@@ -5079,6 +5079,18 @@ TEST(ui_a_sections_tempo_is_set_here_or_skipped_under_an_outside_clock) {
     status.bump_tempo_due(13000);
     pump(3);
     CHECK_NEAR(host.tempo(), 130.0f, 0.01);
+    // With VariSpeed off rest the clock is the section's tempo times its ratio, as for VALUE's
+    // turn: the song keeps its VariSpeed across a section's BPM (it played the plain BPM until
+    // VALUE was touched).
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_encoder(4, -5);
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(2);
+    CHECK_EQ(UiProbe::vari(app), -5);
+    status.bump_tempo_due(12000);
+    pump(3);
+    CHECK_NEAR(host.tempo(), 120.0f * vari_ratio(-5), 0.01);
+    CHECK_EQ(int(app_engine().project().settings.tempo_centi_bpm), 12000);
 }
 
 // The section's morph and ENERGY reach the knobs the UI shadows, so a turn takes over from where
@@ -10503,6 +10515,8 @@ TEST(ui_sounds_func_down_saves_the_tracks_sound_by_name_and_ok_loads_it_back) {
     Strata &app = fresh();
     sounds_on(app, MachineId::kick);
     kick_of_my_own();
+    post_cmd_track(Cmd::set_lfo_trig, 0, kLfoTrigOneShot);   // a kit setting the sound keeps
+    pump(2);
     const TrackParams mine = app_engine().params(0);
     CHECK(app_storage().sound_bank_state(uint8_t(MachineId::kick)) == Storage::SoundBankState::ready);
 
@@ -10520,15 +10534,20 @@ TEST(ui_sounds_func_down_saves_the_tracks_sound_by_name_and_ok_loads_it_back) {
     CHECK(screen_has(app, ">+KCK 1     NOW"));
     check_layout(app, "SOUNDS with one of your own");
 
-    // Another sound, then the saved one back: exactly the bytes a sound owns.
+    // Another sound, the pan and the LFO TRIG moved, then the saved one back: all of it, the
+    // mix and the kit setting included.
     sounds_cursor_to(2);
     key(ENAGA_KEY_OK);
+    post_cmd(Cmd::set_param, uint8_t(kUserSoundFxFirst + 1), 20);
+    post_cmd_track(Cmd::set_lfo_trig, 0, kLfoTrigFree);
     pump(2);
     CHECK(!same_params(app_engine().params(0), mine));
+    CHECK(!screen_has(app, "+KCK 1     NOW"));
     sounds_cursor_to(first_user_row_on_kick());
     key(ENAGA_KEY_OK);
     pump(2);
     CHECK(same_params(app_engine().params(0), mine));
+    CHECK_EQ(int(app_engine().project().kit.tracks[0].lfo_trig), int(kLfoTrigOneShot));
     CHECK(std::strcmp(UiProbe::notice(app), "KCK 1") == 0);
 
     // FUNC + DOWN on your own row replaces it, offering its name; a second save offers KCK 2.
@@ -10615,17 +10634,24 @@ TEST(ui_sounds_func_up_copies_a_sound_and_paste_puts_it_on_any_track) {
     Strata &app = fresh();
     sounds_on(app, MachineId::kick);
     kick_of_my_own();
+    // Kit settings of its own too: a RETRIG LFO and an arp VAR, which a copy carries.
+    post_cmd_track(Cmd::set_lfo_trig, 0, kLfoTrigRetrig);
+    post_cmd_track(Cmd::set_arp_ext, 0, 0, 2);
+    pump(2);
     const TrackParams kick = app_engine().params(0);
+    const UserSoundExtras kick_extras = user_sound_extras_of(app_engine().project().kit.tracks[0]);
     shift_key(ENAGA_KEY_UP);
     CHECK(std::strcmp(UiProbe::notice(app), "COPIED T1 KCK") == 0);
 
-    // Track 2, another machine: the PASTE row under AS WAS switches it to KICK and sounds as
-    // track 1 does, its own mix kept.
+    // Track 2, another machine: the PASTE row under AS WAS switches it to KICK and is track 1's
+    // sound, all of it: every parameter, mix, LFO and ARP among them, and the kit settings.
     key(ENAGA_KEY_SELECT_RIGHT);
     pump(2);
     const uint8_t was = app_engine().machine_id(1);
     CHECK(was != uint8_t(MachineId::kick));
     const TrackParams before = app_engine().params(1);
+    const UserSoundExtras before_extras = user_sound_extras_of(app_engine().project().kit.tracks[1]);
+    CHECK(!user_sound_extras_equal(before_extras, kick_extras));
     sounds_cursor_to(1);
     CHECK(screen_has(app, ">PASTE T1 KCK"));
     check_layout(app, "SOUNDS with PASTE");
@@ -10635,18 +10661,18 @@ TEST(ui_sounds_func_up_copies_a_sound_and_paste_puts_it_on_any_track) {
     CHECK_EQ(int(app_engine().machine_id(1)), int(MachineId::kick));
     const TrackParams &now = app_engine().params(1);
     for (int p = 0; p < kTrackParams; p++) {
-        if (user_sound_owns(uint8_t(MachineId::kick), p)) {
-            CHECK_EQ(int(now.v[p]), int(kick.v[p]));
-        } else if (p >= kUserSoundFxFirst && p < kSoundAsrFirst) {
-            CHECK_EQ(int(now.v[p]), int(before.v[p]));     // its mix, LFO and ARP stay
-        }
+        if (kit_param_real(p)) CHECK_EQ(int(now.v[p]), int(kick.v[p]));
     }
+    CHECK(user_sound_extras_equal(user_sound_extras_of(app_engine().project().kit.tracks[1]),
+                                  kick_extras));
     // The list is the KICK's now, and AS WAS takes the paste back: machine and sound.
     sounds_cursor_to(0);
     key(ENAGA_KEY_OK);
     pump(2);
     CHECK_EQ(int(app_engine().machine_id(1)), int(was));
     CHECK(same_params(app_engine().params(1), before));
+    CHECK(user_sound_extras_equal(user_sound_extras_of(app_engine().project().kit.tracks[1]),
+                                  before_extras));
     key(ENAGA_KEY_CLR);
     key(ENAGA_KEY_F4);
 }
@@ -12347,7 +12373,7 @@ TEST(ui_func_and_the_screen_keys_transpose_on_every_screen) {
     pump(2);
     CHECK_EQ(int(engine.transpose()), 1);
     CHECK_EQ(UiProbe::mode(app), int(Mode::menu));
-    for (int i = 0; i < 8; i++) key(ENAGA_KEY_DOWN);         // SAVE .. FX GLIDE, TRANSPOSE
+    for (int i = 0; i < kMenuTranspose; i++) key(ENAGA_KEY_DOWN);   // SAVE .. FX GLIDE, TRANSPOSE
     CHECK(screen_has(app, "TRANSPOSE"));
     CHECK(screen_has(app, "SCALE"));
     key(ENAGA_KEY_RIGHT);
@@ -13458,6 +13484,102 @@ TEST(ui_jam_rec_starts_and_stops_from_the_menu_and_shows_it_is_running) {
     }
     CHECK_EQ(lit, 0);                                   // no dot once it has stopped
     host.remove_file(path);
+}
+
+// ARR REC (core/arrrec.hpp): the FUNC menu's row under JAM REC. OK arms a take and closes the
+// menu; PLAY starts it; each pass is written into the chain, marked for the next save, and
+// counted in the strip and on the row; the REC key blinks; OK again ends it and says how many
+// sections it wrote. ARR UNDO, a row under CHAIN END, swaps the chain from before back in.
+TEST(ui_arr_rec_records_the_jam_into_the_chain_from_the_menu) {
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    key(ENAGA_KEY_F4);                                  // GRID
+    save_and_clean();
+    const int chain_before = chain_length(app_engine().project());
+    const uint32_t pass = uint32_t(master_loop_ticks(app_engine().project().live()));
+
+    shift_key(ENAGA_KEY_F4);
+    key(ENAGA_KEY_DOWN);
+    key(ENAGA_KEY_DOWN);                                // the third row, under JAM REC
+    CHECK_EQ(UiProbe::menu_cursor(app), int(kMenuArr));
+    CHECK(screen_has(app, "ARR REC"));
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::grid));      // closed, the music back on the screen
+    CHECK_EQ(UiProbe::notice(app), "ARR: PRESS PLAY");
+    CHECK_EQ(int(app_engine().status().arr_on.load()), 1);
+    check_layout(app, "ARR REC armed");
+    char strip[64];
+    CHECK(UiProbe::live_strip(app, strip));
+    CHECK(std::strncmp(strip, "ARR", 3) == 0);
+
+    // PLAY, then two passes of the pattern: one entry, X2, and the project needs a save.
+    host.set_running(true);
+    for (uint32_t t = 0; t <= 2 * pass; t += pass / 4) {
+        host.deliver_tick(t, 0);
+        pump();
+    }
+    CHECK_EQ(chain_length(app_engine().project()), 1);
+    CHECK_EQ(int(app_engine().project().chain[0].repeats), 2);
+    CHECK(app_storage().dirty());
+    CHECK(UiProbe::live_strip(app, strip));
+    CHECK(std::strncmp(strip, "ARR1", 4) == 0);
+
+    // The REC key: dim red for 600 ms of each second while the take is on.
+    int lit = 0;
+    for (int i = 0; i < 1000; i++) {
+        pump();
+        lit += UiProbe::key_red(app, ENAGA_KEY_F2) == 4 ? 1 : 0;
+    }
+    CHECK(lit >= 595 && lit <= 605);
+
+    // The row says it is on and how far it has got; OK there ends the take.
+    menu_to(kMenuArr);
+    CHECK(screen_has(app, "ON 1"));
+    check_layout(app, "ARR REC row on");
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK_EQ(UiProbe::notice(app), "ARR 1 SECTION");
+    CHECK_EQ(int(app_engine().status().arr_on.load()), 0);
+    CHECK(screen_has(app, "OFF"));
+    pump(2);
+    CHECK_EQ(int(UiProbe::key_red(app, ENAGA_KEY_F2)), 0);
+
+    // ARR UNDO: the chain from before, and again the take.
+    menu_to(kMenuArrUndo);
+    CHECK(screen_has(app, "ARR UNDO"));
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK_EQ(UiProbe::notice(app), "ARR UNDONE");
+    CHECK_EQ(chain_length(app_engine().project()), chain_before);
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK_EQ(UiProbe::notice(app), "ARR REDONE");
+    CHECK_EQ(chain_length(app_engine().project()), 1);
+    key(ENAGA_KEY_CLR);
+    // Back to bar 1 for the next test: a tick 0 resyncs the bar count, then the stop.
+    host.deliver_tick(0, 0);
+    pump();
+    host.set_running(false);
+    pump(2);
+}
+
+// A take turned on and off again before a pass was kept costs nothing: the old chain is back,
+// and there is nothing for ARR UNDO to swap.
+TEST(ui_arr_rec_on_and_off_at_once_keeps_the_chain) {
+    Strata &app = fresh();
+    menu_to(kMenuArr);
+    key(ENAGA_KEY_OK);
+    pump(2);
+    menu_to(kMenuArr);
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK_EQ(UiProbe::notice(app), "ARR NOTHING KEPT");
+    menu_to(kMenuArrUndo);
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK_EQ(UiProbe::notice(app), "NO ARR TO UNDO");
+    key(ENAGA_KEY_CLR);
 }
 
 // JAM REC on FUNC + REC twice (usability review, 2026-11-28): the first press is RESAMPLE, the

@@ -284,6 +284,7 @@
         service_track_menu();
         service_launch();
         service_section();
+        service_arr();
         service_input_route();
 
         // A queued launch landed (Track Launch): the lane's source is saved in PROJECT.BIN.
@@ -544,8 +545,9 @@
             if (due != tempo_due_seen_) {
                 tempo_due_seen_ = due;
                 const uint16_t centi = status.section_tempo.load(std::memory_order_relaxed);
-                if (enaga::clock::source() != ENAGA_CLOCK_INTERNAL ||
-                    !enaga::clock::set_tempo(float(centi) * 0.01f)) {
+                // Through set_clock_tempo, as VALUE's turn: the clock is the project's tempo
+                // times VariSpeed's ratio, so a section's BPM keeps the song's VariSpeed.
+                if (enaga::clock::source() != ENAGA_CLOCK_INTERNAL || !set_clock_tempo(centi)) {
                     clock_refused_ = true;
                     if (!bpm_skip_said_) {
                         bpm_skip_said_ = true;
@@ -817,7 +819,9 @@
                   mode_ == Mode::edit ? 8 : 0);
         // REC is red while recording, and green on RESAMPLE ("sampling"). JAM REC blinks it a dim
         // red in time with the top bar's dot, so a running jam shows from a step back.
-        leds_.key(ENAGA_KEY_F2, rec_ ? 8 : (jam_mark_on() ? 4 : 0), mode_ == Mode::resample ? 8 : 0);
+        // ARR REC blinks it the same way.
+        leds_.key(ENAGA_KEY_F2, rec_ ? 8 : (jam_mark_on() || arr_mark_on() ? 4 : 0),
+                  mode_ == Mode::resample ? 8 : 0);
         // FUNC lights while it is held, so a chord shows it is being read as one.
         leds_.key(ENAGA_KEY_F1, 0, shift_ ? 8 : 0);
 

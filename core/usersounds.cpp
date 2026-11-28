@@ -18,9 +18,13 @@ constexpr uint32_t kRecordBytes = kRecordHeadBytes + uint32_t(kKitParams);
 static_assert(kRecordBytes <= 255, "R is one byte on disk");
 static_assert(kKitParams <= 255, "P is one byte on disk");
 constexpr uint32_t kSectionBytes = kBankFixedBytes + uint32_t(kUserSoundSlots) * kRecordBytes;
-constexpr uint32_t kSections = 1;
+constexpr uint32_t kExtrasFixedBytes = 2;
+constexpr uint32_t kExtrasBytes =
+    kExtrasFixedBytes + uint32_t(kUserSoundSlots) * uint32_t(kUserSoundExtraBytes);
+static_assert(kUserSoundExtraBytes <= 255, "E is one byte on disk");
+constexpr uint32_t kSections = 2;
 constexpr uint32_t kTableBytes = kSections * kSectionEntryBytes;
-constexpr uint32_t kTotalBytes = kHeaderBytes + kTableBytes + kSectionBytes;
+constexpr uint32_t kTotalBytes = kHeaderBytes + kTableBytes + kSectionBytes + kExtrasBytes;
 
 bool name_char(char c) {
     return (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == ' ' || c == '-' ||
@@ -47,11 +51,43 @@ void copy_name(char *out, const char *name) {
     for (; i <= kUserSoundNameChars; i++) out[i] = '\0';
 }
 
+// Extras made safe, as KIT.BIN's sections 9, 10 and 12 make theirs.
+UserSoundExtras sanitized(const UserSoundExtras &in) {
+    UserSoundExtras out;
+    out.lfo_trig = in.lfo_trig < kLfoTrigs ? in.lfo_trig : kLfoTrigFree;
+    for (int m = 0; m < kModSlots; m++) {
+        out.mod[m] = mod_slot_sanitized(in.mod[m].source, in.mod[m].dest, uint8_t(in.mod[m].depth));
+    }
+    out.arp = kit_arp_sanitized(in.arp);
+    return out;
+}
+
 }  // namespace
 
+UserSoundExtras user_sound_extras_of(const KitTrack &track) {
+    UserSoundExtras e;
+    e.lfo_trig = track.lfo_trig;
+    for (int m = 0; m < kModSlots; m++) e.mod[m] = track.mod[m];
+    e.arp = track.arp;
+    return e;
+}
+
+bool user_sound_extras_equal(const UserSoundExtras &a, const UserSoundExtras &b) {
+    if (a.lfo_trig != b.lfo_trig) return false;
+    for (int m = 0; m < kModSlots; m++) {
+        if (a.mod[m].source != b.mod[m].source || a.mod[m].dest != b.mod[m].dest ||
+            a.mod[m].depth != b.mod[m].depth) {
+            return false;
+        }
+    }
+    for (int f = 0; f < kArpExtFields; f++) {
+        if (arp_ext_get(a.arp, f) != arp_ext_get(b.arp, f)) return false;
+    }
+    return true;
+}
+
 bool user_sound_owns(uint8_t machine, int p) {
-    const auto mask = sound_preset_writes(machine);
-    return p >= 0 && p < int(sizeof(mask) * 8) && ((mask >> p) & 1u) != 0;
+    return user_sounds_supported(machine) && kit_param_real(p);
 }
 
 bool user_sounds_supported(uint8_t machine) { return sound_preset_writes(machine) != 0; }
@@ -126,7 +162,8 @@ void user_sound_default_name(const UserSoundBank &bank, const char *base, char *
     copy_name(out, "SOUND");   // unreachable: one of the seventeen is free
 }
 
-bool user_sound_store(UserSoundBank &bank, int slot, const char *name, const uint8_t *params) {
+bool user_sound_store(UserSoundBank &bank, int slot, const char *name, const uint8_t *params,
+                      const UserSoundExtras &extras) {
     if (slot < 0 || slot >= kUserSoundSlots || params == nullptr) return false;
     if (!user_sound_name_valid(name)) return false;
     UserSound &s = bank.slots[slot];
@@ -136,6 +173,7 @@ bool user_sound_store(UserSoundBank &bank, int slot, const char *name, const uin
         const uint8_t top = kit_param_max(p);
         s.params[p] = params[p] > top ? top : params[p];
     }
+    s.extras = sanitized(extras);
     return true;
 }
 
@@ -160,12 +198,13 @@ bool user_sound_apply(uint8_t machine, const UserSound &sound, uint8_t *params) 
     return true;
 }
 
-bool user_sound_matches(uint8_t machine, const UserSound &sound, const uint8_t *params) {
+bool user_sound_matches(uint8_t machine, const UserSound &sound, const uint8_t *params,
+                        const UserSoundExtras &extras) {
     if (!sound.used || params == nullptr || !user_sounds_supported(machine)) return false;
     for (int p = 0; p < kKitParams; p++) {
         if (user_sound_owns(machine, p) && params[p] != sound.params[p]) return false;
     }
-    return true;
+    return user_sound_extras_equal(sound.extras, extras);
 }
 
 bool user_bank_file_name(uint8_t machine, char *out, int max) {
@@ -199,6 +238,10 @@ SerializeResult user_bank_write(const UserSoundBank &bank, uint8_t *buffer, uint
     w.u16(0);   // reserved
     w.u32(kTableBytes);
     w.u32(kSectionBytes);
+    w.u16(kSectionUserSoundExtras);
+    w.u16(0);
+    w.u32(kTableBytes + kSectionBytes);
+    w.u32(kExtrasBytes);
 
     w.u8(bank.machine);
     w.u8(kKitFilterLayout);
@@ -211,6 +254,18 @@ SerializeResult user_bank_write(const UserSoundBank &bank, uint8_t *buffer, uint
         for (int i = 0; i < kUserSoundNameChars; i++) w.u8(s.used ? uint8_t(s.name[i]) : 0);
         w.u8(0);
         for (int p = 0; p < kKitParams; p++) w.u8(s.used ? s.params[p] : 0);
+    }
+    w.u8(uint8_t(kUserSoundSlots));
+    w.u8(uint8_t(kUserSoundExtraBytes));
+    for (const UserSound &s : bank.slots) {
+        const UserSoundExtras e = s.used ? s.extras : UserSoundExtras{};
+        w.u8(e.lfo_trig);
+        for (int m = 0; m < kModSlots; m++) {
+            w.u8(e.mod[m].source);
+            w.u8(e.mod[m].dest);
+            w.u8(uint8_t(e.mod[m].depth));
+        }
+        for (int f = 0; f < kArpExtFields; f++) w.u8(arp_ext_get(e.arp, f));
     }
 
     if (!w.ok() || w.size() != kTotalBytes) return SerializeResult::buffer_too_small;
@@ -239,8 +294,8 @@ SerializeResult user_bank_read(UserSoundBank &bank, uint8_t machine, const uint8
     const uint32_t table = sections * kSectionEntryBytes;
     if (table > payload) return SerializeResult::malformed;
 
-    // Find the bank section; skip any this build does not know.
-    uint32_t at = 0, len = 0;
+    // Find the bank section and the extras; skip any this build does not know.
+    uint32_t at = 0, len = 0, ext_at = 0, ext_len = 0;
     for (uint32_t i = 0; i < sections; i++) {
         if (!r.seek(kHeaderBytes + i * kSectionEntryBytes)) return SerializeResult::malformed;
         const uint16_t id = r.u16();
@@ -249,6 +304,12 @@ SerializeResult user_bank_read(UserSoundBank &bank, uint8_t machine, const uint8
         const uint32_t bytes = r.u32();
         if (!r.ok()) return SerializeResult::truncated;
         if (off < table || off > payload || bytes > payload - off) return SerializeResult::malformed;
+        if (id == kSectionUserSoundExtras) {
+            if (ext_at != 0) return SerializeResult::malformed;
+            ext_at = off;
+            ext_len = bytes;
+            continue;
+        }
         if (id != kSectionUserSounds) continue;
         if (at != 0) return SerializeResult::malformed;   // the same id twice
         at = off;
@@ -278,6 +339,42 @@ SerializeResult user_bank_read(UserSoundBank &bank, uint8_t machine, const uint8
     uint8_t defaults[kKitParams] = {};
     machine_defaults_apply(machine, defaults);
 
+    // The extras, when the file has them: a fresh track's for any slot or byte it does not carry.
+    UserSoundExtras extras[kUserSoundSlots];
+    if (ext_at != 0) {
+        if (ext_len < kExtrasFixedBytes) return SerializeResult::malformed;
+        Reader x(buffer + kHeaderBytes + ext_at, ext_len);
+        const uint32_t ext_records = x.u8();
+        const uint32_t ext_bytes = x.u8();
+        if (uint64_t(ext_records) * ext_bytes > ext_len - kExtrasFixedBytes) {
+            return SerializeResult::malformed;
+        }
+        const uint32_t ext_take =
+            ext_records < uint32_t(kUserSoundSlots) ? ext_records : uint32_t(kUserSoundSlots);
+        for (uint32_t k = 0; k < ext_take; k++) {
+            if (!x.seek(kExtrasFixedBytes + k * ext_bytes)) return SerializeResult::malformed;
+            uint8_t b[kUserSoundExtraBytes] = {};
+            UserSoundExtras fresh;
+            b[0] = fresh.lfo_trig;
+            for (int m = 0; m < kModSlots; m++) {
+                b[1 + 3 * m] = fresh.mod[m].source;
+                b[2 + 3 * m] = fresh.mod[m].dest;
+                b[3 + 3 * m] = uint8_t(fresh.mod[m].depth);
+            }
+            for (int f = 0; f < kArpExtFields; f++) b[1 + 3 * kModSlots + f] = arp_ext_get(fresh.arp, f);
+            for (uint32_t i = 0; i < ext_bytes && i < uint32_t(kUserSoundExtraBytes); i++) b[i] = x.u8();
+            if (!x.ok()) return SerializeResult::truncated;
+            UserSoundExtras &e = extras[k];
+            e.lfo_trig = b[0];
+            for (int m = 0; m < kModSlots; m++) {
+                e.mod[m].source = b[1 + 3 * m];
+                e.mod[m].dest = b[2 + 3 * m];
+                e.mod[m].depth = int8_t(b[3 + 3 * m]);
+            }
+            for (int f = 0; f < kArpExtFields; f++) arp_ext_set(e.arp, f, b[1 + 3 * kModSlots + f]);
+        }
+    }
+
     UserSoundBank read;
     user_bank_init(read, machine);
     const uint32_t take = records < uint32_t(kUserSoundSlots) ? records : uint32_t(kUserSoundSlots);
@@ -301,7 +398,8 @@ SerializeResult user_bank_read(UserSoundBank &bank, uint8_t machine, const uint8
         while (n > 0 && name[n - 1] == ' ') name[--n] = '\0';
         int lead = 0;
         while (name[lead] == ' ') lead++;
-        if (!user_sound_store(read, int(k), name[lead] != '\0' ? name + lead : "SOUND", bytes)) {
+        if (!user_sound_store(read, int(k), name[lead] != '\0' ? name + lead : "SOUND", bytes,
+                              extras[k])) {
             return SerializeResult::malformed;
         }
     }
