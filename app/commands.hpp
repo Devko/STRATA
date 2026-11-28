@@ -423,6 +423,10 @@ enum class Cmd : uint8_t {
     // absolute (the UI keeps the position, as it does REL ALL's). Performance, not edits: no
     // file, no undo; a LOCK holds it.
     set_energy,
+    // TRANSPOSE (core/transpose.hpp), FUNC + the screen keys on every screen. a: the semitones as
+    // an int8, -12 .. 12, absolute (the UI keeps it, as it does ENERGY). The melodic tracks'
+    // notes, after the scale fold. Performance, not an edit: no file, no undo; a LOCK holds it.
+    set_transpose,
     // VariSpeed (core/varispeed.hpp), FUNC + turn VALUE. a: the amount as an int8, tenths of a
     // semitone, -120 .. 120, absolute (the UI keeps it, with the clock it sets). The pitch of
     // every machine and the delay's beat; Enaga's tempo is app/'s to set. Performance, not an

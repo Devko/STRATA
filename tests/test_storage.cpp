@@ -618,6 +618,8 @@ const Expect kTable[] = {
     {Cmd::set_live_rnd, 0u, "set_live_rnd"},
     // ENERGY too (core/energy.hpp).
     {Cmd::set_energy, 0u, "set_energy"},
+    // TRANSPOSE too (core/transpose.hpp): the notes stay as written.
+    {Cmd::set_transpose, 0u, "set_transpose"},
     // VariSpeed too (core/varispeed.hpp): the project keeps its own tempo.
     {Cmd::set_varispeed, 0u, "set_varispeed"},
     // An audition is heard, not kept: the track and the project are untouched.
