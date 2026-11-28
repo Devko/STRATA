@@ -511,7 +511,7 @@
         // A tempo nudge (FUNC + push VALUE + turn) that has run out: back to the set tempo,
         // times VariSpeed's.
         if (nudge_due(nudge_, last_ms_)) {
-            clock_refused_ = !set_clock_tempo(adopted_tempo_centi_);
+            clock_refused_ = !set_clock_tempo(clock_centi_);
         }
 
         // Song sections (core/project.hpp, SectionExtra). An entry that started with fields of
@@ -545,7 +545,7 @@
             if (due != tempo_due_seen_) {
                 tempo_due_seen_ = due;
                 const uint16_t centi = status.section_tempo.load(std::memory_order_relaxed);
-                // Through set_clock_tempo, as VALUE's turn: the clock is the project's tempo
+                // Through set_clock_tempo, as VALUE's turn: the clock is the playing tempo
                 // times VariSpeed's ratio, so a section's BPM keeps the song's VariSpeed.
                 if (enaga::clock::source() != ENAGA_CLOCK_INTERNAL || !set_clock_tempo(centi)) {
                     clock_refused_ = true;
@@ -554,12 +554,12 @@
                         notice_logged("EXT CLOCK: BPM SKIPPED");
                     }
                 } else {
-                    // As a turn of VALUE: the project's tempo, which the delay follows and a
-                    // save keeps, and the screen's.
+                    // The screen shows what plays, and a turn of VALUE goes on from it. The
+                    // project's saved tempo is NOT posted (the review's M1): a song is not a
+                    // turn of VALUE, and a save after it keeps the tempo the project was set
+                    // to. The engine already took the BPM for the delay.
                     clock_refused_ = false;
                     tempo_tenths_ = uint32_t(centi) / 10;
-                    adopted_tempo_centi_ = centi;
-                    post_tempo(float(centi) * 0.01f);
                 }
             }
         }
@@ -567,15 +567,18 @@
         // The tempo a LOADED project brought with it. PROJECT.BIN has always had the field and
         // nothing read it, so every project opened at whatever the clock happened to be set to
         // -- a project saved at 142 came back at 130. Watched here rather than hooked to the end
-        // of a load because a load finishes on the card side, and this is one comparison on a
-        // pass that already does several.
+        // of a load because a load finishes on the card side.
         //
-        // `adopted_tempo_centi_` is what stops this fighting the knob: a click posts the new
-        // tempo AND records it here, so the engine's copy coming back is not read as a change.
+        // On the engine's load counter, not by comparing its copy of the tempo with ours: that
+        // copy lags each tempo a VALUE turn or a tap posts until the next audio block, and this
+        // pass runs about twice a block, so the comparison read the old tempo as a load and put
+        // the clock back for a moment, and a second click in that window was lost (the review's
+        // M2).
         {
-            const uint16_t project_centi = engine_.project().settings.tempo_centi_bpm;
-            if (project_centi != adopted_tempo_centi_) {
-                adopted_tempo_centi_ = project_centi;
+            const uint8_t loads = engine_.status().project_loads.load(std::memory_order_acquire);
+            if (loads != project_loads_seen_) {
+                project_loads_seen_ = loads;
+                const uint16_t project_centi = engine_.project().settings.tempo_centi_bpm;
                 tempo_tenths_ = uint32_t(project_centi) / 10;
                 // Refused under an outside clock, which is not an error: the project's tempo is
                 // simply not what is playing, and the screen already says EXT.

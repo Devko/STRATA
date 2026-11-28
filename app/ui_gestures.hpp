@@ -180,7 +180,6 @@
             // holding the default for ever: a project saved at 142 reopened at 130. The engine
             // also re-derives the tempo-synced delay from it.
             post_tempo(float(tempo_tenths_) * 0.1f);
-            adopted_tempo_centi_ = uint16_t(tempo_tenths_ * 10);
             return;
         }
 
