@@ -102,3 +102,12 @@ button:disabled { opacity: 0.5; cursor: default; }
 .steps { padding-left: 20px; }
 .steps li { margin-bottom: 6px; }
 footer { margin-top: 24px; }
+
+/* Starter content: the project list, indented under its ALL box, and greyed out for a release
+   too old for it. */
+.choice .projects { display: grid; gap: 6px; padding-left: 26px; }
+.choice .projects label { font-size: 0.9rem; }
+.choice legend .small { font-weight: 400; }
+fieldset.choice:disabled { opacity: 0.45; }
+fieldset.choice:disabled label { cursor: default; }
+.choice label[hidden] { display: none; }

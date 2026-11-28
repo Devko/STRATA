@@ -57,7 +57,74 @@ function find(entries, pred, what) {
   return e;
 }
 
-export async function buildCard({ manifest, strataVersion, includeFirmware, fetchAsset, onStep = () => {} }) {
+// Is version a ("0.5.0") at least version b? Plain X.Y.Z, as STRATA's tags are.
+export function versionAtLeast(a, b) {
+  const pa = a.split(".").map(Number);
+  const pb = b.split(".").map(Number);
+  for (let i = 0; i < 3; i++) {
+    if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) > (pb[i] || 0);
+  }
+  return true;
+}
+
+// What of the starter content (public/starter/starter.json) a STRATA version can take: the
+// projects and the quick start need min_strata (the file format they were saved in), the sample
+// pack is plain WAV files and fits any.
+export function starterFits(starter, strataVersion) {
+  const projects = !!starter && versionAtLeast(strataVersion, starter.min_strata);
+  return { projects, quickstart: projects, samples: !!starter };
+}
+
+const CARD_QUICKSTART = "STRATA-QUICKSTART.txt";
+const PROJECTS_PREFIX = "ENAGA/DATA/STRATA/PROJECTS/";
+const SAMPLES_PREFIX = "SAMPLES/STRATA/";
+
+// The starter files picked, checked against starter.json's SHA-256 and unpacked into card
+// entries. fetchStarter(file) returns the bytes of public/starter/<file>. Entries are copied
+// still deflated (readZip's stored()), so ten projects of mostly empty banks stay small.
+async function starterFiles({ starter, pick, strataVersion, fetchStarter, onStep }) {
+  const fits = starterFits(starter, strataVersion);
+  const out = { files: [], projects: [], samples: 0, quickstart: false };
+  if (!pick) return out;
+  const get = async (item, label) => {
+    const bytes = await fetchStarter(item.file);
+    const got = await sha256Hex(bytes);
+    if (got !== item.sha256) throw new Error(`${label}: the download does not match starter.json's SHA-256`);
+    return bytes;
+  };
+  const projects = (pick.projects || []).filter(() => fits.projects);
+  if (projects.length) onStep(`Adding ${projects.length} starter project${projects.length > 1 ? "s" : ""}`);
+  for (const name of projects) {
+    const item = starter.projects.find((p) => p.name === name);
+    if (!item) throw new Error(`no starter project called ${name}`);
+    const entries = readZip(await get(item, `starter project ${name}`));
+    const prefix = `${PROJECTS_PREFIX}${name}/`;
+    for (const e of entries) {
+      if (!e.name.startsWith(prefix) || e.name.slice(prefix.length).includes("/")) throw new Error(`starter project ${name}: unexpected file ${e.name}`);
+      out.files.push(e.stored());
+    }
+    if (!entries.some((e) => e.name === `${prefix}PROJECT.BIN`)) throw new Error(`starter project ${name} has no PROJECT.BIN`);
+    out.projects.push(name);
+  }
+  if (pick.samples && fits.samples) {
+    onStep(`Adding the sample pack (${starter.samples.count} sounds)`);
+    for (const e of readZip(await get(starter.samples, "the sample pack"))) {
+      if (!e.name.startsWith(SAMPLES_PREFIX) || e.name.includes("..")) throw new Error(`sample pack: unexpected file ${e.name}`);
+      out.files.push(e.stored());
+      out.samples++;
+    }
+  }
+  if (pick.quickstart && fits.quickstart) {
+    out.files.push({ name: CARD_QUICKSTART, data: await get(starter.quickstart, "the quick start") });
+    out.quickstart = true;
+  }
+  return out;
+}
+
+// starter: public/starter/starter.json, or null when the site has none. pick: { projects:
+// [names], samples, quickstart }, or null for none. Anything the version cannot take is left out.
+export async function buildCard({ manifest, strataVersion, includeFirmware, fetchAsset, onStep = () => {},
+                                  starter = null, pick = null, fetchStarter = null }) {
   const strata = manifest.strata.find((s) => s.version === strataVersion);
   if (!strata) throw new Error(`STRATA ${strataVersion} is not in the list of releases`);
   const enaga = manifest.enaga[strata.enaga];
@@ -93,21 +160,29 @@ export async function buildCard({ manifest, strataVersion, includeFirmware, fetc
     firmware = await find(eEntries, (e) => e.name === "SmplTrek.bin", "SmplTrek.bin").read();
   }
 
+  const extra = await starterFiles({ starter, pick, strataVersion, fetchStarter, onStep });
+
   onStep("Building the card zip");
   const files = [];
   if (firmware) files.push({ name: "SmplTrek.bin", data: firmware });
   files.push({ name: CARD_APP, data: app });
-  files.push({ name: "STRATA-README.txt", data: enc.encode(readme(strata, enaga, includeFirmware)) });
+  files.push({ name: "STRATA-README.txt", data: enc.encode(readme(strata, enaga, includeFirmware, extra)) });
   files.push({ name: "ENAGA-LICENSE.txt", data: enagaLicence });
   files.push({ name: "STRATA-LICENSES.txt", data: enc.encode(licences(dec.decode(licence), dec.decode(notices))) });
+  files.push(...extra.files);
 
   const name = includeFirmware
     ? `STRATA-v${strata.version}-enaga-v${strata.enaga}-sdcard.zip`
     : `STRATA-v${strata.version}-app-only-sdcard.zip`;
-  return { name, zip: writeZip(files), files: files.map((f) => ({ name: f.name, size: f.data.length })) };
+  return {
+    name,
+    zip: writeZip(files),
+    files: files.map((f) => ({ name: f.name, size: f.data ? f.data.length : f.size })),
+    starter: { projects: extra.projects, samples: extra.samples, quickstart: extra.quickstart },
+  };
 }
 
-export function readme(strata, enaga, includeFirmware) {
+export function readme(strata, enaga, includeFirmware, extra = { projects: [], samples: 0, quickstart: false }) {
   const v = strata.version;
   const e = strata.enaga;
   const lines = [
@@ -146,12 +221,23 @@ export function readme(strata, enaga, includeFirmware) {
     "  ENAGA-LICENSE.txt            Enaga's licence (MIT), from its repository at that release",
     "  STRATA-LICENSES.txt          STRATA's licence and every third-party notice (Enaga, and the",
     "                               FatFs and TinyUSB code inside SmplTrek.bin)",
+  );
+  if (extra.quickstart) lines.push(`  ${CARD_QUICKSTART}        one page: the first things to try`);
+  if (extra.projects.length) lines.push(`  ${PROJECTS_PREFIX}...  ${extra.projects.length} starter project${extra.projects.length > 1 ? "s" : ""}: ${extra.projects.join(", ")}`);
+  if (extra.samples) lines.push(`  ${SAMPLES_PREFIX}...            the sample pack, ${extra.samples} WAV files rendered by STRATA`);
+  lines.push(
     "",
     "INSTALLING",
     "----------",
     "  1. Copy everything in this zip to the ROOT of the SD card, keeping the names and folders.",
     "     If the card already has an ENAGA folder, merge it and replace the old APP.ENA.",
   );
+  if (extra.projects.length) {
+    lines.push(
+      "     A project on the card with the same name as a starter project is REPLACED: rename",
+      `     yours first (PROJECTS, push B) if you have one called ${extra.projects.join(", ")}.`,
+    );
+  }
   if (includeFirmware) {
     lines.push(
       "  2. Put the card in the SmplTrek. Hold HOME (F4) while switching on to reach BOOT MODE,",
@@ -173,6 +259,26 @@ export function readme(strata, enaga, includeFirmware) {
     "",
     "Projects are saved on the card under /ENAGA/DATA/STRATA/ and stay there when you update.",
     "",
+  );
+  if (extra.projects.length || extra.samples) {
+    lines.push("STARTER CONTENT", "---------------");
+    if (extra.projects.length) {
+      lines.push(
+        "Open a starter project: PROJECT, screen key RIGHT four times (PROJECTS), pick it, OK twice.",
+        "Most play their arrangement on the chain (FUNC+HOME, CHAIN turns it on or off).",
+      );
+    }
+    if (extra.samples) {
+      lines.push(
+        "The sample pack is in /SAMPLES/STRATA: on a SMP track, OK in EDIT opens the sample browser",
+        "in /SAMPLES, and the pack is its STRATA folder (OK opens it, push A hears a file).",
+        "Melodic files name their note (MONO_ACID_C2): played at C4 they sound at that note.",
+      );
+    }
+    if (extra.quickstart) lines.push(`${CARD_QUICKSTART} has the first things to try on one page.`);
+    lines.push("");
+  }
+  lines.push(
     "GOING BACK",
     "----------",
     "Install an official SmplTrek system update the same way (its SmplTrek.bin on the card's",

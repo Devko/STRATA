@@ -1,0 +1,118 @@
+{
+  "_comment": "Written by web/tools/starter.mjs from content/starter; do not edit by hand.",
+  "min_strata": "0.5.0",
+  "projects": [
+    {
+      "name": "TECHNO",
+      "genre": "Techno",
+      "bpm": 132,
+      "key": "G minor",
+      "about": "Driving groove techno: rolling bass, sparse stab, sidechain.",
+      "file": "TECHNO.zip",
+      "bytes": 7243,
+      "sha256": "704b1787a11b62acb4d3bc269e9737b8096bfcb19e20693487740fec83f9b2cb"
+    },
+    {
+      "name": "DEEP",
+      "genre": "Deep house",
+      "bpm": 122,
+      "key": "A minor",
+      "about": "Swung drums, FM4 electric piano chords, a walking bass, held pads.",
+      "file": "DEEP.zip",
+      "bytes": 7418,
+      "sha256": "aca3b547c8a33ca61f68c1f2312a3c2362ae069f935bddabf17f0bd8c157e6d6"
+    },
+    {
+      "name": "DUB",
+      "genre": "Dub techno",
+      "bpm": 118,
+      "key": "F minor",
+      "about": "One chord thrown into a long dark echo, breathing on an LFO.",
+      "file": "DUB.zip",
+      "bytes": 7028,
+      "sha256": "48d6d98ce12ac5f3f7ba96667599bc6d7df7238db52fae13b19440675b6581b0"
+    },
+    {
+      "name": "DRIFT",
+      "genre": "Ambient",
+      "bpm": 80,
+      "key": "D dorian",
+      "about": "WAVE POLY chords and a drone in the HALL; polymeter chimes.",
+      "file": "DRIFT.zip",
+      "bytes": 6929,
+      "sha256": "2951be70f213b2b4f05ab46f6ca7b55708490532d6aa318fbcb425c7372b43aa"
+    },
+    {
+      "name": "ELECTRO",
+      "genre": "Electro",
+      "bpm": 128,
+      "key": "E phrygian",
+      "about": "808 kit, rubbery 16th bass with slides, a synced lead riff.",
+      "file": "ELECTRO.zip",
+      "bytes": 7037,
+      "sha256": "6fde22366da68a265c4a0755bdef7ae1dc7607a07ee0418996840bf73c54c346"
+    },
+    {
+      "name": "NIGHT",
+      "genre": "Synthwave",
+      "bpm": 132,
+      "key": "A minor",
+      "about": "Am F C G on a detuned string pad, octave bass, gliding lead.",
+      "file": "NIGHT.zip",
+      "bytes": 7434,
+      "sha256": "acd218e59895e0e0b6bb35910ea41a1dbefc7abd22b475d34ea05d4691c6ca6f"
+    },
+    {
+      "name": "BREAKS",
+      "genre": "Breakbeat",
+      "bpm": 134,
+      "key": "A minor",
+      "about": "A synthesized break that changes bar to bar by chance.",
+      "file": "BREAKS.zip",
+      "bytes": 6978,
+      "sha256": "5b510a602628e12b324e9b7300eca7a94da939c255183ce01876fdd75190c5c1"
+    },
+    {
+      "name": "STEEL",
+      "genre": "Breakbeat",
+      "bpm": 140,
+      "key": "E minor",
+      "about": "Straight breaks with ratchets, rolls and a driven reese.",
+      "file": "STEEL.zip",
+      "bytes": 6937,
+      "sha256": "ed1e0a1880d0331eb14bc9418e03e6e30ca6eaf9201c911fe42c08f17f14f5e0"
+    },
+    {
+      "name": "SMASH",
+      "genre": "Breakbeat",
+      "bpm": 155,
+      "key": "F minor",
+      "about": "Drum chaos, random-order ghosts and rolls, a sparse melody.",
+      "file": "SMASH.zip",
+      "bytes": 7380,
+      "sha256": "830303ef2e48d5e4577f6e93353941369c2b73c3da191957df442cebab678c7f"
+    },
+    {
+      "name": "CHAOS",
+      "genre": "Breakbeat",
+      "bpm": 150,
+      "key": "D phrygian",
+      "about": "BREAKS pulled apart: rolls down to 1/64 and constant mutation.",
+      "file": "CHAOS.zip",
+      "bytes": 7265,
+      "sha256": "a20790d77857340ea77307be4a0fdf401f2e9fdd3d66d31b68426420c4ce9ba4"
+    }
+  ],
+  "samples": {
+    "file": "samples.zip",
+    "bytes": 7015609,
+    "sha256": "862b08c99a421555008874803bae0df50808a645b0d7f97b2b2645f131a11a84",
+    "count": 105,
+    "unpacked": 8454252
+  },
+  "quickstart": {
+    "file": "QUICKSTART.txt",
+    "bytes": 2733,
+    "sha256": "b8609c8546d541bd214b3367a064b54fa412adae72b98b8d92031bf3d4ac37db"
+  }
+}

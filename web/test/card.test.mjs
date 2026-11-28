@@ -4,9 +4,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { deflateRawSync } from "node:zlib";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { readZip, writeZip, crc32, sha256Hex } from "../public/zip.js";
-import { buildCard, allowedAssets, assetId } from "../public/card.js";
+import { buildCard, allowedAssets, assetId, versionAtLeast, starterFits } from "../public/card.js";
 import { onRequestGet } from "../functions/api/asset/[id].js";
 import { liveManifest, enagaFromBody, clearCache } from "../lib/releases.js";
 
@@ -337,3 +337,116 @@ test("a GITHUB_TOKEN, if the site has one, goes to GitHub's API only", withFetch
   await liveManifest({ GITHUB_TOKEN: "t0ken" });
   assert.deepEqual(seen, [["https://api.github.com/repos/Devko/STRATA/releases?per_page=100", "Bearer t0ken"]]);
 }));
+
+// --- starter content (public/starter, web/tools/starter.mjs) ---------------------------------
+
+const STARTER = new URL("../public/starter/", import.meta.url);
+const starterFile = JSON.parse(readFileSync(new URL("starter.json", STARTER)));
+const fetchStarterFile = async (file) => new Uint8Array(readFileSync(new URL(file, STARTER)));
+
+test("starter.json matches the files it lists, byte count and SHA-256", async () => {
+  const items = [...starterFile.projects, starterFile.samples, starterFile.quickstart];
+  for (const item of items) {
+    const bytes = await fetchStarterFile(item.file);
+    assert.equal(bytes.length, item.bytes, item.file);
+    assert.equal(await sha256Hex(bytes), item.sha256, `${item.file}: rerun web/tools/starter.mjs`);
+  }
+});
+
+test("starter projects are exactly content/starter/projects, unpacked", async () => {
+  const content = new URL("../../content/starter/", import.meta.url);
+  const listed = starterFile.projects.map((p) => p.name).sort();
+  assert.deepEqual(readdirSync(new URL("projects/", content)).sort(), listed, "every folder is offered, and only those");
+  for (const p of starterFile.projects) {
+    assert.match(p.name, /^[A-Z0-9_]{1,8}$/, "a project folder name the unit can show");
+    const entries = readZip(await fetchStarterFile(p.file));
+    const files = readdirSync(new URL(`projects/${p.name}/`, content)).sort();
+    assert.deepEqual(entries.map((e) => e.name.split("/").pop()).sort(), files, p.name);
+    for (const e of entries) {
+      assert.equal(e.name, `ENAGA/DATA/STRATA/PROJECTS/${p.name}/${e.name.split("/").pop()}`);
+      const want = new Uint8Array(readFileSync(new URL(`projects/${p.name}/${e.name.split("/").pop()}`, content)));
+      assert.deepEqual(await e.read(), want, `${e.name} is stale: rerun web/tools/starter.mjs`);
+    }
+  }
+  const qs = await fetchStarterFile(starterFile.quickstart.file);
+  assert.deepEqual(qs, new Uint8Array(readFileSync(new URL("QUICKSTART.txt", content))), "QUICKSTART.txt is stale");
+});
+
+test("the sample pack is 48 kHz 16-bit mono WAV files under SAMPLES/STRATA", async () => {
+  const entries = readZip(await fetchStarterFile(starterFile.samples.file));
+  assert.equal(entries.length, starterFile.samples.count);
+  assert.equal(entries.reduce((n, e) => n + e.size, 0), starterFile.samples.unpacked);
+  for (const e of entries) {
+    assert.match(e.name, /^SAMPLES\/STRATA\/[A-Z]+\/[A-Z0-9_#]+\.WAV$/, e.name);
+    const w = await e.read();
+    const v = new DataView(w.buffer, w.byteOffset, w.byteLength);
+    assert.equal(dec.decode(w.subarray(0, 4)), "RIFF", e.name);
+    assert.equal(dec.decode(w.subarray(8, 16)), "WAVEfmt ", e.name);
+    assert.equal(v.getUint16(20, true), 1, `${e.name}: PCM`);
+    assert.equal(v.getUint16(22, true), 1, `${e.name}: mono`);
+    assert.equal(v.getUint32(24, true), 48000, `${e.name}: 48 kHz`);
+    assert.equal(v.getUint16(34, true), 16, `${e.name}: 16-bit`);
+    assert.equal(v.getUint32(40, true), w.length - 44, `${e.name}: data size`);
+  }
+});
+
+test("versionAtLeast and starterFits gate the projects on min_strata", () => {
+  assert.ok(versionAtLeast("0.5.0", "0.5.0"));
+  assert.ok(versionAtLeast("0.10.0", "0.5.0"));
+  assert.ok(versionAtLeast("1.0.0", "0.5.1"));
+  assert.ok(!versionAtLeast("0.4.0", "0.5.0"));
+  assert.ok(!versionAtLeast("0.5.0", "0.5.1"));
+  assert.deepEqual(starterFits(starterFile, "0.4.0"), { projects: false, quickstart: false, samples: true });
+  assert.deepEqual(starterFits(starterFile, "0.5.0"), { projects: true, quickstart: true, samples: true });
+  assert.deepEqual(starterFits(null, "0.5.0"), { projects: false, quickstart: false, samples: false });
+});
+
+test("a card with starter content carries the picked projects, the pack and the quick start", async () => {
+  const fx = await fixture();
+  const pick = { projects: ["TECHNO", "DEEP"], samples: true, quickstart: true };
+  const card = await buildCard({
+    manifest: fx.manifest, strataVersion: "9.0.0", includeFirmware: false, fetchAsset: fx.fetchAsset,
+    starter: starterFile, pick, fetchStarter: fetchStarterFile,
+  });
+  const entries = readZip(card.zip);
+  const names = entries.map((e) => e.name);
+  assert.equal(names.filter((n) => n.startsWith("ENAGA/DATA/STRATA/PROJECTS/TECHNO/")).length, 11);
+  assert.equal(names.filter((n) => n.startsWith("ENAGA/DATA/STRATA/PROJECTS/DEEP/")).length, 11);
+  assert.ok(!names.some((n) => n.includes("/PROJECTS/DUB/")), "only the picked projects");
+  assert.equal(names.filter((n) => n.startsWith("SAMPLES/STRATA/")).length, starterFile.samples.count);
+  assert.ok(names.includes("STRATA-QUICKSTART.txt"));
+  assert.deepEqual(card.starter, { projects: ["TECHNO", "DEEP"], samples: starterFile.samples.count, quickstart: true });
+  // Copied still deflated, and every entry still reads back whole (CRC checked by read()).
+  const kit = entries.find((e) => e.name === "ENAGA/DATA/STRATA/PROJECTS/TECHNO/KIT.BIN");
+  assert.deepEqual(await kit.read(), new Uint8Array(readFileSync(new URL("../../content/starter/projects/TECHNO/KIT.BIN", import.meta.url))));
+  for (const e of entries) await e.read();
+  assert.ok(card.zip.length < 2 * starterFile.samples.bytes, "the projects' empty banks stay compressed");
+  const readme = dec.decode(await entries.find((e) => e.name === "STRATA-README.txt").read());
+  assert.match(readme, /STARTER CONTENT/);
+  assert.match(readme, /TECHNO, DEEP/);
+  assert.match(readme, /REPLACED/);
+});
+
+test("starter content a version cannot take is left out, and a bad download is refused", async () => {
+  const fx = await fixture();
+  const old = structuredClone(fx.manifest);
+  old.strata[0].version = "0.4.0";
+  const card = await buildCard({
+    manifest: old, strataVersion: "0.4.0", includeFirmware: false, fetchAsset: async (id) => fx.blobs[id.replace("0.4.0", "9.0.0")],
+    starter: starterFile, pick: { projects: ["TECHNO"], samples: true, quickstart: true }, fetchStarter: fetchStarterFile,
+  });
+  const names = readZip(card.zip).map((e) => e.name);
+  assert.ok(!names.some((n) => n.startsWith("ENAGA/DATA/")), "no projects for 0.4.0");
+  assert.ok(!names.includes("STRATA-QUICKSTART.txt"));
+  assert.ok(names.some((n) => n.startsWith("SAMPLES/STRATA/")), "the sample pack fits any version");
+
+  const tampered = async (file) => {
+    const b = await fetchStarterFile(file);
+    if (file === "DEEP.zip") b[100] ^= 1;
+    return b;
+  };
+  await assert.rejects(buildCard({
+    manifest: fx.manifest, strataVersion: "9.0.0", includeFirmware: false, fetchAsset: fx.fetchAsset,
+    starter: starterFile, pick: { projects: ["DEEP"] }, fetchStarter: tampered,
+  }), /starter project DEEP: the download does not match/);
+});
