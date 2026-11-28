@@ -42,7 +42,7 @@ jobs:
 
       # A compiler cache across runs: most PRs touch a few files, so most objects come back from
       # the cache instead of being rebuilt. One cache per job (the two jobs build with different
-      # flags); a PR reads main's cache and keeps its own.
+      # flags); a PR reads main's cache.
       # install: binary takes the action's own ccache release, checked by SHA-256, in a second;
       # apt-get took 5-20 s of a one-minute job (package lists, dpkg triggers, needrestart).
       - name: Compiler cache
@@ -52,6 +52,9 @@ jobs:
           key: ${{ github.job }}
           max-size: 300M
           install: binary
+          # Only main saves (100-170 MB a job): a PR restores main's cache and rebuilds just
+          # what it changed, and many open PRs no longer evict main's cache from the 10 GB.
+          save: ${{ github.event_name != 'pull_request' }}
 
       - name: Build and run the suite (shards on every core, 120 s per test)
         if: steps.changes.outputs.code == 'true'
@@ -117,6 +120,9 @@ jobs:
           key: ${{ github.job }}
           max-size: 300M
           install: binary
+          # Only main saves (100-170 MB a job): a PR restores main's cache and rebuilds just
+          # what it changed, and many open PRs no longer evict main's cache from the 10 GB.
+          save: ${{ github.event_name != 'pull_request' }}
 
       - name: Build and run the suite under ASan and UBSan at -O1 (shards, 300 s per test)
         if: steps.changes.outputs.code == 'true'
