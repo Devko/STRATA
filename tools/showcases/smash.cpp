@@ -38,6 +38,7 @@ void kit(Kit &kit) {
     kit.tracks[kOpen].params[kAmp3] = 60;
     kit.tracks[kOpen].params[kPan] = 54;
     preset(kit.tracks[kGhost], MachineId::snare, "SHORT");
+    kit.tracks[kGhost].params[kSrc2] = 75;    // TON as heard (SHORT's TON was 75 before the preset review)
     kit.tracks[kGhost].params[kAmp3] = 72;
     kit.tracks[kGhost].params[kPan] = 46;
     kit.tracks[kGhost].params[kSna] = 24;
