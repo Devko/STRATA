@@ -44,12 +44,12 @@ constexpr Text kFuncKnobs = {"FUNC + KNOB OR PAD:", {
     "LOWER PAD  BAR MUTE",
     "STEP       TRIGLESS",
     "TURN A-C  EUCLID GRID",
+    "VALUE      VARISPEED",
     "WITHOUT FUNC:",
     "VALUE      TEMPO",
     "PUSH+TURN VALUE SWING",
     "LOWER PAD  TRACK",
-    "HOLD PROJECT+STEP",
-    "  QUEUE THAT SLOT",
+    "HOLD PROJ+STEP QUEUE",
 }};
 
 constexpr Text kUpperPads = {"UPPER PADS TRK1-7:", {
@@ -75,7 +75,7 @@ constexpr Text kValueMixer = {"VALUE FX MIXER:", {
     "  HOLD STEP  PUSH IN",
     "VALUE  AMOUNT 0 = DRY",
     "TAP VALUE  RIDE TO 0",
-    "FUNC+TAP VALUE  CUT",
+    "FUNC+TAP  CUT/VARI 0",
     "PUSH+LEFT/RIGHT  NEXT",
     "PUSH+CLR  ALL OFF",
     "  AGAIN  CLEARS LOOP",
@@ -400,13 +400,15 @@ constexpr Text kSamples = {"SAMPLES:", {
 
 constexpr Text kSounds = {"SOUNDS:", {
     "UP/DOWN/A  SOUND",
-    "LEFT/RIGHT FIRST/LAST",
     "SCREEN KEYS TRACK",
     "OK  LOAD INTO TRACK",
     "AS WAS  YOURS BACK",
+    "FUNC+DOWN  SAVE YOURS",
+    "FUNC+UP    COPY",
+    "PASTE ROW  ANY TRACK",
+    "PUSH B  RENAME YOURS",
+    "PUSH C  DELETE YOURS",
     "CLR        BACK",
-    "ONE TRACK ONLY",
-    nullptr, nullptr, nullptr,
 }};
 
 constexpr Text kResample = {"RESAMPLE:", {
@@ -467,6 +469,10 @@ constexpr Text kMixer[kHelpMixerPages] = {
                         "SAVED IN THE KIT", nullptr}},
     {"MIXER CHO:", {"A RAT SWEEP RATE", "B DEP DEPTH", "C LVL LEVEL", "D C>R INTO REVERB",
                     "SENDS: CHO 1-4 5-8", nullptr}},
+    {"MIXER IN:", {"A LVL LEVEL", "B PAN PAN", "C DLY DELAY SEND", "D REV REVERB SEND",
+                   "PUSH A  IN ON OR OFF", "THE INPUT JACK INTO", "THE MIX  OFF = QUIET", nullptr}},
+    {"MIXER IN+:", {"A CHO CHORUS SEND", "B DCK DUCK DEPTH", "C TON TONE", "D SRC JACK",
+                    "PUSH A  IN ON OR OFF", "PUSH D  GAIN", "SAVED IN THE PROJECT", nullptr}},
     {"MIXER MST:", {"A DJ  DJ FILTER", "B CMP COMPRESSOR", "C LIM LIMITER", "D LVL LEVEL",
                     nullptr}},
     {"MIXER EQ:", {"A LOW BELOW 250 HZ", "B MID MIDDLE", "C HI  ABOVE 2.5 KHZ", "D ---",

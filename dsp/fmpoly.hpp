@@ -17,6 +17,11 @@ public:
     void init(float sample_rate) override;
     void prepare(const TrackParams &params) override;
     const char *param_name(int index) const override;
+    // VariSpeed: semitones on every voice, sounding or not, kept across prepare.
+    void set_pitch_mod(float semis) override {
+        pitch_mod_ = semis;
+        settings_.pitch_mod = semis;
+    }
 
     const FmSettings &settings() const { return settings_; }
 
@@ -29,6 +34,7 @@ public:
 
 private:
     FmSettings settings_{};
+    float pitch_mod_ = 0.0f;
     float rate_ = 48000.0f;
     float inv_rate_ = 1.0f / 48000.0f;
     float env_[FmVoice::kControl] = {};

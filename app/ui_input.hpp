@@ -84,10 +84,12 @@
         if (name_entry_.active()) {
             const enaga::ui::Action action = name_entry_.key(key, down);
             if (action == enaga::ui::Action::chosen) {
-                if (entry_for_ == EntryFor::rename) {
-                    finish_rename();
-                } else {
-                    finish_save_as();
+                switch (entry_for_) {
+                    case EntryFor::rename: finish_rename(); break;
+                    case EntryFor::save_as: finish_save_as(); break;
+                    case EntryFor::sound_save:
+                    case EntryFor::sound_replace: finish_sound_save(); break;
+                    case EntryFor::sound_rename: finish_sound_rename(); break;
                 }
             }
             if (action == enaga::ui::Action::no) notice("NAME KEPT");
@@ -375,6 +377,20 @@
                              : key == ENAGA_KEY_PUSH_C ? 2 : 3;
             if (down) toggle_chorus_send((mixer_bank_ - kMixerChorusSendPage) * 4 + slot);
             return;
+        }
+
+        // The line input: push A on IN or IN+ turns it on and off, push D on IN+ steps its GAIN.
+        // B and C have no push there, as on most MIXER pages.
+        if ((key == ENAGA_KEY_PUSH_A || key == ENAGA_KEY_PUSH_D) && mode_ == Mode::mixer &&
+            mixer_input_page(mixer_bank_) && !shift_) {
+            if (key == ENAGA_KEY_PUSH_A) {
+                if (down) toggle_input();
+                return;
+            }
+            if (mixer_bank_ == kMixerInputPage + 1) {
+                if (down) step_input_gain();
+                return;
+            }
         }
 
         // The ambient modes: push A on DLY+ or REV+ throws that send's mode, CLAS to LONG or

@@ -19,7 +19,7 @@
 
 namespace strata {
 
-// Which screen the help is for. EDIT's seven pages and MIXER's twelve are told apart by
+// Which screen the help is for. EDIT's seven pages and MIXER's nineteen are told apart by
 // HelpPlace::page rather than by a screen each.
 enum class HelpScreen : uint8_t {
     grid,
@@ -46,7 +46,7 @@ enum class HelpScreen : uint8_t {
 
 // SRC FLTR AMP FX LFO ARP ASR OSC, two pages of the hole, SCAN: as app/app.hpp's kEditPages.
 constexpr int kHelpEditPages = 11;
-constexpr int kHelpMixerPages = 17;    // as app/app.hpp's kMixerPageCount
+constexpr int kHelpMixerPages = 19;    // as app/app.hpp's kMixerPageCount
 constexpr int kHelpRows = 10;          // rows under the title, above the page line
 constexpr int kHelpChars = 21;         // one line of Enaga's font on the 128-pixel screen
 

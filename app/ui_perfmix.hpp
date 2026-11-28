@@ -549,7 +549,15 @@
             perf_notice(perf_picked_, false, 0);
             return;
         }
-        if (shift_) return;
+        if (shift_) {
+            // FUNC + tap with nothing to cut: VariSpeed snaps back to the project's tempo and
+            // pitch (core/varispeed.hpp). Nothing at rest, so a stray tap says nothing.
+            if (vari_ != 0) {
+                vari_apply(0);
+                vari_notice();
+            }
+            return;
+        }
         if (mode_ == Mode::perform || perf_picked_ == PerfFx::morph) {
             morph_set(0);
             notice("MORPH 0");
@@ -970,6 +978,7 @@
         if (source < 0) return;
         input_result_ = enaga::system::input(source, take_level_);
         input_applied_ = input_result_ == 0;
+        input_route_applied_ = -1;      // the strip's route is no longer the codec's (service_input_route)
         notice(input_result_ == 0 ? kTakeSources[take_source_].name : "INPUT REFUSED");
     }
 

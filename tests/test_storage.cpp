@@ -519,6 +519,7 @@ const Expect kTable[] = {
     {Cmd::set_sends, kDirtyProject, "set_sends"},
     {Cmd::set_master, kDirtyProject, "set_master"},
     {Cmd::set_duck, kDirtyKit, "set_duck"},
+    {Cmd::set_input, kDirtyProject, "set_input"},
     // The kill EQ's switches, in the same section as the master bytes.
     {Cmd::eq_kill, kDirtyProject, "eq_kill"},
     // The live-record quantize amount. PROJECT.BIN has had a field for it since M4 and nothing
@@ -587,6 +588,7 @@ const Expect kTable[] = {
     // form writes nothing, but one row covers the command: dirtying the kit for it costs a
     // rewrite of KIT.BIN at most.
     {Cmd::sound_preset, kDirtyKit, "sound_preset"},
+    {Cmd::sound_bytes, kDirtyKit, "sound_bytes"},
     {Cmd::arp_preset, kDirtyKit, "arp_preset"},
     {Cmd::set_arp_ext, kDirtyKit, "set_arp_ext"},
 
@@ -611,6 +613,8 @@ const Expect kTable[] = {
     {Cmd::set_live_rnd, 0u, "set_live_rnd"},
     // ENERGY too (core/energy.hpp).
     {Cmd::set_energy, 0u, "set_energy"},
+    // VariSpeed too (core/varispeed.hpp): the project keeps its own tempo.
+    {Cmd::set_varispeed, 0u, "set_varispeed"},
     // An audition is heard, not kept: the track and the project are untouched.
     {Cmd::audition_start, 0u, "audition_start"},
     {Cmd::audition_stop, 0u, "audition_stop"},
@@ -819,8 +823,8 @@ TEST(storage_every_file_of_a_project_round_trips_through_the_card) {
 
     // The sizes tests/test_project.cpp pins from the serializer, reached here through the real
     // card protocol: a file that came out a different size means the two have drifted apart.
-    CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN")), 450);
-    CHECK_EQ(project_bytes(), 450u);
+    CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN")), 472);
+    CHECK_EQ(project_bytes(), 472u);
     CHECK_EQ(host.file_bytes(card_path("KIT.BIN")), 1550);
     CHECK_EQ(kit_bytes(), 1550u);
     CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN")), 5773);
@@ -1732,7 +1736,7 @@ TEST(storage_an_autosave_writes_every_file_and_leaves_the_project_dirty) {
         }
         CHECK(host.has_file(card_path(kFiles[i], true)));
     }
-    CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN", true)), 450);
+    CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN", true)), 472);
     CHECK_EQ(host.file_bytes(card_path("KIT.BIN", true)), 1550);
     CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN", true)), 5773);
 

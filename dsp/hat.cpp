@@ -276,7 +276,7 @@ void Hat::run(Voice &v, float *out, int n) {
     if (!v.sounding()) return;
 
     // Control rate, once per voice per block: the note moves f0 and everything here follows it.
-    const float f0 = base_hz_ * v.note_ratio;
+    const float f0 = base_hz_ * v.note_ratio * pitch_mod_ratio_;
     uint32_t step[kOscillators];
     for (int j = 0; j < kOscillators; j++) step[j] = increment(f0 * ratio_[j] * inv_rate_);
     const uint32_t sample_hold_step = increment(f0 * sample_hold_ratio_ * inv_rate_);

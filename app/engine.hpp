@@ -47,6 +47,7 @@
 #include "lockstore.hpp" // LOCK: FUNC + MUTATE stores, jumps and swaps back
 #include "launch.hpp"    // Track Launch: a lane playing another slot's part
 #include "moveall.hpp"   // REL ALL and LEN ALL: every track's release and note length
+#include "varispeed.hpp" // VariSpeed: every machine's pitch with the tempo
 #include "arp.hpp"       // the arpeggiator's notes
 #include "sample.hpp"
 #include "scale.hpp"       // the global key and scale: Cmd::set_root and set_scale
@@ -203,6 +204,8 @@ public:
     uint8_t live_rnd_armed() const { return perform_.rnd_armed; }
     // ENERGY (core/energy.hpp): -64 .. +64, 0 is rest.
     int8_t energy() const { return perform_.energy; }
+    // VariSpeed (core/varispeed.hpp): tenths of a semitone on every machine, 0 is rest.
+    int8_t varispeed() const { return vari_tenths_; }
     AutoFill auto_fill() const { return auto_fill_; }
     // EVOLVE (core/evolve.hpp): a track's period index (0 OFF) and the shared settings.
     uint8_t evolve_period(int track) const {
@@ -625,6 +628,8 @@ private:
     // switching makes that an assumption rather than a fact, so it is re-derived on every
     // change: a closed hat chokes an open one only while both tracks still host a Hat.
     void rewire_machines();
+    // Cmd::set_machine's work: silence, switch, load the machine's default sound.
+    void switch_machine(int track, uint8_t id);
 
     Machine *machines_[kTracks] = {};
 
@@ -676,6 +681,7 @@ private:
     // its AS WAS row can put it back. -1 when nothing is remembered.
     TrackParams sound_back_ = {};
     int sound_back_track_ = -1;
+    uint8_t sound_back_machine_ = 0;   // and its machine, which a paste may have switched
     // And `Cmd::arp_preset`'s: the ARP bytes and the arp's kit settings when ARPS opened.
     uint8_t arp_back_[kArpBytes] = {};
     KitArp arp_back_ext_ = {};
@@ -769,6 +775,13 @@ private:
     // The tempo as each track's machine last heard it (Machine::set_tick_frames).
     float tick_frames_sent_[kTracks] = {};
     Machine *tick_frames_machine_[kTracks] = {};
+    // What the machine was last handed: the LFO's semitones plus VariSpeed's.
+    float sent_pitch_[kTracks] = {};
+    // VariSpeed (Cmd::set_varispeed): the amount, its semitones for the machines, and the ratio
+    // the delay's beat is divided by so its echoes keep to the faster or slower clock.
+    int8_t vari_tenths_ = 0;
+    float vari_semis_ = 0.0f;
+    float vari_inv_ratio_ = 1.0f;
 
     // Every note-on a track's machine takes -- a step, a chord, an arp or roll hit, a pad or a
     // key -- goes through here: the screen's trig light, and LFO TRIG's restart.
@@ -867,6 +880,15 @@ private:
 
     void prepare_machine(int track);
     void prepare_chain(int track);
+    // The line input's strip (ProjectSettings::input), between the tracks and the sends: fades in
+    // when turned on, plays one block down to silence when turned off, and costs nothing while
+    // off. `in` is audio()'s input buffer, nullptr where the host gives none.
+    void run_input(const float *in, uint32_t frames);
+    void prepare_input(bool on);
+    bool input_live_ = false;                    // the chain is running (on, or its last block)
+    uint8_t input_prepared_[kInputFields] = {};
+    float input_prepared_scale_ = -1.0f;         // the MUTE BUS's fader scale it was prepared at
+    bool input_prepared_on_ = false;
     void forget_prepared();
     TrackParams machine_prepared_[kTracks] = {};
     const Machine *machine_prepared_for_[kTracks] = {};

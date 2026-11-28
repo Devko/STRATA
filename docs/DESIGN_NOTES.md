@@ -60,6 +60,21 @@ on the PATTERN page (`core/timing.hpp` feel_offset, pattern file section 5, D tu
 `scenario_moveall` turns REL/LEN ALL in the emulator (`move_all_notice` logs each click);
 `scenario_feel` walks FEEL. UNIT_CHECKLIST W29 walks both.
 
+## VariSpeed
+
+**VariSpeed** (CyDrums P7, `core/varispeed.hpp`, docs/CONTROLS.md "VariSpeed") is the whole
+unit, not samples only: a turntable moves everything, and a sample-only speed would leave the
+drums and synths at the old pitch against a moved tempo. FUNC + turn VALUE, because VALUE is
+already the tempo and FUNC + VALUE was free since D1 (it only named the DJ filter's slots). The
+app sets Enaga's clock to the project's tempo times the ratio (`set_clock_tempo`, the one path
+every tempo change takes) and posts `Cmd::set_varispeed`; the engine adds the semitones to the
+LFO's pitch in `run_lfos` and hands the sum to `Machine::set_pitch_mod`, whose default now keeps
+a ratio the non-synth machines multiply in (`pitch_mod_ratio_`, exactly 1 at rest, so the golden
+renders are unchanged). The delay's beat is divided by the ratio in `apply_mixer_bytes`. MID is
+left alone (no pitch bend range to rely on). Not in a LOCK, not saved: the tempo is not either,
+and the project keeps its own tempo so a save is never the moved one. Internal clock only;
+`vari_follow_source` drops it on a CLOCK SRC change. UNIT_CHECKLIST W70, `scenario_varispeed`.
+
 ## LIVE RND
 
 **LIVE RND** (CyDrums P1's live half, `core/liverand.hpp`, docs/CONTROLS.md "LIVE RND"): FUNC +
@@ -218,3 +233,45 @@ guard, listing every track-edit command. CAPTURE copies every lane's part and co
 pool into one free slot, then switches to it keeping each lane's origin, so nothing restarts.
 LAUNCH is PROJECT's last page so the page walks in older tests and scenarios stay valid.
 `tests/scenario_launch.sh` drives it in the emulator; CAPTURE and held pads are host-tested only.
+
+## Your own sounds and copy / paste in SOUNDS
+
+`core/usersounds.hpp` has the design and the file's bytes; `app/storage.hpp` ("your own sounds")
+the protocol. The decisions behind it:
+
+- **One file per machine, not per sound**: `SOUNDS/<MCH>.BIN`, sixteen slots, read when SOUNDS
+  opens on that machine and written whole after each save, rename or delete (a few hundred bytes,
+  one pass, through files::save's .TMP). One read per list, and no scan of sixteen files.
+- **Beside the projects, never in them**, like the kit library: every project file is unchanged,
+  so every older project opens as it did, and a sound saved once is in every project.
+- **Versioned like every STRATA file**: the container's version, and in the record its own length
+  and parameter count, so a later build can save more per sound (the WAVE scan page's bytes) and
+  this one still reads it, and a record with fewer bytes takes the machine's defaults for the rest.
+  A file this build cannot read is never written over (`failed`), so nothing a newer build or a
+  damaged card holds is lost by saving.
+- **The whole kKitParams bytes are kept; loading writes what a factory sound writes**
+  (`user_sound_owns` = `sound_preset_writes`), so the FX page, LFO and ARP stay the track's, as
+  Roland chose for the factory sounds. Kept whole so a later build may choose to load more.
+- **Loading goes as bytes, not a preset index**: `Cmd::sound_bytes` carries eight a command (b-e
+  and `u`), four commands a sound, posted together so they land in one block. No shared buffer
+  between the contexts is needed.
+- **Copy is a clipboard row, not a target picker**: FUNC+UP takes the track's sound into the UI's
+  clipboard and OK on the PASTE row loads it, so "paste" is the list's own OK. Pasting onto
+  another machine posts `Cmd::set_machine` first; `Cmd::sound_preset`'s AS WAS remembers the
+  machine too and switches it back (`Engine::switch_machine`).
+- `tests/scenario_usersounds.sh` walks save, load, copy, paste and AS WAS; UNIT_CHECKLIST W68.
+
+## Line input as a mixer strip
+
+The jam review's idea 4. `ProjectSettings::input` holds the strip (`InputField` order, PROJECT.BIN's
+optional section 9, which grows on the end: a short section reads what it has). It is a project
+setting, not a kit one, for MIDI OUT's reason: it is cabling. `Engine::run_input` runs after the
+tracks, through `Mixer::add_input`, a ninth `InsertChain` prepared in TON mode (no drive), so the
+strip has a fader (square law, 100 = 0 dB), PAN, the three sends, the kit's duck and TON. The MUTE
+BUS scales its fader as it does the tracks'; the send raise and the bounce tap do not reach it.
+Turning it on resets the chain so its gain ramps from 0; off, it runs one more block prepared at
+level 0. The codec route is set by the UI (`service_input_route`, main context only), whenever the
+strip is on and its jack or gain differs from what was last applied; RESAMPLE's own input sources
+invalidate that and win while RESAMPLE is up. The IN pages sit before MST so the scenarios that go
+round to MST and EQ still count the same; CHO moved two pages further (scenario_chorus, m7).
+UNIT_CHECKLIST W69.

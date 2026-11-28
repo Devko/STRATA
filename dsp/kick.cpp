@@ -274,7 +274,7 @@ void Kick::run(Voice &v, float *out, int n) {
 
     // Note-dependent coefficients: still control rate, just once per voice per block rather than
     // once per machine, because the trig note moves f0 and three of these follow f0.
-    const float f0 = clamp(base_hz_ * v.note_ratio, 10.0f, 2000.0f);
+    const float f0 = clamp(base_hz_ * v.note_ratio * pitch_mod_ratio_, 10.0f, 2000.0f);
     const float f0_norm = f0 * inv_rate_;
     const float dirtiness = dirtiness_ * clamp(1.0f - 8.0f * f0_norm, 0.0f, 1.0f);
     const float tone_coefficient = clamp(4.0f * f0_norm * tone_ratio_, 0.0f, 1.0f);

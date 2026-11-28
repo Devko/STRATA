@@ -76,7 +76,10 @@ struct UiProbe {
         app.post(Cmd::set_live_rnd, 0, 0, kLiveRndOff, kLiveRndAllTracks);
         app.energy_ = 0;                             // ENERGY to rest
         app.post(Cmd::set_energy, 0, 0, 0);
+        app.vari_ = 0;                               // VariSpeed to rest
+        app.post(Cmd::set_varispeed, 0, 0, 0);
     }
+    static int vari(const Strata &app) { return app.vari_; }
     static int selected(const Strata &app) { return app.selected_; }
     static int page(const Strata &app) { return app.page_; }
     static int param_page(const Strata &app) { return app.param_page_; }
@@ -245,6 +248,9 @@ struct UiProbe {
         app.audition_row_ = -1;
         app.sound_cursor_ = 0;
         app.sound_track_ = -1;
+        app.sound_clip_ = Strata::SoundClip{};
+        app.sound_entry_slot_ = -1;
+        app.sound_delete_armed_ = -1;
         app.sounds_return_ = Mode::edit;
         app.kit_armed_ = Strata::KitAction::none;
         app.stop_armed_ = false;
@@ -1150,7 +1156,9 @@ TEST(ui_func_fill_turns_note_repeat_on_and_a_held_pad_rolls) {
 TEST(ui_the_retired_chords_say_where_their_moves_went_and_do_nothing_else) {
     // Backlog D1 and D5 (2026-11-25): FUNC + VALUE (the DJ filter), FUNC + push D (the tape
     // stop) and FUNC + MUTATE (the delay freeze) retired for the mixer's slots 1-2, 8 and 5.
-    // Each names the slot, and none falls through to the tempo, a page's push or a mutation.
+    // FUNC + VALUE is VariSpeed since (core/varispeed.hpp): it moves no DJ filter and not the
+    // project's tempo. The other two name their slot, and fall through to no page's push or
+    // mutation.
     Strata &app = fresh();
     pump(2);
     const uint8_t undo_before = undo_depth();
@@ -1161,7 +1169,8 @@ TEST(ui_the_retired_chords_say_where_their_moves_went_and_do_nothing_else) {
     pump(2);
     CHECK_EQ(int(app_engine().project().settings.master[int(MasterField::dj)]), 64);
     CHECK_EQ(UiProbe::tempo_tenths(app), tempo);
-    CHECK_EQ(UiProbe::notice(app), "DJ FILTER: SLOT 1/2");
+    CHECK_EQ(UiProbe::vari(app), 10);
+    UiProbe::moves_to_rest(app);
 
     app.on_key(ENAGA_KEY_PUSH_D, true);
     pump(2);
@@ -1406,6 +1415,118 @@ TEST(ui_the_value_encoder_is_the_tempo_and_a_refused_transport_is_recorded) {
     CHECK(!UiProbe::clock_refused(app));
     key(ENAGA_KEY_F6);
     CHECK(!host.running());
+}
+
+TEST(ui_func_value_is_varispeed_the_clock_and_every_pitch_together) {
+    // core/varispeed.hpp: FUNC + turn VALUE moves the clock and every machine's pitch by one
+    // ratio, the project keeps its tempo, FUNC + tap VALUE snaps back, and an outside clock
+    // refuses it and takes it back to rest.
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    pump(2);
+    const uint32_t tempo = UiProbe::tempo_tenths(app);
+    const uint16_t saved = app_engine().project().settings.tempo_centi_bpm;
+    CHECK_EQ(int(tempo), 1300);
+
+    // An octave up in twelve clicks of ten: twice the tempo on the clock, the project's alone.
+    app.on_key(ENAGA_KEY_F1, true);
+    for (int i = 0; i < 12; i++) app.on_encoder(4, 10);
+    pump(2);
+    CHECK_EQ(UiProbe::vari(app), 120);
+    CHECK_EQ(int(app_engine().varispeed()), 120);
+    CHECK_NEAR(host.tempo(), 260.0f, 0.01);
+    CHECK_EQ(UiProbe::tempo_tenths(app), tempo);
+    CHECK_EQ(app_engine().project().settings.tempo_centi_bpm, saved);
+    CHECK_EQ(UiProbe::notice(app), "VARISPEED +12.0 260.0");
+    CHECK(!UiProbe::clock_refused(app));
+    char strip[64];
+    CHECK(UiProbe::live_strip(app, strip));
+    CHECK(std::strstr(strip, "VS+") != nullptr);
+    // Held at the octave.
+    app.on_encoder(4, 5);
+    CHECK_EQ(UiProbe::vari(app), 120);
+
+    // Back down through 0 stops on it (the eleventh click, from +1.0), and on past it the next.
+    for (int i = 0; i < 11; i++) app.on_encoder(4, -11);
+    pump(2);
+    CHECK_EQ(UiProbe::vari(app), 0);
+    CHECK_NEAR(host.tempo(), 130.0f, 0.01);
+    CHECK_EQ(UiProbe::notice(app), "VARISPEED 0 130.0");
+    app.on_encoder(4, -5);
+    pump(2);
+    CHECK_EQ(UiProbe::vari(app), -5);
+    CHECK_NEAR(host.tempo(), 130.0f * vari_ratio(-5), 0.01);
+    CHECK_EQ(UiProbe::notice(app), "VARISPEED -0.5 126.3");
+    CHECK(UiProbe::live_strip(app, strip));
+    CHECK(std::strstr(strip, "VS-") != nullptr);
+
+    // VALUE alone turns the project's tempo, and the clock follows it times the ratio.
+    app.on_key(ENAGA_KEY_F1, false);
+    app.on_encoder(4, 100);                          // ten BPM
+    pump(2);
+    CHECK_EQ(int(UiProbe::tempo_tenths(app)), 1400);
+    CHECK_EQ(int(app_engine().project().settings.tempo_centi_bpm), 14000);
+    CHECK_NEAR(host.tempo(), 140.0f * vari_ratio(-5), 0.01);
+
+    // FUNC + tap VALUE (nothing picked): back to rest, the project's tempo on the clock.
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_key(ENAGA_KEY_PUSH_VALUE, true);
+    app.on_key(ENAGA_KEY_PUSH_VALUE, false);
+    pump(2);
+    CHECK_EQ(UiProbe::vari(app), 0);
+    CHECK_EQ(int(app_engine().varispeed()), 0);
+    CHECK_NEAR(host.tempo(), 140.0f, 0.01);
+    CHECK_EQ(UiProbe::notice(app), "VARISPEED 0 140.0");
+
+    // Near the top of the clock's range the turn stops where the tempo still fits.
+    app.on_key(ENAGA_KEY_F1, false);
+    for (int i = 0; i < 1400; i++) {
+        app.on_encoder(4, +1);
+        if ((i & 63) == 63) pump();
+    }
+    pump();
+    CHECK_EQ(int(UiProbe::tempo_tenths(app)), 2800);
+    app.on_key(ENAGA_KEY_F1, true);
+    for (int i = 0; i < 20; i++) app.on_encoder(4, 1);
+    pump(2);
+    CHECK(UiProbe::vari(app) > 0 && UiProbe::vari(app) < 20);
+    CHECK(host.tempo() <= 300.0f);
+    CHECK(280.0f * vari_ratio(int8_t(UiProbe::vari(app) + 1)) > 300.0f);
+    // And a faster project tempo brings it back towards 0 rather than past 300.
+    app.on_key(ENAGA_KEY_F1, false);
+    app.on_encoder(4, 200);                          // 300 BPM
+    pump(2);
+    CHECK_EQ(UiProbe::vari(app), 0);
+    CHECK_EQ(int(app_engine().varispeed()), 0);
+    CHECK_NEAR(host.tempo(), 300.0f, 0.01);
+
+    // Under an outside clock it is refused, and it drops back when the source changes.
+    for (int i = 0; i < 1700; i++) {
+        app.on_encoder(4, -1);
+        if ((i & 63) == 63) pump();
+    }
+    pump();
+    CHECK_EQ(int(UiProbe::tempo_tenths(app)), 1300);
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_encoder(4, 30);
+    pump(2);
+    CHECK_EQ(UiProbe::vari(app), 30);
+    host.set_source(ENAGA_CLOCK_MIDI);
+    pump(2);
+    CHECK_EQ(UiProbe::vari(app), 0);
+    CHECK_EQ(int(app_engine().varispeed()), 0);
+    CHECK_EQ(UiProbe::notice(app), "VARISPEED 0 EXT CLOCK");
+    app.on_encoder(4, 10);
+    pump(2);
+    CHECK_EQ(UiProbe::vari(app), 0);
+    CHECK_EQ(UiProbe::notice(app), "EXT CLOCK");
+    CHECK(UiProbe::clock_refused(app));
+    // Back on INTERNAL the clock takes the project's tempo again.
+    host.set_source(ENAGA_CLOCK_INTERNAL);
+    pump(2);
+    CHECK_NEAR(host.tempo(), 130.0f, 0.01);
+    CHECK(!UiProbe::clock_refused(app));
+    app.on_key(ENAGA_KEY_F1, false);
 }
 
 TEST(ui_stop_under_a_running_outside_clock_resets_nothing_until_the_clock_stops) {
@@ -3036,7 +3157,7 @@ TEST(ui_a_machine_id_this_build_does_not_have_is_refused) {
 void mixer_page(Strata &app, int page) {
     app.on_key(ENAGA_KEY_F7, true);
     app.on_key(ENAGA_KEY_F7, false);
-    for (int guard = 0; guard < 16 && UiProbe::mixer_bank(app) != page; guard++) {
+    for (int guard = 0; guard < 2 * kMixerPageCount && UiProbe::mixer_bank(app) != page; guard++) {
         app.on_key(ENAGA_KEY_SELECT_RIGHT, true);
         app.on_key(ENAGA_KEY_SELECT_RIGHT, false);
     }
@@ -3071,8 +3192,9 @@ TEST(ui_the_mixer_pages_walk_the_faders_the_sends_and_the_master) {
     CHECK_EQ(UiProbe::mode(app), int(Mode::mixer));
 
     // The selection keys page through: two pages of faders, two of duck depths and the duck's
-    // own page, the widths' two, then DLY, DLY+, REV, REV+, ROUTE, the chorus's three, MST and EQ.
-    CHECK_EQ(kMixerPageCount, 17);
+    // own page, the widths' two, then DLY, DLY+, REV, REV+, ROUTE, the chorus's three, the line
+    // input's two, MST and EQ.
+    CHECK_EQ(kMixerPageCount, 19);
     for (int i = 1; i < kMixerPageCount; i++) {
         app.on_key(ENAGA_KEY_SELECT_RIGHT, true);
         app.on_key(ENAGA_KEY_SELECT_RIGHT, false);
@@ -3198,6 +3320,104 @@ TEST(ui_the_chorus_pages_set_each_tracks_send_and_the_chorus) {
     CHECK(std::strcmp(value, "0.61") == 0);
     app.on_encoder(1, +3);
     pump(2);
+}
+
+// The line input's IN and IN+ pages: each knob moves its byte of the strip, push A turns the
+// input on and off and push D on IN+ steps the gain, all logged for tests/scenario_linein.sh;
+// with the strip on, its jack and gain are routed on the codec, and only when they change.
+namespace {
+void check_layout(Strata &app, const char *where);
+}  // namespace
+
+TEST(ui_the_line_input_pages_set_the_strip_and_route_the_input) {
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+    FakeHost &host = FakeHost::the();
+    const auto byte = [&engine](InputField f) { return int(engine.project().settings.input[int(f)]); };
+    CHECK_EQ(byte(InputField::on), 0);
+
+    mixer_page(app, kMixerInputPage);
+    CHECK(std::strcmp(kMixerPages[kMixerInputPage].name, "IN") == 0);
+    check_layout(app, "MIXER IN, off");
+    // Off, nothing is routed.
+    pump(2);
+    const int calls_off = host.input_calls();
+    // A: the fader, two counts a click.
+    app.on_encoder(0, -5);
+    pump(2);
+    CHECK_EQ(byte(InputField::level), int(kInputLevelUnity) - 10);
+    CHECK(std::strcmp(UiProbe::notice(app), "IN LEVEL") == 0);
+    CHECK(app_storage().dirty());
+    app.on_encoder(0, +5);
+    // B: the pan, shown L/C/R.
+    app.on_encoder(1, -4);
+    pump(2);
+    CHECK_EQ(byte(InputField::pan), 56);
+    char name[8], value[12];
+    bool empty = true;
+    UiProbe::mixer_knob_parts(app, 1, name, value, empty);
+    CHECK(std::strcmp(name, "PAN") == 0);
+    CHECK(std::strcmp(value, "L8") == 0);
+    app.on_encoder(1, +4);
+    // C and D: the delay and reverb sends.
+    app.on_encoder(2, +10);
+    app.on_encoder(3, +20);
+    pump(2);
+    CHECK_EQ(byte(InputField::delay), 20);
+    CHECK_EQ(byte(InputField::reverb), 40);
+    app.on_encoder(2, -10);
+    app.on_encoder(3, -20);
+    pump(2);
+    CHECK_EQ(host.input_calls(), calls_off);
+
+    // Push A: on, logged, and the jack routed once.
+    press_key(app, ENAGA_KEY_PUSH_A);
+    pump(3);
+    CHECK_EQ(byte(InputField::on), 1);
+    CHECK(host.logged("IN ON"));
+    CHECK_EQ(host.input_source(), int(ENAGA_INPUT_LINE_STEREO));
+    CHECK_EQ(host.input_level(), int(ENAGA_INPUT_NORMAL));
+    const int calls_on = host.input_calls();
+    pump(5);
+    CHECK_EQ(host.input_calls(), calls_on);          // already routed: no second 10 ms gap
+    check_layout(app, "MIXER IN, on");
+
+    // IN+: C the tone, D the jack (one a click), push D the gain.
+    mixer_page(app, kMixerInputPage + 1);
+    check_layout(app, "MIXER IN+");
+    app.on_encoder(2, -3);
+    pump(2);
+    CHECK_EQ(byte(InputField::tone), 58);
+    UiProbe::mixer_knob_parts(app, 2, name, value, empty);
+    CHECK(std::strcmp(value, "LP6") == 0);
+    app.on_encoder(2, +3);
+    app.on_encoder(3, +1);
+    pump(3);
+    CHECK_EQ(byte(InputField::source), 1);
+    CHECK(host.logged("IN LINE L"));
+    CHECK_EQ(host.input_source(), int(ENAGA_INPUT_LINE_MONO));
+    press_key(app, ENAGA_KEY_PUSH_D);
+    pump(3);
+    CHECK_EQ(byte(InputField::gain), 2);
+    CHECK(host.logged("IN GAIN HIGH"));
+    CHECK_EQ(host.input_level(), int(ENAGA_INPUT_HIGH));
+    // B: the duck, a percent a click, stopping at 100.
+    app.on_encoder(1, +120);
+    pump(2);
+    CHECK_EQ(byte(InputField::duck), int(kDuckDepthMax));
+    app.on_encoder(1, -120);
+    pump(2);
+
+    // Back as it was: off, LINE, NORMAL.
+    app.on_encoder(3, -10);
+    press_key(app, ENAGA_KEY_PUSH_D);
+    press_key(app, ENAGA_KEY_PUSH_D);
+    press_key(app, ENAGA_KEY_PUSH_A);
+    pump(3);
+    CHECK_EQ(byte(InputField::on), 0);
+    CHECK_EQ(byte(InputField::source), 0);
+    CHECK_EQ(byte(InputField::gain), int(kInputGainNormal));
+    CHECK(host.logged("IN OFF"));
 }
 
 TEST(ui_the_eq_page_knobs_move_the_bands_and_a_push_kills_one) {
@@ -8122,7 +8342,6 @@ const char *quiet_reason(int s, const Probe &p, bool func) {
         {s_sounds, false, "A-", "ditto"}, {s_sounds, true, "A-", "ditto"},
         {s_sounds, false, "OCT LEFT", "the STEP keys always mean the same"},
         {s_sounds, false, "OCT RIGHT", "ditto"},
-        {s_sounds, true, "UP", "no copy / paste in a list"}, {s_sounds, true, "DOWN", "ditto"},
         {s_sounds, false, "B+", "SOUNDS uses A"}, {s_sounds, false, "C+", "ditto"},
         {s_sounds, false, "D+", "ditto"}, {s_sounds, true, "B+", "ditto"},
         {s_sounds, true, "C+", "ditto"}, {s_sounds, true, "D+", "ditto"},
@@ -8896,6 +9115,18 @@ TEST(ui_screenshots) {
     write_shot(folder, "mixer_dck");
     mixer_page(app, kMixerDuckPage);
     write_shot(folder, "mixer_duck");
+    // The line input on, with some of each send and a duck, as a set would have it; put back after.
+    mixer_page(app, kMixerInputPage);
+    {
+        static const int moves[][2] = {{int(InputField::on), 1},    {int(InputField::delay), 40},
+                                       {int(InputField::reverb), 70}, {int(InputField::chorus), 20},
+                                       {int(InputField::duck), 50},  {int(InputField::pan), -10}};
+        for (const auto &m : moves) post_cmd(Cmd::set_input, uint8_t(m[0]), uint8_t(int8_t(m[1])));
+        pump(2);
+        write_shot(folder, "mixer_in");
+        for (const auto &m : moves) post_cmd(Cmd::set_input, uint8_t(m[0]), uint8_t(int8_t(-m[1])));
+        pump(2);
+    }
     mixer_page(app, kMixerPageCount - 2);
     write_shot(folder, "mixer_mst");
     mixer_page(app, kMixerEqPage);
@@ -9980,6 +10211,193 @@ TEST(ui_sounds_machine_ok_opens_it_and_marks_the_sound_playing_now) {
     CHECK(screen_has(app, ">ACID    NOW"));
     key(ENAGA_KEY_CLR);
     CHECK_EQ(UiProbe::mode(app), int(Mode::machine));
+    post_track(Cmd::set_machine, 0, 0);
+    pump(4);
+    key(ENAGA_KEY_F4);
+}
+
+// --- your own sounds and copy / paste in SOUNDS (core/usersounds.hpp) ------------------------
+
+namespace {
+
+// The track-1 KICK's sound with SRC's first knob somewhere no factory sound puts it.
+void kick_of_my_own() {
+    post_cmd(Cmd::set_param, 1, 101);
+    pump(2);
+}
+
+// Where the list's first user row is, on a KICK track with no copied sound: AS WAS and the
+// factory list above it.
+int first_user_row_on_kick() { return 1 + sound_preset_count(uint8_t(MachineId::kick)); }
+
+}  // namespace
+
+TEST(ui_sounds_func_down_saves_the_tracks_sound_by_name_and_ok_loads_it_back) {
+    Strata &app = fresh();
+    sounds_on(app, MachineId::kick);
+    kick_of_my_own();
+    const TrackParams mine = app_engine().params(0);
+    CHECK(app_storage().sound_bank_state(uint8_t(MachineId::kick)) == Storage::SoundBankState::ready);
+
+    shift_key(ENAGA_KEY_DOWN);                         // SAVE: the name entry, offering KCK 1
+    CHECK(UiProbe::name_entry_open(app));
+    CHECK(std::strcmp(UiProbe::name_entry_text(app), "KCK 1") == 0);
+    check_layout(app, "SAVE SOUND");
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK(!UiProbe::name_entry_open(app));
+    CHECK(std::strcmp(UiProbe::notice(app), "SAVED KCK 1") == 0);
+    CHECK_EQ(user_bank_count(app_storage().sound_bank()), 1);
+    CHECK(!app_storage().sound_write_pending());
+    // The cursor is on the new row, marked as playing now, after the factory sounds.
+    CHECK(screen_has(app, ">+KCK 1     NOW"));
+    check_layout(app, "SOUNDS with one of your own");
+
+    // Another sound, then the saved one back: exactly the bytes a sound owns.
+    sounds_cursor_to(2);
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK(!same_params(app_engine().params(0), mine));
+    sounds_cursor_to(first_user_row_on_kick());
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK(same_params(app_engine().params(0), mine));
+    CHECK(std::strcmp(UiProbe::notice(app), "KCK 1") == 0);
+
+    // FUNC + DOWN on your own row replaces it, offering its name; a second save offers KCK 2.
+    post_cmd(Cmd::set_param, 2, 55);
+    pump(2);
+    shift_key(ENAGA_KEY_DOWN);
+    CHECK(std::strcmp(UiProbe::name_entry_text(app), "KCK 1") == 0);
+    check_layout(app, "REPLACE SOUND");
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK_EQ(user_bank_count(app_storage().sound_bank()), 1);
+    CHECK_EQ(int(app_storage().sound_bank().slots[0].params[2]), 55);
+    sounds_cursor_to(0);
+    shift_key(ENAGA_KEY_DOWN);
+    CHECK(std::strcmp(UiProbe::name_entry_text(app), "KCK 2") == 0);
+    key(ENAGA_KEY_CLR);                                // cancelled: nothing saved
+    pump(2);
+    CHECK_EQ(user_bank_count(app_storage().sound_bank()), 1);
+    key(ENAGA_KEY_CLR);
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_sounds_push_b_renames_and_push_c_deletes_only_your_own) {
+    Strata &app = fresh();
+    sounds_on(app, MachineId::kick);
+    kick_of_my_own();
+    shift_key(ENAGA_KEY_DOWN);
+    key(ENAGA_KEY_OK);
+    pump(2);
+    // On a factory row neither does anything to it, and says so.
+    sounds_cursor_to(1);
+    key(ENAGA_KEY_PUSH_B);
+    CHECK(!UiProbe::name_entry_open(app));
+    CHECK(std::strcmp(UiProbe::notice(app), "YOUR OWN SOUNDS ONLY") == 0);
+    key(ENAGA_KEY_PUSH_C);
+    CHECK(std::strcmp(UiProbe::notice(app), "YOUR OWN SOUNDS ONLY") == 0);
+
+    // Push B: RENAME, starting from its name. UP on the first place makes it LCK 1.
+    sounds_cursor_to(first_user_row_on_kick());
+    key(ENAGA_KEY_PUSH_B);
+    CHECK(UiProbe::name_entry_open(app));
+    check_layout(app, "RENAME SOUND");
+    key(ENAGA_KEY_UP);
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK(std::strcmp(app_storage().sound_bank().slots[0].name, "LCK 1") == 0);
+    CHECK(screen_has(app, "+LCK 1"));
+
+    // A name another of the machine's sounds has is refused.
+    kick_of_my_own();
+    sounds_cursor_to(0);
+    shift_key(ENAGA_KEY_DOWN);                         // KCK 1 is free again
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK_EQ(user_bank_count(app_storage().sound_bank()), 2);
+    sounds_cursor_to(first_user_row_on_kick() + 1);    // KCK 1, in slot 2
+    key(ENAGA_KEY_PUSH_B);
+    key(ENAGA_KEY_UP);                                 // LCK 1: LCK 1's
+    key(ENAGA_KEY_OK);
+    CHECK(std::strcmp(UiProbe::notice(app), "NAME TAKEN") == 0);
+
+    // Push C: OK twice deletes; CLR, or any other key, lets it go.
+    sounds_cursor_to(first_user_row_on_kick());
+    key(ENAGA_KEY_PUSH_C);
+    CHECK(std::strcmp(UiProbe::notice(app), "DELETE? OK TWICE") == 0);
+    check_layout(app, "SOUNDS asking to delete");
+    key(ENAGA_KEY_CLR);
+    CHECK(std::strcmp(UiProbe::notice(app), "DELETE OFF") == 0);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::sounds));
+    key(ENAGA_KEY_PUSH_C);
+    key(ENAGA_KEY_OK);
+    CHECK_EQ(user_bank_count(app_storage().sound_bank()), 2);
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK(std::strcmp(UiProbe::notice(app), "DELETED") == 0);
+    CHECK_EQ(user_bank_count(app_storage().sound_bank()), 1);
+    CHECK(!screen_has(app, "+LCK 1"));
+    CHECK(screen_has(app, "+KCK 1"));
+    key(ENAGA_KEY_CLR);
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_sounds_func_up_copies_a_sound_and_paste_puts_it_on_any_track) {
+    Strata &app = fresh();
+    sounds_on(app, MachineId::kick);
+    kick_of_my_own();
+    const TrackParams kick = app_engine().params(0);
+    shift_key(ENAGA_KEY_UP);
+    CHECK(std::strcmp(UiProbe::notice(app), "COPIED T1 KCK") == 0);
+
+    // Track 2, another machine: the PASTE row under AS WAS switches it to KICK and sounds as
+    // track 1 does, its own mix kept.
+    key(ENAGA_KEY_SELECT_RIGHT);
+    pump(2);
+    const uint8_t was = app_engine().machine_id(1);
+    CHECK(was != uint8_t(MachineId::kick));
+    const TrackParams before = app_engine().params(1);
+    sounds_cursor_to(1);
+    CHECK(screen_has(app, ">PASTE T1 KCK"));
+    check_layout(app, "SOUNDS with PASTE");
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK(std::strcmp(UiProbe::notice(app), "PASTED TO T2") == 0);
+    CHECK_EQ(int(app_engine().machine_id(1)), int(MachineId::kick));
+    const TrackParams &now = app_engine().params(1);
+    for (int p = 0; p < kTrackParams; p++) {
+        if (user_sound_owns(uint8_t(MachineId::kick), p)) {
+            CHECK_EQ(int(now.v[p]), int(kick.v[p]));
+        } else if (p >= kUserSoundFxFirst && p < kSoundAsrFirst) {
+            CHECK_EQ(int(now.v[p]), int(before.v[p]));     // its mix, LFO and ARP stay
+        }
+    }
+    // The list is the KICK's now, and AS WAS takes the paste back: machine and sound.
+    sounds_cursor_to(0);
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK_EQ(int(app_engine().machine_id(1)), int(was));
+    CHECK(same_params(app_engine().params(1), before));
+    key(ENAGA_KEY_CLR);
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_sounds_arps_has_no_copy_or_save_and_says_so) {
+    Strata &app = fresh();
+    post_track(Cmd::set_machine, 0, uint8_t(MachineId::va_mono));
+    pump(4);
+    key(ENAGA_KEY_F8);
+    UiProbe::set_param_page(app, int(Page::arp));
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::sounds));
+    shift_key(ENAGA_KEY_UP);
+    CHECK(std::strcmp(UiProbe::notice(app), "ARPS: NOT SAVED") == 0);
+    shift_key(ENAGA_KEY_DOWN);
+    CHECK(!UiProbe::name_entry_open(app));
+    key(ENAGA_KEY_CLR);
     post_track(Cmd::set_machine, 0, 0);
     pump(4);
     key(ENAGA_KEY_F4);
@@ -12707,7 +13125,7 @@ TEST(ui_jam_rec_on_func_rec_twice_starts_and_stops_it_from_resample) {
 TEST(ui_mixer_up_down_jump_between_the_groups_of_pages) {
     Strata &app = fresh();
     mixer_page(app, 0);
-    static const char *const kDown[] = {"DCK 1-4", "WID 1-4", "DLY", "REV", "CHO 1-4", "MST", "TRK 1-4"};
+    static const char *const kDown[] = {"DCK 1-4", "WID 1-4", "DLY", "REV", "CHO 1-4", "IN", "MST", "TRK 1-4"};
     for (const char *name : kDown) {
         key(ENAGA_KEY_DOWN);
         CHECK_EQ(std::strcmp(kMixerPages[UiProbe::mixer_bank(app)].name, name), 0);
@@ -12718,7 +13136,7 @@ TEST(ui_mixer_up_down_jump_between_the_groups_of_pages) {
     key(ENAGA_KEY_RIGHT);                               // EQ, a page on
     CHECK_EQ(UiProbe::mixer_bank(app), kMixerEqPage);
     key(ENAGA_KEY_UP);                                  // from inside a group: the one before
-    CHECK_EQ(std::strcmp(kMixerPages[UiProbe::mixer_bank(app)].name, "CHO 1-4"), 0);
+    CHECK_EQ(std::strcmp(kMixerPages[UiProbe::mixer_bank(app)].name, "IN"), 0);
     key(ENAGA_KEY_DOWN);
     CHECK_EQ(std::strcmp(kMixerPages[UiProbe::mixer_bank(app)].name, "MST"), 0);
     check_layout(app, "MIXER after a group jump");

@@ -329,7 +329,7 @@ for a second; it shows that screen's help, with `PAGE 1/11` at its foot.
 - Push VALUE + CLR: `FX OFF`. Again: `LOOP CLEARED`. MAX meanwhile: `________ %` (U11 is in 13o).
 
 **W20b. Gestures that moved, MUTE BUS and MORPH (#145, 3 min).** A01 playing, the chord's SnA up.
-- FUNC + turn VALUE: `DJ FILTER: SLOT 1/2`, the tempo and the sound unchanged. FUNC + push D:
+- FUNC + turn VALUE is VariSpeed since (W70): the DJ filter does not move. FUNC + push D:
   `TAPE STOP: SLOT 8`. FUNC + MUTATE is LOCK now (W20c): tapped with no lock it says
   `NO LOCK: HOLD STORES` and freezes or mutates nothing.
 - Push VALUE + STEP 7 (`7 MUTE BUS`), turn VALUE up slowly: every track fades out evenly and the
@@ -787,7 +787,7 @@ to reach `GUARD4` here at a 40-60% top line.
   bright, slightly barking strike that mellows as it rings; soft notes are rounder. `____`
 
 **W59. Chorus (3 min).** Beat playing, A01.
-- MIXER, SELECT_LEFT four times: `CHO 5-8`. Push C: `T7 CHORUS 64`, the chord track's bar stands
+- MIXER, SELECT_LEFT six times: `CHO 5-8`. Push C: `T7 CHORUS 64`, the chord track's bar stands
   half up and the chords sound wider and gently moving. Push C again: OFF, back to the dry
   chords. Turn C up to 127 and down: the chorus follows smoothly, no click. `____`
 - SELECT_RIGHT: `CHO`. Turn A (RAT) up: the sweeps on screen bunch up and the warble speeds up;
@@ -869,8 +869,8 @@ it switch, put a few trigs on track 3 that sound clearly different, then PROJECT
 
 **W65. Usability quick wins: MIXER groups, the KEYS track menu, JAM REC on FUNC+REC (5 min).**
 Beat playing, A01, a card with some space.
-- MIXER, then DOWN: `DCK 1-4`; DOWN again `WID 1-4`, then `DLY`, `REV`, `CHO 1-4`, `MST` and
-  round to `TRK 1-4`. UP from `TRK 1-4` is `MST`. LEFT/RIGHT still go one page. `____`
+- MIXER, then DOWN: `DCK 1-4`; DOWN again `WID 1-4`, then `DLY`, `REV`, `CHO 1-4`, `IN`, `MST`
+  and round to `TRK 1-4`. UP from `TRK 1-4` is `MST`. LEFT/RIGHT still go one page. `____`
 - HOME twice for KEYS, hold OK half a second: the track menu (`TRACK T1`, `>GENERATE`). The pads
   still play notes; UP/DOWN move the menu's row, not the track; OK on GENERATE writes a part.
   CLR: `KEYS`, the keyboard back. `____`
@@ -899,7 +899,58 @@ Beat playing, A01, a card with some space.
   at the end of the pattern. `____`
 - Tap PROJECT: PROJECT opens as the key comes up, no slower than before to the hand. FUNC +
   PROJECT: SAMPLES at once. `____`
-**W68. WAVE scan modes: the SCAN page (4 min).** Beat playing, A01.
+**W68. Your own sounds and copy / paste in SOUNDS (5 min).** Beat playing, A01, a card in.
+- Track 1 (KCK), EDIT, turn TUN and DEC somewhere new, OK: SOUNDS. FUNC + DOWN: `SAVE SOUND`
+  offering `KCK 1`. OK: `SAVED KCK 1`, and `+KCK 1     NOW` at the end of the list, under the
+  cursor. The beat never stops or stutters. `____`
+- Down to 909, OK: the factory kick. Back to `+KCK 1`, OK: your kick again, as you left it. `____`
+- Push B on `+KCK 1`, UP once, OK: `+LCK 1`. Push C, OK, OK: `DELETED`, the row is gone. Push B
+  on a factory sound: `YOUR OWN SOUNDS ONLY`. `____`
+- Save one again, then switch the unit off and on: it is still in the list, in this project and
+  after NEW. On the PC the card has `ENAGA/DATA/STRATA/SOUNDS/KCK.BIN`. `____`
+- Track 6 (MNO), SOUNDS, FUNC + UP: `COPIED T6 MNO`. Screen key right to track 7 (PLY):
+  `PASTE T6 MNO` under AS WAS, `SWITCHES MACHINE` under the bars. OK: track 7 plays track 6's
+  bass sound on its own notes, its pan and sends as they were. AS WAS: PLY and its stab are
+  back. `____`
+
+**W69. Line input as a mixer channel (6 min).** Beat playing, A01, a synth or phone on INPUT L
+and R (line level), headphones on.
+- MIXER, SELECT_LEFT four times: `IN`, the strip dim and `IN OFF`. The input is not heard. Push A:
+  `IN ON`, the synth fades in through the headphones, centred, at about the level it has
+  straight; the meter on the left moves with it. Push A again: `IN OFF`, it fades out, no click.
+  `____`
+- On: turn A (LVL) down and up, B (PAN) to the left, C (DLY) and D (REV) up: the synth goes into
+  the delay and the reverb. Delay to 0 while it rings: the echoes ring out. `____`
+- SELECT_RIGHT: `IN+`. B (DCK) to 100: the synth ducks under the kick. C (TON) down: darker; up
+  past the middle: thinner. D (SRC) one click: `IN LINE L`, the synth from the left jack in both
+  ears; back to `LINE`. Push D: `IN GAIN HIGH`, then `LOW` (the -20 dB pad: much quieter), then
+  `NORM`. `____`
+- How much later does the synth come out than it goes in? Play a short note on the synth with
+  the strip on and off (the synth's own out in one ear if you can): `____` (expect a few ms). Hiss
+  with the synth off, LVL 100, gain NORM: `____` (none / faint / audible). `____`
+- With the input on, the DJ filter (FUNC + VALUE), the kill EQ's LOW and REPEAT take the synth
+  too; JAM REC for a few bars: the file has the synth in it. `____`
+- RESAMPLE (FUNC+REC), B to `MIC`: the input switches to the mic; leave RESAMPLE: back to LINE
+  (the synth heard again). `____`
+- The top line with the input on reads `____ %`, off `____ %`. Save, power cycle, open: the strip
+  comes back on, as left. FUNC+HOME, NEW: the input is off. `____`
+
+
+**W70. VariSpeed (3 min).** A01 playing at 130, internal clock.
+- Hold FUNC, turn VALUE up slowly: `VARISPEED +0.1 130.8` and on, the beat speeding up AND every
+  track rising in pitch together, the kick, the sample loop and the chords alike, like a record
+  sped up. No clicks or dropouts as it moves; held chords bend with it. The top bar shows the
+  moved tempo, the live strip `VS+`. `____`
+- Up to `VARISPEED +12.0 260.0`: an octave up, still in time, the delay echoes on the beat. MAX
+  from SETUP there: `________ %`. Turn back down: it stops on `VARISPEED 0 130.0` and only goes
+  below on the next click (`VS-`, slower and lower). `____`
+- With it at -3.0 or so, FUNC + tap VALUE: straight back to `VARISPEED 0 130.0`, the beat as
+  programmed. VALUE alone still turns the tempo. Save with VariSpeed up, reload: the project
+  opens at its own tempo. `____`
+- SETUP, CLOCK SRC to MIDI with VariSpeed up: `VARISPEED 0 EXT CLOCK`; FUNC + turn VALUE says
+  `EXT CLOCK`. Back to INTERNAL: 130 again. `____`
+
+**W71. WAVE scan modes: the SCAN page (4 min).** Beat playing, A01.
 - Lower pad 6, FUNC+EDIT (MACHINE), DOWN three times: `WMN`. EDIT, then SELECT_LEFT from SRC:
   the SCAN tab, `MOD OFF`, `SCAN OFF: TURN MOD`. On a drum track SCAN never comes up. `____`
 - OK (SOUNDS): WOBBLE (the growl opens and closes once a beat, on the beat), SCANLD (each note
@@ -910,7 +961,6 @@ Beat playing, A01, a card with some space.
 - Track 7, MACHINE: `WPL`, OK: DRIFT and SWIRL, held chords: all notes move together, no clicks
   or zipper on the sweeps. 30 s with WOBBLE on track 6 and DRIFT on track 7: **MAX `____ %`**
   (against W23's). FUNC+HOME, RELOAD PROJECT puts the beat back.
-
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
 
@@ -938,6 +988,8 @@ From `D:\DEV\STRATA` through WSL, as in CLAUDE.md (`wsl.exe -d Ubuntu -- bash -c
       only; record both in docs/BUDGET.md, "A05 PAD". Peak `____ %` / `____ %`
 - [ ] `tests/scenario_sounds.sh` (new: SOUNDS on the kick track, loads 808 and PUNCH while
       playing, then AS WAS) passes with cl6x. Peak `____ %`
+- [ ] `tests/scenario_usersounds.sh` (new: saves the kick's sound as KCK 1, loads HARD and KCK 1,
+      copies, pastes onto track 2, AS WAS) passes with cl6x. Peak `____ %`
 - [ ] `tests/scenario_midi.sh` (new: track 1 to MID on the running beat, both STOPs) passes with
       cl6x and GCC only. It is part of E1's `tools/scenarios.sh` too. Peak `____ %` / `____ %`
 - [ ] **E1.** `tools/scenarios.sh` (every scenario) passes, with cl6x and with GCC only, on main
@@ -971,28 +1023,28 @@ needed for tonight's unit session; do them if the PC is free.
       (about an hour; builds each variant in its own worktree, so main is untouched). Audio check
       all `identical`: yes / no `____`. `head` vs `base`, scenario_m3 cl6x: `____ %` vs `____ %`.
       VA POLY per voice on `head` (E2's method): `________`
-- [ ] **E11.** The sends' ambient modes: `tests/scenario_ambient.sh` (DLY+ push A to LONG, REV+
+- [x] **E11.** The sends' ambient modes: `tests/scenario_ambient.sh` (DLY+ push A to LONG, REV+
       push A to HALL, on the default beat whose sends are open) against `scenario_m3.sh`, both
       compilers. Host estimate +1.9 points cl6x / +2.8 GCC-only once the classic tails have
       gone, +3.6 / +5.3 while they still ring (`docs/BUDGET.md`, "The sends' ambient modes").
-      cl6x `________ %` vs `________ %`, GCC `________ %` vs `________ %`
+      cl6x `25.47 %` vs `22.70 %`, GCC `55.38 %` vs `40.58 %` (2026-11-28, `db96b69`)
 - [ ] **E12.** The ASR page: `tests/scenario_asr.sh` (walks EDIT to ASR on track 1 and track 7;
       every ASR byte 0, so it should match `scenario_factory.sh` to within noise), both
       compilers. Then the held-chord cost: the temporary `factory_kit` edit in `docs/BUDGET.md`
       ("The ASR page", E12), `scenario_factory.sh` both compilers, and revert the edit.
-      Off: cl6x `________ %` GCC `________ %`. Held: cl6x `________ %` GCC `________ %`
-- [ ] **E13.** The OSC page: `tests/scenario_osc.sh` (walks EDIT to OSC on track 1 and track 7,
+      Off: cl6x `23.62 %` GCC `45.36 %` (2026-11-28). Held: cl6x `________ %` GCC `________ %`
+- [x] **E13.** The OSC page: `tests/scenario_osc.sh` (walks EDIT to OSC on track 1 and track 7,
       A01 as shipped) against `scenario_factory.sh` on the commit before it, both compilers.
       Then the worst case: the temporary `factory_kit` edit in `docs/BUDGET.md` ("The OSC page",
       E13), `scenario_factory.sh` both compilers, and revert the edit.
-      Shipped: cl6x `________ %` GCC `________ %`. Worst: cl6x `________ %` GCC `________ %`
+      Shipped: cl6x `23.62 %` GCC `45.36 %`. Worst: cl6x `25.84 %` GCC `54.28 %` (2026-11-28)
 - [ ] **E14.** WAVE: `tests/scenario_wave.sh` (tracks 6 and 7 switched to WMN and WPL on keys)
       against `scenario_factory.sh` on the same commit, both compilers; and the cycles to
       `strata ready` before and after the WAVE commit (`docs/BUDGET.md`, "WAVE MONO and WAVE POLY").
-      WAVE: cl6x `________ %` GCC `________ %`. Boot added: `________`
+      WAVE: cl6x `26.18 %` GCC `50.03 %` (2026-11-28; the beat 23.62 / 45.36). Boot added: `________`
 - [ ] **E15.** FM4: `tests/scenario_fm.sh` (track 7 switched to FM4 on keys) against
       `scenario_factory.sh` on the same commit, both compilers; and `tools/ti_loops.py` for the
-      two FM loops (`docs/BUDGET.md`, "FM4"). FM4: cl6x `________ %` GCC `________ %`
+      two FM loops (`docs/BUDGET.md`, "FM4"). FM4: cl6x `24.68 %` GCC `49.74 %` (2026-11-28)
 - [ ] **E5.** Load `STRATA_1.WAV` (15 s, 96 kHz) through the emulator's card, cl6x vs GCC.
       `________ s` / `________ s`
 - [ ] Optional pre-listen: `make -C host render` writes the four factory patterns and A01's
@@ -1920,7 +1972,7 @@ Enaga's menu and start STRATA6.
 | E14 WAVE, `scenario_wave.sh` vs `scenario_factory.sh`; boot cycles before/after, cl6x / GCC (PC) | |
 | U13 MAX with WMN GROWL and WPL PAD, over A01 (W23) | |
 | E17 WAVE scan, `scenario_wavescan.sh` vs `scenario_wave.sh`, cl6x / GCC (PC) | |
-| U15 MAX with WMN WOBBLE and WPL DRIFT, over A01 (W68) | |
+| U15 MAX with WMN WOBBLE and WPL DRIFT, over A01 (W71) | |
 | E15 FM4, `scenario_fm.sh` vs `scenario_factory.sh`; `ti_loops.py` FM loops, cl6x / GCC (PC) | |
 | U14 MAX with FM4 PAD on track 7, over A01 (W24) | |
 | MAX straight after a kit recall (15) | |
@@ -2780,8 +2832,8 @@ records where each gesture went and why.
       through to the track faders underneath.
 - [ ] On MST, A is the DJ filter, B the glue compressor, C the limiter threshold, D the output
       level. A reads `OFF` at centre, `LP nn` below it and `HP nn` above.
-- [ ] FUNC + VALUE is no longer the DJ filter (since #145, backlog D1): it says
-      `DJ FILTER: SLOT 1/2` and moves nothing. The tempo must not move with it.
+- [ ] FUNC + VALUE is no longer the DJ filter (since #145, backlog D1): it is VariSpeed (W70)
+      and moves no MST byte.
 - [ ] Save, power cycle, reopen: every one of the fourteen comes back. Before this they did not
       exist in any file.
 - [ ] **The kill EQ** (added 2026-11-22): MIXER's seventh page, `EQ`, LOW MID HI on A B C, flat at

@@ -209,6 +209,11 @@ enum class Cmd : uint8_t {
     // The sidechain duck (core/project.hpp, KitDuck): a: DuckField, b: int8 delta; track is the
     // track whose depth moves for DuckField::depth. Kit bytes, so a kit save keeps them.
     set_duck,
+    // The line input's strip (core/project.hpp, ProjectSettings::input): a: InputField, b: an int8
+    // encoder delta onto the byte, clamped to the field's domain (input_field_sanitized); or
+    // c = 1: a push, which turns ON over, walks SRC and GAIN round by one, and is refused on
+    // the other fields. Decided on the audio side, as set_choke's step is. PROJECT.BIN bytes.
+    set_input,
 
     // --- performance, M5 ---------------------------------------------------
     //
@@ -346,6 +351,15 @@ enum class Cmd : uint8_t {
     // Only the bytes a preset writes are touched either way, so the mix stays the user's.
     sound_preset,
 
+    // A saved sound (core/usersounds.hpp) or a copied one into one track: eight parameter bytes
+    // a command, from parameter `step`: b c d e, then u's four bytes low first. track, a: the
+    // MachineId the bytes are for -- refused if the track hosts another machine by the time it
+    // lands. Only the bytes a sound owns (user_sound_owns) are written, as for sound_preset, so
+    // the mix stays the user's. A whole sound is (kKitParams + 7) / 8 of these, posted together, so
+    // they land in one block. AS WAS (sound_preset with kSoundPresetBack) puts back what was
+    // there, the machine included when a paste switched it.
+    sound_bytes,
+
     // A factory arp (core/arppresets.hpp) into one track: the ARPS list (OK on the ARP page).
     // track, b: the preset's index, or kSoundPresetKeep / kSoundPresetBack as for sound_preset.
     // Writes the four ARP bytes and the kit's arp settings (KitTrack::arp), nothing else.
@@ -397,6 +411,11 @@ enum class Cmd : uint8_t {
     // absolute (the UI keeps the position, as it does REL ALL's). Performance, not edits: no
     // file, no undo; a LOCK holds it.
     set_energy,
+    // VariSpeed (core/varispeed.hpp), FUNC + turn VALUE. a: the amount as an int8, tenths of a
+    // semitone, -120 .. 120, absolute (the UI keeps it, with the clock it sets). The pitch of
+    // every machine and the delay's beat; Enaga's tempo is app/'s to set. Performance, not an
+    // edit: no file, no undo, not in a LOCK.
+    set_varispeed,
 
     // Sample audition (dsp/audition.hpp), push A in SAMPLES. `audition_start` is posted by the
     // card side once the file's stream is open and filled; what to play is in

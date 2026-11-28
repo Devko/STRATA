@@ -33,6 +33,8 @@
 
 #include <cstdint>
 
+#include <enaga/dsp.hpp>   // semitones, for set_pitch_mod's ratio
+
 namespace strata {
 
 // --- parameters -----------------------------------------------------------
@@ -201,11 +203,19 @@ public:
     // doubling the part.
     virtual void release(uint8_t note) { (void)note; }
 
-    // The LFO on TUN as a float (dsp/lfo.hpp, "Block rate"): semitones added to the pitch of
-    // every voice, sounding or not, at control rate. Set once a block by the engine, and 0 when
-    // the track's LFO is elsewhere. Only the synth machines (VA and WAVE, MONO and POLY) take it;
-    // the engine moves the TUN byte of every other machine instead, so the default ignores it.
-    virtual void set_pitch_mod(float semis) { (void)semis; }
+    // Semitones added to the pitch of every voice, sounding or not, at control rate: the LFO on
+    // TUN as a float (dsp/lfo.hpp, "Block rate") plus VariSpeed (core/varispeed.hpp). Set by the
+    // engine when it changes, and 0 at rest. The synth machines (VA and WAVE, MONO and POLY, and
+    // FM4) override it and add the semitones to their own pitch. Every other machine gets only
+    // VariSpeed here -- the engine moves its TUN byte for the LFO instead -- and the default keeps
+    // it as a ratio, `pitch_mod_ratio_`, which the drums multiply into their base frequency and
+    // SAMPLE and GRAIN into their read step. Exactly 1 at 0, so a render at rest is unchanged to
+    // the bit. MID ignores it: its notes go to another instrument.
+    virtual void set_pitch_mod(float semis) {
+        pitch_mod_ratio_ = semis == 0.0f ? 1.0f : enaga::dsp::semitones(semis);
+    }
+    // That ratio, for tests (1 at rest; a synth overriding set_pitch_mod leaves it at 1).
+    float pitch_mod_ratio() const { return pitch_mod_ratio_; }
 
     // Frames a clock tick (96 PPQN) at the tempo now: what a machine with a tempo-synced setting
     // of its own (the WAVE pair's SCN SPD) times itself by. The engine calls it whenever the tempo
@@ -236,6 +246,10 @@ public:
     // Three-letter names for the 16 parameter slots, for the encoder labels. Index 0-15; a
     // machine returns "---" for a slot it does not use. The font has upper case and digits only.
     virtual const char *param_name(int index) const = 0;
+
+protected:
+    // set_pitch_mod's semitones as a frequency ratio, for the machines that do not override it.
+    float pitch_mod_ratio_ = 1.0f;
 };
 
 }  // namespace strata
