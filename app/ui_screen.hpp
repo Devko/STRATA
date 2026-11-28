@@ -417,7 +417,9 @@
             case Mode::project:
                 switch (project_page_) {
                     case ProjectPage::launch:  place.screen = HelpScreen::launch; break;
-                    case ProjectPage::chain:   place.screen = HelpScreen::chain; break;
+                    case ProjectPage::chain:
+                        place.screen = section_open_ ? HelpScreen::section : HelpScreen::chain;
+                        break;
                     case ProjectPage::pattern: place.screen = HelpScreen::pattern; break;
                     case ProjectPage::setup:   place.screen = HelpScreen::setup; break;
                     case ProjectPage::files:   place.screen = HelpScreen::projects; break;

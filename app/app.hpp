@@ -603,6 +603,7 @@ public:
 
 #include "ui_project.hpp"
 #include "ui_launch.hpp"
+#include "ui_section.hpp"
 #include "ui_trackmenu.hpp"
 #include "ui_pickview.hpp"
 #include "ui_listview.hpp"
@@ -714,6 +715,11 @@ private:
     Engine engine_;
     uint32_t stream_late_seen_ = 0;    // Status::stream_late as last noticed
     uint8_t song_end_seen_ = 0;        // Status::song_end as last acted on
+    // Song sections: Status::section_event and Status::tempo_due as last acted on, and whether
+    // this run of the transport has already said a section's BPM was refused (once a song).
+    uint8_t section_event_seen_ = 0;
+    uint8_t tempo_due_seen_ = 0;
+    bool bpm_skip_said_ = false;
     uint32_t stream_late_said_ms_ = 0;
 
     // The card side: projects, autosave and the sample loader, all in this context. It owns the
@@ -900,6 +906,12 @@ private:
     uint8_t launch_event_seen_ = 0;
     uint8_t launch_seen_[kTracks] = {};
     uint8_t launch_seen_live_ = 0;
+    // CHAIN's SECTION view (app/ui_section.hpp): open over the entry under `chain_cursor_`, which
+    // of its two pages, and OK's hold for the quick fill.
+    bool section_open_ = false;
+    int section_page_ = 0;
+    bool section_ok_held_ = false;
+    uint32_t section_ok_down_ms_ = 0;
     int pattern_field_ = 0;        // the PATTERN page's field: 0 LEN, 1 SWG, 2 FEEL, 3-10 swings
     static const char *project_page_name(ProjectPage page) {
         switch (page) {

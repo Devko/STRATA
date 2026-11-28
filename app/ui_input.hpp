@@ -102,6 +102,14 @@
         if (on_project_hold(key, down)) return;
         // PROJECT's LAUNCH page: STEP, OK, CLR, the arrows and push B are its own.
         if (on_launch_key(key, down)) return;
+        // CHAIN's SECTION view (app/ui_section.hpp): push A on an entry opens it, and while it is
+        // up the arrows, OK, CLR, the screen keys and the pushes are its own.
+        if (on_section_key(key, down)) return;
+        if (key == ENAGA_KEY_PUSH_A && mode_ == Mode::project &&
+            project_page_ == ProjectPage::chain && !shift_ && held_step_ < 0) {
+            if (down) section_open();
+            return;
+        }
 
         // FUNC + push D was the held tape stop until 2026-11-25 (backlog D5): one home per job,
         // and the tape stop's is the mixer's slot 8. The chord says where it went rather than

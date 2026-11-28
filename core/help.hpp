@@ -32,6 +32,7 @@ enum class HelpScreen : uint8_t {
     project,      // PROJECT's slots
     launch,       // PROJECT's LAUNCH page (Track Launch)
     chain,
+    section,      // CHAIN's SECTION view (push A on an entry)
     pattern,
     setup,
     projects,
