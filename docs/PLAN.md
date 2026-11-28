@@ -79,9 +79,9 @@ no Enaga firmware.
 - [x] **The open PRs**: #196 (the LONG delay in passes, bit-exact), #197 (the second review's
       fixes) and #198 (compiled blocks for the scenarios), all merged 2026-11-27.
 
-**2. Feature freeze.** Once the items above are on `main`: no new feature, gesture or file
-change until 1.0. What may still land: fixes with a failing test first, performance work that is
-bit-exact or null-tested, docs, and tooling.
+**2. Feature freeze: lifted.** Planned as no new feature, gesture or file change until 1.0.
+Roland lifted it on 2026-11-28: development comes before a stable release for now, so features
+land on `main` as usual. A freeze comes back only when Roland calls the 1.0 release.
 
 **3. Checks on the RC build** (a build from `main` at the freeze, with cl6x):
 
