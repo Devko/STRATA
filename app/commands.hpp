@@ -392,6 +392,15 @@ enum class Cmd : uint8_t {
     audition_start,
     audition_stop,
 
+    // JAM REC (app/storage.hpp, "jam recording"), the FUNC menu's last row: the finished master
+    // to /RECORD as one long WAV through an Enaga recording stream. `jam_start` is posted by the
+    // card side once Engine::jam_writer() is created; from the next block the audio side writes
+    // every block into it. `jam_stop` ends that, and the audio side bumps Status::jam_epoch once
+    // it has stopped writing: only then may the card side close the file. Neither touches a
+    // project file.
+    jam_start,
+    jam_stop,
+
     count
 };
 
@@ -640,6 +649,10 @@ struct Status {
     // `audition_frame` is where it is, in file frames, for the screen (0 when none plays).
     std::atomic<uint8_t> audition_epoch{0};
     std::atomic<uint32_t> audition_frame{0};
+
+    // JAM REC. Bumped (with release) by every Cmd::jam_stop once the audio side has stopped
+    // writing the jam's stream, so the card side may close it the moment it sees the change.
+    std::atomic<uint8_t> jam_epoch{0};
 
     // Where a SAMPLE or GRAIN track is in its sample, for EDIT's waveform (core/overview.hpp,
     // WaveView): the window or the grain bracket, the slice starts, and up to eight playheads or

@@ -322,6 +322,54 @@ public:
         return e;
     }
 
+    // --- jam recording: JAM REC, the FUNC menu's last row ---
+    //
+    // The whole jam to the card: the finished master (what RESAMPLE's MASTER take hears, so never
+    // the click or the audition) to /RECORD/JAM_<n>.WAV, 48 kHz 24-bit stereo, for as long as it
+    // runs. About 1 GB an hour. Beside the job machine, like the audition, so a save or a sample
+    // load does not hold it up, and it shares no buffer with anything: RESAMPLE, freeze and the
+    // looper still work while it runs.
+    //
+    // The protocol, all in service_jam():
+    //   1. request_jam_start() creates the file through an Enaga recording stream
+    //      (Engine::jam_writer, a wav::Writer, into `jam_ring_`) and posts Cmd::jam_start.
+    //   2. The audio side writes every block into it. Enaga moves the ring to the card in its main
+    //      loop; a block the ring has no room for is dropped whole and counted (jam_lost_frames).
+    //   3. A stop (the user, a full card, kJamMaxBytes, the card going) posts Cmd::jam_stop. The
+    //      audio side stops writing and bumps Status::jam_epoch; only after seeing that is the
+    //      file closed, which writes what the ring still holds and then the header.
+    //
+    // Numbered across restarts like RESAMPLE's takes (JAMSEQ in the settings), so a jam never
+    // overwrites an earlier one.
+
+    // Start a jam. False when it cannot, with the reason in take_jam_message (NO CARD, JAM
+    // BUSY while the last one is still closing, or the card's own answer).
+    bool request_jam_start();
+    // Stop it; the file is closed on a later pass, once the audio side lets go of it.
+    void request_jam_stop();
+    // Started and not yet closed: recording, or stopping.
+    bool jam_running() const { return jam_state_ != JamState::idle; }
+    // Recording, not yet asked to stop.
+    bool jam_recording() const { return jam_state_ == JamState::recording; }
+    // How long it is so far, in seconds, rounded down; the last jam's length once it has closed.
+    uint32_t jam_seconds() const { return jam_frames_ / uint32_t(ENAGA_SAMPLE_RATE); }
+    // Frames dropped because the card fell behind: 0 on a healthy card.
+    uint32_t jam_lost_frames() const;
+    // The file's name (JAM_3.WAV), the running jam's or the last one's; "" before the first.
+    const char *jam_name() const { return jam_name_; }
+    // What became of the last start or stop (SAVED JAM_3, CARD FULL ...), once: reads and clears.
+    const char *take_jam_message() {
+        const char *m = jam_message_;
+        jam_message_ = nullptr;
+        return m;
+    }
+    // App::stop: the audio side is already gone, so the file is closed at once, header and all.
+    void close_jam_for_shutdown();
+    // A FAT32 file stops short of 4 GiB, and so does a WAV's size field: a jam is closed at this
+    // many bytes of audio, 3 h 51 min. Settable for the tests, which cannot fill 4 GB.
+    static constexpr uint32_t kJamMaxBytes = 4000000000u;
+    void set_jam_limit(uint32_t bytes) { jam_limit_ = bytes; }
+
     // --- streaming (below, "streaming: a file too big for the pool") ---
 
     // Does this track play a streamed file? For the screen's sample line and for tests.
@@ -670,6 +718,25 @@ private:
     static constexpr uint32_t kAuditionRingBytes = 256u << 10;
     uint8_t *audition_head_ = nullptr;   // both taken in init()
     uint8_t *audition_ring_ = nullptr;
+
+    // --- jam recording ---
+    enum class JamState : uint8_t { idle, recording, closing };
+    void service_jam();
+    void stop_jam(const char *why);      // recording -> closing; `why` the message once closed
+    void close_jam();                    // closing -> idle, the file closed
+    JamState jam_state_ = JamState::idle;
+    uint8_t jam_epoch_ = 0;              // Status::jam_epoch when the jam began
+    uint32_t jam_frames_ = 0;            // the jam's length, kept once it has closed
+    uint32_t jam_limit_ = kJamMaxBytes;
+    const char *jam_stop_reason_ = nullptr;   // what the stop says once closed; null: SAVED
+    const char *jam_message_ = nullptr;
+    char jam_name_[24] = {};
+    char jam_path_[40] = {};
+    char jam_text_[32] = {};
+    // The stream's ring: 3.6 s of 24-bit stereo, for the card's slow moments (a FAT allocation, a
+    // sample stream's read at the same time). Taken in init().
+    static constexpr uint32_t kJamRingBytes = 1u << 20;
+    uint8_t *jam_ring_ = nullptr;
 
     // --- streaming: a file too big for the pool ---
     //

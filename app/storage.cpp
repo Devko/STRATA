@@ -21,6 +21,8 @@ constexpr const char *kKeyNewSeq = "NEWSEQ";
 // Resampled takes are numbered across restarts, like NEW projects are, so a take never
 // overwrites an earlier one: docs/SPEC.md's /RECORD/STRATA_<n>.WAV.
 constexpr const char *kKeyTakeSeq = "TAKESEQ";
+// JAM REC's files the same way: /RECORD/JAM_<n>.WAV.
+constexpr const char *kKeyJamSeq = "JAMSEQ";
 
 constexpr const char *kDefaultName = "DEFAULT";
 
@@ -255,6 +257,8 @@ bool Storage::init(Engine &engine) {
     audition_head_ = new uint8_t[kAuditionHeadBytes];
     audition_ring_ = new uint8_t[kAuditionRingBytes];
     if (audition_head_ == nullptr || audition_ring_ == nullptr) return false;
+    jam_ring_ = new uint8_t[kJamRingBytes];
+    if (jam_ring_ == nullptr) return false;
 
     pool_.init(kSampleBudgetDefaultMib << 20);
     engine_->set_sample_region(region_, kRegionBytes);
@@ -874,6 +878,10 @@ void Storage::on_card(bool usable) {
     // makes. Both survive mutation for that reason.)
     // An audition stops: its read or its stream is dead with the card.
     stop_audition();
+    // A jam stops too: its stream died with the card. What reached the card before is kept, but
+    // its header cannot be written now, so the file says it is empty (a reader that trusts the
+    // data that follows still plays it).
+    if (!usable && jam_state_ == JamState::recording) stop_jam("CARD OUT: JAM CUT");
     // A long file's handle is dead with the card; closing it ends its pending read CANCELLED.
     chunk_file_.close();
     chunked_ = false;
@@ -1113,6 +1121,8 @@ void Storage::service() {
     service_streams();
     // The audition likewise: a press should be heard at once, not after a save.
     service_audition();
+    // And JAM REC: a full card or a stop must not wait behind a job either.
+    service_jam();
 
     // Freeze next, whatever job runs and with or without a card: it is RAM only, and a loop
     // whose slot is waiting to be given back should not wait behind a save.
@@ -2782,6 +2792,137 @@ void Storage::service_audition() {
     if (audition_want_ && !audition_read_in_flight_) begin_audition();
 }
 
+// --- jam recording -------------------------------------------------------------
+//
+// app/storage.hpp, "jam recording", has the protocol.
+
+bool Storage::request_jam_start() {
+    if (jam_state_ == JamState::recording) return true;
+    if (jam_state_ == JamState::closing) {
+        jam_message_ = "JAM BUSY";
+        return false;
+    }
+    if (!card_usable_) {
+        jam_message_ = "NO CARD";
+        return false;
+    }
+    // Numbered from the settings, saved at once: a restart in the middle of a jam must not hand
+    // the next one the same name and replace it.
+    const int32_t next = settings_.get(kKeyJamSeq, 0) + 1;
+    settings_.set(kKeyJamSeq, next);
+    settings_.save();
+    {
+        char *out = jam_name_;
+        const char *end = jam_name_ + sizeof jam_name_ - 1;
+        append_text(out, "JAM_", end);
+        append_number(out, uint32_t(next), end);
+        append_text(out, ".WAV", end);
+        *out = '\0';
+    }
+    {
+        char *out = jam_path_;
+        const char *end = jam_path_ + sizeof jam_path_ - 1;
+        append_text(out, "/RECORD/", end);
+        append_text(out, jam_name_, end);
+        *out = '\0';
+    }
+    // 24-bit: the master runs hot into its limiter, and a jam is kept and mastered later. No
+    // make_folder("/RECORD"), as for a take: Enaga makes the parents and refuses the folder alone.
+    enaga::wav::Format format{};
+    format.encoding = enaga::wav::pcm;
+    format.channels = 2;
+    format.rate = uint32_t(ENAGA_SAMPLE_RATE);
+    format.bits = 24;
+    const int32_t created = engine_->jam_writer().create(jam_path_, format, jam_ring_, kJamRingBytes);
+    if (created < 0) {
+        engine_->jam_writer().close();
+        char *out = jam_text_;
+        const char *end = jam_text_ + sizeof jam_text_ - 1;
+        append_text(out, "JAM: ", end);
+        append_text(out, created == enaga::wav::not_wav ? "BAD FORMAT" : enaga::files::error_name(created),
+                    end);
+        *out = '\0';
+        jam_message_ = jam_text_;
+        jam_name_[0] = '\0';
+        return false;
+    }
+    // The epoch BEFORE the start: the bump that ends this jam is a change from it.
+    jam_epoch_ = engine_->status().jam_epoch.load(std::memory_order_acquire);
+    jam_frames_ = 0;
+    jam_stop_reason_ = nullptr;
+    post(Cmd::jam_start);
+    jam_state_ = JamState::recording;
+    return true;
+}
+
+void Storage::request_jam_stop() {
+    if (jam_state_ == JamState::recording) stop_jam(nullptr);
+}
+
+uint32_t Storage::jam_lost_frames() const {
+    return engine_->jam_writer().frames_lost();
+}
+
+void Storage::stop_jam(const char *why) {
+    jam_stop_reason_ = why;
+    post(Cmd::jam_stop);
+    jam_state_ = JamState::closing;
+}
+
+void Storage::close_jam() {
+    enaga::wav::Writer &writer = engine_->jam_writer();
+    jam_frames_ = writer.frames();
+    const int32_t closed = writer.close();
+    jam_state_ = JamState::idle;
+    char *out = jam_text_;
+    const char *end = jam_text_ + sizeof jam_text_ - 1;
+    if (jam_stop_reason_ != nullptr) {
+        // A stop the user did not ask for says why first; the name is in the menu row.
+        append_text(out, jam_stop_reason_, end);
+    } else if (closed < 0) {
+        append_text(out, "JAM: ", end);
+        append_text(out, enaga::files::error_name(closed), end);
+    } else {
+        append_text(out, "SAVED ", end);
+        // The name without its .WAV: the toast has 21 characters.
+        for (const char *c = jam_name_; *c != '\0' && *c != '.' && out < end; c++) *out++ = *c;
+    }
+    *out = '\0';
+    jam_message_ = jam_text_;
+}
+
+void Storage::service_jam() {
+    switch (jam_state_) {
+        case JamState::idle:
+            return;
+        case JamState::closing: {
+            // The audio side has stopped writing once the epoch moves: the file is ours.
+            const uint8_t now = engine_->status().jam_epoch.load(std::memory_order_acquire);
+            if (now != jam_epoch_) close_jam();
+            return;
+        }
+        case JamState::recording: {
+            enaga::wav::Writer &writer = engine_->jam_writer();
+            jam_frames_ = writer.frames();
+            const enaga::files::Stream::Status status = writer.status();
+            if (status.state < 0) {
+                // The card filled or failed: close what is there cleanly and say so.
+                stop_jam(status.state == ENAGA_FILE_FULL ? "CARD FULL: JAM SAVED" : "CARD ERROR: JAM CUT");
+            } else if (status.position >= jam_limit_) {
+                stop_jam("4 HOURS: JAM SAVED");
+            }
+            return;
+        }
+    }
+}
+
+void Storage::close_jam_for_shutdown() {
+    if (jam_state_ == JamState::idle) return;
+    // Enaga removed the audio callback before stop(): nothing writes any more, so no epoch to
+    // wait for.
+    close_jam();
+}
+
 // --- streaming ----------------------------------------------------------------
 //
 // app/storage.hpp, "streaming: a file too big for the pool", has the protocol.
@@ -2919,6 +3060,8 @@ void Storage::save_for_shutdown() {
     // App::stop has 3 s including saves, and destructors never run on this platform, so this is
     // the last chance to keep the user's work. Blocking is allowed here; it is the one place in
     // this file that waits.
+    // The jam first: without its header the file says it holds nothing.
+    close_jam_for_shutdown();
     if (!card_usable_) return;
     // Nor while a project load is half done: RAM is part the project being read and part the one
     // before (on_card says more), and both are whole on the card. An autosave of the mix would
