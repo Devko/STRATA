@@ -83,6 +83,27 @@ The image grew: with cl6x payload 1,691,888 bytes and bss 1,670,656 (2026-11-25:
 emulator's default 4 MiB card that no longer fits, which is why `scenario_projects` failed CARD
 FULL with cl6x only; it runs on an 8 MiB card since.
 
+### KICK's PNCH page and the reverb duck RDK (2026-11-28, emulator, Enaga v0.4.0)
+
+PNCH (dsp/kick.hpp) adds work only while a kick with it up sounds: KNK runs a second body loop
+with one more envelope (two multiplies and an add a sample), TCK a noise block, a band-pass and
+a multiply-add for its first ~10 ms, DRP one exponential a block. Its coefficients are made
+only when its bytes move (a first build made them every block and cost the factory beat 0.46
+points with cl6x). `scenario_sounds` now also loads TECHNO, which plays with KNK, TCK and DRP
+up, so its peak includes them.
+
+| Scenario, peak load | cl6x (main before) | cl6x | GCC-only |
+| --- | --- | --- | --- |
+| `sounds` (now with TECHNO) | 23.84% | 23.86% | 45.98% |
+| `factory` | 23.84% | 23.87% | 45.57% |
+| `m3` | | 22.90% | 40.77% |
+| `m7` | | 23.87% | 45.57% |
+
+RDK (dsp/buses.cpp) is not in any scenario: no scenario turns MIXER ROUTE's D. At 0, or with
+the duck idle, it adds one compare a block; turned up, two clears and two multiply-add passes
+of 64 samples while the duck runs, an estimated 0.1 point. W84 on the unit checks MAX with it
+up.
+
 ### Everything turned up (2026-11-28, emulator, Enaga v0.4.0)
 
 The features of 2026-11-28, measured together for the first time (review M4). `scenario_stack`

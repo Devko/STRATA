@@ -66,7 +66,7 @@ constexpr SoundPreset kKickPresets[] = {
     // land at 13-27. Long and driven, they are 4-6 dB louder than the older kicks: a modern techno
     // kick is.
     // Modern techno: the sweep over 27 ms (FMD 56), a 61 ms body. Closest to the references of all.
-    {"TECHNO", {55, 127, 56, 127}, {70, 127, 20, 0}, {95, 100, 60, 95}, {127, 50, 40, 10}, NO_OSC},
+    {"TECHNO", {55, 127, 56, 127}, {70, 127, 20, 0}, {95, 100, 60, 95}, {127, 50, 40, 30}, NO_OSC},
     // Warehouse: a faster sweep and a longer, darker body (DEC 82, about 190 ms to -20 dB).
     {"WHOUSE", {55, 127, 48, 127}, {60, 127, 20, 0}, {105, 90, 40, 90}, {110, 60, 30, 30}, NO_OSC},
     // Industrial: the fastest sweep, drive at the top, short. Hard and industrial techno.
@@ -84,11 +84,12 @@ constexpr SoundPreset kSnarePresets[] = {
     {"909SN", {64, 70, 70, 0}, FLAT, {50, 28, 40, 100}, NO_ASR, NO_OSC},
     // The 808 snare: tuned higher, less snap, a darker band, a short body.
     {"808SN", {80, 50, 56, 0}, FLAT, {40, 28, 20, 104}, NO_ASR, NO_OSC},
-    // A big clap: four bursts (CLP 100), a longer tail. TUN 45 (about 160 Hz) is the point: the
+    // A big clap: four bursts (CLP 100), a longer tail. TUN 40 (about 150 Hz) is the point: the
     // noise's high-pass sits at ten times TUN, and at the old 200 Hz it cut everything under 2 kHz
     // while the drum body filled 200 Hz. Techno claps (the benchmark, 2026-11-28) peak at 1-2 kHz
-    // with 250 Hz 20 dB down; so does this, within about 3 dB from 250 Hz to 8 kHz.
-    {"CLAP4", {45, 127, 12, 100}, FLAT, {50, 24, 10, 127}, NO_ASR, NO_OSC},
+    // with 250 Hz 20 dB down; so does this, and TON 36 keeps some of their 4-8 kHz. Scored as the
+    // kicks are (core/sounds.cpp, KICK), 8 against the old voicing's 15.
+    {"CLAP4", {40, 127, 36, 100}, FLAT, {48, 22, 0, 112}, NO_ASR, NO_OSC},
     // A snare rim: tuned up, almost no noise, very short. A tick for a sparse groove.
     {"RIMSN", {110, 20, 90, 0}, FLAT, {10, 10, 0, 96}, NO_ASR, NO_OSC},
     // Dirty: noisy, darker, driven hard in the chain. Breaks and electro.
@@ -102,9 +103,9 @@ constexpr SoundPreset kSnarePresets[] = {
     // A dark clap: tuned down (so the noise reaches down to 1 kHz), the band low, a little drive.
     // Deep and dub techno.
     {"DARK", {30, 127, 0, 64}, {40, 127, 20, 0}, {50, 28, 10, 111}, NO_ASR, NO_OSC},
-    // The techno clap: three bursts 9 ms apart, voiced like CLAP4 (TUN 45, the body nearly gone),
-    // short. Within about 3 dB of the benchmark's claps from 250 Hz to 8 kHz.
-    {"TCLAP", {45, 127, 12, 64}, FLAT, {45, 20, 10, 127}, NO_ASR, NO_OSC},
+    // The techno clap: three bursts, voiced like CLAP4 (TUN 40, the body nearly gone), short.
+    // Scored against the benchmark's claps: 8, where CLAP scores 18.
+    {"TCLAP", {40, 127, 12, 64}, FLAT, {48, 22, 10, 127}, NO_ASR, NO_OSC},
 };
 
 // --- HAT: TUN TON NOI DTN / DEC CHO CHK LVL (dsp/hat.cpp) -----------------
