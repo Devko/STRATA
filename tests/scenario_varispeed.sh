@@ -15,10 +15,13 @@
 #   run "walk" (0.9 G cycles)
 #     PLAY
 #     FUNC + turn VALUE +3   -> "VARISPEED +0.1 ...", "+0.2", "+0.3"
-#     FUNC + turn VALUE -5   -> "+0.2", "+0.1", "VARISPEED 0 ...": the click onto rest, twice more
+#     FUNC + turn VALUE -3   -> "+0.2", "+0.1", "VARISPEED 0 ...": the third click lands on rest
+#                               (a turn that would cross 0 stops on it; the next click leaves it,
+#                               as REL ALL's and ENERGY's do, so the turn back is exactly 3)
 #   run "octave" (1.9 G cycles)
 #     PLAY
-#     FUNC + turn VALUE +124 -> "VARISPEED +12.0 ...", held there to the end: the load
+#     FUNC + turn VALUE +124 -> "VARISPEED +12.0 ...", held there to the end: the load. The
+#                               clicks past the top repeat "+12.0" (every click shows something)
 #
 # Keys (third_party/enaga/include/enaga/abi.h): F5 = 22, F1 = 19; VALUE's encoder is 4. The first
 # press must come LATE (tests/scenario_m1.sh).
@@ -65,7 +68,7 @@ echo "running the emulator: VariSpeed up and back to rest ..."
 emulate "$LOG_WALK" 900000000 \
     --key 22@300000000 \
     --key 19@460000000 --turn 4:3@462000000 \
-    --key 19@600000000 --turn 4:-5@602000000
+    --key 19@600000000 --turn 4:-3@602000000
 
 echo "running the emulator: VariSpeed an octave up ..."
 emulate "$LOG" 1900000000 \
@@ -120,13 +123,16 @@ up = index(log, "VARISPEED +0.3 ")
 rest = index(log, "VARISPEED 0 ", up)
 check(up >= 0, "walk: FUNC + turn VALUE took VariSpeed up to +0.3", f"log={log}")
 check(rest > up, "walk: turning back landed on rest", f"log={log}")
+check(rest >= 0 and index(log, "VARISPEED", rest) < 0, "walk: and stopped there", f"log={log}")
 check(index(log, "VARISPEED -") < 0, "walk: never past rest", f"log={log}")
 
 octave_run = load(sys.argv[2])
 log = common(octave_run, "octave")
 top = index(log, "VARISPEED +12.0 ")
 check(top >= 0, "octave: FUNC + turn VALUE took VariSpeed to +12.0", f"log={log}")
-check(top == max(i for i, l in enumerate(log) if l.startswith("VARISPEED")) if top >= 0 else False,
+# The clicks past the top repeat its notice: every VariSpeed line from there on is +12.0.
+check(top >= 0 and all(l.startswith("VARISPEED +12.0 ")
+                       for l in log[top:] if l.startswith("VARISPEED")),
       "octave: and it stayed there", f"log={log}")
 if top >= 0:
     # The tempo it reads is twice the project's: the default beat's.
