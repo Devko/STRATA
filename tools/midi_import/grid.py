@@ -15,7 +15,7 @@ test_midi_import.py checks them against those headers so a change there fails he
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, replace  # noqa: F401  (replace is part of the API)
 from typing import Iterable, Mapping
 
 from smf import Note
@@ -158,10 +158,20 @@ def detect_chord(pitches: list[int]) -> tuple[int, int, int] | None:
         if loose is None:
             for rc in classes:
                 if {(rc + i) % 12 for i in iv} == classes:
-                    root = ps[0] - ((ps[0] - rc) % 12)
-                    loose = (root, type_id, 0)
+                    loose = _keep_bass(ps[0], rc, iv)
+                    loose = (loose[0], type_id, loose[1])
                     break
     return loose
+
+
+def _keep_bass(bass: int, root_class: int, intervals: tuple[int, ...]) -> tuple[int, int]:
+    """For a spread voicing STRATA cannot play exactly: the (root, inversion) whose close
+    voicing starts on the same bass note, so the chord keeps its bass and its register."""
+    for inv in range(min(len(intervals) - 1, CHORD_INVERSION_MAX) + 1):
+        for root in range(bass - 24, bass + 1):
+            if root % 12 == root_class and _voicing(root, intervals, inv)[0] == bass:
+                return root, inv
+    return bass - ((bass - root_class) % 12), 0
 
 
 def poly(steps: Iterable[StepNote]) -> list[StepNote]:

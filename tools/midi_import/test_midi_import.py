@@ -116,8 +116,9 @@ class GridTest(unittest.TestCase):
         self.assertEqual(grid.detect_chord([48, 55]), (48, 11, 0))          # 5TH
         self.assertIsNone(grid.detect_chord([60]))
         self.assertIsNone(grid.detect_chord([60, 61, 62]))
-        # Pitch classes match but the voicing is spread: root position under the lowest note.
+        # Pitch classes match but the voicing is spread: the close voicing on the same bass.
         self.assertEqual(grid.detect_chord([48, 67, 75]), (48, 1, 0))
+        self.assertEqual(grid.detect_chord([48, 56, 65]), (41, 1, 2))      # Fm over its fifth
 
     def test_poly_packs_chord_byte(self):
         steps = grid.quantize([smf.Note(0, 4, n, 100) for n in (63, 67, 72)])
