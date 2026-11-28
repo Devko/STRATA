@@ -566,6 +566,32 @@ TEST(golden_wave_machines) {
         }
     }
     set_wave_library(before);
+
+    // Every sample of every table, all sixteen frames at every mip level, each frame at its
+    // scale: 32 fixed pseudo-random projections of the lot, so a change anywhere in a table moves
+    // them, however few of its samples a render reaches.
+    for (int table = 0; table < kWaveTables; table++) {
+        double proj[32] = {};
+        uint32_t i = 0;
+        for (int f = 0; f < kWaveFrames; f++) {
+            const float scale = library.scale(table, f);
+            for (int k = 0; k < kWaveMipLevels; k++) {
+                const int16_t *x = library.frame(table, f, k);
+                for (int n = 0; n <= wave_mip_length(k); n++, i++) {
+                    const double v = double(x[n]) * double(scale);
+                    for (int j = 0; j < 32; j++) {
+                        const uint32_t h = (i * 2654435761u) ^ (uint32_t(j) * 40503u + 0x9E3779B9u);
+                        proj[j] += v * (double((h >> 11) & 0xFFFu) / 4095.0 - 0.5);
+                    }
+                }
+            }
+        }
+        float summary[32];
+        for (int j = 0; j < 32; j++) summary[j] = float(proj[j] * (1.0 / 32768.0));
+        char name[32];
+        std::snprintf(name, sizeof name, "wavetable/%d", table);
+        check_golden(name, summary, 32);
+    }
 }
 
 namespace {
