@@ -13,6 +13,14 @@
         // A held LEN key repeats until it, or FUNC, comes up (update).
         if (!down && key == len_repeat_key_) len_repeat_key_ = -1;
         if (key == ENAGA_KEY_F1) {
+            // A quick tap of FUNC alone said nothing, and nothing on the panel said the help
+            // exists (usability review, 2026-11-28): the tap names it. Never over another
+            // notice or a MUTATE waiting for OK or CLR, so it only fills a silence.
+            if (!down && shift_ && shift_alone_ && !name_entry_.active() &&
+                uint32_t(last_ms_ - shift_at_ms_) < kFuncHelpMs && !notice_showing() &&
+                !mutation_pending_) {
+                notice("HOLD FUNC: HELP");
+            }
             shift_ = down;
             if (!down) len_repeat_key_ = -1;
             if (down) slot_ok_held_ = false;    // FUNC + OK is redo, never a queue
