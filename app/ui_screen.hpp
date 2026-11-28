@@ -66,9 +66,7 @@
         paint::small_text(px, 80, 2, line, 6);
         // JAM REC: a lit dot before the load, blinking once a second while the jam records and
         // steady while its file is being closed, on every screen.
-        if (storage_.jam_running() && (!storage_.jam_recording() || last_ms_ % 1000u < 600u)) {
-            canvas.rect(75, 2, 3, 4, 15);
-        }
+        if (jam_mark_on()) canvas.rect(75, 2, 3, 4, 15);
         if (lock_mark() != nullptr) paint::small_text(px, 96, 2, lock_mark(), 15);
         out = line;
         if (mode_ == Mode::mixer && kMixerPages[mixer_bank_].master && !func_help_showing()) {
@@ -93,13 +91,14 @@
         };
         if (func_help_showing()) {
             // The help's title takes this line (draw_func_help).
-        } else if ((step_page_ || mode_ != Mode::grid) && notice_showing() &&
+        } else if ((step_page_ || mode_ != Mode::grid || track_menu_) && notice_showing() &&
                    notice_screen_ == screen_key()) {
+            // (GRID's track menu draws over GRID's own notice line, so it takes the toast too.)
             // What just happened. GRID shows it in its edit-state line; every other screen had
             // nowhere for it, so a gesture there (F1 + F3's "again to save", an octave, a scene
             // captured) answered with nothing at all.
             out = line;
-            append_shown(out, notice_, kLineChars - 1);
+            append_shown(out, notice_shown(), kLineChars - 1);
             *out = 0;
             toast(line);
         } else if ((step_page_ || mode_ != Mode::grid) && macro_learn_ >= 0) {
@@ -135,7 +134,10 @@
                 case Mode::mixer:   draw_mixer(canvas); break;
                 case Mode::project: draw_project(canvas); break;
                 case Mode::perform: draw_perform(canvas); break;
-                case Mode::keys:    draw_keys(canvas); break;
+                case Mode::keys:
+                    if (track_menu_) draw_track_menu(canvas);
+                    else draw_keys(canvas);
+                    break;
                 case Mode::resample: draw_resample(canvas); break;
                 case Mode::machine: draw_machine(canvas); break;
                 case Mode::kit:     draw_kit(canvas); break;
@@ -267,6 +269,14 @@
             append(out, text);
         };
 
+        // ARR REC first while a take is on, with the sections written so far: ARR, ARR7.
+        if (arr_on()) {
+            p = part;
+            append(p, "ARR");
+            if (arr_written() > 0) append_number(p, uint32_t(arr_written()));
+            *p = 0;
+            add(part);
+        }
         // Where the hand is now, first: the stutter's step and the rate under REPEAT or a roll.
         if (stutter_raw_ >= 0) {
             p = part;
@@ -320,6 +330,14 @@
         if (engine_.len_all() != 0) add(engine_.len_all() < 0 ? "LN-" : "LN+");
         // ENERGY away from rest: EN- thinner, EN+ fuller (core/energy.hpp).
         if (engine_.energy() != 0) add(engine_.energy() < 0 ? "EN-" : "EN+");
+        // TRANSPOSE away from rest, by how much: "TR+3", "TR-12" (core/transpose.hpp).
+        if (engine_.transpose() != 0) {
+            p = part;
+            transpose_short(engine_.transpose(), p, kTransposeShortMax);
+            add(part);
+        }
+        // VariSpeed away from rest: VS- slower and lower, VS+ faster and higher.
+        if (engine_.varispeed() != 0) add(engine_.varispeed() < 0 ? "VS-" : "VS+");
         // LIVE RND on: its unit, "RN4". Not "R4", which the repeat rate could be read as.
         if (engine_.live_rnd_unit() != kLiveRndOff) {
             p = part;
@@ -416,7 +434,9 @@
             case Mode::project:
                 switch (project_page_) {
                     case ProjectPage::launch:  place.screen = HelpScreen::launch; break;
-                    case ProjectPage::chain:   place.screen = HelpScreen::chain; break;
+                    case ProjectPage::chain:
+                        place.screen = section_open_ ? HelpScreen::section : HelpScreen::chain;
+                        break;
                     case ProjectPage::pattern: place.screen = HelpScreen::pattern; break;
                     case ProjectPage::setup:   place.screen = HelpScreen::setup; break;
                     case ProjectPage::files:   place.screen = HelpScreen::projects; break;
@@ -433,7 +453,7 @@
         return place;
     }
 
-    // Title on the second line, ten rows, and the page line: "SCREEN KEYS: PAGE 1/7", which is
+    // Title on the second line, ten rows, and the page line: "LEFT/RIGHT: PAGE 1/7", which is
     // also how anyone finds out there is more than one page.
     void draw_func_help(enaga::Canvas &canvas) {
         canvas.rect(0, 9, 128, 110, 0);
@@ -453,10 +473,12 @@
         }
         char line[40];
         char *out = line;
-        append(out, pages < 10 ? "SCREEN KEYS: PAGE " : "PAGE ");
+        append(out, "LEFT/RIGHT: PAGE ");      // the screen keys are TRANSPOSE (2026-11-28)
         append_number(out, uint32_t(help_page_ % pages + 1));
         *out++ = '/';
         append_number(out, uint32_t(pages));
+        // The pages go round: on the first, LEFT is the way to the last (the VALUE FX steps).
+        if (help_page_ % pages == 0 && pages > 1) append(out, "  < LAST");
         *out = 0;
         paint::small_text(canvas.data(), 0, 113, line, 8);
     }
@@ -620,7 +642,7 @@
             // Cut to the line: a notice is built in places all over this file, and one that ran
             // off the edge would lose its end, which is usually the part that says what to do.
             out = line;
-            append_shown(out, notice_, kLineChars);
+            append_shown(out, notice_shown(), kLineChars);
             *out = 0;
             canvas.text(0, y, line, 15);
             return;

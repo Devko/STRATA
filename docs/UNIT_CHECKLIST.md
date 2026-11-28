@@ -5,7 +5,7 @@ On a unit that still runs Enaga 0.3.0, update it to 0.4.0 first and do **the Ena
 most likely to break only on the hardware. If it passes, the walkthrough is worth its two hours;
 if an item fails, report that first.
 
-Then **the walkthrough** (W1-W63, about 210 minutes): everything merged since v0.1.0,
+Then **the walkthrough** (the W items, about three and a half hours): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -239,10 +239,10 @@ quickly: `KEYS`, on track 7.
   PLAY: the snare stays muted. FUNC + pad 2 again.
 - **NEW is empty, LOAD DEMO.** FUNC+HOME, NEW PROJECT, OK, OK: GRID shows no steps, every pad
   still plays its sound, centred (headphones: kick, hats and perc all in the middle).
-  FUNC+HOME, UP, UP (`LOAD DEMO`), OK, OK: `DEMO PROJECT`, and the demo beat is back.
+  FUNC+HOME, UP (`LOAD DEMO`, the last row), OK, OK: `DEMO PROJECT`, and the demo beat is back.
 
 **W13. Play modes (#148, 3 min).** PLAY A01, lower pad 3 (hats).
-- FUNC+HOME, DOWN to `TRACK PLAY` (under TRACK SPEED): `T3 FWD`. RIGHT: `T3 PLAY REV`, the hats
+- GRID, hold OK (the track menu), UP to `PLAY` (under SPEED): `FWD`. RIGHT: `T3 PLAY REV`, the hats
   run backwards and the STEP light walks right to left. RIGHT: PING (forward one bar, back the
   next). RIGHT to `RND1`: the hats scramble but stay on the grid and in the swing; `RND4` (two
   more): whole beats swap places.
@@ -266,14 +266,14 @@ beat playing.
   sound is back. Does editing feel normal? `____`
 
 **W16. CLEAR PATTERN (#86, 1 min).** Beat playing.
-- FUNC+HOME, DOWN to CLEAR PATTERN, OK: `OK AGAIN TO CLEAR`, nothing changes.
+- FUNC+HOME, UP, UP (CLEAR PATTERN), OK: `OK AGAIN: CLEAR`, nothing changes.
 - OK again: `CLEARED FUNC+CLR UNDO`, the menu closes, every track silent, GRID empty.
 - FUNC+CLR: the whole beat is back at once.
 - One OK, wait 3 s, OK: it only asks again.
 
 **W17. Projects: save as, rename, delete (#91, 5 min).**
-- Before saving, two things to find again: MIXER DCK 5-8, T6 to `80%`; FUNC+HOME, TRACK PLAY on
-  track 3 to `REV`.
+- Before saving, two things to find again: MIXER DCK 5-8, T6 to `80%`; the track menu's PLAY on
+  track 3 to `REV` (GRID, hold OK).
 - FUNC+HOME, SAVE AS, name `TEST` (A and VALUE), OK: `SAVING`, then `NOW TEST`.
 - PROJECT, screen key RIGHT four times (PROJECTS). Bottom hint `PUSH B REN  C DELETE`.
 - Cursor on `TEST`, push B: `RENAME`, `FROM TEST`. Make it `TEST2`, OK: `RENAMING`, the list
@@ -281,7 +281,7 @@ beat playing.
 - Power cycle: STRATA comes back with `TEST2`, MIXER DCK 5-8 shows T6 `80%` (the duck saved), and
   the hats still run backwards (`T3 PLAY REV`: the play mode saved).
 - PROJECTS, cursor on `DEFAULT`, OK twice: `OPENING`.
-- Cursor on `TEST2`, push C: `DELETE? OK TWICE`. OK, wait 3 s, OK: only `OK AGAIN TO DELETE`.
+- Cursor on `TEST2`, push C: `OK TWICE: DELETE`. OK, wait 3 s, OK: only `OK AGAIN: DELETE`.
   OK, OK: `DELETING`, gone from the list.
 - Push C on `DEFAULT`: `PROJECT IS OPEN`, nothing else.
 
@@ -293,7 +293,7 @@ beat playing.
 **W19. Help for the screen you are on (#107, 3 min).** Hold FUNC alone on each screen below
 for a second; it shows that screen's help, with `PAGE 1/11` at its foot.
 - GRID on the kick: `GRID SRC KCK`, then `A TUN TUNE` ... `D CLK CLICK`, `PUSH A     NOTE VIEW`.
-- Still holding FUNC, tap the screen key RIGHT: `STEPS:` (`STEP+LATER STEP  LEN` among them),
+- Still holding FUNC, tap RIGHT: `STEPS:` (`STEP+LATER STEP  LEN` among them),
   `HOLD STEP + PAD:`, `RANGE AND TRACK:`, `STEP LIGHTS:`, `FUNC + KEY:`, `FUNC + KNOB OR PAD:`,
   `UPPER PADS`, `VALUE FX MIXER:`, `VALUE FX STEPS:`, and round to page 1. LEFT goes back. GRID's
   own knob page did **not** change.
@@ -329,8 +329,8 @@ for a second; it shows that screen's help, with `PAGE 1/11` at its foot.
 - Push VALUE + CLR: `FX OFF`. Again: `LOOP CLEARED`. MAX meanwhile: `________ %` (U11 is in 13o).
 
 **W20b. Gestures that moved, MUTE BUS and MORPH (#145, 3 min).** A01 playing, the chord's SnA up.
-- FUNC + turn VALUE: `DJ FILTER: SLOT 1/2`, the tempo and the sound unchanged. FUNC + push D:
-  `TAPE STOP: SLOT 8`. FUNC + MUTATE is LOCK now (W20c): tapped with no lock it says
+- FUNC + turn VALUE is VariSpeed since (W70): the DJ filter does not move. FUNC + push D is
+  the kill for all bands since (W77). FUNC + MUTATE is LOCK now (W20c): tapped with no lock it says
   `NO LOCK: HOLD STORES` and freezes or mutates nothing.
 - Push VALUE + STEP 7 (`7 MUTE BUS`), turn VALUE up slowly: every track fades out evenly and the
   delay and reverb ring on. At the top only the tails. Back to 0: the beat at its own level,
@@ -529,12 +529,13 @@ sustained in it (a pad, a voice, a chord) in `/SAMPLES` first; `unit-test/STRATA
   the riding square. `____`
 
 **W36. LIVE RND in PERFORM (4 min).** Beat playing, A01.
-- PERFORM (FUNC + MIXER). FUNC + turn D one click at a time: `LIVE RND1 8 TRK` .. `RND16`, and
+- PERFORM (FUNC + MIXER). FUNC + turn D one click at a time: `LIVE RND1 7 TRK` .. `RND16`, and
   it stops there; the line under the macros reads `LIVE RND16 FUNC+D` and the live strip `RN16`. RND 1:
   every part scatters; RND 4: the beats of each bar trade places, still on the grid. Musical at
   which units, for techno and for ambient? `____`
-- Lower pad 1 (kick), FUNC + push D: `T1 RND OUT 7 TRK`, the kick goes straight while the rest
-  keeps jumping; the dot under meter 1 goes. Again: `T1 RND IN 8 TRK`. `____`
+- The kick went straight from the first click while the rest jumps (it starts out, W77); no dot
+  under meter 1. FUNC + lower pad 1: `T1 RND IN 8 TRK`, the kick jumps too. Again:
+  `T1 RND OUT 7 TRK`. `____`
 - FUNC + turn D all the way back: `LIVE RND OFF`, and the beat is exactly A01 again from the next
   step, no stumble. GRID: no step changed, CLR's undo has nothing new. `____`
 - RND4 on, hold FUNC + MUTATE (a lock), turn it OFF, tap FUNC + MUTATE: the shuffle is back; tap
@@ -579,7 +580,7 @@ hit, a 44.1 kHz loop and a long stem (a minute or more). Beat stopped, A01.
   Push A: `STOPPED`, a short fade. `____`
 - The long stem, push A: how long before it sounds? `________` (it should be as quick as the
   hit). Let it run 20 s: no dropouts, `HEARING 20/..S`. `____`
-- PLAY the beat, push A once on a file: `A AGAIN TO HEAR` and nothing is heard. Wait 3 s,
+- PLAY the beat, push A once on a file: `A AGAIN: HEAR` and nothing is heard. Wait 3 s,
   push A once: the same toast again. Push A twice quickly: now it plays. While it plays, DOWN
   hears the next file without asking again. STOP the beat: one push hears a file again. `____`
 - With the beat playing and a file heard, the audition sits about 6 dB under full scale, not
@@ -769,7 +770,7 @@ to reach `GUARD4` here at a 40-60% top line.
   when MAX nears 90%, and it counts down within a few seconds once you mute those tracks. `____`
 
 **W57. Triplet speed (2 min).** Beat playing, A01, GRID, track 3 (the closed hat) selected.
-- FUNC + HOME, TRACK SPEED, LEFT once: `T3 LEN 16 X3/2`. The hat runs faster than the kick, a
+- Hold OK (the track menu), SPEED, LEFT once: `T3 LEN 16 X3/2`. The hat runs faster than the kick, a
   little off the bar. FUNC + pad-row keys to LEN 24: now it comes round on every bar, in
   triplets against the straight kick. `____`
 - LEFT again is 2, RIGHT twice is 1; CLR undoes one step at a time. Save, open: 3/2 is kept. `____`
@@ -787,7 +788,7 @@ to reach `GUARD4` here at a 40-60% top line.
   bright, slightly barking strike that mellows as it rings; soft notes are rounder. `____`
 
 **W59. Chorus (3 min).** Beat playing, A01.
-- MIXER, SELECT_LEFT four times: `CHO 5-8`. Push C: `T7 CHORUS 64`, the chord track's bar stands
+- MIXER, SELECT_LEFT six times: `CHO 5-8`. Push C: `T7 CHORUS 64`, the chord track's bar stands
   half up and the chords sound wider and gently moving. Push C again: OFF, back to the dry
   chords. Turn C up to 127 and down: the chorus follows smoothly, no click. `____`
 - SELECT_RIGHT: `CHO`. Turn A (RAT) up: the sweeps on screen bunch up and the warble speeds up;
@@ -832,17 +833,20 @@ with "Include starter and demo files" ticked, copied onto the card.
   comes back where it was. GRID: no step changed, CLR's undo has nothing new. `____`
 - FUNC + turn C up to `+64`: ghost hits on the off-beats, hats busiest, the kick only now and
   then; a probability step plays every pass. Musical, or too busy for techno? `____`
+- Still at `+64`, GRID: the trig glow follows only the programmed trigs, never an empty step a
+  ghost plays on. ARP on the bass track (EDIT, ARP page, MOD UP): its own steps run the arp, its
+  ghosts are single notes between them. `____`
 - `ENERGY -30`, hold FUNC + MUTATE (a lock), turn it back to 0, tap FUNC + MUTATE: the
   breakdown is back; tap again: rest again. `____`
 - MAX at `+64` against the default beat at 0: `________ %`
 
 **W63. JAM REC, the whole jam to the card (6 min).** Beat playing, A01, a card with a few GB
 free.
-- FUNC+HOME, UP: `JAM REC` with `OFF`. OK: the menu closes, `JAM REC JAM n`, and a dot blinks
+- FUNC+HOME, DOWN: `JAM REC` with `OFF`. OK: the menu closes, `JAM REC JAM n`, and a dot blinks
   in the top bar before the load. The top line reads `____ %` (compare with the beat alone,
   `____ %`). `____`
 - Play for three minutes: change patterns, throw a scene, open a sample and audition it (push A
-  in SAMPLES), switch CLICK on for a bar. FUNC+HOME, UP: the row counts, `3:0x`. No
+  in SAMPLES), switch CLICK on for a bar. FUNC+HOME, DOWN: the row counts, `3:0x`. No
   `JAM: CARD TOO SLOW` on the way. `____`
 - OK: `JAM STOPPING`, then `SAVED JAM n` within a second. On the PC, `/RECORD/JAM_n.WAV` opens
   as 48 kHz 24-bit stereo of about 3 minutes, sounds as heard, and holds no click and no
@@ -864,7 +868,278 @@ it switch, put a few trigs on track 3 that sound clearly different, then PROJECT
   sound, and GRID now edits track 3. `____`
 - Launch something, save, power cycle, open: the launch is still playing. `____`
 
-**W65. WAVE keeps the tables it played last (2 min).** Beat playing, A01.
+**W65. Usability quick wins: MIXER groups, the KEYS track menu, JAM REC on FUNC+REC (5 min).**
+Beat playing, A01, a card with some space.
+- MIXER, then DOWN: `DCK 1-4`; DOWN again `WID 1-4`, then `DLY`, `REV`, `CHO 1-4`, `IN`, `MST`
+  and round to `TRK 1-4`. UP from `TRK 1-4` is `MST`. LEFT/RIGHT still go one page. `____`
+- HOME twice for KEYS, hold OK half a second: the track menu (`TRACK T1`, `>GENERATE`). The pads
+  still play notes; UP/DOWN move the menu's row, not the track; OK on GENERATE writes a part.
+  CLR: `KEYS`, the keyboard back. `____`
+- FUNC+REC: RESAMPLE, the last line reads `LEFT RIGHT: WHERE TO` and `JAM OFF`. FUNC+REC again:
+  `JAM REC JAM n`, the REC key blinks a dim red with the top bar's dot, and the last line reads
+  `FUNC+REC: STOP JAM` with the time counting. FUNC+REC again: `JAM STOPPING`, `SAVED JAM n`,
+  REC dark. `____`
+
+**W66. The slimmer FUNC menu and the track menu's new rows (4 min).** Beat playing, A01.
+- FUNC+HOME: SAVE, then JAM REC, CLICK, COUNT-IN, REC MODE, QUANTIZE, AUTO-FILL, FX GLIDE,
+  LOOP LEN, CHAIN, CHAIN END, PROG CHG OUT, then the file rows down to LOAD DEMO (UP once from SAVE). No
+  TRACK SPEED, TRACK PLAY, FREEZE or RELOAD SAMPLE. CLR.
+- GRID, lower pad 3, hold OK: the track menu on `T3`. UP from GENERATE: RELOAD SAMPLE, FREEZE,
+  PLAY, SPEED. On SPEED, LEFT: `T3 LEN 16 X3/2`, the hats in triplets; RIGHT back to `X1`.
+- Lower pad 8 (the SAMPLE loop) with the menu open, RELOAD SAMPLE, OK: `LOADING`, the loop keeps
+  playing and comes back from the card. On lower pad 1 (the kick): `NO SAMPLE`.
+- Lower pad 7, FREEZE, OK: `FREEZE ARMED`, the row walks `WAIT`, `REC`, `ON` without leaving the
+  menu; OK again: `UNFROZEN`. EDIT on a frozen track says `FROZEN: TRACK MENU`. Easier to reach
+  than before? `____`
+
+**W67. Queue a pattern from any screen (3 min).** Beat playing, A01, something different in A05.
+- GRID. Hold PROJECT: the screen stays on GRID and PROJECT lights green. Press STEP 5:
+  `A05 QUEUED END`. Let both go: still GRID, no trig on step 5 changed, and A05 starts at the end
+  of A01, on the bar. `____`
+- PERFORM (FUNC + MIXER). Hold PROJECT, STEP 1: `A01 QUEUED END`, still PERFORM, A01 comes back
+  at the end of the pattern. `____`
+- Tap PROJECT: PROJECT opens as the key comes up, no slower than before to the hand. FUNC +
+  PROJECT: SAMPLES at once. `____`
+**W68. Your own sounds and copy / paste in SOUNDS (5 min).** Beat playing, A01, a card in.
+- Track 1 (KCK), EDIT, turn TUN and DEC somewhere new, OK: SOUNDS. FUNC + DOWN: `SAVE SOUND`
+  offering `KCK 1`. OK: `SAVED KCK 1`, and `+KCK 1     NOW` at the end of the list, under the
+  cursor. The beat never stops or stutters. `____`
+- Down to 909, OK: the factory kick. Back to `+KCK 1`, OK: your kick again, as you left it. `____`
+- On the FX page turn PAN hard left, on the LFO page push RAT to `RETRIG` and give the LFO some
+  depth, then FUNC + DOWN on `+KCK 1`, OK (REPLACE). Pan back to the middle and TRIG to `FREE`,
+  OK on `+KCK 1`: the kick is hard left again and its LFO restarts on every hit. AS WAS: middle,
+  FREE. `____`
+- Push B on `+KCK 1`, UP once, OK: `+LCK 1`. Push C, OK, OK: `DELETED`, the row is gone. Push B
+  on a factory sound: `YOUR OWN SOUNDS ONLY`. `____`
+- Save one again, then switch the unit off and on: it is still in the list, in this project and
+  after NEW. On the PC the card has `ENAGA/DATA/STRATA/SOUNDS/KCK.BIN`. `____`
+- Track 6 (MNO), SOUNDS, FUNC + UP: `COPIED T6 MNO`. Screen key right to track 7 (PLY):
+  `PASTE T6 MNO` under AS WAS, `SWITCHES MACHINE` under the bars. OK: track 7 plays track 6's
+  bass sound on its own notes, with track 6's pan, sends, LFO and arp. AS WAS: PLY and its
+  stab are back, with its own pan and sends. `____`
+
+**W69. Line input as a mixer channel (6 min).** Beat playing, A01, a synth or phone on INPUT L
+and R (line level), headphones on.
+- MIXER, SELECT_LEFT four times: `IN`, the strip dim and `IN OFF`. The input is not heard. Push A:
+  `IN ON`, the synth fades in through the headphones, centred, at about the level it has
+  straight; the meter on the left moves with it. Push A again: `IN OFF`, it fades out, no click.
+  `____`
+- On: turn A (LVL) down and up, B (PAN) to the left, C (DLY) and D (REV) up: the synth goes into
+  the delay and the reverb. Delay to 0 while it rings: the echoes ring out. `____`
+- SELECT_RIGHT: `IN+`. B (DCK) to 100: the synth ducks under the kick. C (TON) down: darker; up
+  past the middle: thinner. D (SRC) one click: `IN LINE L`, the synth from the left jack in both
+  ears; back to `LINE`. Push D: `IN GAIN HIGH`, then `LOW` (the -20 dB pad: much quieter), then
+  `NORM`. `____`
+- How much later does the synth come out than it goes in? Play a short note on the synth with
+  the strip on and off (the synth's own out in one ear if you can): `____` (expect a few ms). Hiss
+  with the synth off, LVL 100, gain NORM: `____` (none / faint / audible). `____`
+- With the input on, the DJ filter (FUNC + VALUE), the kill EQ's LOW and REPEAT take the synth
+  too; JAM REC for a few bars: the file has the synth in it. `____`
+- RESAMPLE (FUNC+REC), B to `MIC`: the input switches to the mic; leave RESAMPLE: back to LINE
+  (the synth heard again). `____`
+- The top line with the input on reads `____ %`, off `____ %`. Save, power cycle, open: the strip
+  comes back on, as left. FUNC+HOME, NEW: the input is off. `____`
+
+
+**W70. VariSpeed (3 min).** A01 playing at 130, internal clock.
+- Hold FUNC, turn VALUE up slowly: `VARISPEED +0.1 130.8` and on, the beat speeding up AND every
+  track rising in pitch together, the kick, the sample loop and the chords alike, like a record
+  sped up. No clicks or dropouts as it moves; held chords bend with it. The top bar shows the
+  moved tempo, the live strip `VS+`. `____`
+- Up to `VARISPEED +12.0 260.0`: an octave up, still in time, the delay echoes on the beat. MAX
+  from SETUP there: `________ %`. Turn back down: it stops on `VARISPEED 0 130.0` and only goes
+  below on the next click (`VS-`, slower and lower). `____`
+- With it at -3.0 or so, FUNC + tap VALUE: straight back to `VARISPEED 0 130.0`, the beat as
+  programmed. VALUE alone still turns the tempo. Save with VariSpeed up, reload: the project
+  opens at its own tempo. `____`
+- SETUP, CLOCK SRC to MIDI with VariSpeed up: `VARISPEED 0 EXT CLOCK`; FUNC + turn VALUE says
+  `EXT CLOCK`. Back to INTERNAL: 130 again. `____`
+
+**W71. Song sections on the chain (6 min).** Beat playing, A01; scene 3 captured with the
+filters closed, scene 4 open and wet; something different in A02.
+- PROJECT, the screen key to CHAIN, OK twice: two entries of A01. UP to entry 1, push A:
+  `SECT 1/2`, the SECTION view with `PAT A01`, `REP X1`, `MUT --`, `SCN --`. Turn D to 3. The
+  screen key: MOVE, turn A to `SNAP`, B to `0` then `-40`. CLR: the list shows `+` on entry 1 and
+  `S3 SNAP E-40` under MUTES. `____`
+- DOWN to entry 2, push A, D to 4, the screen key, A to `RIDE`, C: the tempo playing, then +6.
+  Turn the entry's REP (B on SECT, or VALUE) to X4. `____`
+- FUNC menu CHAIN ON. Entry 1 starts on the closed scene 3 at full morph, thinner (ENERGY -40);
+  entry 2 starts at the new tempo and opens up from scene 3 to 4 over its four passes, smoothly,
+  with no step at the pass lines. Turn VALUE in PERFORM halfway through: the ride stops where your
+  hand is. The next round of entry 1 snaps back. `____`
+- Entry 1, push A, C (MUT) all the way up to `CAP` with tracks 1 and 2 muted by hand: the eight
+  boxes show them. Unmute by hand; at entry 1's next start they mute again. `____`
+- With the beat on the breakdown you want, entry 2's view, hold OK half a second: `SECTION
+  FILLED`; every field now reads what plays. `____`
+- CLOCK SRC MIDI with a running outside clock: at the entry with a BPM, `EXT CLOCK: BPM SKIPPED`
+  once, the outside tempo stays. Back to INTERNAL. `____`
+- Save, power cycle, open: the sections are still there and play the same. Open a project saved
+  by v0.5.0: its chain plays as it did, every field `--`. `____`
+
+**W72. Tap tempo, the nudge, PROG CHG OUT and the song position (8 min).** Beat playing on
+GRID, CLOCK SRC INTERNAL. For the last two, a computer or a second unit on MIDI.
+- Tap VALUE four times at about 120: `TAP TEMPO`, then `TAP 120.x`, and the beat follows from the
+  second tap. Taps at twice the pace start again rather than landing in between. In PERFORM a
+  VALUE tap is still `MORPH 0`. `____`
+- Hold FUNC, push VALUE and turn it one click right: `NUDGE FASTER`, the top line reads 4% more for a moment and
+  comes back to the set tempo; a few clicks left pull the beat back. Easy to line up with a
+  record playing beside it? `____`
+- FUNC menu, PROG CHG OUT, OK: `PROG OUT CH n` (your MIDI CH). With a MIDI monitor on MIDI OUT,
+  queue A05: one program change 4 on that channel as it lands; a chain moving on sends each
+  entry's number. A second STRATA on the same channel follows the pattern changes. Off again:
+  nothing is sent. `____`
+- CLOCK SRC MIDI, a DAW sending clock with the chain on (three entries). Stop the DAW, move its
+  playhead into the second entry's bars, play: STRATA comes in on that entry, on the beat. Back
+  to bar 1 and play: entry 1. Chain off: the pattern's steps line up with the DAW's bars. `____`
+
+**W73. WAVE scan modes: the SCAN page (4 min).** Beat playing, A01.
+- Lower pad 6, FUNC+EDIT (MACHINE), DOWN three times: `WMN`. EDIT, then SELECT_LEFT from SRC:
+  the SCAN tab, `MOD OFF`, `SCAN OFF: TURN MOD`. On a drum track SCAN never comes up. `____`
+- OK (SOUNDS): WOBBLE (the growl opens and closes once a beat, on the beat), SCANLD (each note
+  brightens over a beat). Back on SCAN: the picture shows the path between the dotted POS and END
+  lines. Turn A through all ten modes: each sounds different, RAND jumps, DRFT glides. `____`
+- B (SPD) below 64 runs free (28 is 1 Hz), from 64 it follows the tempo: change the tempo and
+  WOBBLE stays on the beat. END on POS: `END = POS: NO TRAVEL`, the sound stops moving. `____`
+- Track 7, MACHINE: `WPL`, OK: DRIFT and SWIRL, held chords: all notes move together, no clicks
+  or zipper on the sweeps. 30 s with WOBBLE on track 6 and DRIFT on track 7: **MAX `____ %`**
+  (against W23's). FUNC+HOME, RELOAD PROJECT puts the beat back.
+
+**W74. ARR REC: a jam into the chain (6 min).** A project with a chain of its own, the beat
+stopped on A01, scenes 3 and 4 as in W71.
+- FUNC+HOME, DOWN, DOWN: `ARR REC OFF`. OK: the menu closes, `ARR: PRESS PLAY`, the strip reads
+  `ARR`, the REC key blinks dim red. `____`
+- PLAY. Two passes as it is; then mute track 1 in the middle of a pass; one pass later turn
+  ENERGY down (FUNC + C in PERFORM); then queue A02 (END) and play two passes of it with the
+  morph pushed to B. The strip counts up (`ARR1` .. `ARR4`). `____`
+- Mute a track just after a downbeat (a hair late): that pass is written with it muted. `____`
+- STOP: `ARR 4 SECTIONS` (or as many as you made). PROJECT, CHAIN: one entry per change, X2 on
+  the first, `C` marks (CAP) under each; push A on one: MUT CAP, SCN, MRP SNAP or SNAP A, NRG and
+  BPM filled in. `____`
+- CHAIN END SONG, CHAIN ON, PLAY from stop: the jam plays back as played, mute and breakdown at
+  the pass lines, the morph on B in A02, and the song stops at the end. `____`
+- FUNC menu ARR UNDO: `ARR UNDONE`, the chain you had before. OK again: `ARR REDONE`. `____`
+- ARR REC on and straight off again: `ARR NOTHING KEPT`, the chain unchanged; ARR UNDO says
+  `NO ARR TO UNDO`. `____`
+- One pattern left playing for 17 passes: X16 and then X1 of the same. `____`
+- CLOCK SRC MIDI with a running outside clock: record two sections; their BPM reads `--`. Back to
+  INTERNAL. With JAM REC also running, both blink and both keep recording. `____`
+- Save, power cycle, open: the recorded chain is there. `____`
+**W75. TRANSPOSE (4 min).** Beat playing, A01.
+- FUNC + SEL> three times: `TRANSPOSE +1 IN KEY`, `+2`, `+3`; the bass, chords and leads walk up
+  the scale together and stay in the key, while the kick, hats, snare and a sliced loop do not
+  move. The live strip shows `TR+3`, PERFORM's status line `TR+3`. Musical? `____`
+- FUNC+HOME, DOWN to TRANSPOSE (under FX GLIDE), RIGHT: `SEMI`, `TRANSPOSE SEMITONES`; the parts
+  jump to +3 semitones, a new key. FUNC + SEL<: `TRANSPOSE +2 ..` with the key named in sharps.
+  Back to `SCALE`. `____`
+- FUNC held down, SEL< then SEL> while SEL< is still down: `TRANSPOSE 0`, A01 exactly as
+  programmed. From +2, both screen keys pressed together: straight to 0, no step down heard
+  first. Hold FUNC alone for a second: the help comes up, and LEFT/RIGHT (not the screen
+  keys) turn its pages. `____`
+- KEYS on the bass track: hold a pad, FUNC + SEL> twice while it sounds, let go of the pad: the
+  note ends cleanly, nothing hangs. The next pad sounds two scale steps up. With REC on, a note
+  played at +2 plays back moved with the rest; at 0 it is the pad you pressed. `____`
+- ARP on the chord track (EDIT, ARP page, MOD UP): FUNC + SEL< while it runs: the run follows at
+  its next note. `____`
+- `TRANSPOSE +5`, hold FUNC + MUTATE (a lock), go back to 0, tap FUNC + MUTATE: +5 again; tap
+  again: 0. `____`
+**W76. ARR REC keeps Track Launch (4 min).** The factory beat stopped on A01, bank A with free
+slots, no chain.
+- PROJECT twice (LAUNCH), track 3, STEP 7: `T3 < A07 AT END`. FUNC+HOME, DOWN, DOWN, OK:
+  `ARR: PRESS PLAY`. PLAY: track 3 plays A07's part from the start. `____`
+- At the end of the first pass: `LAUNCH IN A..` (the first free slot); the pattern shown is still
+  A01 and track 3 still borrows. Two more passes: no second toast. `____`
+- On LAUNCH, CLR on track 3 (`T3 < OWN`), one pass; then STEP 7 again, one pass: the
+  second launched section takes another slot (`LAUNCH IN A..`). STOP: `ARR 3 SECTIONS`. `____`
+- PROJECT, CHAIN: the captured slot X3, A01 X1, the second slot X1. CHAIN END SONG, CHAIN ON, PLAY
+  from stop: it sounds as played, track 3's part on the captured slots, with no lane borrowed. `____`
+- Save, power cycle, open: the captured slots are still there and the chain still plays them. `____`
+- Fill every empty slot of bank A, then the same take: `LAUNCH NOT KEPT`, once, and the chain
+  entry is A01. FUNC+HOME, RELOAD PROJECT. `____`
+
+**W77. PERFORM's FUNC layer, Track Launch polish and the confirmations (6 min).** A01 playing.
+- PERFORM, hold FUNC: the gauges read `REL LEN NRG RND` with `0 100 0 OFF` and the hint line is
+  gone. Still holding, turn A, C and D: each gauge moves and lights, the value under it follows.
+  Let go: the macros are back. Readable at a glance on the OLED? `____`
+- Still in PERFORM, FUNC + turn D one click from OFF: `LIVE RND1 7 TRK`, the kick holds. FUNC +
+  lower pad 2: `T2 RND OUT 6 TRK`, no mute. FUNC + turn D back to OFF. `____`
+- FUNC + push D on PERFORM, then on GRID and EDIT: `KILL ALL`, the beat goes thin to nothing;
+  again: `ALL BANDS BACK`. With only LOW killed (FUNC + push A) it takes the other two out. `____`
+- Hold FUNC alone for a second in PERFORM: the help's second page (LEFT/RIGHT) is PERFORM LIVE;
+  page 1's last line ends `< LAST`. `____`
+- PROJECT twice (LAUNCH), press a lower pad: `PADS PICK LANES`, no sound; a second pad says
+  nothing. STEP 7 launches A07 on the lane, CLR sends it home (`T1 < OWN`), CLR again:
+  `T1 PLAYS ITS OWN`, and LAUNCH stays. STEP 7 again, then HOME (GRID): tap a step on that
+  track: `T1 A07 READ ONLY`, then `HOLD OK: CAPTURE`, taking turns for 3 s. `____`
+- Hold OK (track menu), UP once: `CAPTURE  TO A`. OK: `CAPTURED A0n` over the menu, and the
+  lane edits again. `____`
+- FUNC+HOME, RELOAD PROJECT, OK: `OK AGAIN: RELOAD`; wait 3 s. PROJECT, SLOT, FUNC + LEFT:
+  `LEFT AGAIN: CLEAR`; wait. Every confirmation on the unit reads `<KEY> AGAIN: <WHAT>`. `____`
+
+**W78. LOCK keeps launched tracks apart (4 min).** A01 playing, its track 3 with a few steps of
+its own; A07's track 3 a different part.
+- PROJECT twice (LAUNCH), track 3, STEP 7, wait for `T3 A07`. Hold FUNC + MUTATE: `LOCK A01
+  STORED`. CLR on track 3 (`T3 < OWN`): A01's own track 3 plays, the top line shows `L+`. `____`
+- Tap FUNC + MUTATE: `BACK TO LOCK A01`, track 3 plays A07's part again and LAUNCH shows A07 on
+  it. Tap again: `SWAPPED BACK A01`, track 3 plays A01's own part, unchanged. `____`
+- STEP 7 on track 3 again, tap FUNC + MUTATE twice, then CLR on track 3: A01's own track 3 is
+  still its own part, not A07's. Save, RELOAD PROJECT: the same. `____`
+
+**W79. A knob keeps its layer through FUNC (2 min).** A01 playing, PERFORM.
+- Hold FUNC, turn C down steadily and let go of FUNC while still turning, for about half a
+  second more: ENERGY goes on going down (`ENERGY -30`), and after letting go macro C's gauge has
+  not moved. Turn C back up with FUNC to `ENERGY 0`: the part is as programmed, the dub delay as
+  before. `____`
+- Rest the knob a moment, then turn C without FUNC: `MACRO C` and a number, macro C moves at once. Turn it
+  and press FUNC mid-turn: macro C goes on; rest, then turn: ENERGY. The same with A (REL ALL) and
+  D (LIVE RND). `____`
+
+**W80. Tempo: sections, ARR REC, tap tempo and VariSpeed (5 min).** The factory beat stopped on
+A01 at 130.0, no chain.
+- On GRID, tap VALUE twice about a second apart: `TAP TEMPO` both times and the tempo stays
+  130.0. Two more taps at the same pace: `TAP 60.0` or near. Turn VALUE back to 130.0. `____`
+- Turn VALUE fast, several clicks in one flick, while the beat plays: the tempo moves by every
+  click and the beat never stumbles back to the old tempo. `____`
+- ARR REC (FUNC+HOME, DOWN, DOWN, OK), PLAY, two passes; turn VALUE to 140.0, two passes; STOP.
+  PROJECT, CHAIN, push A on entry 1: MOVE page BPM 130; entry 2: BPM 140. `____`
+- CHAIN END SONG, CHAIN ON, PLAY from stop: entry 2 plays at 140, the loop back to entry 1 at 130.
+  STOP, save, power cycle, open: the project opens at the tempo it was saved with, not at the last
+  section's. `____`
+- Record a take at one tempo only: no entry has a BPM, and VALUE during playback holds for the
+  whole song. `____`
+- Push VALUE and flick it fast for swing, then FUNC + push VALUE + flick for the nudge: every
+  detent counts (swing moves by each click, `NUDGE FASTER` every time). `____`
+- FUNC + turn VALUE to +5.0 at 130. Give a chain entry BPM 280: as it plays, `VARISPEED HELD`
+  and a smaller amount; at the next entry with a slower BPM, `VARISPEED +5.0 ...` again.
+  FUNC + tap VALUE. `____`
+
+**W81. A project opens at rest; ENERGY ghosts skip conditional trigs (3 min).** A01 playing.
+- PERFORM: FUNC + turn C to `ENERGY -64`, FUNC + turn D to `LIVE RND4`, FUNC + turn A a few
+  clicks, FUNC + SEL> three times (`TR+3`), FUNC + turn VALUE to `VARISPEED +12.0`. FUNC+HOME,
+  LOAD DEMO, OK, OK: the demo plays at its own tempo and pitch, the full beat, and the live strip
+  shows no `EN`, `RN`, `RL`, `TR` or `VS`. Holding FUNC in PERFORM reads `0 100 0 OFF`. `____`
+- FUNC + turn C one click: `ENERGY +2`, not -62. Back to 0. `____`
+- NEW PROJECT, PLAY. GRID, select the SNARE track and clear its trigs, then hold FILL and tap
+  STEP 13: its only trig is a FILL trig. PERFORM, FUNC + turn C to `ENERGY +64`: the snare stays
+  silent (before, its ghosts played the FILL hit every bar); hold FILL and step 13 plays. `____`
+
+**W82. Everything up at once, and the review's fixes (8 min).** A project filled the way
+`scenario_stack` does: GEN (DENSITY 100, RANGE 3 OCT, LEAP 100) on all eight tracks, PLAY.
+- The line input on (MIXER IN, push A), PERFORM, FUNC + turn A, B and C to the top (`REL ALL +64`,
+  `LEN ALL 400%`, `ENERGY +64`), FUNC + turn VALUE to `VARISPEED +12.0`, FUNC + SEL> three times,
+  then FUNC+HOME, DOWN, OK (JAM REC). Let it run a minute. Top-line load: `____`, MAX from SETUP:
+  `____`, GUARD shown? `____`. No clicks or dropouts? Every knob click landing? `____`
+- Stop JAM REC, everything back to rest. CHAIN, an entry, push A, MOVE page: D reads `TRN --`;
+  turn it to `-2`, CHAIN ON, PLAY: the entry plays two steps down, the next (TRN `--`) stays
+  there. `____`
+- ARR REC a take with FUNC + SEL> moved in the middle: the chain gets a new entry with `T+1` on
+  the list, and it replays the key change. `____`
+- LAUNCH a lane from A07, ARR REC two passes (`LAUNCH IN A..`), STOP; queue an empty slot and ARR
+  REC another launched pass: the queued slot stays empty. FUNC menu ARR UNDO: `ARR UNDONE`, the
+  captured slots are empty again; ARR UNDO once more: `NO ARR TO UNDO`. `____`
+- A launched lane on GRID: FUNC + UP (copy) says `COPIED`, not `READ ONLY`; paste on another
+  track: that track plays the borrowed part. `____`
+
+**W83. WAVE keeps the tables it played last (2 min).** Beat playing, A01.
 - Lower pad 6, FUNC+EDIT, DOWN three times: `WMN`. EDIT, SRC: turn A slowly through all 16
   tables, a few notes on each, then back two tables. The table played a moment ago sounds on
   its first note, not sub only for a moment while it is built again. `____`
@@ -896,6 +1171,8 @@ From `D:\DEV\STRATA` through WSL, as in CLAUDE.md (`wsl.exe -d Ubuntu -- bash -c
       only; record both in docs/BUDGET.md, "A05 PAD". Peak `____ %` / `____ %`
 - [ ] `tests/scenario_sounds.sh` (new: SOUNDS on the kick track, loads 808 and PUNCH while
       playing, then AS WAS) passes with cl6x. Peak `____ %`
+- [ ] `tests/scenario_usersounds.sh` (new: saves the kick's sound as KCK 1, loads HARD and KCK 1,
+      copies, pastes onto track 2, AS WAS) passes with cl6x. Peak `____ %`
 - [ ] `tests/scenario_midi.sh` (new: track 1 to MID on the running beat, both STOPs) passes with
       cl6x and GCC only. It is part of E1's `tools/scenarios.sh` too. Peak `____ %` / `____ %`
 - [ ] **E1.** `tools/scenarios.sh` (every scenario) passes, with cl6x and with GCC only, on main
@@ -929,28 +1206,28 @@ needed for tonight's unit session; do them if the PC is free.
       (about an hour; builds each variant in its own worktree, so main is untouched). Audio check
       all `identical`: yes / no `____`. `head` vs `base`, scenario_m3 cl6x: `____ %` vs `____ %`.
       VA POLY per voice on `head` (E2's method): `________`
-- [ ] **E11.** The sends' ambient modes: `tests/scenario_ambient.sh` (DLY+ push A to LONG, REV+
+- [x] **E11.** The sends' ambient modes: `tests/scenario_ambient.sh` (DLY+ push A to LONG, REV+
       push A to HALL, on the default beat whose sends are open) against `scenario_m3.sh`, both
       compilers. Host estimate +1.9 points cl6x / +2.8 GCC-only once the classic tails have
       gone, +3.6 / +5.3 while they still ring (`docs/BUDGET.md`, "The sends' ambient modes").
-      cl6x `________ %` vs `________ %`, GCC `________ %` vs `________ %`
+      cl6x `25.47 %` vs `22.70 %`, GCC `55.38 %` vs `40.58 %` (2026-11-28, `db96b69`)
 - [ ] **E12.** The ASR page: `tests/scenario_asr.sh` (walks EDIT to ASR on track 1 and track 7;
       every ASR byte 0, so it should match `scenario_factory.sh` to within noise), both
       compilers. Then the held-chord cost: the temporary `factory_kit` edit in `docs/BUDGET.md`
       ("The ASR page", E12), `scenario_factory.sh` both compilers, and revert the edit.
-      Off: cl6x `________ %` GCC `________ %`. Held: cl6x `________ %` GCC `________ %`
-- [ ] **E13.** The OSC page: `tests/scenario_osc.sh` (walks EDIT to OSC on track 1 and track 7,
+      Off: cl6x `23.62 %` GCC `45.36 %` (2026-11-28). Held: cl6x `________ %` GCC `________ %`
+- [x] **E13.** The OSC page: `tests/scenario_osc.sh` (walks EDIT to OSC on track 1 and track 7,
       A01 as shipped) against `scenario_factory.sh` on the commit before it, both compilers.
       Then the worst case: the temporary `factory_kit` edit in `docs/BUDGET.md` ("The OSC page",
       E13), `scenario_factory.sh` both compilers, and revert the edit.
-      Shipped: cl6x `________ %` GCC `________ %`. Worst: cl6x `________ %` GCC `________ %`
+      Shipped: cl6x `23.62 %` GCC `45.36 %`. Worst: cl6x `25.84 %` GCC `54.28 %` (2026-11-28)
 - [ ] **E14.** WAVE: `tests/scenario_wave.sh` (tracks 6 and 7 switched to WMN and WPL on keys)
       against `scenario_factory.sh` on the same commit, both compilers; and the cycles to
       `strata ready` before and after the WAVE commit (`docs/BUDGET.md`, "WAVE MONO and WAVE POLY").
-      WAVE: cl6x `________ %` GCC `________ %`. Boot added: `________`
+      WAVE: cl6x `26.18 %` GCC `50.03 %` (2026-11-28; the beat 23.62 / 45.36). Boot added: `________`
 - [ ] **E15.** FM4: `tests/scenario_fm.sh` (track 7 switched to FM4 on keys) against
       `scenario_factory.sh` on the same commit, both compilers; and `tools/ti_loops.py` for the
-      two FM loops (`docs/BUDGET.md`, "FM4"). FM4: cl6x `________ %` GCC `________ %`
+      two FM loops (`docs/BUDGET.md`, "FM4"). FM4: cl6x `24.68 %` GCC `49.74 %` (2026-11-28)
 - [ ] **E5.** Load `STRATA_1.WAV` (15 s, 96 kHz) through the emulator's card, cl6x vs GCC.
       `________ s` / `________ s`
 - [ ] Optional pre-listen: `make -C host render` writes the four factory patterns and A01's
@@ -1218,7 +1495,7 @@ invisible on the grid, and the screen said only `VELOCITY` for a second and a ha
 - [ ] PERFORM, DOWN to `ROT RIGHT` (a change you can see on the grid), back to GRID, MUTATE: the
       track's trigs move one step right. CLR: back.
 - [ ] Track 8 cleared (CLR with nothing held), MUTATE: `T8 NOTHING TO MUTATE`, the pad stays dim.
-- [ ] EDIT, FUNC+octave RIGHT: `T2 LEN ..` on the second line; FUNC menu, TRACK SPEED, RIGHT: the speed.
+- [ ] EDIT, FUNC+octave RIGHT: `T2 LEN ..` on the second line; GRID's track menu (hold OK), SPEED, RIGHT: the speed.
 - [ ] KEYS, turn A: `T2` and the knob's name and value. PERFORM, turn B: `MACRO B` and its value.
 - [ ] FUNC+lower pad 3: `T3 MUTE AT BAR`. CHAIN, pad-row RIGHT (octave): `BANK B`. STOP twice while
       stopped: `STOP`, then `TAILS CUT`.
@@ -1281,7 +1558,7 @@ Roland's OK). It used to be 30 s of 48 kHz frames, which refused the 30 s file `
 
 - [ ] Power off. Copy `unit-test/STRATA_1.WAV` from the project files over `/RECORD/STRATA_1.WAV`
       on the card (rename it if 8b showed another number). Card back, power on, start STRATA.
-- [ ] It loads once as the project opens. Then track 8 selected, FUNC+HOME, RELOAD SAMPLE, OK
+- [ ] It loads once as the project opens. Then track 8 selected in GRID, hold OK, RELOAD SAMPLE, OK
       (reload the track's sample) to time it: from `LOADING` until
       the SMP line shows `O` for track 8: `________ s`
 - [ ] While it loads (`RESAMPLING`), the screen keeps drawing and the keys answer. Stalls? `________`
@@ -1393,7 +1670,7 @@ Since #145 both live only in the performance mixer (slots 8 and 5); their FUNC c
       **no click**.
 - [ ] **U8.** Hold a tape stop for 10 s: **MAX `________ %`** against U1's `________ %`.
 - [ ] Lock D on a step (hold STEP, turn D). Hold that STEP, then FUNC, push D: `LOCK CLEARED`.
-      Without a STEP held, FUNC + push D only says `TAPE STOP: SLOT 8` and stops nothing.
+      Without a STEP held, FUNC + push D is the kill for all bands (W77) and stops nothing.
 - [ ] Turn the chord's SnA (delay send) up and play a few chord stabs. **Push VALUE + STEP 5,
       turn VALUE to the top**: `FRZ` on PERFORM's bar line. The echo keeps looping at the same
       level; new stabs are not echoed. Turn down: the loop fades into the delay's tail.
@@ -1432,8 +1709,8 @@ New after the walkthrough was written. Chain on/off and SONG/LOOP are FUNC menu 
       the chain plays A01, A02 without kick, A01, then **stops** with `SONG END`, nothing after
       the last bar, no hanging note. PLAY: it starts again from entry 1.
 - [ ] CHAIN END, OK again: `LOOP CHAIN`, and the chain goes round as before.
-- [ ] **Changed tonight.** On entry 3, CLR once: `AGAIN TO REMOVE`, nothing removed. Wait
-      3 s and press again: still `AGAIN TO REMOVE`. Press twice quickly: `ENTRY REMOVED`.
+- [ ] **Changed tonight.** On entry 3, CLR once: `CLR AGAIN: REMOVE`, nothing removed. Wait
+      3 s and press again: still `CLR AGAIN: REMOVE`. Press twice quickly: `ENTRY REMOVED`.
 - [ ] Save, power cycle: SONG and the `M2` come back. The page boxes and rows fit the screen.
 
 ## 13j. The ambient delay and reverb: LONG and HALL (8 min)
@@ -1574,22 +1851,22 @@ New: RESAMPLE's B goes past the inputs to `TRK 1`-`TRK 8`, a take of that track 
 
 ## 13n. Freeze (6 min)
 
-New: the FUNC menu's last row, FREEZE. Play A01 with the CHORD track's chord on MIN11 (six
+New: FREEZE, in GRID's track menu (hold OK). Play A01 with the CHORD track's chord on MIN11 (six
 voices) so there is something worth freezing. Note LOAD and MAX first: LOAD `____` MAX `____`.
 
-- [ ] Select track 7 (GRID, DOWN). FUNC+HOME, UP: `FREEZE  T7 1 BAR`. B: 2, 4, 8, 1. OK:
-      `FREEZE ARMED`, the menu closes. On the next bar line the row (FUNC+HOME, UP) reads `T7 REC`,
-      a bar later `FROZEN` on the screen and the row reads `T7 ON`.
+- [ ] Select track 7 (GRID, DOWN). Hold OK, UP, UP: `FREEZE  1 BAR`. B: 2, 4, 8, 1. OK:
+      `FREEZE ARMED`, the menu stays and the row reads `WAIT`. On the next bar line it reads
+      `REC`, a bar later `ON`; CLR, and the screen has said `FROZEN`.
 - [ ] The chord sounds the same as before, in time, with no click at the loop point. LOAD with
       it frozen `____`, MAX after PLAY `____` (expect several points lower: the six voices stop).
 - [ ] Track 7's filter (FLTR CUT), its fader, pan and send still change the sound. Its SRC knobs
-      and new steps do nothing, and EDIT says `FROZEN: FUNC+HOME`.
+      and new steps do nothing, and EDIT says `FROZEN: TRACK MENU`.
 - [ ] Change the tempo by 10 BPM: the loop jumps back into time on the next bar line (a small
       jump each bar while the tempo is off). Back to 142.
 - [ ] STOP: track 7 fades out with the rest. PLAY: it comes back in time from bar 1.
 - [ ] Freeze a track for 4 or 8 bars, let it play past bar 5, STOP, PLAY: in time from the first
       bar, not several bars later (fixed 2026-11-23, after #109).
-- [ ] FUNC+HOME, UP, OK: `UNFROZEN`, the live chord is back on the next step, LOAD goes back up.
+- [ ] GRID, hold OK (the menu kept its row on FREEZE), OK: `UNFROZEN`, the live chord is back on the next step, LOAD goes back up.
 - [ ] Freeze track 8 (the SAMPLE loop) and then unfreeze it: its sample is still there
       straight away (no reload).
 - [ ] Freeze a track, then RELOAD PROJECT: it comes back live.
@@ -1607,7 +1884,7 @@ New 2026-11-23 (docs/CONTROLS.md, "The performance mixer"). Play A01.
       Push VALUE + the lit STEP: `FX OFF: VALUE TEMPO`, and VALUE is the tempo again.
 - [ ] Push VALUE + LEFT/RIGHT: the slot walks round the sixteen and keeps the amount.
 - [ ] MUTE MODE on (upper pad 3): push VALUE + STEP 1 still says `STORED 1`. MUTE MODE off.
-- [ ] FUNC+HOME, LOOP LEN (last row): `4 BAR`; RIGHT: `8 BAR`. Push VALUE + STEP 16: it records
+- [ ] FUNC+HOME, LOOP LEN: `4 BAR`; RIGHT: `8 BAR`. Push VALUE + STEP 16: it records
       8 bars from the next bar line (STEP 16 blinks red armed, steady red recording, green after).
       VALUE up: the loop alone, in time; leave it a minute: still in time.
 - [ ] Push VALUE + CLR once (`FX OFF`: the loop is kept at mix 0), turn VALUE: the tempo moves.
@@ -1618,7 +1895,7 @@ New 2026-11-23 (docs/CONTROLS.md, "The performance mixer"). Play A01.
       `LOOP OFF: VALUE TEMPO`, the live beat comes back at once, VALUE turns the tempo. VALUE +
       STEP 16: the loop is picked again (`LOOP MIX 0`), turn VALUE up and it is back in time.
       Push VALUE + STEP 16 during `LOOP 4 BAR: NEXT BAR`: `LOOP CANCELLED`, STEP 16 dark.
-- [ ] While the loop is held, FUNC+REC then OK: `LOOP HOLDS BUFFER`; FUNC menu FREEZE, OK: the
+- [ ] While the loop is held, FUNC+REC then OK: `LOOP HOLDS BUFFER`; the track menu's FREEZE, OK: the
       same. Push VALUE + CLR twice: `LOOP CLEARED`, and RESAMPLE works again.
 - [ ] **U11.** A01 with 15 BUILD at 127 and a playing loop at mix 64, STOP then PLAY, 60 s:
       MAX `________ %` (against U1's). And 9 BASS KILL at 127 with the loop: MAX `________ %`.
@@ -1670,9 +1947,9 @@ emulator only walks to the page (`tests/scenario_osc.sh`). Play A01 GROOVE.
 
 ## 14. Reload and new: the FUNC menu's RELOAD PROJECT and NEW PROJECT (3 min)
 
-- [ ] Change the tempo (unsaved). FUNC+HOME, RELOAD PROJECT, OK once: `OK AGAIN TO RELOAD`,
+- [ ] Change the tempo (unsaved). FUNC+HOME, RELOAD PROJECT, OK once: `OK AGAIN: RELOAD`,
       nothing changes. Again within 2 s: `RELOADING`, and the tempo is back to 142.0.
-- [ ] NEW PROJECT, OK once: `OK AGAIN FOR NEW`, nothing changes. Twice: `NEW PROJECT`: an empty
+- [ ] NEW PROJECT, OK once: `OK AGAIN: NEW`, nothing changes. Twice: `NEW PROJECT`: an empty
       project (no steps; every pad still plays the factory sound, pans centred; since #140).
       LOAD DEMO, OK twice: `DEMO PROJECT`, A01 GROOVE again, all eight tracks audible; track 8's
       blips play the placeholder (PR #42). A single OK on any of these rows never loses work.
@@ -1686,7 +1963,7 @@ New 2026-11-22. PROJECT, screen key RIGHT four times: `PROJECTS`.
 - [ ] FUNC+DOWN (or the FUNC menu's SAVE AS): `SAVE AS` with `DEFAULT` in the entry. Make it `LIVE 1` with A and VALUE, OK:
       `SAVING`, then `LIVE 1` appears in the list and `NOW LIVE 1`. The text is readable and the
       underline sits under the right character? `________`
-- [ ] Change something, then OK twice on `DEFAULT`: `AGAIN TO OPEN`, then `OPENING`; the change
+- [ ] Change something, then OK twice on `DEFAULT`: `OK AGAIN: OPEN`, then `OPENING`; the change
       is gone and DEFAULT plays as it was saved.
 - [ ] Power cycle: STRATA comes back with `DEFAULT`, the one opened last.
 - [ ] SAVE AS `LIVE 1` from DEFAULT says `NAME TAKEN` and writes nothing.
@@ -1702,8 +1979,8 @@ The second-to-last line says `PUSH B REN  C DELETE`.
 - [ ] Rename the open project the same way: `NOW` shows the new name. Power cycle: STRATA comes
       back with it.
 - [ ] Rename onto a name in the list: `NAME TAKEN`, nothing changes.
-- [ ] Cursor on another project, push C: `DELETE? OK TWICE`. CLR: `DELETE OFF`, still there.
-      Push C, OK, wait 3 s, OK: only `OK AGAIN TO DELETE` again. Push C, OK, OK: `DELETING`,
+- [ ] Cursor on another project, push C: `OK TWICE: DELETE`. CLR: `DELETE OFF`, still there.
+      Push C, OK, wait 3 s, OK: only `OK AGAIN: DELETE` again. Push C, OK, OK: `DELETING`,
       and it leaves the list. On a computer its folder is gone from
       `/ENAGA/DATA/STRATA/PROJECTS/`.
 - [ ] Push C on the open project: `PROJECT IS OPEN`, nothing else.
@@ -1721,9 +1998,9 @@ project. Back in STRATA's project from 14 (or any project), playing.
       (or the screen keys) show slots 09-16. CLR goes back to MACHINE. No overlaps.
 - [ ] Change a few knobs and put track 8 on GRN. On slot 1, FUNC+DOWN: `SAVING KIT`, the row reads
       `KIT` and the two lines below show the eight machines (GRN last).
-- [ ] FUNC+DOWN on slot 1 again: `AGAIN TO OVERWRITE`; only a second press writes.
+- [ ] FUNC+DOWN on slot 1 again: `DOWN AGAIN: REPLACE`; only a second press writes.
 - [ ] Change the sound (track 8 back to SMP, a knob or two). Still playing, OK on slot 1:
-      `OK AGAIN TO LOAD`, nothing changes. OK again: the slot-1 sound is back and **the beat
+      `OK AGAIN: LOAD`, nothing changes. OK again: the slot-1 sound is back and **the beat
       does not stop**. Click or dropout at the recall? `________`
       STOP, PLAY, recall again: MAX `________ %`
 - [ ] STEP keys only move the cursor; they never load.
@@ -1877,6 +2154,8 @@ Enaga's menu and start STRATA6.
 | U12 MAX with a MIN11 chord on OS2 sync, DRV and SUB up, over A01 (13p) | |
 | E14 WAVE, `scenario_wave.sh` vs `scenario_factory.sh`; boot cycles before/after, cl6x / GCC (PC) | |
 | U13 MAX with WMN GROWL and WPL PAD, over A01 (W23) | |
+| E18 WAVE scan, `scenario_wavescan.sh` vs `scenario_wave.sh`, cl6x / GCC (PC) | |
+| U15 MAX with WMN WOBBLE and WPL DRIFT, over A01 (W73) | |
 | E15 FM4, `scenario_fm.sh` vs `scenario_factory.sh`; `ti_loops.py` FM loops, cl6x / GCC (PC) | |
 | U14 MAX with FM4 PAD on track 7, over A01 (W24) | |
 | MAX straight after a kit recall (15) | |
@@ -2069,7 +2348,7 @@ the command ring and the undo stack are known to work before you touch the hardw
 
 **Polymeter**
 
-- [ ] FUNC + pad-row keys set the selected track's length, the FUNC menu's TRACK SPEED its speed; both show
+- [ ] FUNC + pad-row keys set the selected track's length, the track menu's SPEED its speed; both show
       on the grid line as `L nn` and `X n`. Set track 2 to 15 steps against track 1's 16 and
       listen for the phase walking — that is the feature working.
 - [ ] A track at 2x with micro-timing at the extremes still fires every step exactly once per
@@ -2736,8 +3015,8 @@ records where each gesture went and why.
       through to the track faders underneath.
 - [ ] On MST, A is the DJ filter, B the glue compressor, C the limiter threshold, D the output
       level. A reads `OFF` at centre, `LP nn` below it and `HP nn` above.
-- [ ] FUNC + VALUE is no longer the DJ filter (since #145, backlog D1): it says
-      `DJ FILTER: SLOT 1/2` and moves nothing. The tempo must not move with it.
+- [ ] FUNC + VALUE is no longer the DJ filter (since #145, backlog D1): it is VariSpeed (W70)
+      and moves no MST byte.
 - [ ] Save, power cycle, reopen: every one of the fourteen comes back. Before this they did not
       exist in any file.
 - [ ] **The kill EQ** (added 2026-11-22): MIXER's seventh page, `EQ`, LOW MID HI on A B C, flat at
@@ -2868,9 +3147,9 @@ below (`tests/test_ui.cpp`, "the arrow keys"); what it cannot tell is whether it
       `FUNC+EDIT: MACHINE`.
 - [ ] RESAMPLE: UP and DOWN pick the length, LEFT and RIGHT where the take goes.
 - [ ] PROJECT: the arrows move a frame over the 16 slots and OK queues the framed one; a STEP key
-      queues and moves the frame there. The FUNC menu toggles the chain and reloads the sample.
+      queues and moves the frame there. The FUNC menu toggles the chain; the track menu reloads the sample.
       On SETUP, CLR goes back.
-- [ ] Notices (an octave, a scene captured, `OK AGAIN TO RELOAD`) appear on the second line in
+- [ ] Notices (an octave, a scene captured, `OK AGAIN: RELOAD`) appear on the second line in
       every mode, not only in GRID.
 
 ## FUNC + PLAY restart, FUNC + STOP stop and reset
@@ -2936,7 +3215,7 @@ were the octave keys until the controls concept, docs/CONTROLS.md).
 ## PROJECT: undo and redo, and where reload and new went
 
 - [ ] In PROJECT, FUNC + CLR undoes and FUNC + OK redoes (try a LEN change on the PATTERN page).
-- [ ] FUNC + LEFT once shows AGAIN TO RELOAD and changes nothing; twice reloads the project from the
+- [ ] FUNC + LEFT once shows OK AGAIN: RELOAD and changes nothing; twice reloads the project from the
       card. FUNC + RIGHT twice starts a new project. A single press of either never loses work.
 
 ## KIT: the kit browser (FUNC+EDIT twice)
@@ -2947,10 +3226,10 @@ were the octave keys until the controls concept, docs/CONTROLS.md).
 - [ ] Turn a few knobs and switch a machine, then FUNC+DOWN on slot 1: `SAVING KIT`, the row reads
       `KIT` and the two lines below show the eight machines. The card has
       `/ENAGA/DATA/STRATA/KITS/KIT_01.BIN`.
-- [ ] Change the sound, then with the beat PLAYING press OK on slot 1: `OK AGAIN TO LOAD`, nothing
+- [ ] Change the sound, then with the beat PLAYING press OK on slot 1: `OK AGAIN: LOAD`, nothing
       changes. OK again: the stored sound comes back and the beat does not stop. Listen for a
       click or a dropout at the recall, and read LOAD/PEAK straight after it.
-- [ ] FUNC+DOWN on slot 1 again says `AGAIN TO OVERWRITE`; only the second press writes.
+- [ ] FUNC+DOWN on slot 1 again says `DOWN AGAIN: REPLACE`; only the second press writes.
 - [ ] A kit with a sample on track 8: recall a kit with the SAME sample while playing -- the loop
       does not stop. Recall one naming another WAV -- the track reloads (PROJECT shows `.` then `O`).
 - [ ] After a recall PROJECT says `UNSAVED`; FUNC+HOME, OK saves it, and the reopened project

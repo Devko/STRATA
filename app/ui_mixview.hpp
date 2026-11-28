@@ -23,6 +23,7 @@
         else if (mixer_bank_ == kMixerDelayPage || mixer_bank_ == kMixerLongPage) draw_echo_view(canvas, mixer_bank_ == kMixerLongPage);
         else if (mixer_bank_ == kMixerEqPage) draw_eq_view(canvas);
         else if (mixer_bank_ == kMixerChorusPage) draw_chorus_view(canvas);
+        else if (mixer_input_page(mixer_bank_)) draw_input_view(canvas);
         else if (kMixerPages[mixer_bank_].name[0] == 'R' && kMixerPages[mixer_bank_].name[1] == 'E') {
             draw_reverb_view(canvas, kMixerPages[mixer_bank_].name[3] == '+');
         }
@@ -51,6 +52,8 @@
                                            : uint32_t(slot == 2 ? duck.hold : duck.release) * uint32_t(kDuckTimeStepMs));
                 append(v, "MS");
             }
+        } else if (mixer_input_page(mixer_bank_)) {
+            input_knob_parts(slot, n, v);
         } else {
             const int8_t field = kMixerPages[mixer_bank_].field[slot];
             if (field < 0) {
@@ -71,8 +74,39 @@
         if (mixer_bank_ == kMixerDuckPage) {
             append(out, "DUCKS UNDER T");
             append_number(out, uint32_t(engine_.project().kit.duck.source) + 1u);
+        } else if (mixer_input_page(mixer_bank_)) {
+            append(out, input_byte(InputField::on) != 0 ? "IN ON" : "IN OFF");
         }
         *out = 0;
+    }
+
+    // An IN or IN+ knob's name and value: the byte, the pan as L/C/R, the tone as LP/HP or FLAT
+    // and the jack by a short name (IN+'s picture spells it out).
+    void input_knob_parts(int slot, char *&n, char *&v) {
+        static const char *const names[2][4] = {{"LVL", "PAN", "DLY", "REV"},
+                                                {"CHO", "DCK", "TON", "SRC"}};
+        static const char *const jacks[kInputSources] = {"LINE", "LN L", "MIC", "DYN", "HIZ", "USB"};
+        const int page = mixer_bank_ - kMixerInputPage;
+        const InputField field = kInputPageFields[page][slot];
+        const uint8_t byte = input_byte(field);
+        append(n, names[page][slot]);
+        if (field == InputField::pan) {
+            if (byte == 64) append(v, "C");
+            else {
+                append(v, byte < 64 ? "L" : "R");
+                append_number(v, uint32_t(byte < 64 ? 64 - byte : byte - 64));
+            }
+        } else if (field == InputField::tone) {
+            if (byte == kToneFlat) append(v, "FLAT");
+            else {
+                append(v, byte < kToneFlat ? "LP" : "HP");
+                append_number(v, uint32_t(byte < kToneFlat ? kToneFlat - byte : byte - kToneFlat));
+            }
+        } else if (field == InputField::source) {
+            append(v, jacks[byte < kInputSources ? byte : 0]);
+        } else {
+            append_number(v, uint32_t(byte));
+        }
     }
 
     void mixer_hint_text(char *line) {
@@ -82,6 +116,8 @@
         else if (mixer_bank_ == kMixerLongPage && !sends.delay_long) append(out, "PUSH A: LONG DELAY");
         else if (mixer_bank_ == kMixerDuckPage) append(out, "TRACKS DUCK ON DCK 1-4 5-8");
         else if (mixer_bank_ == kMixerChorusPage) append(out, "TRACKS SEND ON CHO 1-4 5-8");
+        else if (mixer_bank_ == kMixerInputPage) append(out, input_byte(InputField::on) != 0 ? "PUSH A: OFF" : "PUSH A: ON");
+        else if (mixer_bank_ == kMixerInputPage + 1) append(out, "PUSH A ON/OFF D GAIN");
         else if (kMixerPages[mixer_bank_].name[0] == 'R' && kMixerPages[mixer_bank_].name[3] == '+' && !sends.reverb_hall) {
             append(out, "PUSH A: HALL");
         }
@@ -441,6 +477,77 @@
     // deep as DEP swings them and as many as RAT turns in that time, L above the centre line's
     // dotted 8 ms and R a shade dimmer. While the beat plays they run. Under them, how much of
     // the chorus goes into the reverb (C>R) as a bar.
+    // --- IN and IN+: the line input's strip -----------------------------------------------------
+    //
+    // On the left the input's meter (Status::input_peak, the top 36 dB, before the fader) beside
+    // the fader's slot and its cap at the level; a strip that is off is dim and its cap hollow.
+    // Beside it the jack and its gain, the pan as a tick on a line and the three sends as bars,
+    // and the duck as a bar hanging from the top that dips with the source while the beat plays.
+    void draw_input_view(enaga::Canvas &canvas) {
+        uint8_t *px = canvas.data();
+        const bool on = input_byte(InputField::on) != 0;
+        constexpr int kTop = 32, kRows = 64, kX = 6;
+        const int bottom = kTop + kRows - 1;
+        // The meter, every other row, lit up to the input's level when the strip is on.
+        const uint32_t milli = engine_.status().input_peak.load(std::memory_order_relaxed);
+        const int lit = on ? paint::level_rows(milli, kRows / 2, 36) : 0;
+        for (int r = 0; r < kRows / 2; r++) {
+            canvas.rect(kX, bottom - 2 * r, 6, 1, uint8_t(r < lit ? (r >= kRows / 2 - 3 ? 15 : 11) : 2));
+        }
+        // The fader's slot and its cap: 127 at the top, 0 at the bottom.
+        canvas.rect(kX + 10, kTop, 1, kRows, 4);
+        const int cap = bottom - int(input_byte(InputField::level)) * (kRows - 3) / 127 - 3;
+        if (on) canvas.rect(kX + 8, cap, 5, 3, 15);
+        else frame_rect(px, kX + 8, cap, 5, 3, 8);
+        // The unity mark.
+        const int unity = bottom - int(kInputLevelUnity) * (kRows - 3) / 127 - 2;
+        canvas.rect(kX + 14, unity, 2, 1, 6);
+
+        const int tx = 30;
+        const uint8_t text = uint8_t(on ? 15 : 7);
+        char line[24];
+        char *out = line;
+        const uint8_t source = input_byte(InputField::source);
+        append(out, kInputRoutes[source < kInputSources ? source : 0].name);
+        append(out, " ");
+        // USB takes no level (enaga_input_source), so it shows none.
+        if (source != 5) append(out, kInputLevelNames[input_byte(InputField::gain) % kInputGains]);
+        *out = 0;
+        paint::small_text(px, tx, kTop, line, text);
+        paint::small_text(px, tx, kTop + 10, on ? "ON" : "OFF", text);
+
+        // The pan, a tick on a line.
+        const int pan_y = kTop + 24;
+        paint::small_text(px, tx, pan_y - 2, "PAN", 7);
+        canvas.rect(tx + 20, pan_y + 1, 41, 1, 3);
+        canvas.rect(tx + 20 + int(input_byte(InputField::pan)) * 40 / 127, pan_y - 1, 1, 5, text);
+        // The three sends, a bar each.
+        static const char *const sends[3] = {"DLY", "REV", "CHO"};
+        static const InputField fields[3] = {InputField::delay, InputField::reverb, InputField::chorus};
+        for (int k = 0; k < 3; k++) {
+            const int y = pan_y + 10 + k * 8;
+            paint::small_text(px, tx, y - 2, sends[k], 7);
+            canvas.rect(tx + 20, y + 1, 41, 1, 2);
+            const int amount = int(input_byte(fields[k]));
+            if (amount > 0) canvas.rect(tx + 20, y, 1 + amount * 40 / 127, 3, uint8_t(on ? 10 : 5));
+        }
+        // The duck: how far it goes down, and how far it is down now.
+        const int depth = int(input_byte(InputField::duck));
+        const int dx = 100, dtop = kTop + 9, drows = kRows - 9;
+        paint::small_text(px, dx, kTop, "DCK", 7);
+        canvas.rect(dx + 4, dtop, 1, drows, 3);
+        if (depth > 0) {
+            const Kit &kit = engine_.project().kit;
+            const int source_track = kit.duck.source < kTracks ? int(kit.duck.source) : 0;
+            const bool running = enaga::clock::state().running != 0;
+            const float dip = running && on ? duck_gain_now(source_track) : 0.0f;
+            const int reach = depth * (drows - 1) / 100;
+            frame_rect(px, dx + 1, dtop, 7, reach + 1, 6);
+            const int now = int(dip * float(reach));
+            if (now > 0) canvas.rect(dx + 2, dtop + 1, 5, now, 12);
+        }
+    }
+
     void draw_chorus_view(enaga::Canvas &canvas) {
         uint8_t *px = canvas.data();
         const SendSettings &s = engine_.sends();

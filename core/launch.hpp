@@ -117,6 +117,12 @@ bool pattern_has_steps(const Pattern &pattern);
 // lane's source. -1 when there is none.
 int launch_capture_slot(const Project &project, int bank);
 
+// The same, and not any of the `count` sources in `avoid` either (kLaneOwn entries are skipped):
+// ARR REC writes what a pass played after the pass, when what plays may already be something
+// else, and neither may be written over.
+int launch_capture_slot_avoiding(const Project &project, int bank, const uint8_t *avoid,
+                                 int count);
+
 enum class CaptureResult : uint8_t {
     ok,
     no_slot,       // `bank`/`slot` is not a slot CAPTURE may write (launch_capture_slot)
@@ -126,9 +132,16 @@ enum class CaptureResult : uint8_t {
 // Write what every lane plays into `out`, which must be none of the project's patterns that a
 // lane reads (the playing pattern or a source): each lane's part with its locks compacted into
 // `out`'s pool, and the playing pattern's master length, swing, FEEL, key, scale and seed. False,
-// writing nothing, when the parts' locks together do not fit in one pool. CAPTURE and LOCK both
-// take what you hear through this.
+// writing nothing, when the parts' locks together do not fit in one pool. CAPTURE writes through
+// this. LOCK does not: it keeps the lane sources apart (core/lockstore.hpp).
 bool launch_compose(const Project &project, Pattern &out);
+
+// launch_compose for a mix that is not (or no longer) the project's own: `live` is the playing
+// pattern's source and `lanes[t]` lane t's (kLaneOwn: its own part of `live`). ARR REC writes a
+// pass this way once the pass is over. False, writing nothing, for an invalid `live` or a pool
+// that does not fit; an invalid lane source reads as the lane's own part.
+bool launch_compose_lanes(const Project &project, uint8_t live, const uint8_t lanes[kTracks],
+                          Pattern &out);
 
 // Write what every lane plays into pattern `bank`/`slot`: each lane's part from its source, with
 // its locks moved into the new pattern's pool (compacted), and the playing pattern's master

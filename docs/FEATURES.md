@@ -45,6 +45,7 @@ UNIT_CHECKLIST.md's ~550 boxes, 4 are ticked.
 | **PROJECT's slots and MACHINE redrawn to the drafts** (docs/SCREENS.md): a map of all 128 patterns (empty, used, playing, queued) and each of the shown bank's sixteen drawn as its steps; MACHINE's kit as pictures, every machine a picture of its sound, what it is for and what it costs | #175 | ○ (W44) | draw() 1.28 ms PROJECT, 2.50 ms MACHINE (emulator, cl6x) |
 | **Stereo width WID** on VA POLY, WAVE POLY and FM4: MIXER WID 1-4 / 5-8, 1-63 spread (chord notes across the field), 64-127 unison (two voices a note, hard L/R, 6-40 cents); push OFF / 48 / 96 | #216 | ○ (W60) | A kit setting, not lockable; unison halves a track's notes (3) and counts two voices a note against the 12; docs/BUDGET.md "Stereo width" |
 | **Chorus, send C**: a stereo chorus on MIXER; CHO 1-4 / 5-8 set each track's send (push: OFF or 64), CHO its RAT DEP LVL and C>R into the reverb | #214 | ○ (W59) | The send is a kit setting, not lockable; costs nothing while no track sends; docs/BUDGET.md "The chorus" |
+| **Line input as a mixer channel**: MIXER IN / IN+, the INPUT jacks through STRATA's mix with LVL, PAN, DLY, REV, CHO, DCK and TON; SRC picks the jack (LINE, LINE L, MIC, DYN MIC, HI-Z, USB), push D the gain | #242 | ○ (W69), E (scenario_linein.sh) | Off by default and in older projects; saved in the project, not the kit; through the master, the looper, REPEAT and JAM REC; latency and noise owed from the unit |
 | **EDIT and MIXER redrawn to the drafts** (docs/SCREENS.md): EDIT's knob line and a picture on every page of every machine; MIXER's eight-strip desk, duck, DLY, REV, ROUTE, MST with LUFS, EQ curve; lists with a lit cursor, the step page's lane, CHAIN's strip | #174 | ○ (W43) | draw() see docs/BUDGET.md "The screen"; GRID and PERFORM unchanged |
 | **Screens rebuilt to the mockups**: frame (badges, toasts, tabs), PERFORM, GRID, EDIT (graph rows 50-117, filter response, LFO trail, WAVE LIVE, GRAIN cloud), MIXER master (spectrum, vectorscope, CMP/LIM bars) | #171 | ○ (W42) | draw() 1.71 ms on PERFORM, 1.20 ms on MST (emulator, cl6x). Knob values in the small font and LUFS on MST came with #174 |
 | **Live screens 6**: MIXER MST/EQ spectrum (24 bands, peak dots) and vectorscope; live meters beside the faders | #170 | ○ (W41) | draw() 1.21 ms on MST (emulator, cl6x) |
@@ -62,14 +63,17 @@ UNIT_CHECKLIST.md's ~550 boxes, 4 are ticked.
 | --- | --- | --- | --- |
 | Controls concept from the panel: one job per button group ([CONTROLS.md](CONTROLS.md)) | v0.1.0 | ◐ (2, 5) | |
 | FUNC + function key = its printed second label (sampling, pool, system, ◀◀, ▶▶, fx, rec src) | v0.1.0 | ◐ (2) | |
-| FUNC menu (FUNC+HOME): save, save as, open, new, reload, kits, sample reload, track speed, chain, song/loop, auto-fill, quantize, REC MODE; freeze (#109), loop length (#116), load demo (#140), track play (#148), FX glide (#149) | v0.1.0 | ◐ (14, W12, W13, W20c) | |
+| FUNC menu (FUNC+HOME): save, save as, open, new, reload, kits, chain, song/loop, auto-fill, quantize, REC MODE; loop length (#116), load demo (#140), FX glide (#149) | v0.1.0 | ◐ (14, W12, W13, W20c) | |
+| **Slimmer FUNC menu**: project-wide rows only, live toggles first and file actions last; the selected track's SPEED, PLAY, FREEZE and RELOAD SAMPLE moved to GRID's track menu (hold OK) | Unreleased | ○ (W66) | Usability review finding 2 |
 | NEW PROJECT is empty (factory sounds and mixer, pans centred, no steps, scenes or macros); LOAD DEMO loads the factory demo | #140 | ○ (W12) | |
 | **CLEAR PATTERN** in the FUNC menu: every track in one press, OK twice, one undo | #86 | ○ (W16) | Keeps sounds, lengths, speeds and swing |
 | **Help for the screen that is up**: its knobs in words and its gestures, every screen and EDIT/MIXER page, then five shared pages (FUNC + key, FUNC + knob or pad, upper pads, the performance mixer); screen keys turn its pages while FUNC is held; a quick FUNC tap says `HOLD FUNC: HELP`, an OK tap in GRID `HOLD OK: TRACK MENU` | #107, WIP | ○ (W19, W52) | Text only; it says what the build does, so a changed gesture changes `core/help.cpp` too |
+| **PERFORM names its FUNC layer**: while FUNC is held the gauges read REL LEN NRG RND with their values; the FUNC help puts PERFORM LIVE second | Unreleased | ○ (W77) | |
+| **One confirmation wording**: every two-press step reads `<KEY> AGAIN: <WHAT>` (`OK AGAIN: DELETE`), held by tools/check_rules.sh | Unreleased | ○ (W77) | |
 | HOME = GRID, HOME twice = KEYS | v0.1.0 | ◐ | |
 | Lit, self-naming performance pads; mode keys green/red by screen | v0.1.0 | ○ (W8, W20c) | Upper pads are printed TRK 1-7 but are performance pads (Roland's choice) |
 | Arrow-key navigation model (UP/DOWN rows, LEFT/RIGHT sideways, OK picks, CLR back) | v0.1.0 | ○ (5, "Arrow keys") | |
-| Screens: GRID, step page, EDIT (6 pages, 8 on the VA, WAVE, FM4 and GRAIN machines), MACHINE, KIT, SOUNDS, KEYS, MIXER (12 pages), PERFORM, PROJECT (5 pages), SAMPLES, RESAMPLE, menu | v0.1.0 | ◐ (4) | |
+| Screens: GRID, step page, EDIT (6 pages, 8 on the VA, FM4 and GRAIN machines, 9 on WAVE), MACHINE, KIT, SOUNDS, KEYS, MIXER (17 pages; UP/DOWN jump a group), PERFORM, PROJECT (5 pages), SAMPLES, RESAMPLE, menu | v0.1.0 | ◐ (4) | |
 | Fixes: the FUNC menu never shows a MUTATE verdict OK would not give; OK in RESAMPLE no longer retargets a take being written | #84 | ○ | |
 
 ## Engines (machines)
@@ -96,7 +100,8 @@ FM4 and GRAIN machines.
 | **Held notes on the VAs: ENV page** (ATK SUS REL FSU, seventh EDIT page; named ASR until #174); with SUS up a note holds while the key is held or for its step's LEN (up to 64 steps) | #90 | ○ (13k) | Held voices count against the 12-voice POLY budget for as long as they hold; MONO counts LEN only once SUS is up |
 | **VA sound rework: OSC page** (WAV OS2 SUB DRV, eighth EDIT page): saw or pulse width, a detuned or hard-synced OSC 2, sub level, drive into the filter; RES self-oscillates near the top, LP24 squelches like LP12 | #118 | ○ (13p, W22) | Older projects lose the old fixed synced pulse (load `SAW OFF 102 000`). No key tracking to the filter |
 | **One filter on the synths (D8)**: on the VA and WAVE machines FLTR is the voice's own filter (CUT RES ENV FDE; FDE its own decay, or 0.55 x DEC at 0), the insert filter one TON knob; **velocity opens the filter (D15)**; **cutoff floor (D9)**: a swept cutoff stops at about 100 Hz | #139, #147 | ○ (13q, 13e) | Older projects' insert filter on these tracks loads as the nearest TON, without its drive and resonance |
-| **WAVE MONO and WAVE POLY**: the VA voice with a wavetable (16 built-in tables of 16 frames: TBL POS, MOT envelope to position, WRP phase bend, DET second reader), 8 + 7 factory sounds | #122 | ○ (W23) | CPU per voice is a host estimate until the emulator and the unit measure it (BUDGET "WAVE"); a table is built when a track first sounds it (8 slots, 1.25 MiB; the sub plays alone for a moment). No user tables from the card yet, though the slots leave room for them |
+| **WAVE MONO and WAVE POLY**: the VA voice with a wavetable (16 built-in tables of 16 frames: TBL POS, MOT envelope to position, WRP phase bend, DET second reader), 14 + 14 factory sounds | #122 | ○ (W23) | CPU per voice is a host estimate until the emulator and the unit measure it (BUDGET "WAVE"); a table is built when a track first sounds it (8 slots, 1.25 MiB; the sub plays alone for a moment). No user tables from the card yet, though the slots leave room for them |
+| **WAVE scan: the SCAN page** (MOD SPD END CRV, ninth EDIT page on WAVE MONO and WAVE POLY): the position moves from POS towards END with each note: OFF FWD REV LOOP LREV PING RET SINE RAND DRFT, SPD free or synced as the LFO's RAT, CRV the curve; 2 + 2 scanning factory sounds | #246 | ○ (W73) | Control rate (2-6% of a WAVE voice on the host, BUDGET "WAVE scan"); not an LFO or mod-slot target; lockable, scene and macro. Older projects load it OFF. No user wavetables yet |
 | **FM4**: four-operator FM, eight algorithms, operator 4 feedback, an index envelope, six voices with chords in the shared 12-voice POLY budget; 8 factory sounds | #126 | ○ (W24) | CPU per voice is a host estimate (about 1.7x a VA POLY voice) until the unit measures it; the emulator shows no peak above the factory beat (BUDGET "FM4", E15). High notes at high IDX are capped for the whole operator chain so they do not alias (#189; W54). |
 | MID: plays an outboard synth over MIDI; SRC/AMP knobs send CC 74/71/73/72, 70/75/76/77 | v0.1.0 | ○ (8d) | No sound or CPU of its own; no scale fold |
 | Key and scale per pattern (15 scales), fold for the VA, WAVE and FM4 machines, GRAIN and unsliced SAMPLE; sharps everywhere | v0.1.0 | ○ (7) | |
@@ -108,12 +113,12 @@ FM4 and GRAIN machines.
 | Feature | Since | Unit | Known limits / notes |
 | --- | --- | --- | --- |
 | Up to 64 steps a track, per-track length and speed (2x ... 1/8): polymeter | v0.1.0 | ○ (M3) | |
-| **Speed 3/2: 16th-note triplets** (16 ticks a step, 24 to the bar) in TRACK SPEED, between 2 and 1 | #213 | ○ (W57) | Older builds play a 3/2 track at 1x. The arp, rolls and REPEAT had 1/16T already |
-| **Track Launch**: each track can play the same track's part of another pattern (LAUNCH, PROJECT twice), queued on the boundary; read only until CAPTURE; PIN; saved in the project | Unreleased | ○ (W64) | Not in the chain. CAPTURE is not undoable. The emulator cannot press pads, so the held-pad launch is host-tested only |
+| **Speed 3/2: 16th-note triplets** (16 ticks a step, 24 to the bar) in the track menu's SPEED, between 2 and 1 | #213 | ○ (W57) | Older builds play a 3/2 track at 1x. The arp, rolls and REPEAT had 1/16T already |
+| **Track Launch**: each track can play the same track's part of another pattern (LAUNCH, PROJECT twice), queued on the boundary; read only until CAPTURE (hold OK on LAUNCH, or the track menu's CAPTURE row), COPY reads the borrowed part; PIN; saved in the project | Unreleased | ○ (W64, W77, W82) | Not in the chain. CAPTURE is not undoable. The emulator cannot press pads, so the held-pad launch is host-tested only |
 | Steps, trigless steps (FUNC + tap), STEP LED colours | v0.1.0 | ◐ | |
 | Step page: NOTE, VEL, LEN, MICR (±11 ticks), PROB, COND, RTCH 1-8, RAMP, ACNT, SLID, CHRD | v0.1.0 | ○ (6) | LEN is the note length on VA POLY, on VA MONO once SUS is up, and for MIDI out; ignored by drums, SAMPLE and GRAIN |
 | Trig conditions: a:b, FILL, PRE, NEI, 1ST and their NOTs; seeded | v0.1.0 | ○ (M3) | |
-| **Play modes per track**: FWD, REV, PING, RND1-RND16 (FUNC menu TRACK PLAY); seeded, the pattern untouched | #148 | ○ (W13) | Live on PERFORM too: LIVE RND, below |
+| **Play modes per track**: FWD, REV, PING, RND1-RND16 (the track menu's PLAY, hold OK in GRID); seeded, the pattern untouched | #148 | ○ (W13) | Live on PERFORM too: LIVE RND, below |
 | Parameter locks: 8 a step, 1,024 a pattern; push the knob to remove one | v0.1.0 | ○ (6) | `FULL n` when the pool is full (never reached on the unit) |
 | **Random lock ranges** (hold STEP + FUNC + turn): each pass a new value within the range, drawn from the pattern's seed | #167 | ○ (W37) | Takes one of the step's 8 lock slots |
 | **Parameter slide** (hold STEP + FUNC + push): a lock glides to the next step that plays, in play order | #167 | ○ (W37) | Ignores the target step's condition and probability, swing and micro-timing; not on a step stutter |
@@ -138,8 +143,12 @@ FM4 and GRAIN machines.
 | **Arp VAR, RHYTHM, ACCENT, RATCHET** (push A-D on the ARP page): CONV DIVG THUMB PINKY; 11 rest patterns (rests hold the note); 7 accent patterns and CYC; ratchets 2-4 on fixed slots or by chance | #184 | ○ (W51) | Kit settings (KIT.BIN section 12), not lockable or scene-able |
 | **ARPS**: OK on the ARP page loads one of 14 factory arps (all eight settings) into one track, AS WAS puts it back | #184 | ○ (W51) | Any machine |
 | Banks A-H x 16 patterns, queued changes (END, 16, 32, NOW) | v0.1.0 | ◐ (3b) | |
+| **Queue from any screen**: hold PROJECT + STEP n queues slot n of the shown bank and the screen stays; PROJECT opens on its release | Unreleased | ○ (W67) | The bank is the one PROJECT last showed |
 | Chain of up to 64 entries, repeats X1-X16 | v0.1.0 | ○ (3b, 12) | |
 | **Song mode**: per-entry mute recall, SONG plays once and stops | v0.1.0 | ○ (13i) | |
+| **Song sections**: a chain entry's SCN, MRP (SNAP, RIDE, BACK, SNAP A), NRG, BPM, TRN and MUT CAP, applied as it starts; the SECTION view (push A on CHAIN) with quick fill (hold OK); saved in PROJECT.BIN section 10 | Unreleased | ○ (W71), E (scenario_sections.sh) | BPM is skipped under an outside clock. Quick fill writes SNAP or SNAP A, whichever side the morph is nearer. TRN (W82) is byte 7, which older builds ignore: they play the entry untransposed. No kit per section |
+| **ARR REC**: a jam written into the chain a pass at a time (a repeat when nothing changed, a new section entry with MUT CAP, SCN, MRP SNAP/SNAP A, NRG, TRN, BPM when something did; X16 split; 64 entries); ARR UNDO swaps the chain from before back in, one level | Unreleased | ○ (W74), E (scenario_arrrec.sh) | A pass is what played at its start (12 ticks of grace); a cut pass counts from half. No BPM under an outside clock. Track Launch: see the next row |
+| **ARR REC keeps Track Launch**: a pass with a borrowed lane is CAPTUREd into the first free slot of the bank without switching, and the entry names it (`LAUNCH IN A05`); the same mix in a row shares the slot; no slot or too many locks: the playing pattern alone (`LAUNCH NOT KEPT`) | Unreleased | ○ (W76), E (scenario_arrlaunch.sh) | Parts replay from the slot's step 1 (a NOW or grid launch replays shifted). A slot a queued change or launch is about to land on is never taken. ARR UNDO empties the captured slots (not one edited since or playing), and such a take cannot be redone (W82) |
 | Restart (FUNC+PLAY) and stop-and-reset (FUNC+STOP, also resets the chain) | v0.1.0 | ○ (11) | |
 
 ## Performance
@@ -153,14 +162,16 @@ FM4 and GRAIN machines.
 | 4 macros of up to 4 targets, sweep from the live value; demo B ACID, C DUB, D DRIVE | v0.1.0 | ○ (3b) | |
 | **Macro learn by turning (D11)**: push a macro's knob in PERFORM, turn EDIT knobs, OK | #141 | ○ (W10) | |
 | The kill EQ's bands learnt by turning on MIXER's EQ page during MACRO LEARN (FUNC + STEP 5-7 retired) | #156 | ○ (W32) | |
-| **LOCK** (FUNC + MUTATE: hold stores, tap jumps, tap again swaps back), one per pattern, RAM only | #149 | ○ (W20c) | Not saved; the kit is shared, so a jump brings that lock's sound to every pattern |
+| **LOCK** (FUNC + MUTATE: hold stores, tap jumps, tap again swaps back), one per pattern, RAM only | #149 | ○ (W20c) | Not saved; the kit is shared, so a jump brings that lock's sound to every pattern. Track Launch: the lanes' sources are held apart from the pattern and put back (W78; host-tested, the emulator cannot press pads) |
 | **REL ALL / LEN ALL**: every track's release (FUNC + A) and every note's length (FUNC + B) in PERFORM | #152 | ○ (W29) | Live only; LEN ALL leaves gateless notes (drums, arp) alone |
-| **LIVE RND**: FUNC + turn D in PERFORM shuffles every armed track in blocks of 1-16 steps, FUNC + push D arms the selected track; OFF is the grid at once | #166 | ○ (W36) | Live only, in a LOCK; the pattern is never written |
-| **ENERGY**: FUNC + turn C in PERFORM thins every track in tier order down to a breakdown, or adds ghosts and lifts probabilities up to the peak | #224 | ○ (W62) | Live only, in a LOCK; the pattern is never written |
+| **LIVE RND**: FUNC + turn D in PERFORM shuffles every armed track in blocks of 1-16 steps, FUNC + lower pad arms that track, the kick out at start; OFF is the grid at once | #166, Unreleased | ○ (W36, W77) | Live only, in a LOCK; the pattern is never written |
+| **ENERGY**: FUNC + turn C in PERFORM thins every track in tier order down to a breakdown, or adds ghosts and lifts probabilities up to the peak | #224, Unreleased | ○ (W62, W79, W81) | Live only, in a LOCK; the pattern is never written. A turn of A-D keeps its layer until the knob rests 250 ms, so FUNC let go mid-turn moves no macro. Ghosts copy only trigs that play every pass; 0 after a project load or NEW |
+| **TRANSPOSE**: FUNC + SEL< / SEL> on every screen moves the melodic tracks (VAs, WAVEs, FM4, GRAIN, unsliced SAMPLE) a scale step, -12..+12, staying in the key; the FUNC menu's row makes it semitones with the key moving; both screen keys back to 0 (pressed together, no step first) | Unreleased | ○ (W75, W82) | Live only, in a LOCK; nothing written. Drums, sliced samples and MID never move. A held key is let go of at its own pitch (scenario_transpose) |
+| **VariSpeed**: FUNC + turn VALUE on every screen moves the tempo and every machine's pitch together, an octave each way in tenths of a semitone; FUNC + tap VALUE snaps back | Unreleased | ○ (W70) | Internal clock only. Not saved, not in a LOCK; the project keeps its tempo. MID notes are not moved. No CPU at rest; at +12 SAMPLE and GRAIN read twice as fast (scenario_varispeed) |
 | Pad pressure bends macro A | v0.1.0 | ○ ("Pad feel") | |
 | THROW to delay or reverb | v0.1.0 | ◐ | |
 | MUTATE (rotate, density, velocity, micro, chance, notes), OK keeps, CLR reverts | v0.1.0 | ○ (10) | |
-| **GEN and EVOLVE** (hold OK in GRID): a new drum or melodic part in the key (DENSITY, RANGE, LEAP, WHAT); a track mutating on its own every 1-8 loops, ORBIT or DRIFT, KEEP or HOME | #195, #200 | ○ (W52, W53) | The mutation and amount are PERFORM's MUTATE setting; MIX draws one each turn. Saved in PROJECT.BIN (section 7); HOME is not |
+| **GEN and EVOLVE** (hold OK in GRID or KEYS): a new drum or melodic part in the key (DENSITY, RANGE, LEAP, WHAT); a track mutating on its own every 1-8 loops, ORBIT or DRIFT, KEEP or HOME | #195, #200 | ○ (W52, W53) | The mutation and amount are PERFORM's MUTATE setting; MIX draws one each turn. Saved in PROJECT.BIN (section 7); HOME is not |
 | Note repeat on the pads, pressure as velocity | v0.1.0 | ○ (13f) | Recorded with REC as a roll over LEN (P3, #187; not at 1/4T) |
 | Step stutter: hold REPEAT + STEP loops that step on every track (FUNC: one track) | #151 | ○ (W11) | Sequencer, not audio: sounds stay live. Host-tested; the emulator cannot press pads |
 | Roll rate on LEFT/RIGHT under REPEAT or a rolling pad, on the live strip | #151 | ○ (W11) | |
@@ -177,7 +188,7 @@ FM4 and GRAIN machines.
 | --- | --- | --- | --- |
 | Insert chain per track: drive, filter (LP/BP/HP 12/24), lo-fi, amp, duck, pan, level | v0.1.0 | ◐ (W54) | Off stages cost nothing. A DC blocker follows the drive since #191 |
 | **Sidechain duck**, editable: depth per track, source track, attack/hold/release | v0.1.0, editable since #89 | ○ (13l) | MIXER pages DCK 1-4, DCK 5-8, DUCK. Saved in the kit (KIT.BIN section 6; older kits open with the v0.1.0 duck: track 1, 35%, 3/40/120 ms). Not p-lockable, not in scenes or macros: a lock slot would change the pattern and scene file layouts |
-| **JAM REC**: the whole jam to `/RECORD/JAM_<n>.WAV`, FUNC menu's last row, a REC dot in the top bar | #226 | ○ (W63) | The finished master (as RESAMPLE's MASTER take), never the click or the audition. 48 kHz 24-bit stereo through an Enaga recording stream, 1 MiB ring; stops cleanly on a full card, at 3 h 51 min, at shutdown; a pulled card leaves the file without its header. Card speed beside four sample streams unmeasured |
+| **JAM REC**: the whole jam to `/RECORD/JAM_<n>.WAV`, FUNC+REC twice (RESAMPLE, then again) or the FUNC menu's second row; a REC dot in the top bar and a dim red blink on REC | #226, this PR | ○ (W63, W65) | The finished master (as RESAMPLE's MASTER take), never the click or the audition. 48 kHz 24-bit stereo through an Enaga recording stream, 1 MiB ring; stops cleanly on a full card, at 3 h 51 min, at shutdown; a pulled card leaves the file without its header. Card speed beside four sample streams unmeasured |
 | **CLICK and COUNT-IN**: a metronome, and 1 or 2 bars clicked before a PLAY with REC on (CyDrums S6) | #182 | ○ (W47) | FUNC menu rows. STRATA's own click (Enaga has none), 1 kHz / 1.6 kHz on a bar, after RESAMPLE's tap, so never recorded. A count-in starts the clock at once and holds the sequencer, rolls, stutter and arps for its bars. Internal clock only. Not saved |
 | **Choke groups** 1-4 for any track: a note cuts the other tracks of its group (CyDrums S4) | #181 | ○ (W46) | Push A-D on MIXER's TRK pages; `C1`-`C4` on the strip. A 64-frame fade on the track's output, then its voices are cut. Two notes of a group on the same frame both sound (a block renders whole). Saved in the kit (KIT.BIN section 11; older kits have no groups) |
 | Send A: tempo-synced ping-pong delay | v0.1.0 | ◐ (13c / U4) | |
@@ -186,7 +197,7 @@ FM4 and GRAIN machines.
 | Send B **HALL** mode with shimmer | v0.1.0 | ○ (13j) | As LONG |
 | Delay into reverb (D>R) routing | v0.1.0 | ○ ("The sends, the master and SETUP") | Routing page has one empty slot |
 | Master: DJ filter, glue compressor, limiter, output level | v0.1.0 | ◐ | |
-| Master **kill EQ**: 3 bands at 250 Hz / 2.5 kHz, kill switches (FUNC + push A/B/C), scene-able, macro-able | v0.1.0 | ○ (13d / U6) | |
+| Master **kill EQ**: 3 bands at 250 Hz / 2.5 kHz, kill switches (FUNC + push A/B/C, FUNC + push D all three), scene-able, macro-able | v0.1.0, Unreleased | ○ (13d / U6, W77) | |
 | MIXER: 8 faders, 12 pages (3 for the duck since #89) | v0.1.0 | ◐ | |
 
 ## Samples and resampling
@@ -205,19 +216,23 @@ FM4 and GRAIN machines.
 | Resample the master, 1-8 bars, to a file or straight onto a track | v0.1.0 | ○ ("Resampling") | Takes ≤ 30 s |
 | Bounce: resample ONE track alone (B = `TRK 1`-`TRK 8`), mono, before its duck, fader, pan and sends | #109 | ○ (13m) | No emulator scenario: B is an encoder, the emulator presses keys only |
 | **Bounce to track**: a take to FILE is offered to a SAMPLE or GRAIN track (`PUT ON TRK 3 GRN`), one OK puts it there | #153 | ○ (13m) | `scenario_bounce` runs a take through Enaga's real file layer. Takes failed `DENIED` on the unit before #153 (Storage made `/RECORD`) |
-| **Freeze**: FUNC menu FREEZE, a track plays a 1-8 bar loop of its machine from RAM; chain, mix and sends stay live; instant unfreeze | #109 | ○ (13n), E (scenario_freeze.sh) | Not saved: a reload, NEW or kit recall unfreezes. Measured (cl6x): A05 held pad 20.3% to 10.1% average; A01 peaks 7 points lower |
-| Sample from the input: LINE, LINE L, MIC, DYN MIC, HI-Z, with level and meter | v0.1.0 | ○ (8c) | No monitoring through STRATA; MIC needs headphones in |
+| **Freeze**: the track menu's FREEZE (hold OK in GRID), a track plays a 1-8 bar loop of its machine from RAM; chain, mix and sends stay live; instant unfreeze | #109 | ○ (13n), E (scenario_freeze.sh) | Not saved: a reload, NEW or kit recall unfreezes. Measured (cl6x): A05 held pad 20.3% to 10.1% average; A01 peaks 7 points lower |
+| Sample from the input: LINE, LINE L, MIC, DYN MIC, HI-Z, with level and meter | v0.1.0 | ○ (8c) | Heard through STRATA only with the line input's strip on (MIXER IN); MIC needs headphones in |
 
 ## MIDI and sync
 
 | Feature | Since | Unit | Known limits / notes |
 | --- | --- | --- | --- |
 | Follows the unit's clock: internal, MIDI clock, SYNC IN; refuses tempo/transport under external clock | v0.1.0 | ○ (M7) | STRATA cannot set CLOCK SRC (Enaga has no setter). SYNC polarity not selectable (Enaga) |
+| Tap tempo on VALUE, nudge on FUNC + push VALUE + turn | Unreleased | ○ (W72, W80) | Internal clock only; nothing set until three taps agree within 25%; the nudge is 4% for 250 ms a detent |
+| **Song tempo kept apart from the project's**: a section's BPM plays without becoming the saved tempo; ARR REC writes BPM only where the tempo changed (and the take's start tempo on its first entry); VariSpeed held back near 300 BPM says so and returns at a slower tempo | Unreleased | ○ (W80), E (scenario_sections.sh, scenario_arrrec.sh) | The clock no longer jumps back for a moment after a section BPM, a VALUE turn or a tap |
 | MIDI OUT per track (OFF/1-16): steps, chords, ratchets, arp, note repeat, pads, KEYS, MIDI IN | v0.1.0 | ○ (8d) | **On Enaga 0.2.0 (v0.1.0-v0.3.1):** with USB connected to a computer not reading, DIN out stalls; unplug USB. Fixed in Enaga 0.3.0, which `main` needs |
 | Every note gets its note-off; second STOP sends All Notes Off | v0.1.0 | ○ (8d) | Slide is not sent as legato |
 | MIDI IN notes (ch 1-8 = tracks, others = selected), held to note-off | v0.1.0 | ○ (8d) | No pitch bend or aftertouch |
 | MIDI IN CC 16-31 = track parameters, CC 120/123 release | v0.1.0 | ○ (8d) | |
 | MIDI IN program change queues a pattern | v0.1.0 | ○ (8d) | |
+| MIDI IN song position pointer: chain entry and pass, or the pattern from the top | Unreleased | ○ (W72) | MIDI clock only; Enaga takes an SPP only while stopped |
+| PROG CHG OUT: each pattern change sends a program change on MIDI CH | Unreleased | ○ (W72) | Off by default; saved with the project |
 | Sending MIDI clock | — | — | Enaga's CLOCK OUT does it, not STRATA |
 
 ## Storage, projects and kits
@@ -236,6 +251,7 @@ FM4 and GRAIN machines.
 | **Starter content in the card builder** (web/, `content/starter/`): ten starter projects (0.5.0 and newer), a 105-file sample pack rendered by STRATA (`host/starter.cpp`) in `/SAMPLES/STRATA`, and `STRATA-QUICKSTART.txt`, behind one tick box (#230) | #223 | ○ W61 | `tests/test_starter.cpp` opens every project through Storage; web tests check the pack and the manifest. No emulator scenario: nothing in the app changed |
 | Factory pattern A05 PAD: held VA POLY chords from the ENV page, in the pattern's locks | #100 | ○ (13k) | The kit's chord stays A01's SUS 0 stab |
 | Factory sounds: SOUNDS (OK in EDIT or MACHINE) loads one of 116 ready-made sounds (KCK 10, SNR 10, HAT 11, PRC 12, MNO 14, PLY 12, WMN 12, WPL 12, FM4 12, GRN 11) into one track, AS WAS puts it back | #102, #118, #122, #126, #134, #184 | ○ (15e) | Leaves FX, LFO, ARP, fader and HAT's choke group; not undoable except by AS WAS |
+| **Your own sounds**: in SOUNDS, FUNC+DOWN saves the track's sound by name (16 per machine, on the card in `SOUNDS/<MCH>.BIN`, shared by every project), OK loads it on any track with that machine, push B renames, push C deletes; FUNC+UP copies a track's sound and the PASTE row puts it on any track, switching the machine if needed, AS WAS takes it back | WIP | ○ (W68) | All of the sound: every page (FX, LFO, ARP too) and the LFO and ARP pages' pushed settings; not the fader, chorus, WID, duck or MIXER's choke; SMP and MID have none; the copy is lost at power-off |
 
 ---
 

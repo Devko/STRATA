@@ -4,7 +4,7 @@
 #
 #   PLAY
 #   F2                       -> REC on
-#   FUNC + HOME, UP x8       -> the FUNC menu, round from SAVE to REC MODE (above CLICK)
+#   FUNC + HOME, DOWN x5     -> the FUNC menu, from SAVE to REC MODE (under COUNT-IN)
 #   OK                       -> "REC ADDS NOTES", the row drawn with ADD
 #   OK                       -> "REC REPLACES"
 #   CLR                      -> back
@@ -13,7 +13,7 @@
 # gets recorded, and what a step with extra notes plays, are tests/test_ui.cpp's (polyrec_*) and
 # tests/test_midi.cpp's. This holds the menu row and its log on the C674x, and the load.
 #
-# Keys (third_party/enaga/include/enaga/abi.h): F5 = 22, F2 = 26, F1 = 19, F4 = 27, UP = 17,
+# Keys (third_party/enaga/include/enaga/abi.h): F5 = 22, F2 = 26, F1 = 19, F4 = 27, DOWN = 25,
 # OK = 23, CLR = 30. A chord is the first key pressed and the second 5 M cycles later
 # (tests/scenario_m6.sh). The first press must come LATE (tests/scenario_m1.sh).
 set -euo pipefail
@@ -48,8 +48,8 @@ python3 -B tools/enaga_cached.py emulate "$STAGE" --cycles "$CYCLES" \
     --key 22@300000000 \
     --key 26@360000000 \
     --key 19@420000000 --key 27@425000000 \
-    --key 17@460000000 --key 17@495000000 --key 17@530000000 --key 17@565000000 \
-    --key 17@600000000 --key 17@635000000 --key 17@670000000 --key 17@705000000 \
+    --key 25@460000000 --key 25@495000000 --key 25@530000000 --key 25@565000000 \
+    --key 25@600000000 \
     --key 23@780000000 \
     --key 23@860000000 \
     --key 30@940000000 \

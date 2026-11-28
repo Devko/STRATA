@@ -237,10 +237,19 @@
         // which is what keeps the conditions and the playheads in step with the outside
         // transport. A STOP that F6 made arrives here too; releasing twice is harmless. The next
         // F6 press is then the one that cuts the tails.
-        (void)position;
         if (what == ENAGA_TRANSPORT_START || what == ENAGA_TRANSPORT_LOCATE) {
             stop_armed_ = false;
             clear_rec_passes();          // the pass count starts again: old marks would match
+        }
+        // A song position pointer at MIDI IN: Enaga located its clock (only while stopped), and
+        // the CONTINUE that follows plays from there. The engine puts the pattern, or the chain
+        // and its entry, where that position falls (Engine::locate). Only under MIDI clock: under
+        // the internal clock a LOCATE is STRATA's own restart, which Cmd::restart already covers.
+        if (what == ENAGA_TRANSPORT_LOCATE && enaga::clock::source() == ENAGA_CLOCK_MIDI) {
+            Command command;
+            command.cmd = Cmd::locate;
+            command.u = position;
+            post_command(command);
         }
         if (what == ENAGA_TRANSPORT_STOP) {
             count_in_armed_ = 0;         // a STOP ends a count-in (Engine::process)
@@ -274,6 +283,10 @@
         service_slot_menu();
         service_track_menu();
         service_launch();
+        service_section();
+        service_arr();
+        service_input_route();
+        service_transpose();
 
         // A queued launch landed (Track Launch): the lane's source is saved in PROJECT.BIN.
         {
@@ -487,22 +500,103 @@
             }
         }
 
+        // The user's MIDI CH, for PROG CHG OUT: Enaga's setting, which only this context reads.
+        {
+            const int channel = enaga::midi::channel() & 0x0F;
+            if (channel != posted_midi_channel_) {
+                posted_midi_channel_ = channel;
+                post(Cmd::set_midi_channel, 0, 0, uint8_t(channel));
+            }
+        }
+
+        // A tempo nudge (FUNC + push VALUE + turn) that has run out: back to the set tempo,
+        // times VariSpeed's.
+        if (nudge_due(nudge_, last_ms_)) {
+            clock_refused_ = !set_clock_tempo(clock_centi_);
+        }
+
+        // Song sections (core/project.hpp, SectionExtra). An entry that started with fields of
+        // its own moved the morph and ENERGY on the audio side: the knobs the UI shadows follow,
+        // as after a LOCK jump, and so does the morph all the way through a RIDE or BACK, so a
+        // hand on VALUE takes over from where the ride has got to.
+        {
+            const Status &status = engine_.status();
+            const uint8_t event = status.section_event.load(std::memory_order_acquire);
+            if (event != section_event_seen_) {
+                // Logged, not shown (a song would flash it at every entry): "SECTION 2 S4 SNAP",
+                // the entry and what it set, which is what the emulator and a unit log can see.
+                const ChainPlayer &player = engine_.chain();
+                char line[48];
+                char *out = line;
+                append(out, "SECTION ");
+                append_number(out, uint32_t(player.entry) + 1);
+                *out++ = ' ';
+                section_summary(engine_.project().chain_extra[player.entry % kChainEntries], out);
+                enaga::log(line);
+            }
+            if (event != section_event_seen_ ||
+                status.morph_riding.load(std::memory_order_relaxed) != 0) {
+                section_event_seen_ = event;
+                morph_ = engine_.morph();
+                energy_ = engine_.energy();
+                transpose_ = engine_.transpose();   // TRN
+            }
+            // A section's BPM: only this context may set Enaga's clock. Refused under an outside
+            // clock, which the song then follows, said once a run of the transport.
+            const uint8_t due = status.tempo_due.load(std::memory_order_acquire);
+            if (due != tempo_due_seen_) {
+                tempo_due_seen_ = due;
+                const uint16_t centi = status.section_tempo.load(std::memory_order_relaxed);
+                // Through set_clock_tempo, as VALUE's turn: the clock is the playing tempo
+                // times VariSpeed's ratio, so a section's BPM keeps the song's VariSpeed.
+                if (enaga::clock::source() != ENAGA_CLOCK_INTERNAL || !set_clock_tempo(centi)) {
+                    clock_refused_ = true;
+                    if (!bpm_skip_said_) {
+                        bpm_skip_said_ = true;
+                        notice_logged("EXT CLOCK: BPM SKIPPED");
+                    }
+                } else {
+                    // The screen shows what plays, and a turn of VALUE goes on from it. The
+                    // project's saved tempo is NOT posted (the review's M1): a song is not a
+                    // turn of VALUE, and a save after it keeps the tempo the project was set
+                    // to. The engine already took the BPM for the delay.
+                    clock_refused_ = false;
+                    tempo_tenths_ = uint32_t(centi) / 10;
+                }
+            }
+        }
+
         // The tempo a LOADED project brought with it. PROJECT.BIN has always had the field and
         // nothing read it, so every project opened at whatever the clock happened to be set to
         // -- a project saved at 142 came back at 130. Watched here rather than hooked to the end
-        // of a load because a load finishes on the card side, and this is one comparison on a
-        // pass that already does several.
+        // of a load because a load finishes on the card side.
         //
-        // `adopted_tempo_centi_` is what stops this fighting the knob: a click posts the new
-        // tempo AND records it here, so the engine's copy coming back is not read as a change.
+        // On the engine's load counter, not by comparing its copy of the tempo with ours: that
+        // copy lags each tempo a VALUE turn or a tap posts until the next audio block, and this
+        // pass runs about twice a block, so the comparison read the old tempo as a load and put
+        // the clock back for a moment, and a second click in that window was lost (the review's
+        // M2).
         {
-            const uint16_t project_centi = engine_.project().settings.tempo_centi_bpm;
-            if (project_centi != adopted_tempo_centi_) {
-                adopted_tempo_centi_ = project_centi;
+            const uint8_t loads = engine_.status().project_loads.load(std::memory_order_acquire);
+            if (loads != project_loads_seen_) {
+                project_loads_seen_ = loads;
+                // The engine put the live moves and VariSpeed to rest, as it clears the LOCKs:
+                // the knobs the UI shadows follow, so the next turn starts from rest and not from
+                // where the last project left them, and the clock below loses VariSpeed's ratio.
+                rel_all_ = 0;
+                len_all_ = 0;
+                rnd_unit_ = kLiveRndOff;
+                rnd_armed_ = kLiveRndAllTracks;
+                rnd_armed_chosen_ = false;
+                energy_ = 0;
+                transpose_ = 0;
+                vari_ = 0;
+                vari_set_ = 0;
+                const uint16_t project_centi = engine_.project().settings.tempo_centi_bpm;
                 tempo_tenths_ = uint32_t(project_centi) / 10;
                 // Refused under an outside clock, which is not an error: the project's tempo is
                 // simply not what is playing, and the screen already says EXT.
-                clock_refused_ = !enaga::clock::set_tempo(float(project_centi) * 0.01f);
+                clock_refused_ = !set_clock_tempo(project_centi);      // times VariSpeed's
             }
         }
 
@@ -513,11 +607,14 @@
             const enaga::clock::State clock = enaga::clock::state();
             const bool running = clock.running != 0;
             const int source = int(clock.source);
+            if (source != logged_source_ && logged_source_ >= 0) vari_follow_source(source);
             if (running != logged_running_ || source != logged_source_) {
                 // A start begins a fresh MAX, so the figure on screen belongs to what is playing
                 // now and not to a load or an earlier pattern. Here rather than in on_transport
                 // because this edge is seen whoever started the clock.
                 if (running && !logged_running_) cpu_max_ = 0;
+                // And a fresh song: its first refused BPM is said again.
+                if (running && !logged_running_) bpm_skip_said_ = false;
                 logged_running_ = running;
                 logged_source_ = source;
                 enaga::log(running ? (source == ENAGA_CLOCK_INTERNAL ? "run int"
@@ -664,7 +761,14 @@
             }
         }
 
-        for (int i = 0; i < 16; i++) {
+        // Each STEP key is written once a pass. LedShadow skips only a write equal to the last one,
+        // so a colour put here and then painted over by an overlay (both cover all 16 keys) went
+        // out twice every pass: 32 blocking UART sends, about 10 ms of update(), and the encoder
+        // phases a fast turn passes through were missed. While VALUE was pushed that lost the
+        // detents of swing (push + turn) and the nudge (FUNC + push + turn).
+        const bool perf_overlay = value_pushed_ && !mute_mode_ && mode_ != Mode::menu;
+        const bool launch_overlay = launch_page() && !value_pushed_;
+        for (int i = 0; i < 16 && !perf_overlay && !launch_overlay; i++) {
             const int step = i + page_ * 16;
             const Step &s = pattern.tracks[selected_].steps[step];
             const bool trig = (s.flags & kStepTrig) != 0;
@@ -696,8 +800,8 @@
             if (step == playhead && status.running.load(std::memory_order_relaxed)) red = 10;
             leds_.step(i, red, green);
         }
-        if (launch_page() && !value_pushed_) light_launch_steps();
-        if (value_pushed_ && !mute_mode_ && mode_ != Mode::menu) light_perf_steps();
+        if (launch_overlay) light_launch_steps();
+        if (perf_overlay) light_perf_steps();
 
         for (int t = 0; t < kTracks && mode_ != Mode::keys; t++) {
             const Rgb colour = kTrackColour[t];
@@ -732,12 +836,16 @@
         // KEYS (its second press) and red in the FUNC menu ("system").
         leds_.key(ENAGA_KEY_F4, mode_ == Mode::keys || mode_ == Mode::menu ? 8 : 0,
                   mode_ == Mode::grid || mode_ == Mode::keys ? 8 : 0);
-        leds_.key(ENAGA_KEY_F3, mode_ == Mode::samples ? 8 : 0, mode_ == Mode::project ? 8 : 0);
+        leds_.key(ENAGA_KEY_F3, mode_ == Mode::samples ? 8 : 0,
+                  mode_ == Mode::project || project_down_ ? 8 : 0);
         leds_.key(ENAGA_KEY_F7, mode_ == Mode::perform ? 8 : 0, mode_ == Mode::mixer ? 8 : 0);
         leds_.key(ENAGA_KEY_F8, mode_ == Mode::machine || mode_ == Mode::kit ? 8 : 0,
                   mode_ == Mode::edit ? 8 : 0);
-        // REC is red while recording, and green on RESAMPLE ("sampling").
-        leds_.key(ENAGA_KEY_F2, rec_ ? 8 : 0, mode_ == Mode::resample ? 8 : 0);
+        // REC is red while recording, and green on RESAMPLE ("sampling"). JAM REC blinks it a dim
+        // red in time with the top bar's dot, so a running jam shows from a step back.
+        // ARR REC blinks it the same way.
+        leds_.key(ENAGA_KEY_F2, rec_ ? 8 : (jam_mark_on() || arr_mark_on() ? 4 : 0),
+                  mode_ == Mode::resample ? 8 : 0);
         // FUNC lights while it is held, so a chord shows it is being read as one.
         leds_.key(ENAGA_KEY_F1, 0, shift_ ? 8 : 0);
 

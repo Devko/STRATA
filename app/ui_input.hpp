@@ -12,6 +12,9 @@
         // key, knob or pad while it is down means the hand knew, and the help stays away.
         // A held LEN key repeats until it, or FUNC, comes up (update).
         if (!down && key == len_repeat_key_) len_repeat_key_ = -1;
+        // Which screen keys are down: both together with FUNC put TRANSPOSE back to 0.
+        if (key == ENAGA_KEY_SELECT_LEFT) sel_left_down_ = down;
+        if (key == ENAGA_KEY_SELECT_RIGHT) sel_right_down_ = down;
         if (key == ENAGA_KEY_F1) {
             // A quick tap of FUNC alone said nothing, and nothing on the panel said the help
             // exists (usability review, 2026-11-28): the tap names it. Never over another
@@ -31,15 +34,14 @@
             }
             return;
         }
-        // While the help shows, the screen keys (or LEFT/RIGHT) turn its pages, as they turn the
-        // screen's own. FUNC + these four does nothing anywhere else (docs/CONTROLS.md), and
-        // only once the help is up, so no chord changes meaning.
-        if (func_help_showing() &&
-            (key == ENAGA_KEY_SELECT_LEFT || key == ENAGA_KEY_SELECT_RIGHT ||
-             key == ENAGA_KEY_LEFT || key == ENAGA_KEY_RIGHT)) {
+        // While the help shows, LEFT/RIGHT turn its pages. FUNC + these two does nothing
+        // anywhere else (docs/CONTROLS.md), and only once the help is up, so no chord changes
+        // meaning. The screen keys turned them too until FUNC + a screen key became TRANSPOSE
+        // (2026-11-28): one gesture that sometimes paged the help instead would be no gesture.
+        if (func_help_showing() && (key == ENAGA_KEY_LEFT || key == ENAGA_KEY_RIGHT)) {
             if (down) {
                 const int pages = help_page_count(help_place());
-                const int delta = key == ENAGA_KEY_SELECT_LEFT || key == ENAGA_KEY_LEFT ? -1 : 1;
+                const int delta = key == ENAGA_KEY_LEFT ? -1 : 1;
                 help_page_ = (help_page_ + delta + pages) % pages;
             }
             return;
@@ -47,6 +49,18 @@
         if (down) shift_alone_ = false;
         // Any other key between two PROJECT presses makes them two presses, not a double tap.
         if (down && key != ENAGA_KEY_F3) project_tapped_ = false;
+        // PROJECT opens on its RELEASE, so that a STEP pressed while it is held can queue a
+        // pattern instead, on whatever screen is up (on_project_hold). `project_open_` is set by
+        // the press below, where every guard a press of PROJECT has always had still applies.
+        if (key == ENAGA_KEY_F3) {
+            const bool open = !down && project_open_;
+            project_down_ = down && !shift_;
+            project_open_ = false;
+            if (open) {
+                open_project();
+                return;
+            }
+        }
         // A press of VALUE on its own, let go with nothing turned or pressed in between, resets
         // what VALUE is on to 0 (Roland, 2026-11-23; value_reset). Held, it stays the modifier
         // for swing, STEP, LEFT/RIGHT and CLR, which is why it acts on the RELEASE.
@@ -72,37 +86,52 @@
         if (name_entry_.active()) {
             const enaga::ui::Action action = name_entry_.key(key, down);
             if (action == enaga::ui::Action::chosen) {
-                if (entry_for_ == EntryFor::rename) {
-                    finish_rename();
-                } else {
-                    finish_save_as();
+                switch (entry_for_) {
+                    case EntryFor::rename: finish_rename(); break;
+                    case EntryFor::save_as: finish_save_as(); break;
+                    case EntryFor::sound_save:
+                    case EntryFor::sound_replace: finish_sound_save(); break;
+                    case EntryFor::sound_rename: finish_sound_rename(); break;
                 }
             }
             if (action == enaga::ui::Action::no) notice("NAME KEPT");
             return;
         }
 
-        // PROJECT's slots: a held OK opens the pattern menu, which then takes its keys.
-        if (on_slot_menu_key(key, down)) return;
-        // GRID: a held OK opens the track menu (GEN and EVOLVE), which then takes its keys.
-        if (on_track_menu_key(key, down)) return;
-        // PROJECT's LAUNCH page: STEP, OK, CLR, the arrows and push B are its own.
-        if (on_launch_key(key, down)) return;
-
-        // FUNC + push D was the held tape stop until 2026-11-25 (backlog D5): one home per job,
-        // and the tape stop's is the mixer's slot 8. The chord says where it went rather than
-        // falling through to a page's push, which would do something nobody meant. Not while a
-        // STEP is held: then FUNC + push D toggles the slide of that step's D lock, as FUNC +
-        // push A-C do theirs -- every push with a step held is the step's.
-        //
-        // In PERFORM it is LIVE RND's other half (core/liverand.hpp): the selected track in or out
-        // of the armed set, heard at once while a unit is on.
-        if (key == ENAGA_KEY_PUSH_D && shift_ && held_step_ < 0 && mode_ == Mode::perform) {
-            if (down) live_rnd_arm(selected_);
+        // FUNC + a screen key: TRANSPOSE (core/transpose.hpp), a semitone down or up; both
+        // together, back to 0. On every screen and over every list, menu and view, as VariSpeed
+        // is on FUNC + VALUE: a performance move works wherever the hands happen to be.
+        if (shift_ && (key == ENAGA_KEY_SELECT_LEFT || key == ENAGA_KEY_SELECT_RIGHT)) {
+            const int delta = key == ENAGA_KEY_SELECT_LEFT ? -1 : 1;
+            if (down) transpose_press(delta);
+            else if (transpose_pending_ == delta) transpose_commit();   // a tap inside the wait
             return;
         }
+
+        // PROJECT's slots: a held OK opens the pattern menu, which then takes its keys.
+        if (on_slot_menu_key(key, down)) return;
+        // GRID and KEYS: a held OK opens the track menu (GEN and EVOLVE), which then takes its keys.
+        if (on_track_menu_key(key, down)) return;
+        // PROJECT held: the STEP keys queue a pattern, on any screen.
+        if (on_project_hold(key, down)) return;
+        // PROJECT's LAUNCH page: STEP, OK, CLR, the arrows and push B are its own.
+        if (on_launch_key(key, down)) return;
+        // CHAIN's SECTION view (app/ui_section.hpp): push A on an entry opens it, and while it is
+        // up the arrows, OK, CLR, the screen keys and the pushes are its own.
+        if (on_section_key(key, down)) return;
+        if (key == ENAGA_KEY_PUSH_A && mode_ == Mode::project &&
+            project_page_ == ProjectPage::chain && !shift_ && held_step_ < 0) {
+            if (down) section_open();
+            return;
+        }
+
+        // FUNC + push D is the kill EQ's fourth switch on every screen (Roland, 2026-11-28, D2):
+        // all three bands out, or all back. It was the held tape stop until 2026-11-25, then
+        // LIVE RND's track toggle in PERFORM, which is FUNC + lower pad there now. Not while a
+        // STEP is held: then FUNC + push D toggles the slide of that step's D lock, as FUNC +
+        // push A-C do theirs -- every push with a step held is the step's.
         if (key == ENAGA_KEY_PUSH_D && shift_ && held_step_ < 0) {
-            if (down) notice_logged("TAPE STOP: SLOT 8");
+            if (down) toggle_kill_all();
             return;
         }
 
@@ -361,6 +390,20 @@
                              : key == ENAGA_KEY_PUSH_C ? 2 : 3;
             if (down) toggle_chorus_send((mixer_bank_ - kMixerChorusSendPage) * 4 + slot);
             return;
+        }
+
+        // The line input: push A on IN or IN+ turns it on and off, push D on IN+ steps its GAIN.
+        // B and C have no push there, as on most MIXER pages.
+        if ((key == ENAGA_KEY_PUSH_A || key == ENAGA_KEY_PUSH_D) && mode_ == Mode::mixer &&
+            mixer_input_page(mixer_bank_) && !shift_) {
+            if (key == ENAGA_KEY_PUSH_A) {
+                if (down) toggle_input();
+                return;
+            }
+            if (mixer_bank_ == kMixerInputPage + 1) {
+                if (down) step_input_gain();
+                return;
+            }
         }
 
         // The ambient modes: push A on DLY+ or REV+ throws that send's mode, CLAS to LONG or
@@ -643,6 +686,12 @@
 
             case ENAGA_KEY_F2:                         // REC, or F1 + F2 for resample setup
                 if (shift_) {
+                    // Pressed again on RESAMPLE it is JAM REC, on or off: the whole jam to the
+                    // card, beside the takes it already makes (as FUNC + EDIT twice is KIT).
+                    if (mode_ == Mode::resample) {
+                        toggle_jam(false);
+                        break;
+                    }
                     // docs/SPEC.md's key table gives F1 + F2 to "Resample setup". A mode rather
                     // than a one-shot, because a take has two settings to choose -- how many
                     // bars and where it lands -- and OK is what commits it.
@@ -671,24 +720,14 @@
                     open_samples();
                     break;
                 }
-                // PROJECT double-tapped opens LAUNCH, as HOME double-tapped opens KEYS (Track
-                // Launch): the second press within kDoubleTapMs, with no other key between.
-                {
-                    const bool double_tap = mode_ == Mode::project && project_tapped_ &&
-                                            uint32_t(last_ms_ - project_tapped_at_ms_) < kDoubleTapMs;
-                    project_tapped_ = !double_tap;
-                    project_tapped_at_ms_ = last_ms_;
-                    if (double_tap) {
-                        project_page_ = ProjectPage::launch;
-                        notice(project_page_name(project_page_));
-                        break;
-                    }
+                // A STEP held as a modifier: PROJECT opens at once, as it always did, and ends
+                // the hold (leave_mode). Otherwise it waits for the release, because a STEP
+                // pressed meanwhile queues that slot and PROJECT never opens (on_project_hold).
+                if (held_step_ >= 0) {
+                    open_project();
+                    break;
                 }
-                mode_ = Mode::project;
-                leave_mode();
-                // Back on PROJECTS: the list it shares with the sample browser may hold samples
-                // now, so it is read again.
-                if (project_page_ == ProjectPage::files) list_projects();
+                project_open_ = true;
                 break;
             case ENAGA_KEY_F4:                         // HOME: GRID and KEYS; FUNC: "system", the menu
                 if (shift_) {
@@ -927,7 +966,12 @@
                 // The take's length, A's other way in.
                 take_bars_index_ = (take_bars_index_ + delta + kTakeBarChoices) % kTakeBarChoices;
                 break;
-            case Mode::mixer:                   // nothing is selected by row on the mixer
+            case Mode::mixer:
+                // Nothing is selected by row on the mixer, so UP/DOWN jump a group of pages: the
+                // levels, the duck, the widths, the delay, the reverb, the chorus, the master.
+                mixer_bank_ = mixer_group_jump(mixer_bank_, delta);
+                notice_logged(kMixerPages[mixer_bank_].name);
+                break;
             case Mode::project:                 // PROJECT, PERFORM and KIT have their own handlers
             case Mode::perform:
             case Mode::kit:
@@ -1046,6 +1090,51 @@
         if (held_step_ < 0) return;
         release_hold();
         end_gesture();
+    }
+
+    // PROJECT, opened by a press of its key let go with no STEP in between.
+    void open_project() {
+        // PROJECT double-tapped opens LAUNCH, as HOME double-tapped opens KEYS (Track Launch):
+        // the second press within kDoubleTapMs, with no other key between. Timed release to
+        // release, since that is when PROJECT opens.
+        const bool double_tap = mode_ == Mode::project && project_tapped_ &&
+                                uint32_t(last_ms_ - project_tapped_at_ms_) < kDoubleTapMs;
+        project_tapped_ = !double_tap;
+        project_tapped_at_ms_ = last_ms_;
+        if (double_tap) {
+            project_page_ = ProjectPage::launch;
+            notice(project_page_name(project_page_));
+            return;
+        }
+        mode_ = Mode::project;
+        leave_mode();
+        // Back on PROJECTS: the list it shares with the sample browser may hold samples now, so
+        // it is read again.
+        if (project_page_ == ProjectPage::files) list_projects();
+    }
+
+    // Hold PROJECT + STEP n: queue slot n of the shown bank (the one PROJECT last showed) from
+    // any screen, without leaving it, so a pattern change in a jam is one chord rather than
+    // PROJECT, STEP, HOME (usability review, 2026-11-28). The change lands as PROJECT's own
+    // queue does, by QUEUE mode. PROJECT's release then opens nothing. Taken ahead of every
+    // screen's own STEP meaning, PROJECT's CHAIN page and KIT's slots included: the chord is
+    // the same everywhere. The STEP keys the chord took keep their releases from the screen
+    // under it, which would otherwise toggle a trig nobody pressed.
+    bool on_project_hold(int key, bool down) {
+        if (key < ENAGA_KEY_STEP1 || key >= ENAGA_KEY_STEP1 + 16) return false;
+        const int slot = key - ENAGA_KEY_STEP1;
+        const uint16_t bit = uint16_t(1u << slot);
+        if (!down) {
+            if ((project_steps_ & bit) == 0) return false;
+            project_steps_ = uint16_t(project_steps_ & ~bit);
+            return true;
+        }
+        if (!project_down_) return false;
+        project_steps_ = uint16_t(project_steps_ | bit);
+        project_open_ = false;
+        if (mode_ == Mode::project) slot_cursor_ = slot;
+        queue_shown_pattern(slot, true);
+        return true;
     }
 
     void leave_mode() {
@@ -1267,7 +1356,7 @@
         post(Cmd::set_track_speed, uint8_t(selected_), 0, uint8_t(kSpeedDisplayOrder[index]));
         end_gesture();
         echo(Echo::layout);                    // as the length: GRID was the only screen with it
-        // Logged, one line a press, as TRACK PLAY's: the emulator cannot read the screen
+        // Logged, one line a press, as PLAY's: the emulator cannot read the screen
         // (tests/scenario_triplets.sh). "T1 SPEED 3/2".
         char line[20];
         char *out = line;

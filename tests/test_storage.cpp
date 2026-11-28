@@ -519,6 +519,7 @@ const Expect kTable[] = {
     {Cmd::set_sends, kDirtyProject, "set_sends"},
     {Cmd::set_master, kDirtyProject, "set_master"},
     {Cmd::set_duck, kDirtyKit, "set_duck"},
+    {Cmd::set_input, kDirtyProject, "set_input"},
     // The kill EQ's switches, in the same section as the master bytes.
     {Cmd::eq_kill, kDirtyProject, "eq_kill"},
     // The live-record quantize amount. PROJECT.BIN has had a field for it since M4 and nothing
@@ -528,6 +529,10 @@ const Expect kTable[] = {
     {Cmd::restart, 0u, "restart"},
     // The chain's entries are PROJECT.BIN's second section.
     {Cmd::chain_edit, kDirtyProject, "chain_edit"},
+    // ARR REC empties the chain as it starts, and ARR UNDO swaps it. The passes a take writes
+    // come with no command: App marks them from Status::arr_passes.
+    {Cmd::arr_rec, kDirtyProject, "arr_rec"},
+    {Cmd::arr_undo, kDirtyProject, "arr_undo"},
 
     // --- the performance layer --------------------------------------------
     //
@@ -582,11 +587,17 @@ const Expect kTable[] = {
     // MIDI OUT's channel per track is PROJECT.BIN's fifth section: cabling, not a sound, so not
     // the kit (core/project.hpp).
     {Cmd::set_midi_out, kDirtyProject, "set_midi_out"},
+    // PROG CHG OUT on the end of the same section; the MIDI CH is Enaga's and a song position is
+    // live state, so neither touches a file.
+    {Cmd::set_program_out, kDirtyProject, "set_program_out"},
+    {Cmd::set_midi_channel, 0u, "set_midi_channel"},
+    {Cmd::locate, 0u, "locate"},
 
     // A factory sound writes a track's parameters (core/sounds.hpp), as a knob does. The keep
     // form writes nothing, but one row covers the command: dirtying the kit for it costs a
     // rewrite of KIT.BIN at most.
     {Cmd::sound_preset, kDirtyKit, "sound_preset"},
+    {Cmd::sound_bytes, kDirtyKit, "sound_bytes"},
     {Cmd::arp_preset, kDirtyKit, "arp_preset"},
     {Cmd::set_arp_ext, kDirtyKit, "set_arp_ext"},
 
@@ -611,6 +622,10 @@ const Expect kTable[] = {
     {Cmd::set_live_rnd, 0u, "set_live_rnd"},
     // ENERGY too (core/energy.hpp).
     {Cmd::set_energy, 0u, "set_energy"},
+    // TRANSPOSE too (core/transpose.hpp): the notes stay as written.
+    {Cmd::set_transpose, 0u, "set_transpose"},
+    // VariSpeed too (core/varispeed.hpp): the project keeps its own tempo.
+    {Cmd::set_varispeed, 0u, "set_varispeed"},
     // An audition is heard, not kept: the track and the project are untouched.
     {Cmd::audition_start, 0u, "audition_start"},
     {Cmd::audition_stop, 0u, "audition_stop"},
@@ -819,12 +834,12 @@ TEST(storage_every_file_of_a_project_round_trips_through_the_card) {
 
     // The sizes tests/test_project.cpp pins from the serializer, reached here through the real
     // card protocol: a file that came out a different size means the two have drifted apart.
-    CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN")), 450);
-    CHECK_EQ(project_bytes(), 450u);
-    CHECK_EQ(host.file_bytes(card_path("KIT.BIN")), 1506);
-    CHECK_EQ(kit_bytes(), 1506u);
-    CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN")), 5121);
-    CHECK_EQ(perform_bytes(), 5121u);
+    CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN")), 998);
+    CHECK_EQ(project_bytes(), 998u);
+    CHECK_EQ(host.file_bytes(card_path("KIT.BIN")), 1550);
+    CHECK_EQ(kit_bytes(), 1550u);
+    CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN")), 5773);
+    CHECK_EQ(perform_bytes(), 5773u);
     for (int b = 0; b < kBanks; b++) {
         char name[12];
         CHECK(bank_file_name(b, name, int(sizeof name)));
@@ -1110,7 +1125,7 @@ TEST(storage_damage_is_reported_in_one_fixed_order) {
     CHECK(pump_until_idle());
     CHECK(storage().last_error() == nullptr);
     keep_pristine(kit);
-    CHECK_EQ(g_pristine_bytes, 1506u);
+    CHECK_EQ(g_pristine_bytes, 1550u);
 
     // A sanity pass first: the pristine file loads.
     CHECK(reload_now());
@@ -1732,9 +1747,9 @@ TEST(storage_an_autosave_writes_every_file_and_leaves_the_project_dirty) {
         }
         CHECK(host.has_file(card_path(kFiles[i], true)));
     }
-    CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN", true)), 450);
-    CHECK_EQ(host.file_bytes(card_path("KIT.BIN", true)), 1506);
-    CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN", true)), 5121);
+    CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN", true)), 998);
+    CHECK_EQ(host.file_bytes(card_path("KIT.BIN", true)), 1550);
+    CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN", true)), 5773);
 
     // Eleven files and SETTINGS.TXT, which carries the counter a later start compares.
     CHECK_EQ(host.saves() - saves_before, kFileN + 1);
@@ -5216,6 +5231,39 @@ TEST(storage_jams_are_numbered_and_never_replace_each_other) {
     host.remove_file(jam_path());
 }
 
+TEST(storage_a_jam_the_card_refuses_leaves_its_number_for_the_next) {
+    // A start that cannot make its file (here a full card) says why and takes no number: the
+    // next jam that does start is the very next one after the last real jam.
+    clean();
+    FakeHost &host = FakeHost::the();
+    CHECK(storage().request_jam_start());
+    char first[24];
+    std::snprintf(first, sizeof first, "%s", storage().jam_name());
+    pump(5);
+    storage().request_jam_stop();
+    CHECK(pump_until_jam_closed());
+    storage().take_jam_message();
+    const int number = std::atoi(first + 4);          // JAM_<n>.WAV
+    host.set_full(true);
+    CHECK(!storage().request_jam_start());
+    const char *why = storage().take_jam_message();
+    CHECK(why != nullptr && std::strncmp(why, "JAM: ", 5) == 0);
+    CHECK(!storage().jam_running());
+    CHECK(!storage().request_jam_start());           // twice: still no number spent
+    storage().take_jam_message();
+    host.set_full(false);
+    CHECK(storage().request_jam_start());
+    CHECK_EQ(std::atoi(storage().jam_name() + 4), number + 1);
+    pump(5);
+    storage().request_jam_stop();
+    CHECK(pump_until_jam_closed());
+    storage().take_jam_message();
+    char path[64];
+    std::snprintf(path, sizeof path, "/RECORD/%s", first);
+    host.remove_file(path);
+    host.remove_file(jam_path());
+}
+
 TEST(storage_a_jam_on_a_full_card_is_closed_cleanly_and_says_so) {
     clean();
     FakeHost &host = FakeHost::the();
@@ -5261,7 +5309,7 @@ TEST(storage_a_jam_stops_itself_at_its_length_limit) {
     host.remove_file(jam_path());
 }
 
-TEST(storage_a_card_too_slow_for_a_jam_drops_whole_blocks_and_counts_them) {
+TEST(storage_a_card_too_slow_for_a_jam_drops_what_does_not_fit_and_counts_it) {
     clean();
     FakeHost &host = FakeHost::the();
     CHECK(storage().request_jam_start());

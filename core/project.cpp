@@ -69,6 +69,8 @@
 //         2   1  depth, -127..127 as a two's-complement byte
 //     choke (id 11), 8 x 1 byte: KitTrack::choke, 0 none or a group 1-4
 //     arp ext (id 12), 8 x 4 bytes: KitTrack::arp, VAR RHYTHM ACCENT RATCHET (core/arp.hpp)
+//     lfo layout (id 13), chorus (id 14), width (id 15): see core/project.hpp
+//     scn (id 16), 8 x 4 bytes: the SCN page's parameters, 40-43 (absent: kKitScnDefault)
 //
 // BANK_x.BIN, one section holding 16 patterns, each one `pattern_write`'s own container back to
 // back. The patterns are the section's bytes, so the bank's CRC covers them as well as its own
@@ -310,7 +312,7 @@ SerializeResult find_sections(const uint8_t *buffer, uint32_t size, uint16_t ver
 
 // --- PROJECT.BIN sizes ----------------------------------------------------
 
-constexpr uint32_t kProjectSections = 8;
+constexpr uint32_t kProjectSections = 10;
 constexpr uint32_t kProjectSettingsBytes = 19;
 constexpr uint32_t kProjectChainBytes = uint32_t(kChainEntries) * 3;
 // The sends, the master bytes and the kill switches. The section GREW when the kill EQ came
@@ -337,7 +339,10 @@ constexpr uint32_t kProjectLiveOffset = kProjectMixerOffset + kProjectMixerBytes
 // Song mode: the SONG switch, then each chain entry's mute recall.
 constexpr uint32_t kProjectSongBytes = 1 + uint32_t(kChainEntries);
 constexpr uint32_t kProjectSongOffset = kProjectLiveOffset + kProjectLiveBytes;
-constexpr uint32_t kProjectMidiBytes = uint32_t(kTracks);   // MIDI OUT channel per track
+// The MIDI section: each track's MIDI OUT channel, then PROG CHG OUT (2026-11-28) on the end. A
+// section that stops after the channels is a file from before it, which sent no program changes.
+constexpr uint32_t kProjectMidiBytesV1 = uint32_t(kTracks);   // MIDI OUT channel per track
+constexpr uint32_t kProjectMidiBytes = kProjectMidiBytesV1 + 1;
 constexpr uint32_t kProjectMidiOffset = kProjectSongOffset + kProjectSongBytes;
 // EVOLVE: each track's period, then mode, mutation and amount.
 constexpr uint32_t kProjectEvolveBytes = uint32_t(kTracks) + 3;
@@ -345,14 +350,21 @@ constexpr uint32_t kProjectEvolveOffset = kProjectMidiOffset + kProjectMidiBytes
 // Track Launch: each lane's source, then the pin mask.
 constexpr uint32_t kProjectLaunchBytes = uint32_t(kTracks) + 1;
 constexpr uint32_t kProjectLaunchOffset = kProjectEvolveOffset + kProjectEvolveBytes;
-constexpr uint32_t kProjectTotalBytes = kHeaderBytes + kProjectLaunchOffset + kProjectLaunchBytes;
+// The line input's strip, one byte a field.
+constexpr uint32_t kProjectInputBytes = uint32_t(kInputFields);
+constexpr uint32_t kProjectInputOffset = kProjectLaunchOffset + kProjectLaunchBytes;
+// The song sections: a layout byte, then a record per chain entry.
+constexpr uint32_t kSectionRecordBytes = 8;
+constexpr uint8_t kSectionLayout = 0;
+constexpr uint32_t kProjectSectionsBytes = 1 + uint32_t(kChainEntries) * kSectionRecordBytes;
+constexpr uint32_t kProjectSectionsOffset = kProjectInputOffset + kProjectInputBytes;
+constexpr uint32_t kProjectTotalBytes = kHeaderBytes + kProjectSectionsOffset + kProjectSectionsBytes;
 
-// How many of `wanted` at the END of the list a reader may do without. Six: the mixer, the
-// live, the song, the MIDI, the EVOLVE and the launch sections, none of which existed when the
-// format was first written, so a PROJECT.BIN from before them has two to seven sections and must
-// still load
-// (core/project.hpp).
-constexpr uint32_t kProjectOptionalSections = 6;
+// How many of `wanted` at the END of the list a reader may do without. Eight: the mixer, the
+// live, the song, the MIDI, the EVOLVE, the launch, the input and the song-section sections, none
+// of which existed when the format was first written, so a PROJECT.BIN from before them has two
+// to nine sections and must still load (core/project.hpp).
+constexpr uint32_t kProjectOptionalSections = 8;
 
 static_assert(sizeof(ProjectSettings::mute_states) == 8,
               "the settings section is 19 bytes on the strength of 8 mute states");
@@ -365,13 +377,13 @@ static_assert(kProjectMixerBytes == sizeof(ProjectSettings::sends) +
 
 // --- KIT.BIN sizes --------------------------------------------------------
 
-constexpr uint32_t kKitSections = 15;
+constexpr uint32_t kKitSections = 16;
 // The second to eleventh, the LFO, the arp, SLC AUTO, the ASR page, the duck, the OSC page, the
 // filter layout, LFO TRIG, the mod slots, the choke groups, the arp's settings, the LFO layout,
-// the chorus sends and the widths, are optional
+// the chorus sends, the widths and the SCN page, are optional
 // on read: see
 // kSectionKitLfo.
-constexpr uint32_t kKitOptionalSections = 14;
+constexpr uint32_t kKitOptionalSections = 15;
 constexpr uint32_t kKitTrackBytes =
     uint32_t(kKitSoundParams) + 1 + 2 + uint32_t(kSamplePathBytes);
 constexpr uint32_t kKitTracksBytes = kKitTrackBytes * uint32_t(kTracks);
@@ -406,7 +418,9 @@ constexpr uint32_t kKitChorusBytes = uint32_t(kTracks);
 constexpr uint32_t kKitChorusOffset = kKitLfoLayoutOffset + kKitLfoLayoutBytes;
 constexpr uint32_t kKitWidthBytes = uint32_t(kTracks);
 constexpr uint32_t kKitWidthOffset = kKitChorusOffset + kKitChorusBytes;
-constexpr uint32_t kKitTotalBytes = kHeaderBytes + kKitWidthOffset + kKitWidthBytes;
+constexpr uint32_t kKitScnBytes = uint32_t(kKitScnParams) * uint32_t(kTracks);
+constexpr uint32_t kKitScnOffset = kKitWidthOffset + kKitWidthBytes;
+constexpr uint32_t kKitTotalBytes = kHeaderBytes + kKitScnOffset + kKitScnBytes;
 static_assert(kKitSoundParams == 16, "KIT.BIN's track section has carried 16 parameters since M4");
 
 // --- BANK_x.BIN sizes -----------------------------------------------------
@@ -444,6 +458,9 @@ void kit_clear(Kit &kit) {
         kit.tracks[t].machine = uint8_t(kDefaultMachines[t]);
         // A zero TON is the darkest low-pass, not "off" (D8): a blank synth track starts flat.
         if (machine_has_voice_filter(kit.tracks[t].machine)) kit.tracks[t].params[kSlotTone] = kToneFlat;
+        // SCN as a kit from before it loads: no scan, but END and SPD where a turn of MOD is
+        // heard at once.
+        for (int p = 0; p < kKitScnParams; p++) kit.tracks[t].params[kKitScnFirst + p] = kKitScnDefault[p];
     }
 }
 
@@ -457,6 +474,7 @@ void project_init(Project &project) {
     project.settings = ProjectSettings{};
     kit_clear(project.kit);
     for (int i = 0; i < kChainEntries; i++) project.chain[i] = ChainEntry{};
+    for (int i = 0; i < kChainEntries; i++) project.chain_extra[i] = SectionExtra{};
     for (int bank = 0; bank < kBanks; bank++) {
         for (int slot = 0; slot < kPatternsPerBank; slot++) {
             pattern_init(project.patterns[bank][slot]);
@@ -502,6 +520,8 @@ SerializeResult project_write(const Project &project, uint8_t *buffer, uint32_t 
         {kSectionProjectMidi, kProjectMidiOffset, kProjectMidiBytes},
         {kSectionProjectEvolve, kProjectEvolveOffset, kProjectEvolveBytes},
         {kSectionProjectLaunch, kProjectLaunchOffset, kProjectLaunchBytes},
+        {kSectionProjectInput, kProjectInputOffset, kProjectInputBytes},
+        {kSectionProjectSections, kProjectSectionsOffset, kProjectSectionsBytes},
     };
 
     Writer w(buffer, capacity);
@@ -545,21 +565,40 @@ SerializeResult project_write(const Project &project, uint8_t *buffer, uint32_t 
     w.u8(s.scene_b);
 
     w.u8(s.chain_song ? 1 : 0);
-    for (int i = 0; i < kChainEntries; i++) w.u8(project.chain[i].mutes);
+    // A CAP entry keeps `mutes` at 0 (core/queue.cpp), so an older build reads `--` here and
+    // leaves the mutes alone rather than reading a value it does not know. Written as 0 here
+    // too, so a damaged pair in memory still says `--` to an older build.
+    for (int i = 0; i < kChainEntries; i++) {
+        w.u8(project.chain_extra[i].cap != 0 ? uint8_t(0) : project.chain[i].mutes);
+    }
     for (int t = 0; t < kTracks; t++) w.u8(s.midi_out[t]);
+    w.u8(s.program_out ? 1 : 0);
     for (int t = 0; t < kTracks; t++) w.u8(s.evolve_period[t]);
     w.u8(s.evolve_mode);
     w.u8(s.evolve_kind);
     w.u8(s.evolve_amount);
     for (int t = 0; t < kTracks; t++) w.u8(s.lane_source[t]);
     w.u8(s.lane_pinned);
+    for (int i = 0; i < kInputFields; i++) w.u8(s.input[i]);
+
+    w.u8(kSectionLayout);
+    for (int i = 0; i < kChainEntries; i++) {
+        const SectionExtra &e = project.chain_extra[i];
+        w.u8(e.cap);
+        w.u8(e.mask);
+        w.u8(e.scene);
+        w.u8(e.morph);
+        w.u8(e.energy);
+        w.u16(e.bpm);
+        w.u8(e.transpose);   // TRN, in what was a reserved byte: older builds ignore it
+    }
 
     if (!w.ok() || w.size() != kProjectTotalBytes) return SerializeResult::buffer_too_small;
     return finish_container(w, buffer, kProjectTotalBytes, written);
 }
 
-// `-fno-unroll-loops` for THIS FUNCTION ONLY, and it is a compiler bug rather than anything
-// about the code.
+// Lower optimisation for THIS FUNCTION ONLY (first `-fno-unroll-loops`, now `-O1`), and it is a
+// compiler bug rather than anything about the code.
 //
 // GCC 13.3.0 for tic6x-elf crashes compiling this function with `-O2 -funroll-loops`, which is
 // what Enaga's build_app.py passes: an internal compiler error in the instruction scheduler,
@@ -574,10 +613,21 @@ SerializeResult project_write(const Project &project, uint8_t *buffer, uint32_t 
 // the cost is that the chain and track loops in a project LOAD are not unrolled -- a load, in
 // the main context, once per project.
 //
+// Now `-O1` for this function, because the song sections (PROJECT.BIN section 10) grew it and
+// it crashed again with unrolling already off, this time in the C6x delay-slot pass after
+// scheduling: "in reorg_emit_nops, at config/c6x/c6x.cc:5088", "in emit_nop_after" at :4706, or
+// a segfault. The message changes from run to run; the failure does not (5 of 5, 2026-11-28).
+// Tried and still crashing: the new read loop moved into a noinline function, the refuse
+// lambda's two loops merged, its body made a noinline function, and
+// `optimize("no-schedule-insns2")` (that one works on the command line but not as a pragma:
+// the C6x backend reads the flag once for the whole file). `-O1` compiles 5 of 5: no scheduler
+// runs, so it also stays clear of the haifa-sched crash above. The cost is a less optimised
+// project LOAD, the same once-per-project path in the main context.
+//
 // To be reported upstream with this file as the failing case. If a later toolchain fixes it,
 // delete the pragma and this comment together.
 #pragma GCC push_options
-#pragma GCC optimize("no-unroll-loops")
+#pragma GCC optimize("O1")
 SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t size) {
     // Every refusal goes through here, so a refused load leaves the defaults rather than half a
     // file -- but only of what PROJECT.BIN owns. The patterns are deliberately untouched: they
@@ -586,17 +636,20 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
     const auto refuse = [&project](SerializeResult why) {
         project.settings = ProjectSettings{};
         for (int i = 0; i < kChainEntries; i++) project.chain[i] = ChainEntry{};
+        for (int i = 0; i < kChainEntries; i++) project.chain_extra[i] = SectionExtra{};
         project.bank = 0;
         project.slot = 0;
         return why;
     };
 
-    // The six optional sections (mixer, live, song, MIDI, EVOLVE, launch) come LAST:
-    // kProjectOptionalSections.
+    // The eight optional sections (mixer, live, song, MIDI, EVOLVE, launch, input, song
+    // sections) come LAST: kProjectOptionalSections.
     const uint16_t wanted[kProjectSections] = {kSectionProjectSettings, kSectionProjectChain,
                                                kSectionProjectMixer, kSectionProjectLive,
                                                kSectionProjectSong, kSectionProjectMidi,
-                                               kSectionProjectEvolve, kSectionProjectLaunch};
+                                               kSectionProjectEvolve, kSectionProjectLaunch,
+                                               kSectionProjectInput,
+                                               kSectionProjectSections};
     uint32_t offset[kProjectSections] = {};
     uint32_t length[kProjectSections] = {};
     const SerializeResult found =
@@ -616,7 +669,7 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
     if (offset[4] != 0 && length[4] < kProjectSongBytes) {
         return refuse(SerializeResult::malformed);
     }
-    if (offset[5] != 0 && length[5] < kProjectMidiBytes) {
+    if (offset[5] != 0 && length[5] < kProjectMidiBytesV1) {
         return refuse(SerializeResult::malformed);
     }
     if (offset[6] != 0 && length[6] < kProjectEvolveBytes) {
@@ -625,6 +678,7 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
     if (offset[7] != 0 && length[7] < kProjectLaunchBytes) {
         return refuse(SerializeResult::malformed);
     }
+    if (offset[9] != 0 && length[9] < 1) return refuse(SerializeResult::malformed);
 
     Reader r(buffer, size);
     if (!r.seek(kHeaderBytes + offset[0])) return refuse(SerializeResult::malformed);
@@ -754,12 +808,16 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
     // The MIDI OUT channels: absent is an older file, where no track sent MIDI. A byte past 16
     // is damage and turns that track's MIDI out off rather than onto some channel nobody chose.
     for (int t = 0; t < kTracks; t++) s.midi_out[t] = kMidiOutOff;
+    s.program_out = false;
     if (offset[5] != 0) {
         if (!r.seek(kHeaderBytes + offset[5])) return refuse(SerializeResult::malformed);
         for (int t = 0; t < kTracks; t++) {
             const uint8_t channel = r.u8();
             s.midi_out[t] = channel <= kMidiChannels ? channel : kMidiOutOff;
         }
+        // PROG CHG OUT: only 1 is on, so damage leaves it off rather than sending program
+        // changes to gear nobody asked to have them.
+        s.program_out = length[5] >= kProjectMidiBytes && r.u8() == 1;
         if (!r.ok()) return refuse(SerializeResult::truncated);
     }
 
@@ -804,6 +862,56 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
         s.lane_pinned = pinned;
     }
 
+    // The line input: absent is an older file, where the input was never heard, so the strip
+    // takes the defaults (off) rather than whatever the reused buffer held. A section shorter
+    // than this build's is a file from before a field was appended: what it has is read, the rest
+    // defaults. Unlike the sections above, short is NOT damage here, because this section is
+    // meant to grow on the end.
+    {
+        const ProjectSettings defaults;
+        for (int i = 0; i < kInputFields; i++) s.input[i] = defaults.input[i];
+        if (offset[8] != 0) {
+            if (!r.seek(kHeaderBytes + offset[8])) return refuse(SerializeResult::malformed);
+            const int present = length[8] < kProjectInputBytes ? int(length[8]) : kInputFields;
+            for (int i = 0; i < present; i++) s.input[i] = input_field_sanitized(i, r.u8());
+            if (!r.ok()) return refuse(SerializeResult::truncated);
+        }
+    }
+
+    // The song sections: absent is an older file, where every field is `--`. A layout this build
+    // does not know is a newer writer's, read as absent rather than guessed at; so is a section
+    // too short for the layout it names. Each field out of its range is damage and reads `--`,
+    // and an entry the chain section left unused keeps the zeroed record, as its mute recall
+    // does. CAP wins over a mute recall on the same entry (only damage puts both there).
+    for (int i = 0; i < kChainEntries; i++) project.chain_extra[i] = SectionExtra{};
+    if (offset[9] != 0) {
+        if (!r.seek(kHeaderBytes + offset[9])) return refuse(SerializeResult::malformed);
+        const uint8_t layout = r.u8();
+        if (!r.ok()) return refuse(SerializeResult::truncated);
+        if (layout == kSectionLayout && length[9] >= kProjectSectionsBytes) {
+            for (int i = 0; i < kChainEntries; i++) {
+                const uint8_t cap = r.u8();
+                const uint8_t mask = r.u8();
+                const uint8_t scene = r.u8();
+                const uint8_t morph = r.u8();
+                const uint8_t energy = r.u8();
+                const uint16_t bpm = r.u16();
+                const uint8_t transpose = r.u8();   // 0 in files from before TRN
+                if (project.chain[i].repeats == 0) continue;
+                SectionExtra &e = project.chain_extra[i];
+                e.cap = cap == 1 ? uint8_t(1) : uint8_t(0);
+                e.mask = e.cap != 0 ? mask : uint8_t(0);
+                e.scene = scene <= kSectionScenesMax ? scene : uint8_t(0);
+                e.morph = morph <= kSectionMorphMax ? morph : kSectionMorphNone;
+                e.energy = energy <= kSectionEnergyMax ? energy : uint8_t(0);
+                e.bpm = bpm >= kTempoCentiMin && bpm <= kTempoCentiMax ? bpm : uint16_t(0);
+                e.transpose = transpose <= kSectionTransposeMax ? transpose : uint8_t(0);
+                if (e.cap != 0) project.chain[i].mutes = 0;
+            }
+            if (!r.ok()) return refuse(SerializeResult::truncated);
+        }
+    }
+
     // The live pattern. Not a user setting but project state: docs/SPEC.md reopens the last
     // project on start, and reopening it on A01 rather than where the user left off is a loss
     // these two bytes avoid.
@@ -846,6 +954,7 @@ SerializeResult kit_write(const Kit &kit, uint8_t *buffer, uint32_t capacity, ui
         {kSectionKitLfoLayout, kKitLfoLayoutOffset, kKitLfoLayoutBytes},
         {kSectionKitChorus, kKitChorusOffset, kKitChorusBytes},
         {kSectionKitWidth, kKitWidthOffset, kKitWidthBytes},
+        {kSectionKitScn, kKitScnOffset, kKitScnBytes},
     };
 
     Writer w(buffer, capacity);
@@ -874,7 +983,7 @@ SerializeResult kit_write(const Kit &kit, uint8_t *buffer, uint32_t capacity, ui
     w.u8(kit.duck.hold);
     w.u8(kit.duck.release);
     for (int t = 0; t < kTracks; t++) {
-        for (int p = kKitAsrEnd; p < kKitParams; p++) w.u8(kit.tracks[t].params[p]);
+        for (int p = kKitAsrEnd; p < kKitOscEnd; p++) w.u8(kit.tracks[t].params[p]);
     }
     w.u8(kKitFilterLayout);
     for (int t = 0; t < kTracks; t++) w.u8(kit.tracks[t].lfo_trig);
@@ -893,6 +1002,9 @@ SerializeResult kit_write(const Kit &kit, uint8_t *buffer, uint32_t capacity, ui
     w.u8(kLfoLayoutNumbers);
     for (int t = 0; t < kTracks; t++) w.u8(chorus_send_sanitized(kit.tracks[t].chorus));
     for (int t = 0; t < kTracks; t++) w.u8(width_sanitized(kit.tracks[t].width));
+    for (int t = 0; t < kTracks; t++) {
+        for (int p = kKitScnFirst; p < kKitParams; p++) w.u8(kit.tracks[t].params[p]);
+    }
 
     if (!w.ok() || w.size() != kKitTotalBytes) return SerializeResult::buffer_too_small;
     return finish_container(w, buffer, kKitTotalBytes, written);
@@ -909,7 +1021,7 @@ SerializeResult kit_read(Kit &kit, const uint8_t *buffer, uint32_t size) {
                                            kSectionKitOsc, kSectionKitFilter, kSectionKitLfoTrig,
                                            kSectionKitMod, kSectionKitChoke, kSectionKitArpExt,
                                            kSectionKitLfoLayout, kSectionKitChorus,
-                                           kSectionKitWidth};
+                                           kSectionKitWidth, kSectionKitScn};
     uint32_t offset[kKitSections] = {};
     uint32_t length[kKitSections] = {};
     const SerializeResult found = find_sections(buffer, size, kKitVersion, wanted, kKitSections,
@@ -931,6 +1043,7 @@ SerializeResult kit_read(Kit &kit, const uint8_t *buffer, uint32_t size) {
     if (offset[12] != 0 && length[12] < kKitLfoLayoutBytes) return refuse(SerializeResult::malformed);
     if (offset[13] != 0 && length[13] < kKitChorusBytes) return refuse(SerializeResult::malformed);
     if (offset[14] != 0 && length[14] < kKitWidthBytes) return refuse(SerializeResult::malformed);
+    if (offset[15] != 0 && length[15] < kKitScnBytes) return refuse(SerializeResult::malformed);
 
     Reader r(buffer, size);
     if (!r.seek(kHeaderBytes + offset[0])) return refuse(SerializeResult::malformed);
@@ -1014,7 +1127,7 @@ SerializeResult kit_read(Kit &kit, const uint8_t *buffer, uint32_t size) {
     if (offset[6] != 0) {
         if (!r.seek(kHeaderBytes + offset[6])) return refuse(SerializeResult::malformed);
         for (int t = 0; t < kTracks; t++) {
-            for (int p = kKitAsrEnd; p < kKitParams; p++) {
+            for (int p = kKitAsrEnd; p < kKitOscEnd; p++) {
                 kit.tracks[t].params[p] = clamp_u8(r.u8(), 0, kParamMax);
             }
         }
@@ -1124,6 +1237,25 @@ SerializeResult kit_read(Kit &kit, const uint8_t *buffer, uint32_t size) {
     if (offset[14] != 0) {
         if (!r.seek(kHeaderBytes + offset[14])) return refuse(SerializeResult::malformed);
         for (int t = 0; t < kTracks; t++) kit.tracks[t].width = width_sanitized(r.u8());
+        if (!r.ok()) return refuse(SerializeResult::truncated);
+    }
+
+    // The SCN page. Absent is a kit from before it: no scan (kKitScnDefault), set explicitly for
+    // the reason the LFO's section gives. MOD past the last mode is damage, read as the last. The
+    // hole between OSC and SCN is never stored and always 0.
+    for (int t = 0; t < kTracks; t++) {
+        for (int p = kKitOscEnd; p < kKitScnFirst; p++) kit.tracks[t].params[p] = 0;
+        for (int p = 0; p < kKitScnParams; p++) {
+            kit.tracks[t].params[kKitScnFirst + p] = kKitScnDefault[p];
+        }
+    }
+    if (offset[15] != 0) {
+        if (!r.seek(kHeaderBytes + offset[15])) return refuse(SerializeResult::malformed);
+        for (int t = 0; t < kTracks; t++) {
+            for (int p = kKitScnFirst; p < kKitParams; p++) {
+                kit.tracks[t].params[p] = clamp_u8(r.u8(), 0, kit_param_max(p));
+            }
+        }
         if (!r.ok()) return refuse(SerializeResult::truncated);
     }
     return SerializeResult::ok;

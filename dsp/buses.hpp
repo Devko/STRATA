@@ -277,6 +277,10 @@ public:
 
     InsertChain &chain(int track) { return chains_[track]; }
     const InsertChain &chain(int track) const { return chains_[track]; }
+    // The line input's strip (core/project.hpp, InputField): a ninth chain, prepared by the app
+    // like a track's with TON alone, PAN, the sends and the duck.
+    InsertChain &input_chain() { return input_chain_; }
+    const InsertChain &input_chain() const { return input_chain_; }
 
     // A mono scratch block for a machine to render into, big enough for kMaxFrames. The caller
     // clears it, the machine adds into it, add_track() consumes it in place.
@@ -295,6 +299,10 @@ public:
     void add_track_tapped(int track, float *mono, float *tap);
     // A stereo track's pair (InsertChain::process_pair); `tap` as add_track_tapped's, or nullptr.
     void add_pair(int track, float *left, float *right, float *tap);
+    // The audio input's interleaved L R L R block (audio()'s `in`) through the input chain and
+    // into the buses, as a stereo track's pair. Uses both scratch blocks, so call it between
+    // tracks, never with a track's block still in them.
+    void add_input(const float *interleaved, int frames);
     // The three sends, the master chain, and the interleaved L R L R result for audio().
     void finish_block(float *out, int frames);
 
@@ -317,6 +325,8 @@ public:
 private:
     // add_track_tapped and add_pair: `right` nullptr for a mono track.
     void add_any(int track, float *mono, float *right, float *tap);
+    // Any chain's block into the buses: the tails it feeds, then the chain itself.
+    void add_through(InsertChain &insert, float *mono, float *right, float *tap);
 
     // Settings to coefficients, only when the settings have actually changed.
     void resolve_sends(const SendSettings &sends);
@@ -335,6 +345,7 @@ private:
     int frames_ = 0;
 
     InsertChain chains_[kTracks];
+    InsertChain input_chain_;
     Duck duck_;
     bool duck_active_ = false;
 

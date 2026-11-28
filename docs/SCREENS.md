@@ -20,8 +20,8 @@ another, small labels end by x 125, two small labels on a line keep 2 blank pixe
 - **Stopped, a screen holds still and still looks right**: pictures are drawn from their knobs;
   analysers (spectrum, scope, meters) sit at rest; nothing moves on a timer of its own. Moving
   parts come from the audio side (an LFO's phase, a grain, a note's envelope) or from the running
-  transport. The control audit (`ui_audit_every_input_in_every_screen_shows_it_did_something`)
-  fails a screen that moves with no input.
+  transport. The control audit's `ui_audit_every_screen_holds_still_with_no_input` fails a
+  screen that moves with no input.
 - **A picture that plays a note through** (a drum's hit, the filter's sweep, the duck's dip)
   starts from the moment the UI saw the track's trigger count move (`update_track_triggers`,
   every frame on every screen). A count that moved while nothing was drawn for 200 ms is an old
@@ -95,6 +95,7 @@ Pictures by page and machine:
 | ROUTE | TRK into DLY and REV, both into OUT; D>R's wire as bright as it sends; ping-pong's L R; LONG's low cut; dots running along the wires while the beat plays |
 | CHO 1-4, CHO 5-8 | the desk with each track's chorus send standing up from the bottom of its strip, `OFF` or the amount under it |
 | CHO | knob line; the two sweeps over two seconds, L bright and R dim a quarter turn apart, as deep as DEP and as many as RAT turns, running while the beat plays; C>R as a bar beside `REV`; `TRACKS SEND ON CHO 1-4 5-8` |
+| IN, IN+ | knob line; the input's meter before the fader (every other row, the top 36 dB) beside the fader's slot, its cap and a unity tick; the jack and gain, `ON` or `OFF`, the pan as a tick on a line, DLY REV CHO as bars, the duck depth hanging from the top and dipping with the source; dim while off; `IN ON` / `IN OFF`, `PUSH A: ON` / `OFF`, `PUSH A ON/OFF D GAIN` |
 | MST | the draft: knob line (DJ CMP LIM); the spectrum, 24 bands of 5 px (4 lit) in rows 26-59, every other row, bright at the top, peaks held 12 frames; 100 / 1K / 10K at y 63; the vectorscope 42 x 42 at (0, 70), mid up and side across, afterglow; CMP's reduction and LIM falling from the top of two bars (x 50, 68; rows 72-109); GR and LUFS (momentary, K-weighted, 400 ms, from the scope history at 24 kHz) at x 88; LVL at (88, 106) |
 | EQ | FLT's frame with the kill EQ's curve (a shelf under 250 Hz, a bell, a shelf over 2.5 kHz; KILL 30 dB down), A B C on it, a lit `KILL` over a thrown band |
 
@@ -144,6 +145,7 @@ No caption repeats the screen's name: the tab says it, and so does the toast on 
 | SOUNDS | 18 `INTO T1 KCK ONLY`, the cursor's place at the right; 26-71 six presets; 77 the preset's name and whether it is the one playing; 81-104 its twenty knobs as bars, page by page (SRC FLT AMP ASR OSC, labels at 106), the track's own value a tick where it differs; a page the machine does not read dotted |
 | ARPS (#184) | SOUNDS' layout over the factory arps: 18 `INTO T7 ARP ONLY`, the cursor's place at the right; 26-71 six arps, `NOW` on the one the track plays; 77 the cursor's arp (or AS WAS) and `PLAYING NOW`; under it the arp in words, MOD RAT OCT GAT on one line and the kit settings on the next; 113 the keys |
 | CHAIN | 18 entries and SONG or LOOP, `ON` lit while the chain plays; 24-26 the whole song as a strip, each entry as long as its passes; 31-60 the lane: each entry a block as long as its passes (6 + steps/4 px a pass, 15-120), its pattern, `X2` and `M3` in it, the passes dotted, the cursor's framed bright, the playing one filled as far as it has got with the playhead; the song's end a double bar; 66 the cursor's entry (number lit, pattern and repeats in Enaga's font); 77-91 its pattern's steps (read once when the cursor moves onto it) and the mute state it recalls as eight boxes (hollow: muted); 105 and 113 the keys |
+| SECTION (`app/ui_section.hpp`) | 18 `SECT 2/5` (a badge while that entry plays) and the page, SECT or MOVE, at the right; 26 the two page tabs, the open one bright; 32-76 four rows 11 px apart: the knob's letter, the field's name and its value (`--` dim, a set value bright, MOVE's D `---`); 81-88 when MUT is a recall or CAP, the mute state as eight boxes (hollow: muted); 105 and 113 the keys. On CHAIN the cursor entry's other fields are a summary line at 96 (`S4 SNAP E+32 132BPM`), and the lane marks an entry with more than a mute recall with `+` |
 | KITS | 18 the page of slots, what the card is doing at the right; eight slots 11 px apart from 25: the number and the kit's eight machines as MACHINE's pictures (drawn once into a cache, `build_kit_icons`); the cursor's row lit with the machines' names; an empty slot a dotted line (the cursor's says how to save there); 113 the keys |
 | KEYS | 18 the key and scale, OCT at the right; 25-54 the pads as a keyboard (held pads white); 61 the held notes, lowest first, and the chord they make lit at the right (`C MAJ`, `A MIN7`); 72 the EDIT page A-D turn here; 77-110 its four knobs as gauges, name under, value under that; 113 which sixteen steps the STEP keys are |
 | PATTERN | 18 the live pattern; 26, 35, 44 LEN, SWG and FEEL as rows, SWG drawn at the right as a beat of sixteenths with the off-beats late; 55 `TRACK SWING`; 62-109 eight bars, 6 px a track: number, machine, a bar from 50% to the track's swing (75% at x 104), PAT ones dim at the pattern's swing, which is a dotted line down the bars; the value at the right; the cursor's row lit |
@@ -151,7 +153,8 @@ No caption repeats the screen's name: the tab says it, and so does the toast on 
 The track menu (hold OK in GRID, #195, `app/ui_trackmenu.hpp`) is MENU's kind of list: rows
 from y 20, 9 px apart, each row's name at the left and its value right-aligned before the
 meter, the cursor's row lit and kept in the middle while the list scrolls; 105 the selected
-track and `OK: RUN  CLR: BACK`, 113 `LEFT/RIGHT: CHANGE`.
+track and `OK: RUN  CLR: BACK`, 113 `LEFT/RIGHT: CHANGE`. Fifteen rows: GENERATE to HOME, then the
+track's SPEED, PLAY, FREEZE (`1 BAR`, `WAIT`, `REC`, `ON`) and RELOAD SAMPLE.
 
 MENU, SETUP and PROJECTS have no caption that names them: MENU's rows start at y 20 (nine of
 them), SETUP's caption is the device and `DRW` (Enaga's font, which the input audit masks as a

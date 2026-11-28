@@ -77,6 +77,19 @@ TEST(midiout_message_bytes_are_status_with_channel_and_seven_bit_data) {
     CHECK_EQ(int(m[1]), 123);
 }
 
+TEST(midiout_a_program_change_is_two_bytes_on_the_channel) {
+    uint8_t m[3] = {0, 0, 0xEE};
+    midi_program(m, 1, 0);
+    CHECK_EQ(int(m[0]), 0xC0);
+    CHECK_EQ(int(m[1]), 0);
+    CHECK_EQ(int(m[2]), 0xEE);                     // the third byte is not written
+    midi_program(m, 16, 127);
+    CHECK_EQ(int(m[0]), 0xCF);
+    CHECK_EQ(int(m[1]), 127);
+    midi_program(m, 5, 200);                       // masked to 7 bits
+    CHECK_EQ(int(m[1]), 200 & 0x7F);
+}
+
 TEST(midiout_a_note_on_is_sent_at_once_with_its_velocity) {
     fresh();
     CHECK(g_out.note_on(g_sink, 2, 3, 60, 100, 10, 1000));

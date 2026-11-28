@@ -13,13 +13,16 @@
 // accent counting for more, and a fixed draw that orders hits of the same weight.
 //
 // **Up fills.** An EMPTY step of a track that plays anything at all may get a ghost: a quiet hit
-// with the note and the locks of the hit before it on that track, so a ghost on a tuned kick is
+// with the note and the locks of the hit before it on that track (the nearest hit with no
+// condition and a probability above 0, so a FILL-only crash or a 1:4 hit is never copied), so a ghost on a tuned kick is
 // the same kick and a ghost on a bass line repeats the note it follows. Its chance is GEN's
 // metric weight times the amount times the track's appetite: the hats fill most, then the
 // percussion, the samples, the snare and the lines; the kick only near the top; pads, textures
 // and MID tracks never (a chord made up from nothing, or a note sent to someone else's
-// instrument, is not a fill). Up also lifts a step's probability towards 100, so a 50% hat plays
-// more often as the energy climbs.
+// instrument, is not a fill). A ghost is marked as one (StepEvent::ghost): it lights no step and
+// no trig glow, since the lights show the pattern, and on a track whose arp is on it is one note,
+// not a run. Up also lifts a step's probability towards 100, so a 50% hat plays more often as
+// the energy climbs.
 //
 // **Recoverable by construction**: the pattern is never written, and at 0 the scheduler takes no
 // branch of this at all, so rest is the programmed part to the bit. Each draw is a hash of the
@@ -95,8 +98,8 @@ bool energy_ghost(int8_t energy, EnergyTier tier, uint32_t seed, int track, int 
                   uint8_t &velocity);
 
 // The step a ghost on `step` borrows its note, length and locks from: the nearest trig before it
-// on the track, wrapping round the track's `length`. -1 when the track has no trig at all, and a
-// track that plays nothing gets no ghost.
+// on the track, wrapping round the track's `length`, that plays every pass (no condition, and a
+// probability above 0). -1 when the track has no such trig, and that track gets no ghost.
 int energy_source_step(const TrackPattern &track, int length, int step);
 
 }  // namespace strata

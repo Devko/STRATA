@@ -20,19 +20,21 @@ kind of thing everywhere: the arrow pad moves the cursor (OK picks, CLR goes bac
 keys turn the screen's pages, and the pad-row keys choose which sixteen the STEP keys mean (step
 page or bank). FUNC + a function key does what is printed under that key: REC "sampling"
 is RESAMPLE, PROJECT "pool" is the sample browser, HOME "system" is the **FUNC menu**, MIXER "fx"
-is PERFORM. The rare setup actions (save as, open, new, reload, kits, chain on/off, song mode,
-track speed, auto-fill, quantize) live in the FUNC menu, named on the screen. The upper pads are
+is PERFORM. The project-wide setup actions (save as, open, new, reload, kits, chain on/off, song
+mode, auto-fill, quantize, the click) live in the FUNC menu, named on the screen; the selected
+track's own settings (its speed, play order, freeze, sample reload) and GENERATE are in the track
+menu, OK held in GRID. The upper pads are
 printed TRK 1-7, but in STRATA they are the performance pads: each is lit in its own colour and
 names itself on the screen when pressed. Hold FUNC alone for a moment for help on the screen you
-are on: what the four knobs do there and the gestures it has. Keep holding FUNC and tap the screen
-keys (or LEFT/RIGHT) for more pages; the last five are the same everywhere: FUNC + each function
+are on: what the four knobs do there and the gestures it has. Keep holding FUNC and tap
+LEFT/RIGHT for more pages; the last five are the same everywhere: FUNC + each function
 key, FUNC + a knob or pad, the upper pads, and two pages on the performance mixer.
 
 ![The SmplTrek panel with STRATA's button groups: screen, knobs, screen keys, arrow pad, function block, OK and CLR, STEP keys, pad-row keys, performance pads and track pads](screens/panel.svg)
 
 <p><img src="screens/help.png" width="256" alt="FUNC held alone on GRID: what A-D do on the EDIT page they turn, and GRID's keys"> <img src="screens/menu.png" width="256" alt="The FUNC menu, opened with FUNC+HOME, on SAVE"></p>
 
-<sub>Left: FUNC held alone on GRID: A-D and their words, then GRID's keys; the screen keys turn to
+<sub>Left: FUNC held alone on GRID: A-D and their words, then GRID's keys; LEFT/RIGHT turn to
 the steps, the STEP lights and FUNC + each key.
 Right: the FUNC menu (FUNC+HOME), which always opens on SAVE.</sub>
 
@@ -426,11 +428,15 @@ the selected track's pad pushes it up while you lean on it.
 remove hits, or nudge velocity, timing, probability or notes within the scale. It is one undo
 level: OK keeps it, CLR takes it back.
 
-### GEN and EVOLVE
+### The track menu: GEN, EVOLVE and the track's settings
 
 <p><img src="screens/trackmenu.png" width="256" alt="The track menu, held OK in GRID: GENERATE and its settings, EVOLVE, MODE, MUTATION, AMOUNT"></p>
 
-**Hold OK in GRID** for the track menu. **GENERATE** writes a new part on the selected track: on
+**Hold OK in GRID** (or in KEYS) for the track menu: everything that belongs to the selected track. A lower
+pad picks another track with the menu open. Its last four rows are the track's **SPEED** and
+**PLAY** (see "Length, speed and swing"), **FREEZE** (see "Freeze") and **RELOAD SAMPLE**, which
+loads the track's sample again after a `FAIL` or a card that was out; the list wraps, so UP from
+GENERATE reaches them. **GENERATE** writes a new part on the selected track: on
 a drum track a rhythm, busier on the beats than between them, with accents and ghost notes; on a
 melodic track a line in the pattern's key and scale too, starting on the root. DENSITY sets how
 busy, RANGE how many octaves the line may climb, LEAP how often it jumps, and WHAT whether to
@@ -473,6 +479,7 @@ you, with starter projects, a sample pack and a quick start unless you untick th
                                   /BANK_A.BIN ... BANK_H.BIN   16 patterns each
 /ENAGA/DATA/STRATA/AUTOSAVE/                   the working copy, same files
 /ENAGA/DATA/STRATA/KITS/KIT_01.BIN ... KIT_16.BIN   the kit library
+/ENAGA/DATA/STRATA/SOUNDS/KCK.BIN ... FM4.BIN      your own sounds, one file per machine
 /RECORD/STRATA_<n>.WAV                         resampled takes
 /RECORD/JAM_<n>.WAV                            JAM REC recordings
 /SAMPLES/STRATA/                               the starter sample pack, if the card builder added it
@@ -511,7 +518,8 @@ short blips until you give it a sample (section 6).
 Press **PLAY**. A01 starts; the top line reads `A01 1.1 130.0 > 20%` (pattern, bar.beat, tempo, `>`
 playing, audio load) with the selected track's badge at the right, a thin line under it runs
 across the pattern, the tabs along the bottom are the screen's pages, and the column at the right
-edge is the master level. Turn **VALUE** to change the tempo; push and turn VALUE for swing. **STOP** stops
+edge is the master level. Turn **VALUE** to change the tempo, or tap VALUE in time to set it
+("Tap tempo and nudge", section 5); push and turn VALUE for swing. **STOP** stops
 and lets tails ring; STOP again cuts them.
 
 ### 2. Edit steps
@@ -529,7 +537,7 @@ Clear the whole track with **CLR**, and get it back with **FUNC+CLR** (undo). FU
 There are 16 levels.
 
 To start from an empty pattern, clear all eight tracks at once: **FUNC+HOME**, DOWN to **CLEAR
-PATTERN**, then **OK** twice within 2 seconds (`OK AGAIN TO CLEAR`, then `CLEARED FUNC+CLR UNDO`).
+PATTERN**, then **OK** twice within 2 seconds (`OK AGAIN: CLEAR`, then `CLEARED FUNC+CLR UNDO`).
 Every trig and lock goes; the sounds, and each track's length, speed and swing, stay. FUNC+CLR
 brings the whole pattern back in one undo.
 
@@ -570,7 +578,8 @@ are the white keys C to C, the upper pads above them the black keys (C#, D#, F#,
 two upper pads with no black key are octave down (between E and F) and octave up (after B). Pads
 play at the strength you hit them and hold the note while down; the pads in the scale light in
 the track's colour, the root brightest; the screen draws the same keyboard. LEFT/RIGHT change
-octave, UP/DOWN the track, and FUNC + a pad still mutes on the bar. The STEP keys are the track's
+octave, UP/DOWN the track, and FUNC + a pad still mutes on the bar. **Hold OK** for the track menu
+(GENERATE and EVOLVE, below), as in GRID; the pads stay the piano while it is open. The STEP keys are the track's
 steps, as on GRID, with the pad-row keys for the step page, so you can play a line on the pads and
 place or fix steps at the same time. Press **REC** (it lights red) while playing and what you play is
 recorded onto the selected track, quantized by the SETUP page's QUANTIZE amount (100% by
@@ -826,6 +835,7 @@ slide and glide on WMN, chords and the shared 12-voice budget on WPL.
 | AMP | **DEC** as MNO | | **MOT** envelope to position: 64 off, up to +15 or -15 frames | **LVL** |
 | ENV | **ATK** | **SUS** | **REL** | **FSU** as MNO |
 | OSC | **WRP** bends the cycle (0 = none; high notes bend less, to stay clean) | **DET** a second, detuned copy: OFF, up to 60 cents | **SUB** sub level | WMN: **GLD** glide; WPL: **DRV** drive |
+| SCAN | **MOD** scan mode (OFF and nine more, below) | **SPD** speed: 0-63 free (0.06-32 Hz, 28 = 1 Hz), 64-127 synced to the tempo, as the LFO's RAT | **END** where the scan heads, frame 0-15 as POS | **CRV** the curve: 64 LIN, above it slow to start, below it fast |
 
 The tables, from TBL 0 up:
 
@@ -850,7 +860,34 @@ The tables, from TBL 0 up:
 
 MOT above 64 moves the position up as the filter envelope rises and back as it falls; below 64 it
 moves it down. With PLK at POS 127 and MOT 0, each note starts bright and dulls like a string.
-The SOUNDS list (OK on MACHINE) has 8 WMN and 7 WPL starting points.
+The SOUNDS list (OK on MACHINE) has 14 WMN and 14 WPL starting points.
+
+<p><img src="screens/edit_scan.png" width="256" alt="EDIT, the SCAN page on WAVE MONO: PING between POS and END"></p>
+
+**Scanning: the SCAN page.** EDIT's ninth page moves the position between POS and END on its own,
+at SPD, starting again from POS with each note (a slid note carries on where the last one was).
+MOT still adds the envelope on top. The modes:
+
+| MOD | Movement, from POS towards END |
+| --- | --- |
+| OFF | none: the position is POS (and MOT) |
+| FWD | once to END, then holds there |
+| REV | starts at END, once back to POS, then holds there |
+| LOOP | to END, jumps back to POS, again |
+| LREV | the same backwards: END to POS, again |
+| PING | to END and back, again |
+| RET | to END and back to POS once, then holds at POS |
+| SINE | to END and back, eased at both ends, again |
+| RAND | jumps to a random frame between POS and END once a cycle |
+| DRFT | glides to a new random frame each cycle |
+
+One cycle of SPD is one sweep from POS to END (PING and SINE go there and back in one cycle). A
+synced SPD of 96 ticks is a beat, so LOOP at 96 restarts the sweep on every beat. END below POS
+scans downwards; END on POS has nowhere to go and plays as OFF. The page draws the path the scan
+takes over two cycles between dotted lines at POS and END. The chords of WPL scan together. WMN's
+WOBBLE and SCANLD and WPL's DRIFT and SWIRL in SOUNDS use it. The page is not on the other
+machines, and its four knobs cannot be the target of an LFO or a mod slot; a step can lock them
+and a scene can store them.
 
 ### FM4: four-operator FM
 
@@ -981,6 +1018,37 @@ FAT, REESE, ACID, SYNC, LEAD and DRONE sustain (the ENV page's SUS is up), so th
 each step's LEN: give the steps long LENs, or hear PAD on A05. A loaded sound is a change to the
 kit like turning knobs: it is saved with the project, and FUNC+CLR does not undo it (AS WAS does).
 
+### Your own sounds, and copying a sound to another track
+
+A sound you made on a track can join its machine's SOUNDS list, so every project can load it.
+In SOUNDS, **FUNC+DOWN saves** the track's sound: name it (eight characters; A or LEFT/RIGHT move,
+B, VALUE or UP/DOWN pick the character) and press OK. It is listed after the factory sounds with
+a `+` in front (`+KCK 1`), and loads with OK like any other, on any track with the same machine.
+FUNC+DOWN on one of your own sounds replaces it with what the track has now, under the same name
+or a new one. **Push B** renames the sound under the cursor and **push C** deletes it (OK twice).
+The factory sounds cannot be renamed or deleted. Each machine keeps up to 16 of your sounds.
+
+A saved sound holds all of the track's sound: every page (SRC, FLTR, AMP, FX, LFO, ARP and, on
+the machines that have them, ENV, OSC and SCAN) and the settings pushed on the LFO and ARP pages
+(TRIG, the two mod slots, VAR, RHYTHM, ACCENT and RATCHET). Loading it sets all of that, so the
+track sounds and moves as it did when you saved it, pan and sends included. That is more than a
+factory sound sets: a factory sound is a starting point for any track, a saved one is a track you
+finished. What stays the track's own is the mixer's: the fader, the chorus send, WID, the duck
+depth and the choke group set on MIXER. A GRAIN sound plays the sample its new track holds. SMP
+and MID have no SOUNDS list and so no saved sounds.
+
+**FUNC+UP copies** the track's sound. A **PASTE** row then sits under AS WAS on every track
+(`PASTE T1 KCK`): OK on it gives the selected track the copied sound. On a track with another
+machine it switches the machine first (`SWITCHES MACHINE` under the bars), the way MACHINE does,
+and then sets the sound, all of it, as loading a saved sound does. AS WAS takes a paste or a saved
+sound back, the machine, the pages and the LFO and ARP settings included. The copy lasts until the next FUNC+UP or until STRATA is switched off.
+
+Saved sounds live on the card in `ENAGA/DATA/STRATA/SOUNDS/`, one file per machine (`KCK.BIN`,
+`MNO.BIN` and so on), beside the projects and the kit library. They are not part of a project:
+copying that folder to another card takes them along, and projects open exactly as they did. A
+file that cannot be read shows `SOUND FILE` and the reason on the list's top line, and is never
+written over, so nothing in it is lost.
+
 ---
 
 ## 4. The sequencer in depth
@@ -1041,12 +1109,12 @@ track. The FUNC menu's CLEAR PATTERN (OK twice) clears every track at once. Hold
 <p><img src="screens/pattern.png" width="256" alt="PROJECT's PATTERN page"></p>
 
 - `FUNC + pad-row keys`: the selected track's length, 1-64 steps.
-- The FUNC menu's TRACK SPEED row: its speed, 2x, 3/2, 1x, 3/4, 1/2, 1/4, 1/8 (LEFT/RIGHT).
+- The track menu's SPEED row (hold OK in GRID): its speed, 2x, 3/2, 1x, 3/4, 1/2, 1/4, 1/8 (LEFT/RIGHT).
   **3/2 is 16th-note triplets**: a step every 16 ticks, six to the beat, so a bar is 24 steps.
   Give the track LEN 24 for a one-bar triplet hat, or leave it at 16 for a part that drifts
   against the beat and comes round every two thirds of a bar. 3/4 is the eighth-note triplet.
   Swing still pushes the track's odd steps, on its own 16-tick grid.
-- The FUNC menu's TRACK PLAY row, under it: the order the track plays its steps in, without
+- The track menu's PLAY row, under it: the order the track plays its steps in, without
   changing them. **FWD** as written; **REV** backwards; **PING** forward one pass and backward
   the next (the two end steps sound twice at the turn, so a 16-step track still turns every
   bar); **RND1** a random step in every slot; **RND2, RND4, RND8, RND16** cut the track into
@@ -1091,6 +1159,10 @@ the playing one; STEP 1-16 or the cursor plus OK queue a slot from it. CLR cance
 (`QUEUE OFF`). The slots show the playing pattern bright, patterns with trigs mid grey, empty ones
 dark, and `05>` marks a queued slot.
 
+From any other screen, **hold PROJECT and press STEP 1-16**: that slot of the shown bank is
+queued (`A05 QUEUED END`) and the screen you are playing on stays up. PROJECT itself opens when
+the key comes up, and only if no STEP was pressed while it was held.
+
 The **CHAIN** page (PROJECT, screen key RIGHT) lists the entries, `>02 A05 X2 PLAY`. UP/DOWN move the
 cursor, a STEP key puts that slot of the shown bank into the entry, LEFT/RIGHT step the entry's
 pattern, A or VALUE set its repeats, OK adds a copy after the cursor (up to 64), CLR twice removes
@@ -1106,6 +1178,83 @@ outside clock that keeps running, STRATA goes quiet at the end and waits for PLA
 STOP. The header shows which (`CHAIN 3/64 ON SONG`). Both are saved with the project; a project
 from before song mode loops, with no recalls.
 
+**Sections.** Push A on an entry for its **SECTION** view. Each entry can also change the sound,
+the energy, the key and the tempo as it starts, so one pattern can be an intro, a build and a drop. The
+screen keys switch two pages: **SECT** (A PAT, B REP, C MUT, D SCN) and **MOVE** (A MRP, B NRG,
+C BPM, D TRN). Every field reads `--` until you turn it, and `--` leaves that thing as it is.
+
+<p><img src="screens/section.png" width="256" alt="The SECTION view, MOVE page"></p>
+
+| Field | Values | As the entry starts |
+| --- | --- | --- |
+| MUT | `--`, M1-M8, CAP | M1-M8 recall a stored mute state; CAP sets the exact mutes the entry stores (turned to CAP, it takes the mutes as they stand) |
+| SCN | `--`, 1-16 | that scene goes on morph side B |
+| MRP | `--`, SNAP, RIDE, BACK, SNAP A | SNAP jumps the morph to B; RIDE rides it to B over the whole entry; BACK rides it to A; SNAP A jumps it to A |
+| NRG | `--`, -64 to +64 | ENERGY jumps there |
+| BPM | `--`, 20-300 | the tempo changes there, a whole BPM a click |
+| TRN | `--`, -12 to +12 | TRANSPOSE jumps there, in the unit the FUNC menu's TRANSPOSE row has (scale steps or semitones) |
+
+A push on a knob puts its field back to `--`. UP/DOWN go to the previous or next entry without
+leaving the view, and OK or CLR go back to the list. **Hold OK** to fill the fields from what
+plays: the mutes as CAP, the scene on side B, SNAP if the morph is past half way (else SNAP A), the ENERGY,
+the TRANSPOSE and the tempo. So a breakdown is set by ear: dial it in, hold OK.
+
+Your hands win until the next entry: a mute, the morph, ENERGY or TRANSPOSE changed during a section takes
+over at once and stops a RIDE where it is. The next entry applies its own fields. A section's
+tempo plays and shows on the screen, but the project keeps its own saved tempo, so a save during
+or after the song stores the tempo the project was set to. A turn of VALUE goes on from the tempo
+playing and is saved as usual. Under an outside clock a section's tempo is skipped and STRATA
+says `EXT CLOCK: BPM SKIPPED` once. On the list, `+` under an entry marks fields of its
+own, `C` a CAP, and the cursor's entry lists them under MUTES (`S4 SNAP E-40 T+2 132BPM`). OK copies
+an entry with its fields. A project from before sections opens with every field `--`.
+
+### Recording a song by playing it: ARR REC
+
+**ARR REC** writes the jam into the chain while you play, so a set comes out as a song you can
+replay and edit. It records the structure, not the sound: JAM REC records the audio, and the two
+can run together. ARR REC is the FUNC menu's third row: **FUNC+HOME, DOWN, DOWN, OK**. The menu
+closes and STRATA says `ARR: PRESS PLAY` (or `ARR REC ON` with the transport running). The chain
+you had is kept for undo, the chain is emptied, and the chain is not followed while you record.
+
+Then play. At the end of every pass of the pattern, STRATA looks at what played: if it is the
+same pattern with the same mutes, scene on side B, morph side, ENERGY, TRANSPOSE and tempo as the
+chain's last entry, that entry gets one more repeat; otherwise a new entry starts, holding those as
+its section fields (MUT CAP, SCN, MRP SNAP or SNAP A, NRG, TRN, BPM). A pass counts as what played at its
+start, so a mute or an ENERGY move shows from the next pass; one made a hair after the downbeat
+still belongs to the pass it was meant for. An entry holds up to X16, then a new entry of the
+same starts. The live strip shows `ARR` and how many sections are written (`ARR7`), the menu row
+`ON 7`, and the REC key blinks.
+
+Track Launch is recorded too. A pass in which a track plays another pattern's part (LAUNCH, below)
+is written into the first free slot of the playing pattern's bank, exactly as you heard it, and
+the new entry names that slot: STRATA says `LAUNCH IN A05`. Nothing switches while you play; the
+slot is there for the song. More passes of the same mix in a row use the same slot. When the bank
+has no free slot, or the parts hold more locks than one pattern can, the pass is written as the
+playing pattern alone and STRATA says `LAUNCH NOT KEPT`. Every part replays from the slot's first
+step, so a launch you landed NOW or on a 16 or 32 step grid replays from the pattern's start.
+A slot that a queued pattern change or launch is about to land on is never taken, so an empty
+pattern you queued is still empty when you get there.
+
+STOP, OK on the row again, or turning the chain on ends the take (`ARR 23 SECTIONS`); so does a
+65th entry (`ARR FULL 64 SECTIONS`). A pass you leave before half of it has played (a pattern
+change at once, STOP) is not written; one past half is written whole. A take that kept nothing
+gives you the old chain back (`ARR NOTHING KEPT`).
+
+To hear it, set CHAIN END to SONG, turn CHAIN on and press PLAY from stop: the jam plays back with
+its patterns, mutes, scenes, breakdowns, key changes and tempo changes, quantized to whole passes. Edit any
+entry on the CHAIN page or in its SECTION view. A morph swept by hand is written as the side it
+ended a pass nearer to; set RIDE or BACK on the entry for a sweep. **ARR UNDO** (the FUNC menu,
+under CHAIN END) swaps the chain from before the take back in (`ARR UNDONE`), and OK again brings
+the take back (`ARR REDONE`). It keeps one chain until the next take or until a project is
+opened. After a take that wrote launched tracks into slots, ARR UNDO also empties those slots, so
+the jam leaves nothing behind in the bank; a slot you have edited since, or one playing at that
+moment, is kept. Such a take cannot be brought back, and a second ARR UNDO says `NO ARR TO UNDO`. Under an outside clock the sections carry no BPM, and the song follows the clock.
+
+ARR REC writes a BPM only where the tempo changed. A take played at one tempo has no BPM in any
+entry, so the song plays at the project's tempo and VALUE moves the whole song. When you change
+the tempo during a take, the entry where it changed holds the new BPM and the first entry holds
+the tempo the take started at, so the song comes back to it when it loops.
+
 ### Track Launch: one track from another pattern
 
 Play the bass of B07 under the drums of A01 without making a new pattern. Press PROJECT twice
@@ -1116,7 +1265,8 @@ that track plays the same track's part of that pattern from the next boundary, f
 to its own part.
 
 A launched track is read only: its steps belong to the other pattern, so edits are refused
-(`T3 B07 READ ONLY`). When the mix is right, **hold OK**: CAPTURE writes what plays into the
+(`T3 B07 READ ONLY`). COPY still works and copies the part the track plays, so you can paste one
+borrowed part onto another track or pattern. When the mix is right, **hold OK**: CAPTURE writes what plays into the
 first empty slot of the bank and switches to it, every track on its own part again, ready to edit.
 
 A pattern change sends every track back to its own part, unless you **pin** it with push B: a
@@ -1145,16 +1295,16 @@ key as the rest of a POLY chord does; MID sends them as written unless the step 
 A seventh note is refused. The extra notes are kept in the step's locks, so a chord of six leaves
 two parameter locks free on that step.
 
-What a later pass does is **REC MODE** in the FUNC menu (after QUANTIZE): **REPLACE**, the
+What a later pass does is **REC MODE** in the FUNC menu (after COUNT-IN): **REPLACE**, the
 default, lets the first note of a new pass take the step over, its old notes and chord type gone,
 and the notes played with it join it; **ADD** adds every note to what the step holds, so a chord
 can be built up one pass at a time. The edit line says `REC+` under ADD. Transposing a range,
 MUTATE's note moves and turning NOTE move the whole chord. VA MONO, WAVE MONO, SAMPLE, GRAIN and
 the drums keep one note a step: the last one played.
 
-<p><img src="screens/menu_click.png" width="256" alt="The FUNC menu on CLICK, with REC MODE above and COUNT-IN below"></p>
+<p><img src="screens/menu_click.png" width="256" alt="The FUNC menu on CLICK, with ARR REC above and COUNT-IN below"></p>
 
-**CLICK and COUNT-IN** (FUNC menu). CLICK `ON` clicks every beat while the transport runs, a
+**CLICK and COUNT-IN** (FUNC menu, the two rows under ARR REC). CLICK `ON` clicks every beat while the transport runs, a
 higher click on each bar's first beat. COUNT-IN `1 BAR` or `2 BAR` makes a PLAY from stop with REC
 on click that many bars first (the notice counts `COUNT-IN 4` .. `1`), whether CLICK is on or not;
 the pattern then starts on step 1 on the next beat, and nothing is recorded during the clicks
@@ -1178,6 +1328,19 @@ MIDI IN (the DIN jack, or USB MIDI) plays STRATA like the pads:
   that channel. Enaga sends 123 by itself when a keyboard's active sensing stops.
 - **Program change** on your MIDI CH (the Enaga menu, SETUP shows it) queues pattern 1-128,
   which is A01 to H16, in the queue mode PROJECT has set, exactly as pressing the slot would.
+- **Song position pointer**, under CLOCK SRC MIDI: when the master moves its song position while
+  stopped, STRATA goes where that position falls before the master continues. With the chain
+  on, that is the chain entry and its pass, as if the chain had played from the top without a
+  break (past the end of a song, STRATA stays quiet until the next start). With the chain off,
+  the playing pattern runs from the top of the song, so its steps fall on the master's bars. A
+  pattern change still queued happens at once.
+
+**PROG CHG OUT** (FUNC menu, `OFF` or `ON`) sends a program change on your MIDI CH every time the
+playing pattern changes, whatever changed it: a press, a queued change landing, the chain moving
+on, a program change in. The number is the pattern's, 0-127 for A01-H16, the same numbers MIDI IN
+takes, so a second STRATA or any sequencer that follows program changes changes pattern with
+this one. It is off in a new project, since a synth listening on your MIDI CH would change its
+sound instead, and it is saved with the project.
 
 ---
 
@@ -1194,6 +1357,22 @@ The seven upper pads are the same in every mode:
 | 5 SCENE B | The same for side B | |
 | 6 THROW | Selected track's delay send to full while held | Reverb instead |
 | 7 MUTATE | Mutate the selected track; OK keeps, CLR reverts | **LOCK**: held, store; tapped, jump back or swap back (below) |
+
+### Tap tempo and nudge
+
+**Tap VALUE** in time, at least three times, to set the tempo (`TAP TEMPO` on the first two
+taps, then `TAP 128.0`). Nothing changes until two gaps agree to within a quarter, so two stray
+taps leave the tempo alone. The tempo then follows the last four taps, so one early or late tap
+moves it a little; a pause of more than two seconds, or a tap at half or twice the pace, starts a
+new count. It
+works wherever VALUE turns the tempo: not in PERFORM (where a VALUE tap resets the morph), not on
+PROJECT's CHAIN and PATTERN pages, and not with an effect picked on VALUE. The tapped tempo is set
+and saved as a turn of VALUE sets it.
+
+**FUNC + push VALUE + turn** nudges: hold FUNC, push VALUE and turn it, and each detent plays 4% faster (`NUDGE FASTER`) or slower (`NUDGE
+SLOWER`) for a quarter of a second, then the tempo goes back to where it was set. The beat ends
+up a little earlier or later and the tempo stays put, which is how to line STRATA up by ear with
+a turntable or a band that sends no clock. Both are refused under an outside clock (`EXT CLOCK`).
 
 ### Mutes
 
@@ -1289,30 +1468,36 @@ always stops on rest for one click (a detent), so you can find it without lookin
 
 While either is away from rest, PERFORM's line under the macros shows both (`REL -12 LEN 71%`)
 and the live strip under the top line says `RL-` / `RL+` and `LN-` / `LN+`. Neither is saved or undone, like a macro's position;
-a LOCK holds them, so a jump puts them back where they were.
+a LOCK holds them, so a jump puts them back where they were. Opening a project, or NEW, puts both
+back to rest.
 
 ### LIVE RND: shuffle the beat from PERFORM
 
 **FUNC + turn D in PERFORM is LIVE RND**: OFF, then RND 1, 2, 4, 8 and 16, a click each, stopping
-at both ends (`LIVE RND4 8 TRK`). While it is on, every armed track plays its pattern in random
+at both ends (`LIVE RND4 7 TRK`). While it is on, every armed track plays its pattern in random
 blocks of that many steps, picked afresh every pass: RND 1 scatters single hits, RND 4 shuffles
 the beats of a bar, RND 16 shuffles whole bars of a long track. Inside a block the steps keep their
 order, so the groove stays on the grid and a hat still sits on its offbeat.
 
-**FUNC + push D takes the selected track out of LIVE RND**, or puts it back (`T1 RND OUT 7 TRK`).
-All eight are in at the start. The usual move: select the kick (lower pad 1), FUNC + push D, and
-the four-on-the-floor holds while everything else jumps around it.
+**FUNC + a lower pad takes that track out of LIVE RND**, or puts it back (`T2 RND OUT 6 TRK`).
+LIVE RND comes on with every track in but the kick, so the four-on-the-floor holds while
+everything else jumps around it; FUNC + lower pad 1 puts the kick in too. Once you have chosen
+the tracks, LIVE RND keeps your choice.
 
-It is the same shuffle as the FUNC menu's TRACK PLAY row (RND1-RND16), but for many tracks at
+**Hold FUNC in PERFORM to see these four**: while it is down the gauges read `REL`, `LEN`, `NRG`
+and `RND` with where each is, and the macros come back when you let go.
+
+It is the same shuffle as the track menu's PLAY row (RND1-RND16), but for many tracks at
 once and only while it is on: the pattern is never changed, so **turning back to OFF puts every
-track on its own steps at once**, exactly as programmed, in time. A track's own TRACK PLAY mode
+track on its own steps at once**, exactly as programmed, in time. A track's own PLAY mode
 comes back with it. The shuffle is seeded from the pattern, so the same pattern shuffles the same
 way every time you play it.
 
 While it is on, PERFORM's line under the macros reads `LIVE RND4 FUNC+D` (or ends `R4` beside
 REL ALL and LEN ALL), the track meters mark the armed tracks with a dot, and the live strip says `RN4`.
 LIVE RND is not saved or undone; a LOCK holds the unit and which tracks are in, so a jump brings
-back the shuffle you stored, and the swap-back the one you had. A hit recorded while it is on goes
+back the shuffle you stored, and the swap-back the one you had. Opening a project, or NEW, turns it
+OFF and puts back the starting set of tracks. A hit recorded while it is on goes
 on the step that was sounding.
 
 ### ENERGY: from breakdown to peak on one knob
@@ -1327,18 +1512,78 @@ snare and the samples, the bass and lead lines, the pads, and the kick last, fro
 drums and lines are gone and only the pads and textures play, on their strongest hits.
 
 **Turn it up and the beat fills in.** Empty steps get quiet ghost hits, off-beats first, with the
-sound of the hit before them on the same track, so a ghost on a tuned kick is the same kick and a
+sound of the hit before them on the same track (one that plays every pass: a crash that plays only
+with FILL, a 1:4 hit or a step at 0% is passed over), so a ghost on a tuned kick is the same kick and a
 ghost on a bass line repeats the note it follows. The hats fill most, then the percussion, the
 snare and the samples, and the lines; the kick only in the top half, and pads and MID tracks
-never. A track with nothing on it stays silent. Steps with a probability play more often too: a
-50% hat plays every pass at +64.
+never. A track with nothing on it stays silent. A ghost is one note even on a track whose arp is
+on, and it lights no step and no trig glow in GRID: the lights show the pattern, not the fill.
+Steps with a probability play more often too: a 50% hat plays every pass at +64.
 
 Each position of the knob plays the same groove every bar: turning one click further takes away
 (or adds) exactly one more set of hits, and turning back brings each one back where it was. The
 pattern is never changed, so at 0 the beat is exactly as programmed. Trigless steps (a programmed
 filter sweep) and conditions are left alone. While it is away from rest, PERFORM shows `EN-20` on
 its status line (beside `BAR` while stopped) and the live strip says `EN-` or `EN+`. ENERGY is not
-saved or undone; a LOCK holds it, so a jump brings back the energy you stored.
+saved or undone; a LOCK holds it, so a jump brings back the energy you stored. Opening a project,
+or NEW, puts it to 0.
+
+### VariSpeed: the whole unit faster or slower
+
+**FUNC + turn VALUE is VariSpeed**, on every screen. VALUE alone is the tempo; with FUNC the pitch
+moves with it, the way a turntable's speed control or a tape machine's varispeed moves both. Every
+machine follows: the drums, SAMPLE and GRAIN read faster or slower, the synths and FM4 move by the
+same interval, held notes and ringing hits included, and the delay's echoes keep to the new
+tempo. One click is a tenth of a semitone and the range is an octave either way; the notice says
+the amount and the tempo it runs at (`VARISPEED +1.2 140.3`), the top bar shows that tempo, and
+the live strip says `VS+` or `VS-`.
+
+Rest is a detent: turning back stops on 0, the project's own tempo and pitch. **FUNC + tap VALUE**
+snaps straight back to it when no performance effect is picked (with one picked, the tap cuts the
+effect, as above). The project keeps its tempo underneath, so a save stores the tempo the song was
+written at, and VALUE on its own still turns that tempo with VariSpeed riding on top. Near the
+ends of the clock's 20-300 BPM the turn stops where the tempo still fits. When a faster tempo (a
+turn of VALUE or a song section's BPM) would take the clock past 300, VariSpeed is held back to
+what fits and STRATA says so (`VARISPEED HELD +3.0`); back at a slower tempo, the amount you set
+returns (`VARISPEED +5.0 135.0`).
+
+Envelope times stay as they are, and MID tracks send their notes unmoved. VariSpeed needs the
+internal clock: under MIDI or SYNC it says `EXT CLOCK`, and it goes back to rest when CLOCK SRC
+changes. It is not saved, not undone and not held by a LOCK, like the tempo. Opening a project, or NEW, puts
+it to rest, so the project plays at its own tempo and pitch.
+
+### TRANSPOSE: move the melodic tracks through the key
+
+**FUNC + SEL> moves the melodic tracks up a step of the scale, FUNC + SEL< down**, on every
+screen, up to 12 steps either way. Press **both screen keys** with FUNC (the second while the
+first is still down) to go back to 0; pressed together, no step is heard on the way. Every note walks the project's scale, so the parts stay in
+the key and move the way a chord progression does: in A minor, two steps down takes a bass line
+on A to F and the A minor chord to F major, the key's VI, with every note still one of A minor's.
+The notice says `TRANSPOSE -2 IN KEY`, and `TRANSPOSE 0` at rest. PERFORM shows `TR-2` on its
+status line (beside `BAR` while stopped) and the live strip says `TR-2` on every screen.
+
+**For semitones**, set the FUNC menu's TRANSPOSE row (under FX GLIDE) from `SCALE` to `SEMI`.
+A step is then a semitone and the key moves with the notes: every line keeps its shape and every
+chord its colour, so A minor +3 plays C minor, and the notice names the key, `TRANSPOSE +3 C`.
+The amount stays where it is when you switch, heard in the new unit. The row is not saved:
+every start is SCALE. With the project's scale on CHROMATIC the two are the same.
+
+The tracks that move are exactly the ones that fold into the scale: VA MONO, VA POLY, WAVE MONO,
+WAVE POLY, FM4, GRAIN, and SAMPLE while it plays the sample whole (SLC 1). The drums keep their
+tuning, a sliced SAMPLE keeps its slices (there the note picks the slice) and MID tracks send
+their notes unmoved, since the instrument on the other end may be a drum machine. So the beat and
+the chopped loops stay put and the harmony moves.
+
+Everything those tracks play moves: steps, chords, the
+arp (a running arp follows at its next note), pads, KEYS, MIDI IN notes, note repeat, and what
+goes to MIDI OUT. A key you are holding keeps sounding at the pitch it started on and lets go
+cleanly after a change.
+
+Nothing is written. A note you record in KEYS while transposed is stored as the key you pressed,
+so it plays back moved with the rest, as you heard it, and at 0 everything is as programmed.
+TRANSPOSE is not saved or undone; a LOCK holds it, so a jump brings back the key you stored. A
+song section's TRN sets it as the entry starts, and ARR REC records it there. Opening a project,
+or NEW, puts it to 0.
 
 ### Beat repeat, throws and auto-fill
 
@@ -1410,8 +1655,8 @@ Two held master moves, both in the performance mixer (below) since backlog D1 (#
 
 Neither is saved or undone; both cost nothing until used. With the delay in its LONG mode
 (below) the freeze is the LONG delay's own: the whole wash holds exactly as it is, whatever its
-length. FUNC + hold push D only says where the tape stop is (`TAPE STOP: SLOT 8`), and
-FUNC + MUTATE is LOCK (below); "Gestures that moved" in CHANGELOG.md lists older gestures.
+length. FUNC + push D takes every band of the kill EQ out at once (`KILL ALL`), and again brings
+them back (`ALL BANDS BACK`); FUNC + MUTATE is LOCK (below); "Gestures that moved" in CHANGELOG.md lists older gestures.
 
 ### LOCK: store a moment, jump back to it
 
@@ -1427,7 +1672,8 @@ over the old one.
 
 A lock holds the pattern whole (steps, locks, conditions, lengths, swing), every track's sound
 (all eight EDIT pages) and fader, the sends and the master, the mutes, and where the morph and
-the four macros are, REL ALL and LEN ALL, LIVE RND and ENERGY (FEEL is in the pattern). It does not hold the samples or the machines (a lock taken before a machine
+the four macros are, REL ALL and LEN ALL, LIVE RND, ENERGY and TRANSPOSE (FEEL is in the pattern),
+and which pattern each launched track plays (Track Launch, below). It does not hold the samples or the machines (a lock taken before a machine
 switch brings back the parameters only), the tempo, the kill EQ's switches, the scenes or the
 macro setup, the stored mute states or the chain. The performance mixer is not in it either: a
 jump rides the picked effect back to 0 over FX GLIDE and leaves a loop playing.
@@ -1442,6 +1688,10 @@ Things to know:
 - **A MUTATE waiting for OK or CLR is dropped** by a jump: its pattern is gone.
 - **Swap-back is for the moment of the jump.** Changing pattern, or storing a new lock, ends it.
   Undo (FUNC + CLR) still works on the pattern, but only swap-back brings the sound back.
+- **Launched tracks stay launched.** A jump sends each track back to the part it played when
+  you stored the lock, another pattern's or its own, and the swap-back sends it back to the
+  part it played before the jump. The pattern's own steps are never replaced by a launched
+  part; CAPTURE is the way to make one yours. Pins are not part of a lock.
 - The MUTATE pad glows half bright while the playing pattern has a lock.
 
 ### The performance mixer: VALUE as a crossfader
@@ -1501,7 +1751,8 @@ effect still in (`MORPH 64` as you turn). Push VALUE + STEP 13 again lets go and
 morph where it is (`MORPH KEPT: VALUE TEMPO`). The looper (16) is the other slot like it.
 
 The stutter is the REPEAT pad's, and the master DJ filter is slots 1 and 2 (its saved setting
-is MIXER's MST page): FUNC + VALUE only says `DJ FILTER: SLOT 1/2`.
+is MIXER's MST page). FUNC + turn VALUE is VariSpeed (below), and FUNC + push VALUE + turn the
+tempo nudge ("Tap tempo and nudge").
 
 **The looper (STEP 16).** Push VALUE + STEP 16 with the beat running: from the next bar line the
 whole mix is recorded for 4 bars (`LOOP 4 BAR: NEXT BAR`; set 1, 2, 4 or 8 in the FUNC menu's
@@ -1568,7 +1819,7 @@ tracks 3 and 4 is separate and still works without a group.
 
 <p><img src="screens/mixer.png" width="256" alt="MIXER: the faders of tracks 1-4"> <img src="screens/mixer_dly.png" width="256" alt="MIXER's DLY page"></p>
 
-<sub>MIXER's first page, all eight faders with A-D on tracks 1-4, and the DLY page. The screen keys walk all seventeen: TRK 1-4, TRK 5-8, DCK 1-4, DCK 5-8, DUCK, WID 1-4, WID 5-8, DLY, DLY+, REV, REV+, ROUTE, CHO 1-4, CHO 5-8, CHO, MST, EQ.</sub>
+<sub>MIXER's first page, all eight faders with A-D on tracks 1-4, and the DLY page. The screen keys walk all nineteen: TRK 1-4, TRK 5-8, DCK 1-4, DCK 5-8, DUCK, WID 1-4, WID 5-8, DLY, DLY+, REV, REV+, ROUTE, CHO 1-4, CHO 5-8, CHO, IN, IN+, MST, EQ. UP/DOWN jump a group at a time, to its first page: the levels (TRK), the duck (DCK), the widths (WID), the delay (DLY), the reverb (REV), the chorus (CHO 1-4), the line input (IN) and the master (MST).</sub>
 
 Each send has a second mode for long, washy sounds. They sit on the MIXER pages beside their
 send, `DLY+` after `DLY` and `REV+` after `REV`. **Push A** on either page (or turn A) flips the
@@ -1639,19 +1890,49 @@ parameter, because every track's 32 parameter slots are taken: a lock, a scene o
 move it. The sends are saved with the kit (and in the kit library), the chorus's four knobs with
 the project. A project or kit from before the chorus opens with no track sending to it.
 
+### Line input: IN and IN+
+
+<p><img src="screens/mixer_in.png" width="256" alt="MIXER's IN page with the input on"></p>
+
+Whatever is plugged into the SmplTrek's **INPUT** jacks can play through STRATA's mix as a
+channel of its own: an outboard synth, a drum machine, a phone. It gets a fader, pan, the three
+sends and the duck, and it goes through the master like the tracks do, so the DJ filter, the kill
+EQ, the performance mixer, the looper, REPEAT, the tape stop and **JAM REC** all take it too.
+
+- **IN** (MIXER, after CHO): **LVL** (A) the fader, 0-127 with 100 at unity; **PAN** (B);
+  **DLY** (C) and **REV** (D), the delay and reverb sends. **Push A** turns the input on and off;
+  the strip says `IN ON` / `IN OFF` and fades rather than clicks.
+- **IN+**: **CHO** (A) the chorus send; **DCK** (B) how far the kit's duck takes the input down,
+  so a synth pad pumps under the kick; **TON** (C) the tone knob the synth tracks have, flat in
+  the middle, a low-pass below it and a high-pass above; **SRC** (D) the jack: `LINE` (stereo, L
+  and R), `LINE L` (mono, the left jack), `MIC` (the built-in microphone, heard only with
+  headphones in), `DYN MIC`, `HI-Z` (a guitar) or `USB` (the computer's audio). **Push D** steps
+  the gain: `LOW` (the line input's -20 dB pad), `NORM`, `HIGH`.
+
+The page shows the input's level before the fader, so it reads even with the fader down: set the
+gain until the loudest notes come near the top, then the fader for the mix. The sends are
+post-fader, as on the tracks.
+
+The input is **off** in a new project and in every project from before it, so nothing is heard
+from the jacks by surprise. Its settings are saved with the project, not the kit: recalling a kit
+leaves the synth plugged in and playing. The input is routed while the strip is on; RESAMPLE's own
+input sources take over while that screen shows one, and the strip's jack comes back when you
+leave it. The input adds a few milliseconds of delay through the box, as any digital mixer does.
+The strip costs a little CPU while it is on and nothing while it is off.
+
 ### Freeze
 
 CPU is the SmplTrek's tight resource and memory is not, so a track can be **frozen**: it plays
-a loop of itself from RAM instead of computing its sound. FUNC+HOME opens the menu; **FREEZE** is
-near the end (UP four times from SAVE, since the list wraps). The row shows the selected track and the loop's length, `T7 1 BAR`;
-LEFT/RIGHT or B pick 1, 2, 4 or 8 bars. OK arms it (`FREEZE ARMED`, or `ARMED: PRESS PLAY`
-when stopped): from the next bar line the track's machine is recorded for that many bars, and
+a loop of itself from RAM instead of computing its sound. Select the track in GRID and hold OK
+for the track menu; **FREEZE** is two UPs from GENERATE, since the list wraps. The row shows the
+loop's length, `1 BAR`; LEFT/RIGHT or B pick 1, 2, 4 or 8 bars. OK arms it (`FREEZE ARMED`, or
+`ARMED: PRESS PLAY` when stopped) and the menu stays open, the row reading `WAIT`, then `REC`: from the next bar line the track's machine is recorded for that many bars, and
 then the screen says `FROZEN` and the track plays the recording.
 
 A frozen track keeps its **insert filter, drive, lo-fi, fader, pan, sends and duck**: they work
 on the loop live. What stops is everything that feeds the machine: notes, steps, locks, chords
-and the knobs on its SRC/AMP pages do nothing, and EDIT says `FROZEN: FUNC+HOME`. To change the
-part, unfreeze it: the FREEZE row reads `T7 ON`, and OK gives the machine back at once
+and the knobs on its SRC/AMP pages do nothing, and EDIT says `FROZEN: TRACK MENU`. To change the
+part, unfreeze it: the track menu's FREEZE row reads `ON`, and OK gives the machine back at once
 (`UNFROZEN`). The loop keeps in time with the bar lines; after a tempo change it jumps back into
 time at the start of its next loop rather than stretching. A frozen track is silent while
 stopped. Loading a project, NEW and recalling a kit unfreeze every track, and a freeze is not
@@ -1705,7 +1986,8 @@ guitar). C sets the input level, `LOW`, `NORM` or `HIGH` (on LINE, LOW is the -2
 input shows a meter under `FROM ...`; set the level so it does not reach `CLIP`. The take is the
 input alone, before anything STRATA plays, and otherwise works exactly like a master take: it
 starts on the next bar line with the transport running, lasts 1-8 bars, and lands in a file or
-a track. You do not hear the input through STRATA; listen to the source directly. Turning B or C
+a track. The input is heard through STRATA only while MIXER's IN strip is on ("Line input: IN
+and IN+"); otherwise listen to the source directly. Turning B or C
 makes the input quiet for about 10 ms, and Enaga puts the input back to LINE, NORM when STRATA
 stops.
 
@@ -1718,11 +2000,12 @@ muted track bounces as silence, so unmute it first.
 
 ### Recording the whole jam: JAM REC
 
-RESAMPLE keeps 30 seconds. To keep a whole set, use **JAM REC**, the FUNC menu's last row:
-FUNC+HOME, UP, OK. The menu closes with `JAM REC JAM 3`, a dot blinks in the top bar before the
-load, and everything that comes out of STRATA goes to `/RECORD/JAM_<n>.WAV` until you stop it:
-FUNC+HOME, UP, OK again (`JAM STOPPING`, then `SAVED JAM 3`). The row shows how long it has run,
-`4:07` or `1:02:33`.
+RESAMPLE keeps 30 seconds. To keep a whole set, use **JAM REC**: press **FUNC+REC twice**, once
+for RESAMPLE and again to start it (`JAM REC JAM 3`). A dot blinks in the top bar before the load,
+the REC key blinks a dim red, and everything that comes out of STRATA goes to
+`/RECORD/JAM_<n>.WAV` until you stop it with FUNC+REC on RESAMPLE again (`JAM STOPPING`, then
+`SAVED JAM 3`). RESAMPLE's last line shows how long it has run, `4:07` or `1:02:33`, and the key
+that stops it. The FUNC menu's JAM REC row, its second (FUNC+HOME, DOWN, OK), does the same, with the time on the row.
 
 It records what RESAMPLE's MASTER take hears: every track, the sends, the master effects,
 REPEAT and the tape stop. The metronome and the sample browser's audition are for you and are
@@ -1776,12 +2059,12 @@ screen frame", has the details.
 
 In the FUNC menu (FUNC+HOME), each with OK twice within 2 s:
 
-- RELOAD PROJECT (`OK AGAIN TO RELOAD`): read the project back from its last save, throwing away
+- RELOAD PROJECT (`OK AGAIN: RELOAD`): read the project back from its last save, throwing away
   what is unsaved.
-- NEW PROJECT (`OK AGAIN FOR NEW`): a new, empty project named `NEWn`: the factory sounds and
+- NEW PROJECT (`OK AGAIN: NEW`): a new, empty project named `NEWn`: the factory sounds and
   mixer with every pan centred, but no steps, chain, scenes, macros or mute states. Nothing is
   written until you save it, so the old project is untouched.
-- LOAD DEMO (`OK AGAIN FOR DEMO`): the factory demo project, the beat a first start plays, under
+- LOAD DEMO (`OK AGAIN: DEMO`): the factory demo project, the beat a first start plays, under
   a new name. Again nothing is written until you save.
 
 All three stop the transport.
@@ -1794,7 +2077,7 @@ PROJECT, then screen key RIGHT four times (or the FUNC menu's OPEN PROJECT), is 
 with `NOW` and the open one's name at the top. UP/DOWN or A move the cursor, LEFT/RIGHT go a page
 of eight at a time.
 
-- **Open:** OK on a project, then OK again within 2 s (`AGAIN TO OPEN`). What is unsaved in the
+- **Open:** OK on a project, then OK again within 2 s (`OK AGAIN: OPEN`). What is unsaved in the
   open project is thrown away and the transport stops, as with a reload. STRATA starts with that
   project from now on.
 - **Save as:** `FUNC+DOWN` here, or the FUNC menu's SAVE AS, opens a name entry starting from the current name. A or LEFT/RIGHT
@@ -1807,8 +2090,8 @@ of eight at a time.
   project has is refused (`NAME TAKEN`). The open project can be renamed too: it carries on under
   the new name, and STRATA starts with it. Unsaved work stays unsaved; the rename moves what is
   on the card.
-- **Delete:** push C on a project asks `DELETE? OK TWICE`; OK, then OK again within 2 s
-  (`OK AGAIN TO DELETE`), deletes its folder and everything in it (`DELETING`). CLR, or any other
+- **Delete:** push C on a project asks `OK TWICE: DELETE`; OK, then OK again within 2 s
+  (`OK AGAIN: DELETE`), deletes its folder and everything in it (`DELETING`). CLR, or any other
   key, keeps it. The open project cannot be deleted (`PROJECT IS OPEN`): open another one first.
   A delete cannot be undone.
 - `FUNC+UP` reads the card again. CLR goes back to the slots.
@@ -1855,11 +2138,11 @@ minor seventh chords.
 `UNREADABLE` or `...` (not read yet), and the kit under the cursor is listed as its eight
 machines. UP/DOWN, A or the STEP keys move the cursor (they never load).
 
-- **Recall:** OK, then OK again within 2 s (`OK AGAIN TO LOAD`). The transport keeps playing; only
+- **Recall:** OK, then OK again within 2 s (`OK AGAIN: LOAD`). The transport keeps playing; only
   tracks whose sample changed reload theirs. Everything the kit holds comes back, MOD slots,
   choke groups and arp settings included. A recall is **not undoable**.
 - **Store:** `FUNC+DOWN` stores the current kit; over a stored kit it needs a second press
-  (`AGAIN TO OVERWRITE`).
+  (`DOWN AGAIN: REPLACE`).
 - `FUNC+UP` reads the card again. CLR goes back to MACHINE.
 
 A recalled kit makes the project UNSAVED until you save it.
@@ -1913,7 +2196,7 @@ browser opens in the folder of the file the track plays, with the cursor on it, 
 - **Push A to hear a file first.** It plays the file under the cursor, whole and from its
   start, straight to the output at about -6 dB, without loading it: the track and the kit stay
   as they were. Push A again to stop. **With the beat playing it takes two pushes**: the
-  first only says `A AGAIN TO HEAR`, and a second push on the same file within 2 s plays it.
+  first only says `A AGAIN: HEAR`, and a second push on the same file within 2 s plays it.
   The SmplTrek has no separate cue output, so the audition goes out with the beat, and a single
   bump of the knob in a set should not put a file into the room. While a file is heard, UP/DOWN (or turning A, or a page)
   hears the next file the cursor lands on, so you can listen down a folder and press OK on the
@@ -1999,7 +2282,7 @@ sound crackles:
   out first) and GRAIN clouds get sparser. It steps back down one level a second once the load
   falls, and a second STOP clears it. Seeing `GUARD` often means the pattern asks for more than
   the box has: use the tips above.
-- **Freeze the dearest track.** FUNC+HOME, UP four times to FREEZE, OK: the selected track
+- **Freeze the dearest track.** Select it in GRID, hold OK, UP twice to FREEZE, OK: the track
   records its loop (1 bar; LEFT/RIGHT or B on the row for 2, 4 or 8) from the next bar line, then
   plays it from memory and stops computing. A six-voice POLY chord goes from the biggest cost
   in the project to almost nothing. See "Freeze" in section 5.
@@ -2022,7 +2305,7 @@ Shown on the PROJECT screen under the project name, and the track shows `X` on t
 | `NOT A WAV` / `BAD FORMAT` | Not a WAV STRATA reads | Export as 16 or 24-bit PCM WAV |
 | `TOO MANY CH` | More than two channels | Export as mono or stereo |
 | `EMPTY` | No audio in the file | |
-| `NO SAMPLE` | the FUNC menu's RELOAD SAMPLE on a track whose kit names no file | |
+| `NO SAMPLE` | the track menu's RELOAD SAMPLE on a track whose kit names no file | |
 | `NO CARD` | The card is missing or unusable | Reinsert it; samples reload by themselves |
 | `NO SWAP` | The sample handover did not complete | A bug: please report it |
 

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # LIVE RND in the emulator (core/liverand.hpp; docs/CONTROLS.md, "LIVE RND"): FUNC + turn D in
-# PERFORM sets the unit for the armed tracks, FUNC + push D takes the selected track out, and
-# turning back to OFF puts the grid back. The emulator holds a key for 20 M cycles, and a turn of
+# PERFORM sets the unit for the armed tracks (every track but the kick, D3), FUNC + push D is the
+# kill for all bands there as everywhere (D2), and turning back to OFF puts the grid back. The
+# emulator has no pads, so FUNC + lower pad (a track in or out) is tests/test_ui.cpp's. The emulator holds a key for 20 M cycles, and a turn of
 # n detents takes 12 ms a detent, so a FUNC press with a turn 2 M cycles later is FUNC + turn.
 # The notices are logged (app/app.hpp, notice_logged). What the units play is
 # tests/test_scheduler.cpp's; this proves the path runs on the C674x under the load target, with
@@ -9,8 +10,9 @@
 #
 #   PLAY
 #   FUNC + MIXER             -> PERFORM
-#   FUNC + turn D +3         -> "LIVE RND4 8 TRK"
-#   FUNC + push D            -> "T1 RND OUT 7 TRK" (track 1, the kick, back on the grid)
+#   FUNC + turn D +3         -> "LIVE RND4 7 TRK" (track 1, the kick, stays on the grid)
+#   FUNC + push D            -> "KILL ALL", not LIVE RND's
+#   FUNC + push D            -> "ALL BANDS BACK"
 #   FUNC + turn D +2         -> "LIVE RND16 7 TRK"
 #   FUNC + turn D -3, -2     -> "LIVE RND2 7 TRK" on the way, then "LIVE RND OFF"
 #   FUNC + turn D +2         -> "LIVE RND2 7 TRK", left on for the last frame
@@ -50,6 +52,7 @@ python3 -B tools/enaga_cached.py emulate "$STAGE" --cycles "$CYCLES" \
     --key 19@380000000 --key 21@385000000 \
     --key 19@460000000 --turn 3:3@462000000 \
     --key 19@700000000 --key 3@705000000 \
+    --key 19@760000000 --key 3@765000000 \
     --key 19@820000000 --turn 3:2@822000000 \
     --key 19@940000000 --turn 3:-3@942000000 \
     --key 19@1000000000 --turn 3:-2@1002000000 \
@@ -85,7 +88,8 @@ log = report.get("log", [])
 check(report.get("app_status") == "APP RUNNING", "app is running",
       f'status={report.get("app_status")!r}')
 check(not report.get("crash_reason"), "no crash", f'reason={report.get("crash_reason")!r}')
-check("run int" in log, "the transport started", f"log={log}")
+# Not "run int": Enaga's log ring keeps 16 lines and this run logs 16 after PLAY, which pushes it
+# out (HANDOFF, section 2). "the beat was sounding" below proves the transport ran.
 
 def index(line, after=-1):
     for i in range(after + 1, len(log)):
@@ -95,15 +99,17 @@ def index(line, after=-1):
 
 screens = [line for line in log if line.startswith("scr ")]
 check("scr PERFORM" in screens, "FUNC + MIXER reached PERFORM", f"screens={screens}")
-rnd4 = index("LIVE RND4 8 TRK")
-out = index("T1 RND OUT 7 TRK", rnd4)
-rnd16 = index("LIVE RND16 7 TRK", out)
+rnd4 = index("LIVE RND4 7 TRK")
+out = index("KILL ALL", rnd4)
+back = index("ALL BANDS BACK", out)
+rnd16 = index("LIVE RND16 7 TRK", back)
 rnd2 = index("LIVE RND2 7 TRK", rnd16)
 off = index("LIVE RND OFF", rnd2)
 again = index("LIVE RND2 7 TRK", off)
-check(rnd4 >= 0, "FUNC + turn D set RND4 on all eight tracks", f"log={log}")
-check(out > rnd4, "FUNC + push D took track 1 out", f"log={log}")
-check(rnd16 > out, "FUNC + turn D on to RND16, and it stopped there", f"log={log}")
+check(rnd4 >= 0, "FUNC + turn D set RND4 on every track but the kick", f"log={log}")
+check(out > rnd4, "FUNC + push D killed every band", f"log={log}")
+check(back > out, "and again brought them back", f"log={log}")
+check(rnd16 > back, "FUNC + turn D on to RND16, and it stopped there", f"log={log}")
 check(rnd2 > rnd16, "turning back passed RND2", f"log={log}")
 check(off > rnd2, "and stopped on OFF", f"log={log}")
 check(again > off, "and RND2 again for the last frame", f"log={log}")

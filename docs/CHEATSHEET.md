@@ -38,21 +38,21 @@ pads and the performance mixer.
 | --- | --- | --- |
 | GRID | HOME (from anywhere) | All 8 tracks; STEP keys edit the selected track |
 | KEYS | HOME twice quickly (double-tap) | The pads are a piano (lower white, upper black keys), the STEP keys steps, on the selected track |
-| FUNC menu | FUNC+HOME ("system") | Save, save as, open, new, reload, clear pattern, kits, sample reload, track speed, track play, chain, song, auto-fill, quantize, REC MODE, click, count-in, FX glide, freeze, loop length, load demo |
-| EDIT | EDIT | The selected track's sound: pages SRC, FLTR, AMP, FX, LFO, ARP, and on the VA, WAVE, FM4 and GRAIN machines ENV and OSC |
+| FUNC menu | FUNC+HOME ("system") | The project-wide rows: save, JAM REC, ARR REC, click, count-in, REC MODE, quantize, auto-fill, FX glide, TRANSPOSE (scale or semitones), loop length, chain, song, ARR UNDO, PROG CHG OUT, save as, open, kits, new, reload, clear pattern, load demo |
+| EDIT | EDIT | The selected track's sound: pages SRC, FLTR, AMP, FX, LFO, ARP, and on the VA, WAVE, FM4 and GRAIN machines ENV and OSC, and SCAN on the WAVE machines |
 | MACHINE | FUNC+EDIT | Pick the machine on each track, and its MIDI OUT channel |
 | KIT | FUNC+EDIT twice, or the menu's KITS | Save and recall whole kits: 16 slots on the card, shared by all projects |
 | SAMPLES | FUNC+PROJECT ("pool"), or OK in EDIT or MACHINE on a SMP track, OK in MACHINE on a GRN track | Pick the track's WAV from `/SAMPLES` or `/RECORD` |
-| SOUNDS | OK in EDIT or MACHINE on a drum, VA, WAVE or FM4 track; OK in EDIT on a GRN track | Load a factory sound into that track only; AS WAS puts yours back |
+| SOUNDS | OK in EDIT or MACHINE on a drum, VA, WAVE or FM4 track; OK in EDIT on a GRN track | Load a factory sound or one of your own into that track only; AS WAS puts yours back. FUNC+DOWN saves the track's sound as your own, FUNC+UP copies it for the PASTE row |
 | MIXER | MIXER | Levels, the sidechain duck, stereo width, delay, reverb, routing, chorus, master, kill EQ |
 | PERFORM | FUNC+MIXER | Scenes, morph, macros, mutation |
-| Track menu | **Hold OK** in GRID (a tap says `HOLD OK: TRACK MENU`) | GENERATE a drum or melodic part (DENSITY, RANGE, LEAP, WHAT); EVOLVE every 1-8 loops (mutation MIX: a different one each turn), ORBIT or DRIFT, KEEP or HOME; saved with the project |
-| PROJECT | PROJECT | Banks and patterns, key and scale, the card. On the slots: **hold OK** for the pattern menu (COPY, PASTE, CLEAR, DOUBLE; OK runs, PASTE/CLEAR/DOUBLE twice). Shortcuts: FUNC+UP copies, FUNC+DOWN twice pastes, FUNC+LEFT twice clears |
+| Track menu | **Hold OK** in GRID or KEYS (a tap says `HOLD OK: TRACK MENU`) | The selected track's rows: GENERATE a drum or melodic part (DENSITY, RANGE, LEAP, WHAT); EVOLVE every 1-8 loops (mutation MIX: a different one each turn), ORBIT or DRIFT, KEEP or HOME, saved with the project; SPEED, PLAY, FREEZE, RELOAD SAMPLE |
+| PROJECT | PROJECT | Banks and patterns, key and scale, the card. On the slots: **hold OK** for the pattern menu (COPY, PASTE, CLEAR, DOUBLE; OK runs, PASTE/CLEAR/DOUBLE twice). Shortcuts: FUNC+UP copies, FUNC+DOWN twice pastes, FUNC+LEFT twice clears. From any screen: hold PROJECT + STEP queues that slot |
 | CHAIN | PROJECT, then screen key RIGHT | The pattern chain as a list |
 | PATTERN | PROJECT, screen key RIGHT twice | Master length (LEN), swing (SWG), FEEL and each track's own swing of the playing pattern |
 | SETUP | PROJECT, screen key RIGHT three times | Record quantize; shows clock and MIDI settings |
 | PROJECTS | PROJECT, screen key RIGHT four times, or the menu's OPEN PROJECT | Open another project from the card, save this one under a new name, rename or delete one |
-| LAUNCH | PROJECT twice quickly | Each track from another pattern: STEP launches that slot on the selected track (or held pads, silent here), CLR back to its own part, push B pins, **hold OK** CAPTUREs what plays into a free slot |
+| LAUNCH | PROJECT twice quickly | Each track from another pattern: STEP launches that slot on the selected track (or held pads, silent here), CLR back to its own part, push B pins, **hold OK** CAPTUREs what plays into a free slot. A launched track is READ ONLY, but COPY copies the part it plays |
 | RESAMPLE | FUNC+REC ("sampling") | Record the output, or the audio input, to a file or a track |
 | Step page | Hold STEP + OK | One step's own fields (opens over GRID) |
 | Enaga menu | FUNC+POWER | CLOCK SRC, CLOCK/SYNC OUT, MIDI CH |
@@ -74,7 +74,7 @@ each line means.
 <tr><td align="center"><img src="screens/project.png" width="200" alt="PROJECT"><br><sub>PROJECT</sub></td><td align="center"><img src="screens/chain.png" width="200" alt="CHAIN"><br><sub>CHAIN</sub></td><td align="center"><img src="screens/pattern.png" width="200" alt="PATTERN"><br><sub>PATTERN</sub></td></tr>
 <tr><td align="center"><img src="screens/setup.png" width="200" alt="SETUP"><br><sub>SETUP</sub></td><td align="center"><img src="screens/projects.png" width="200" alt="PROJECTS"><br><sub>PROJECTS</sub></td><td align="center"><img src="screens/menu.png" width="200" alt="FUNC menu (FUNC+HOME)"><br><sub>FUNC menu (FUNC+HOME)</sub></td></tr>
 <tr><td align="center"><img src="screens/help.png" width="200" alt="FUNC held alone on GRID"><br><sub>FUNC held alone (GRID)</sub></td><td align="center"><img src="screens/mutate.png" width="200" alt="MUTATE pressed"><br><sub>MUTATE pressed</sub></td><td align="center"><img src="screens/scene.png" width="200" alt="SCENE A held"><br><sub>SCENE A held</sub></td></tr>
-<tr><td align="center"><img src="screens/help_keys.png" width="200" alt="FUNC held, screen keys to FUNC + KEY"><br><sub>FUNC held, screen keys: FUNC + KEY</sub></td><td></td><td></td></tr>
+<tr><td align="center"><img src="screens/help_keys.png" width="200" alt="FUNC held, LEFT to FUNC + KEY"><br><sub>FUNC held, LEFT: FUNC + KEY</sub></td><td></td><td></td></tr>
 </table>
 
 ## Keys that work everywhere
@@ -89,15 +89,19 @@ each line means.
 | FUNC+CLR / FUNC+OK | Undo / redo, in every mode and page |
 | VALUE turn | Tempo, 20-300 BPM in 0.1 steps (PERFORM: morph). With a performance effect picked: its amount (below) |
 | VALUE push + turn | Pattern swing |
+| Tap VALUE, three times or more | Tap tempo where VALUE turns the tempo (`TAP 128.0`) once two gaps agree, from the last four taps; a 2 s gap starts again |
+| FUNC + SEL< / SEL> | **TRANSPOSE**: the melodic tracks (VAs, WAVEs, FM4, GRAIN, unsliced SAMPLE) a scale step down / up, -12..+12, on every screen (`TRANSPOSE +2 IN KEY`); the FUNC menu's TRANSPOSE row on SEMI makes it semitones, the key moving too (`TRANSPOSE +3 C`). Both screen keys together back to 0. Drums, sliced samples and MID stay. Not saved; in a LOCK |
+| FUNC + VALUE turn | **VariSpeed**: tempo and the pitch of every machine together, like a turntable, a tenth of a semitone a click, an octave each way (`VARISPEED +1.2 140.3`). Rest is a detent; FUNC + tap VALUE (no effect picked) snaps back. Not saved; internal clock only (`EXT CLOCK`) |
+| FUNC + push VALUE + turn | Nudge: 4% faster or slower for 250 ms a detent, then back to the set tempo (`NUDGE FASTER`) |
 | Push VALUE + STEP, CLR, LEFT/RIGHT | The performance mixer (below) |
 | FUNC + push A / B / C | Master kill EQ: kill LOW / MID / HI, again to bring it back (`KILL LOW`, `LOW BACK`). Performance only: not saved, and a load brings every band back |
 | FUNC + pad-row L/R | Selected track's length (polymeter), on every screen but the menu; hold to repeat |
 | Arrow pad | UP/DOWN move through rows, LEFT/RIGHT sideways, OK picks, CLR goes back |
-| Screen keys L/R | The screen's pages (on GRID and KEYS: the EDIT page A-D turn) |
+| Screen keys L/R | The screen's pages (on GRID and KEYS: the EDIT page A-D turn); with FUNC, TRANSPOSE |
 | Pad-row keys L/R | Which 16 the STEP keys mean: step page (GRID, KEYS, PERFORM, EDIT and the other editing screens), bank (PROJECT, CHAIN) |
 | FUNC + UP / DOWN | Copy / paste while editing; in the card lists, read again / store here |
 | FUNC tapped alone | `HOLD FUNC: HELP`: the reminder that the help is there |
-| FUNC held alone | Help for this screen: what A-D do here and its gestures. Keep holding FUNC: screen keys (or LEFT/RIGHT) turn the pages; the last five are FUNC + each function key, FUNC + a knob or pad, the upper pads, and the VALUE mixer's gestures and slots |
+| FUNC held alone | Help for this screen: what A-D do here and its gestures. Keep holding FUNC: LEFT/RIGHT turn the pages; the last five are FUNC + each function key, FUNC + a knob or pad, the upper pads, and the VALUE mixer's gestures and slots |
 
 ## Pads
 
@@ -114,7 +118,7 @@ screen when pressed.
 | Upper 3 MUTE (TRK 3) | Toggles MUTE MODE: lower pads mute at once | In MUTE MODE: STEP 1-8 recall a mute state, FUNC+STEP on the next bar, push VALUE+STEP stores |
 | Upper 4/5 SCENE A/B (TRK 4/5) | Hold + STEP 1-16 picks that side's scene | In PERFORM: hold + OK captures the selected track only, hold + CLR erases the scene |
 | Upper 6 THROW (TRK 6) | Delay throw while held | FUNC: reverb throw |
-| Upper 7 MUTATE (TRK 7) | Mutates the selected track (type and amount set in PERFORM): `MUTATE T1 VELOCITY`, then `OK KEEPS CLR REVERTS` with the pad bright until OK keeps it or CLR reverts it. Any other edit also keeps it. `T1 NOTHING TO MUTATE`: nothing changed (empty track, amount 0). VELOCITY, the default, is subtle on drums; ROT or DENSITY show on the grid | FUNC, held 0.5 s: **LOCK** the playing pattern (`LOCK A01 STORED`). FUNC, tapped: jump to its lock at once (`BACK TO LOCK A01`), again to swap back (`SWAPPED BACK A01`). Pattern, sound, faders, sends, master, mutes, morph and macro positions; not the machines, samples, tempo or mixer. RAM only. The top line shows `L`, or `L+` once changed |
+| Upper 7 MUTATE (TRK 7) | Mutates the selected track (type and amount set in PERFORM): `MUTATE T1 VELOCITY`, then `OK KEEPS CLR REVERTS` with the pad bright until OK keeps it or CLR reverts it. Any other edit also keeps it. `T1 NOTHING TO MUTATE`: nothing changed (empty track, amount 0). VELOCITY, the default, is subtle on drums; ROT or DENSITY show on the grid | FUNC, held 0.5 s: **LOCK** the playing pattern (`LOCK A01 STORED`). FUNC, tapped: jump to its lock at once (`BACK TO LOCK A01`), again to swap back (`SWAPPED BACK A01`). Pattern, each track's launch (kept apart from it), sound, faders, sends, master, mutes, morph and macro positions; not the machines, samples, tempo or mixer. RAM only. The top line shows `L`, or `L+` once changed |
 
 OK and CLR answer a mutation in any mode but PROJECT, KIT, SAMPLES and RESAMPLE, and not while
 a STEP, a range or a scene pad is held: there they keep their own jobs.
@@ -131,7 +135,7 @@ a time; nothing of it is saved or undone.
 | Push VALUE + STEP 13 | The A/B morph on any screen (`MORPH 64`), the effect that was up left as it is. Again: let go, the morph stays (`MORPH KEPT: VALUE TEMPO`) |
 | Push VALUE + STEP 16 | The looper: records LOOP LEN bars (FUNC menu, 1/2/4/8, default 4) of the mix from the next bar line; then VALUE is the loop's mix, 0 live, 127 loop only (`LOOP MIX 64`). Again: leaves the looper (`LOOP OFF`; the loop is kept, silent, and VALUE + CLR throws it away for a new take; during the count-in or the take, `LOOP CANCELLED`). Effects picked after it play over the loop |
 | Push VALUE + LEFT / RIGHT | Previous / next effect, keeping the amount (crossfaded over FX GLIDE) |
-| Tap VALUE (let go within 0.5 s) | Back to 0, riding out over at most a 1/16: the effect's amount, the loop's mix; or the morph (`MORPH 0`, in PERFORM or with slot 13 picked). Never the tempo or swing. FUNC + tap: a cut |
+| Tap VALUE (let go within 0.5 s) | Back to 0, riding out over at most a 1/16: the effect's amount, the loop's mix; or the morph (`MORPH 0`, in PERFORM or with slot 13 picked). Never swing; where VALUE is the tempo, a tap is tap tempo. FUNC + tap: a cut; with no effect picked, VariSpeed back to 0 |
 | Push VALUE + CLR | Everything off, loop mix 0, riding (`FX OFF`); again: the loop is thrown away (`LOOP CLEARED`) |
 | FUNC menu FX GLIDE | How long those button jumps (and a slot change, leaving a playing loop, a LOCK jump) ride: OFF, 1/16, 1 BEAT (default), 1 BAR; back to 0 they take at most a 1/16. Turning VALUE never glides |
 | VALUE held | The STEP keys show the slots: dim amber, the effect that is up bright amber, the one VALUE is on bright green; STEP 16 red blinking armed, red recording, green holding a loop |
@@ -177,18 +181,19 @@ Page 1 NOTE VEL LEN MICR, page 2 PROB COND RTCH RAMP, page 3 ACNT SLID CHRD.
 | Mode | UP / DOWN | LEFT / RIGHT | Screen keys L/R | Pad-row L/R | A-D | OK / CLR | FUNC + arrow |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | GRID | Track | Step page 1-4 | EDIT page (for A-D) | Step page | Current EDIT page params | — / clear | Copy / paste |
-| EDIT | Track | Page SRC FLTR AMP FX LFO ARP ENV OSC | Page | Step page | The page's 4 params | SMP: open SAMPLES; drums, synths and GRN: open SOUNDS / clear | Copy / paste |
+| EDIT | Track | Page SRC FLTR AMP FX LFO ARP ENV OSC SCAN | Page | Step page | The page's 4 params | SMP: open SAMPLES; drums, synths and GRN: open SOUNDS / clear | Copy / paste |
 | KEYS | Track | Octave (OCT 0-7) | EDIT page (for A-D) | Step page | Current EDIT page params | — | Copy / paste |
 | MACHINE | Machine | Machine column (3 over) | Track | Step page | A: machine, B: MIDI OUT channel (OFF, 1-16) | SMP/GRN: open SAMPLES; drums and synths: open SOUNDS / — | Copy / paste |
 | KIT | Slot | Page of 8 slots | Page of 8 slots | — | A: slot | Recall (twice) / back to MACHINE | DOWN: save here, UP: read the card again |
-| MIXER | — | Page (17) | Page | Step page | Levels or page fields; on EQ, push A-C kills a band; on DLY+ and REV+, push A flips the mode; on WID and CHO 1-4 / 5-8, push A-D steps that track's width or send (OFF, 48, 96 / OFF, 64) | — / clear | Copy / paste |
+| MIXER | Group of pages: TRK DCK WID DLY REV CHO MST | Page (17) | Page | Step page | Levels or page fields; on EQ, push A-C kills a band; on DLY+ and REV+, push A flips the mode; on WID and CHO 1-4 / 5-8, push A-D steps that track's width or send (OFF, 48, 96 / OFF, 64) | — / clear | Copy / paste |
 | SAMPLES | Entry | Page of 8 | Page of 8 | — | A: entry; push A: hear the file (twice while playing) / stop | Load file or open folder / up a folder (at the top: back) | UP: read the folder again |
-| SOUNDS | Entry | First / last entry | Track | — | A: entry | Load into the track (AS WAS: put yours back) / back | — |
+| SOUNDS | Entry | First / last entry | Track | — | A: entry; push B / C: rename / delete your own | Load into the track (AS WAS: put yours back; PASTE: the copied sound) / back | Copy the sound / save it as your own |
 | RESAMPLE | Bars 1/2/4/8 | Destination FILE, TRK 1-8 | Destination | Step page | A: bars, B: source, C: input level | Arm / cancel | Copy / paste |
 | PROJECT | Slot cursor by row | Slot cursor | Page: PROJECT CHAIN PATTERN SETUP PROJECTS | Bank A-H | A: queue mode, B: key, C: scale | Queue slot / cancel queue | — (FUNC menu) |
-| CHAIN | Entry | Entry's pattern -/+ | Page | Bank A-H | A: repeats X1-X16, B: mute recall --/M1-M8 | Add entry / remove entry (twice; empty: back) | — (FUNC menu) |
+| CHAIN | Entry | Entry's pattern -/+ | Page | Bank A-H | A: repeats X1-X16, B: mute recall --/M1-M8; push A: SECTION view | Add entry / remove entry (twice; empty: back) | — (FUNC menu) |
+| SECTION | Entry | Entry's pattern -/+ | SECT / MOVE | Bank A-H | SECT: PAT REP MUT SCN, MOVE: MRP NRG BPM TRN; push: field to -- | Back (hold: fill from what plays) / back | — |
 | PATTERN | Change field -/+ | Field LEN / SWG / FEEL / track 1-8 swing | Page | Bank A-H | A: LEN 1-64, B: SWG, C: track swing (PAT, 50-75), D: FEEL (OFF, DRIFT 1-6, WAVE 1-6) | — / back | — |
-| PERFORM | Mutation type | Macro A-D | Mutate amount (±10) | Step page | Macros A-D (push: MACRO LEARN; FUNC + A: REL ALL, FUNC + B: LEN ALL, FUNC + C: ENERGY, FUNC + D: LIVE RND, FUNC + push D: track in/out) | Capture scene / clear macro | — (auto-fill: FUNC menu) |
+| PERFORM | Mutation type | Macro A-D | Mutate amount (±10) | Step page | Macros A-D (push: MACRO LEARN; FUNC + A: REL ALL, FUNC + B: LEN ALL, FUNC + C: ENERGY, FUNC + D: LIVE RND; held FUNC names them on the gauges; FUNC + lower pad: track in/out of LIVE RND) | Capture scene / clear macro | — (auto-fill: FUNC menu) |
 | FUNC menu | Row | Change a setting row | — | — | A: row, B: change | Run the row / close | — |
 
 **STEP lights:** a trig is green as bright as its velocity (soft, medium, loud, accent), blinks with a condition or probability, is amber with locks; red = trigless, bright red = the playhead.
@@ -197,30 +202,51 @@ Page 1 NOTE VEL LEN MICR, page 2 PROB COND RTCH RAMP, page 3 ACNT SLID CHRD.
 bank. On the slots a tap on OK queues the one under the cursor and a hold (0.5 s) opens the
 pattern menu: COPY, PASTE, CLEAR, DOUBLE (doubles every track up to 64 steps, copying the steps).
 The screen keys walk the pages PROJECT, CHAIN, PATTERN, SETUP, PROJECTS; CLR on any of
-them goes back to the slots. In SETUP, A sets the record quantize. Chain on/off, the sample
-reload, RELOAD PROJECT, NEW PROJECT and LOAD DEMO are in the FUNC menu (FUNC+HOME); the last
-three throw away unsaved work, so each needs OK twice within 2 s (OK AGAIN TO RELOAD, OK AGAIN
-FOR NEW, OK AGAIN FOR DEMO). NEW is empty; LOAD DEMO is the factory demo a first start plays.
-**FUNC menu (FUNC+HOME):** SAVE, SAVE AS, OPEN PROJECT, NEW PROJECT, RELOAD PROJECT, CLEAR
-PATTERN, KITS, RELOAD SAMPLE, TRACK SPEED, TRACK PLAY, CHAIN, CHAIN END, AUTO-FILL, QUANTIZE, REC MODE, CLICK, COUNT-IN, FX GLIDE, FREEZE, LOOP
-LEN, LOAD DEMO, JAM REC. It always opens on SAVE, and the list wraps: UP once is JAM REC, twice LOAD DEMO, three times LOOP LEN, four times FREEZE, five times FX GLIDE. UP/DOWN or A
+them goes back to the slots. In SETUP, A sets the record quantize. Chain on/off,
+RELOAD PROJECT, NEW PROJECT and LOAD DEMO are in the FUNC menu (FUNC+HOME), the sample reload in
+the track menu (hold OK in GRID); the last
+three throw away unsaved work, so each needs OK twice within 2 s (OK AGAIN: RELOAD, OK AGAIN:
+NEW, OK AGAIN: DEMO). NEW is empty; LOAD DEMO is the factory demo a first start plays.
+**FUNC menu (FUNC+HOME):** SAVE, JAM REC, ARR REC, CLICK, COUNT-IN, REC MODE, QUANTIZE, AUTO-FILL,
+FX GLIDE, TRANSPOSE (SCALE or SEMI), LOOP LEN, CHAIN, CHAIN END, ARR UNDO, PROG CHG OUT, SAVE AS,
+OPEN PROJECT, KITS, NEW PROJECT, RELOAD PROJECT, CLEAR PATTERN, LOAD DEMO. It always opens on SAVE:
+DOWN once is JAM REC, twice ARR REC, three times CLICK; the list wraps, so
+UP once is LOAD DEMO, twice CLEAR PATTERN. UP/DOWN or A
 scroll, OK runs the row (NEW, RELOAD, CLEAR PATTERN and LOAD DEMO need OK twice), LEFT/RIGHT or B change a
-setting row (OK steps it too), CLR or FUNC+HOME close it. FREEZE: the selected track plays a 1-8
+setting row (OK steps it too), CLR or FUNC+HOME close it. **Track menu (hold OK in GRID):**
+GENERATE, DENSITY, RANGE, LEAP, WHAT, EVOLVE, MODE, MUTATION, AMOUNT, KEEP, HOME, SPEED, PLAY,
+FREEZE, RELOAD SAMPLE, for the selected track (a lower pad picks another with it open); it keeps
+its row, and from GENERATE UP once is RELOAD SAMPLE, twice FREEZE. FREEZE: the track plays a 1-8
 bar loop of itself from RAM and stops computing; OK again unfreezes. CLICK: a click on every beat (ON/OFF). COUNT-IN: OFF, 1 BAR, 2 BAR clicked
 before a PLAY from stop with REC on (`COUNT-IN 4` .. `1`); internal clock only; neither saved.
 JAM REC: OK records the finished master to `/RECORD/JAM_<n>.WAV` (24-bit, about 1 GB an hour,
-up to 3 h 51 min) until OK again; a dot blinks before the load meanwhile; no click or audition.
+up to 3 h 51 min) until OK again; a dot blinks before the load and the REC key a dim red meanwhile;
+no click or audition. FUNC+REC twice (RESAMPLE, then again) starts and stops it too.
+ARR REC: OK on, the chain kept for undo and emptied; each pass of the jam is written into it
+(the same again: one more repeat; a change of pattern, mutes, scene, morph side, ENERGY,
+TRANSPOSE or tempo: a new entry with MUT CAP, SCN, MRP, NRG, TRN, BPM; X16 then a new entry). STOP, OK again or CHAIN ON
+end it (`ARR 23 SECTIONS`; 64 entries: `ARR FULL`); nothing kept gives the old chain back. A
+change in a pass shows from the next one; a pass cut before half is dropped. A launched lane is
+kept by writing the mix into a free slot of the bank (`LAUNCH IN A05`; none free: `LAUNCH NOT
+KEPT`), never a slot a queued change or launch is about to land on. Strip `ARR7`, the REC key
+blinks. ARR UNDO swaps the chain from before the take back in, and again the take; after a take
+that captured, it also empties the captured slots (not one edited since or playing) and is final.
 **PROJECTS:** UP/DOWN or A move, LEFT/RIGHT page by 8. OK twice within 2 s opens the project
-under the cursor (AGAIN TO OPEN; it throws away unsaved work and stops the transport).
+under the cursor (OK AGAIN: OPEN; it throws away unsaved work and stops the transport).
 FUNC+DOWN (or the menu's SAVE AS) is SAVE AS: A or LEFT/RIGHT move, B, VALUE or UP/DOWN change the character, OK saves
 under that name (NAME TAKEN if another project has it), CLR cancels. FUNC+UP reads the card again.
 Push B renames the project under the cursor (the same entry, titled RENAME; the open one too).
-Push C deletes it: DELETE? OK TWICE, then OK twice within 2 s; CLR or any other key keeps it; the
+Push C deletes it: OK TWICE: DELETE, then OK twice within 2 s; CLR or any other key keeps it; the
 open project cannot be deleted (PROJECT IS OPEN).
 **CHAIN:** a STEP key puts that slot of the shown bank into the entry under the cursor (or starts
 the chain); VALUE also sets repeats; OK adds a copy after the cursor (the playing pattern when
-empty), up to 64 entries. CLR twice within 2 s removes the entry under the cursor (`AGAIN TO REMOVE`, then `ENTRY REMOVED`; not undoable); on an empty chain CLR goes back. B recalls a mute state as the entry starts. The FUNC menu's CHAIN turns the chain on and off, and CHAIN END
+empty), up to 64 entries. CLR twice within 2 s removes the entry under the cursor (`CLR AGAIN: REMOVE`, then `ENTRY REMOVED`; not undoable); on an empty chain CLR goes back. B recalls a mute state as the entry starts. The FUNC menu's CHAIN turns the chain on and off, and CHAIN END
 switches SONG (play the chain once and stop, `SONG END`) and LOOP. Chain edits are not undoable.
+**SECTION (push A on CHAIN):** the entry's fields applied as it starts. MUT --/M1-M8/CAP (an
+exact mute mask), SCN --/1-16 (scene on side B), MRP --/SNAP/RIDE/BACK/SNAP A (morph to B at once,
+to B over the entry, to A over the entry, to A at once), NRG --/-64..+64 (ENERGY), BPM --/20-300 (skipped under an
+outside clock: `EXT CLOCK: BPM SKIPPED`), TRN --/-12..+12 (TRANSPOSE, in the FUNC menu row's unit). Push a knob: `--`. Hold OK: `SECTION FILLED` from what
+plays. The hands win until the next entry.
 **PATTERN:** VALUE also changes the field under `>`. LEN is the master length that a queued change
 (END) and the chain wait for. The eight TRACK SWING fields read `PAT` (follow SWG) or 50-75%: C
 sets the one under `>`, or the selected track's when `>` is on LEN or SWG. FEEL (D, or its row)
@@ -230,11 +256,16 @@ whole groove along one four-bar curve; the number is the most a step moves, in 9
 the ENV page) by the same count (`REL ALL -12`, -64..+64); FUNC + turn B scales every sequenced
 note's length (`LEN ALL 71%`, 25-400%). 0 is rest and a detent; not saved; a LOCK holds both.
 **LIVE RND:** in PERFORM, FUNC + turn D shuffles every armed track in random blocks of 1, 2, 4, 8
-or 16 steps (`LIVE RND4 8 TRK`), OFF puts the programmed order back at once; FUNC + push D takes
-the selected track out or back in (all eight at start). Pattern untouched; not saved; in a LOCK.
+or 16 steps (`LIVE RND4 7 TRK`), OFF puts the programmed order back at once; FUNC + lower pad takes
+that track out or back in (every track but the kick at start). Pattern untouched; not saved; in a LOCK.
 **ENERGY:** in PERFORM, FUNC + turn C from a breakdown (-64: drums and lines out, pads keep their
 strongest hits; hats go first, kick last) to the peak (+64: quiet ghosts on empty off-beats, hats
-most, probabilities towards 100). `ENERGY -20`; 0 is rest and a detent; pattern untouched; in a LOCK.
+most, probabilities towards 100). `ENERGY -20`; 0 is rest and a detent; pattern untouched; in a LOCK; 0 after a load or NEW.
+**TRANSPOSE:** FUNC + SEL< / SEL> on any screen moves the tracks that fold into the scale a step
+of the scale, staying in the key (`TRANSPOSE +2 IN KEY`); FUNC menu TRANSPOSE `SEMI` makes it a
+semitone with the key moving (`TRANSPOSE +3 C`). Both screen keys together back to 0, no step
+heard first. A held key is let go of at the pitch it started; recording stores the key played.
+Not saved; in a LOCK and in a section's TRN.
 **MACRO LEARN:** in PERFORM push a macro's knob (A-D): EDIT opens with `LEARN B n/4`; **turn** any EDIT knob (any page, the LFO's included, any track), or LOW, MID and HI on MIXER's EQ page (the kill EQ), to where the macro's top should be; OK, CLR, HOME or any screen but EDIT and MIXER ends it (`B: 3 PARAMS`) and the knobs snap back, so the macro at 0 is the old sound and at 127 the one you dialled. A push takes a parameter the macro holds off it; a fifth knob says `FULL`. An EDIT knob on a parameter a turned-up macro holds says `HELD BY MACRO x`.
 **PERFORM:** macros are set by MACRO LEARN (above); the STEP keys are steps, as in GRID;
 FUNC+STEP a trigless step, as in GRID. OK's whole capture also stores the
@@ -245,16 +276,16 @@ wherever they are. The demo project has B ACID (bass filter), C DUB (chord and r
 track only); scene pad + CLR erases it. Mutes, mute states and the A/B scene choice are saved with
 the project.
 **KIT:** a kit is everything KIT.BIN holds: the eight machines, their parameters, the faders,
-the sample paths, and each track's SLC AUTO, LFO TRIG, MOD slots, choke group and arp settings. STEP 1-16 move the cursor to that slot (they never load). OK once shows OK AGAIN TO
+the sample paths, and each track's SLC AUTO, LFO TRIG, MOD slots, choke group and arp settings. STEP 1-16 move the cursor to that slot (they never load). OK once shows OK AGAIN:
 LOAD; OK again within 2 s recalls the kit, and the transport keeps playing. A recall cuts the tails
 and is not undoable, which is why it takes two presses. Tracks whose sample path changed reload
 their sample in the background; the others keep playing theirs. FUNC+DOWN saves the current kit
-into an empty slot at once, and over a stored kit on a second press (AGAIN TO OVERWRITE). The kits
+into an empty slot at once, and over a stored kit on a second press (DOWN AGAIN: REPLACE). The kits
 live in `/ENAGA/DATA/STRATA/KITS/KIT_01.BIN` ... `KIT_16.BIN`. A recalled kit makes the project
 UNSAVED until it is saved with FUNC+HOME, OK.
 **SAMPLES:** one OK loads the file into the track at once, the beat keeps playing and the cursor
 stays, so DOWN, OK tries the next. **Push A hears the file first** without loading it, whole
-from its start (`HEARING 3/12S`); with the beat playing push A twice (`A AGAIN TO HEAR`), since it goes out with the beat; while it plays, UP/DOWN hears the next; push A again stops. The top level holds `SAMPLES/` and `RECORD/`, and on a card with the stock firmware's folders also
+from its start (`HEARING 3/12S`); with the beat playing push A twice (`A AGAIN: HEAR`), since it goes out with the beat; while it plays, UP/DOWN hears the next; push A again stops. The top level holds `SAMPLES/` and `RECORD/`, and on a card with the stock firmware's folders also
 `POOL/` (`/SmplTrek/Pool/Audio`) and `SMPLTREK/` (the whole `/SmplTrek` tree, stock projects included). Only WAVs and
 folders are listed (no `._` files), at most 256 a folder. Picking a file makes the project UNSAVED.
 **MIDI out:** a track with a MIDI OUT channel (MACHINE, encoder B) sends every note it plays
@@ -267,6 +298,9 @@ MIDI port open on the computer) when driving gear from the DIN jack; Enaga 0.3.0
 **MIDI in:** channels 1-8 play tracks 1-8, other channels play the selected track. Notes are
 held until their note-off. CC 16-31 set the track's 16 parameters (SRC, FLTR, AMP, FX in order);
 CC 120/123 let go of held notes. Program change 1-128 on your MIDI CH queues pattern A01-H16.
+Under CLOCK SRC MIDI a song position pointer puts the chain on its entry and pass (chain off:
+the pattern from the top of the song). **PROG CHG OUT** (FUNC menu, saved, off in a new project):
+every pattern change sends its number 0-127 as a program change on your MIDI CH.
 
 ## The screen
 
@@ -274,7 +308,7 @@ CC 120/123 let go of held notes. Program change 1-128 on your MIDI CH queues pat
 | --- | --- | --- |
 | Top line | `A01 3.2 130.0 > 24%  L  T1` | Live bank+slot (lit), bar.beat, tempo (`MIDI` / `SYNC` under an outside clock), `>` playing / `.` stopped, audio load, `L` / `L+` a LOCK, the selected track (lit) |
 | Under it | a 1 px line | How far the pattern is through its pass |
-| Under it | `K:L FX4 S40 M:AB RL- EN+ RN4 LP` | Live strip, small: what is off rest (kills, perf effect, morph %, macros, REL ALL, LEN ALL, ENERGY, LIVE RND, looper); not drawn at rest |
+| Under it | `ARR7 K:L FX4 S40 M:AB RL- EN+ TR+3 VS+ RN4 LP` | Live strip, small: an ARR REC take and its sections so far, then what is off rest (kills, perf effect, morph %, macros, REL ALL, LEN ALL, ENERGY, TRANSPOSE, VariSpeed, LIVE RND, looper); not drawn at rest |
 | Under it | a lit toast: `LOCK A01 STORED`, `SCENE A: STEP PICKS`, `CLOCK REFUSED` | A notice, LEARN, a scene or the MUTATE verdict, for a moment over the screen |
 | Right edge | 2 px column | Master meter: level, held peak dot, top pixel = limiter |
 | Bottom line | `SRC FLTR AMP ...`, `DROP 2`, `GUARD1` | The screen's pages as tabs, the one showing lit (the screen keys turn them); at the right DROP = edits lost to a full command ring, GUARD = the CPU guard shedding voices |
@@ -286,6 +320,7 @@ CC 120/123 let go of held notes. Program change 1-128 on your MIDI CH queues pat
 | GRID cells | dot / cut corner / teeth / outline | Locks / top-left condition, top-right probability / ratchet / trigless |
 | PROJECT | `Q END CHAIN`, `BANK A 5/16`, the map A-H | Queue mode, chain running; the shown bank and how many of its slots hold a pattern; every bank's slots (grey: used, white: playing, blinking: queued) |
 | CHAIN | `CHAIN 3/64 ON SONG`, `>02 A05 X2 M3 PLAY` | Entries used, chain on/off, plays once (SONG) or loops; cursor, entry, pattern, repeats, mute state recalled at its start, playing now |
+| SECTION | `SECT 2/5`, `MRP RIDE`, `S4 SNAP E-40 T+2 132BPM` | The entry (a badge while it plays), the page's fields; on CHAIN, the cursor entry's section fields |
 | PATTERN | `>LEN 16 STEPS`, `SWG 54%`, `FEEL DRIFT 3`, `3 PAT`, `>5 66%` | Master length; swing; FEEL; a track following SWG or with its own (`>` = field VALUE changes) |
 | EDIT | `A TUN G-1+  B FMA 072  C FMD 056`, `D CLK 072` | The knob line at the top (A-C) and the footer (D); a held step's lock lights its value |
 | EDIT | `LFO>CUT 40`, `VEL>RES +20`, `ENV>CUT +37` | The footer's second line: what moves the page's knobs (the LFO, a MOD slot, the filter envelope) |
@@ -296,6 +331,7 @@ CC 120/123 let go of held notes. Program change 1-128 on your MIDI CH queues pat
 | EDIT ARP | `X2 OCT`, `ARP OFF: TURN MOD`, `ARP RHY E5/16`, `PUSH: VAR RHY ACC RTC` | How many octaves the run climbs; the arp is off; a push set RHYTHM; none of the four is set |
 | EDIT ENV | `HOLDS: PAD OR LEN`, `SUS 0: ONE-SHOT`, `NOT ON THIS MACHINE` | Notes hold (SUS up); notes are one-shots; a machine with no ENV page |
 | EDIT OSC | `SAW + SUB DRIVEN`, `NOT ON THIS MACHINE` | What goes into the VA's filter; a machine with no OSC page |
+| EDIT SCAN | `EACH NOTE: POS TO END`, `SCAN OFF: TURN MOD`, `END = POS: NO TRAVEL` | The scan runs with each note; MOD is OFF; END on POS leaves nowhere to go |
 | PROJECT slots | `05>`, bright box | Queued slot; live slot (bright), has trigs (mid), empty (dark) |
 | PROJECT | `SMP OS.X- 12/64M` | Per track sample: O ready, S streamed from the card, . loading, X failed, - none; MiB used/budget |
 | Any | `STREAM LATE` | The card fell behind a streamed file; the gap played as silence |
@@ -316,14 +352,18 @@ CC 120/123 let go of held notes. Program change 1-128 on your MIDI CH queues pat
 **Machines:** KCK kick · SNR snare · HAT hat · PRC 2-op FM percussion · SMP sampler · GRN granular ·
 MNO VA mono · PLY VA poly · WMN wavetable mono · WPL wavetable poly · FM4 four-operator FM.
 
-**EDIT pages:** SRC source · FLTR filter (the insert chain's; on the VA and WAVE machines the voice's own) · AMP amplitude · FX effects (insert chain) · LFO the track's LFO · ARP its arpeggiator · ENV held notes and OSC oscillators (VA, WAVE, FM4 and GRAIN machines).
+**EDIT pages:** SRC source · FLTR filter (the insert chain's; on the VA and WAVE machines the voice's own) · AMP amplitude · FX effects (insert chain) · LFO the track's LFO · ARP its arpeggiator · ENV held notes and OSC oscillators (VA, WAVE, FM4 and GRAIN machines) · SCAN the wavetable scan (WAVE machines).
 **LFO page:** WAV shape SIN TRI RMP (rising) SAW (falling) SQR S+H · RAT rate, `0.06`-`32` Hz free on the lower half, `8B` (bars) to `1/32` synced on the upper (`.` dotted, `T` triplet) · DEP depth, 127 = about 64 either side (about 3 octaves on a cutoff, never under ~100 Hz) · DST the parameter it moves, or OFF. Lockable, scene- and macro-able like any parameter. **Push B = TRIG:** FREE, RETRIG (each note restarts it), ONE-SHOT (each note runs one cycle: TRI attack-decay, SAW decay, RMP rise and hold, SQR gate, S+H per note). On VA and WAVE an LFO on TUN glides. **Push C / D = MOD slot 1 / 2:** push again for the source (LFO, ENV = the LFO's shape once per note, VEL, PRS = pad pressure, RND = random per note, OFF), turn any knob of the track for the depth, OK. A dim line under a bar is a slot's range.
 **ENV page (VA and WAVE machines; FM4's is below):** ATK attack `3MS`-`5.0S` · SUS sustain `0%` (one-shot: DEC is the length) to `100%` · REL release `60MS`-`8.0S` · FSU filter sustain (0 = the sweep closes, up = stays open). SUS up: a note holds while the pad or key is held, or for the step's LEN (MONO counts LEN only then). Pad: SUS 70%, ATK 400MS, REL 2.0S, chord step LEN 16 STP. REC records how long a held note was held as its step's LEN.
 **OSC page (VA MONO, VA POLY):** WAV `SAW` (0-31), `SQR` (32) to `P08` (127, a thin pulse) · OS2 `OFF` (0), `D0`-`D60` a detuned second saw in cents (1-63: chorus to Reese), `S+0`-`S+24` a pulse synced to OSC 1 (64-127: the sync sweep) · SUB the sub an octave down (0 = off) · DRV drive into the filter, thicker and dirtier, not louder. RES (SRC) self-oscillates near the top.
 
 **OSC page (WAVE MONO, WAVE POLY):** WRP phase bend, 0 none · DET `OFF` or `D1`-`D60`, a second detuned reader in cents · SUB · WMN: GLD glide; WPL: DRV drive.
 
+**SCAN page (WAVE MONO, WAVE POLY):** moves the position from POS towards END with each note. MOD `OFF` `FWD` (once, holds) `REV` (from END, once) `LOOP` `LREV` (looped backwards) `PING` (there and back) `RET` (there and back once) `SINE` (eased there and back) `RAND` (a random frame a cycle) `DRFT` (glides to a random frame a cycle) · SPD the LFO's RAT: 0-63 free (28 = 1 Hz), 64-127 synced (96 ticks = a beat) · END frame 0-15 as POS · CRV `LIN` at 64, `+n` slow start, `-n` fast start.
+
 **FM4 pages:** ENV = ATK SUS REL ISU (index sustain). OSC = DET `OFF`/`D1`-`D25` the second pair sharp · FIN fine ratio, `0` at 64 · BRT index keytrack · CAR carrier ratio 1 0.5 2 3 4.
+
+**SECTION (CHAIN, push A):** SECT = PAT pattern · REP repeats · MUT mute state (`--`, M1-M8, CAP an exact mask) · SCN scene on side B. MOVE = MRP morph move (SNAP, RIDE, BACK, SNAP A) · NRG ENERGY · BPM tempo · TRN TRANSPOSE.
 
 **ARP page:** MOD OFF UP DN U/D ORD RND · RAT `1/4` to `1/32T` · OCT `X1`-`X4` · GAT note length, `50%`-`99%` of the spacing. On, a step plays a run for its length (PLY: through its chord); in KEYS, held keys are arpeggiated. Lockable and scene-able. Push A VAR (CONV DIVG THUMB PINKY), push B RHYTHM (rests; a rest holds the note), push C ACCENT (patterns, CYC), push D RATCHET (2:4 2:8 3:8 4:16 2ALL RND2 RND3): kit settings, not lockable. OK: ARPS, 14 factory arps.
 
@@ -337,8 +377,8 @@ MNO VA mono · PLY VA poly · WMN wavetable mono · WPL wavetable poly · FM4 fo
 | GRN | POS position, SIZ grain size, DEN density, SPR spray | DEC (127 HOLD), PIT pitch, SHP grain shape, LVL; ENV: ATK SUS REL; OSC: SCN scan, PSP pitch spray |
 | MNO | TUN, MOD filter mode, TON tone; FLTR: CUT cutoff, RES resonance, ENV filter env amount, FDE filter decay | DEC, -, GLD glide, LVL (ENV page: ATK SUS REL FSU) |
 | PLY | TUN, MOD, TON; FLTR: CUT, RES, ENV, FDE | DEC, -, DET detune, LVL (ENV page: ATK SUS REL FSU) |
-| WMN | TBL table (CLS PWM SYN FMT RSW HRM FLD PHD FM1 TIN DGT VOW GRL EPN PLK MLT), POS position, TON; FLTR: CUT (LP24), RES, ENV, FDE | DEC, -, MOT envelope to position (`OFF` at 64, `+15`/`-15`), LVL (ENV and OSC pages) |
-| WPL | TBL, POS, TON; FLTR: CUT, RES, ENV, FDE | DEC, -, MOT, LVL (ENV and OSC pages; chords, shares the 12 POLY voices) |
+| WMN | TBL table (CLS PWM SYN FMT RSW HRM FLD PHD FM1 TIN DGT VOW GRL EPN PLK MLT), POS position, TON; FLTR: CUT (LP24), RES, ENV, FDE | DEC, -, MOT envelope to position (`OFF` at 64, `+15`/`-15`), LVL (ENV, OSC and SCAN pages) |
+| WPL | TBL, POS, TON; FLTR: CUT, RES, ENV, FDE | DEC, -, MOT, LVL (ENV, OSC and SCAN pages; chords, shares the 12 POLY voices) |
 | FM4 | ALG algorithm `A1`-`A8`, RAT modulator ratio, IDX index, FBK feedback | DEC, IEN index envelope, VEL velocity to index, LVL (ENV and OSC pages; chords, shares the 12 POLY voices) |
 
 **Insert chain (every track):** FLTR = DRV drive, CUT cutoff, RES resonance, MOD filter mode
@@ -359,7 +399,7 @@ OFF-100% (SRC: the source, never ducked) · DUCK: SRC source track, ATK attack 1
 FBK feedback, TON tone, LVL · DLY+: TYP CLAS/LONG (push A flips it), MUL X1-X8 (LONG: time x MUL,
 up to 12 s), WOW tape wobble, DIF diffusion · REV: DEC decay, DMP damping, HPF high-pass, LVL ·
 REV+: TYP ROOM/HALL (push A), SIZ size, MOD sweep, SHM octave-up shimmer · ROUTE: PNG ping-pong,
-D>R delay into reverb, LCT the LONG delay's low cut · CHO 1-4, CHO 5-8: each track's chorus send, OFF-127 (push A-D: OFF or 64; saved in the kit) · CHO: RAT sweep 0.05-5 Hz, DEP depth, LVL return, C>R chorus into the reverb · MST master: DJ filter, CMP compressor, LIM limiter, LVL · EQ master kill EQ:
+D>R delay into reverb, LCT the LONG delay's low cut · CHO 1-4, CHO 5-8: each track's chorus send, OFF-127 (push A-D: OFF or 64; saved in the kit) · CHO: RAT sweep 0.05-5 Hz, DEP depth, LVL return, C>R chorus into the reverb · IN: the line input, LVL (100 = 0 dB), PAN, DLY, REV sends (push A: on/off) · IN+: CHO send, DCK duck depth, TON tone, SRC jack LINE/LINE L/MIC/DYN MIC/HI-Z/USB (push D: gain LOW/NORM/HIGH; saved in the project) · MST master: DJ filter, CMP compressor, LIM limiter, LVL · EQ master kill EQ:
 LOW (below 250 Hz), MID, HI (above 2.5 kHz), each flat at centre, KILL at the bottom, +6 dB at the top.
 
 **Lists:** queue modes END (end of pattern), 16, 32 (steps), NOW · repeat 1/4 1/8 1/16 1/32 1/4T

@@ -46,8 +46,10 @@ HOME "system", PLAY "◀◀", STOP "▶▶", MIXER "fx", EDIT "rec src".
      second label.**
    - **Arrow pad:** the cursor on the screen. UP/DOWN rows, LEFT/RIGHT sideways. OK picks, CLR
      goes back (or clears, where there is something selected to clear).
-   - **Screen keys:** the screen's pages. EDIT SRC FLTR AMP FX LFO ARP ENV OSC; MIXER's seventeen; PROJECT,
-     CHAIN, PATTERN, SETUP, PROJECTS; the step page's field pages; SAMPLES' and KIT's pages of
+   - **Screen keys:** the screen's pages; FUNC + a screen key is **TRANSPOSE** (below), on every
+     screen. EDIT SRC FLTR AMP FX LFO ARP ENV OSC SCAN (SCAN on
+     the WAVE machines only; a page a machine lacks is stepped over); MIXER's nineteen;
+     PROJECT, CHAIN, PATTERN, SETUP, PROJECTS; the step page's field pages; SAMPLES' and KIT's pages of
      eight. On GRID and KEYS, where A-D turn the current EDIT page, they turn that page. The
      one-page screens give them their one sideways setting: MACHINE and SOUNDS the track,
      RESAMPLE the destination, PERFORM the mutate amount.
@@ -83,15 +85,24 @@ HOME "system", PLAY "◀◀", STOP "▶▶", MIXER "fx", EDIT "rec src".
      EDIT, GRID and KEYS. OK on the ARP page opens ARPS, the factory arps, as OK on the sound
      pages opens SOUNDS (same keys, AS WAS first).
      On PROJECTS, where only A turns, push B renames and push C deletes the project under the
-     cursor (delete then asks for OK twice).
+     cursor (delete then asks for OK twice). SOUNDS does the same for your own saved sounds
+     (core/usersounds.hpp); on a factory sound or in ARPS they say `YOUR OWN SOUNDS ONLY`.
    - **VALUE is the crossfader.** Push VALUE + STEP picks what it fades: an effect, the morph
      (13) or the looper (16), on every screen (the performance mixer, below). With nothing
      picked it is the tempo (PERFORM: the morph; CHAIN/PATTERN: the field under the cursor).
-     Push + turn = swing. FUNC + turn is free (D1, 2026-11-25: it says `DJ FILTER: SLOT 1/2`).
+     Push + turn = swing. FUNC + turn = **VariSpeed** (below): the tempo with the pitch tied to
+     it. It was the DJ filter until D1 (2026-11-25), then free. **FUNC + push + turn = the tempo
+     nudge** (2026-11-28, core/taptempo.hpp): each detent plays 4% faster or slower for 250 ms,
+     then the set tempo comes back (`NUDGE FASTER`, `NUDGE SLOWER`); not saved, `EXT CLOCK` under
+     an outside clock.
      **A press of VALUE alone** (let go within half a second, with nothing turned or pressed
      meanwhile) resets what it is on to 0: a picked effect's amount, the looper's mix, the morph
-     (PERFORM, or slot 13 picked). Never the tempo, swing or a field, and nothing while a STEP
-     is held.
+     (PERFORM, or slot 13 picked). Never swing or a field, and nothing while a STEP is held.
+     With FUNC: a cut of the picked effect, or with none picked VariSpeed back to 0.
+     **Where VALUE is the tempo, the press is tap tempo** (2026-11-28): from the third tap, once
+     two gaps agree within 25%, the tempo follows the last four taps (`TAP TEMPO` twice, then
+     `TAP 128.0`), set and saved as a turn sets it; two stray taps set nothing. A gap over 2 s
+     or a tap at half or twice the pace starts a new count.
    - **STEP keys:** the sixteen of whatever the pad-row keys chose. **On every playing screen,
      PERFORM and KEYS included, they are steps** (D12, 2026-11-25): tap, hold + knob, hold + OK
      work as on GRID. MUTE MODE (STEP 1-8 the mute states), a held scene pad, push VALUE (the
@@ -118,14 +129,19 @@ HOME "system", PLAY "◀◀", STOP "▶▶", MIXER "fx", EDIT "rec src".
    The upper row is printed TRK 1-7. Roland preferred tracks on the lower row and tools above, so
    the pads stay as they are and every performance pad names itself on the screen when pressed;
    FUNC held alone shows the whole row.
+5. **A step that cannot be undone asks for a second press, always in the same words** (U3,
+   2026-11-28): `<KEY> AGAIN: <WHAT>`, the key to press again and what it will do, within 2 s:
+   `OK AGAIN: DELETE`, `OK AGAIN: OPEN`, `CLR AGAIN: REMOVE`, `DOWN AGAIN: REPLACE`, `A AGAIN:
+   HEAR`. A delete that starts on a push asks `OK TWICE: DELETE` first. tools/check_rules.sh
+   holds the wording.
 
 ## Function block
 
 | Key | Plain | FUNC + key (printed second label) | Lit |
 | --- | --- | --- | --- |
 | FUNC | modifier | — | green while held |
-| REC | live record on/off | RESAMPLE ("sampling") | red recording, green on RESAMPLE |
-| PROJECT | PROJECT: banks, patterns, chain, card | SAMPLES, the selected track's browser ("pool") | green PROJECT, red SAMPLES |
+| REC | live record on/off | RESAMPLE ("sampling"); again JAM REC on/off | red recording, green on RESAMPLE; a dim red blink while JAM REC records |
+| PROJECT | PROJECT: banks, patterns, chain, card. Opens on the release; held, STEP n queues slot n from any screen (below) | SAMPLES, the selected track's browser ("pool") | green PROJECT, red SAMPLES |
 | HOME | GRID, always. Double-tap (within 0.4 s, on GRID) = KEYS | **FUNC menu** ("system"); again closes it | green GRID, amber KEYS, red menu |
 | PLAY | play | restart from step 1 ("◀◀") | green running |
 | STOP | stop; again cuts the tails | reset: back to step 1, queue dropped, chain to its start ("▶▶") | red stopped |
@@ -136,41 +152,48 @@ HOME "system", PLAY "◀◀", STOP "▶▶", MIXER "fx", EDIT "rec src".
 
 ## The FUNC menu (FUNC + HOME)
 
-A list over whatever screen was up. UP/DOWN or A scroll, OK runs the row, LEFT/RIGHT or B change
+A list over whatever screen was up, of the project-wide rows only: the selected track's rows are
+in GRID's track menu (below). UP/DOWN or A scroll, OK runs the row, LEFT/RIGHT or B change
 a setting row, CLR or FUNC + HOME closes it and returns to the screen it opened over. STEP
-keys, screen keys and pad-row keys do nothing in it. FUNC + CLR / OK stay undo and redo.
-The cursor starts on SAVE every time, so **FUNC + HOME, OK saves**, and the list wraps, so
-**FUNC + HOME, UP, OK starts or stops JAM REC**.
+keys, screen keys and pad-row keys do nothing in it. FUNC + CLR / OK stay undo and redo, and
+FUNC + a screen key stays TRANSPOSE.
+The rows run by how often a jam reaches for them: the live toggles first, the file actions at
+the bottom. The cursor starts on SAVE every time, so **FUNC + HOME, OK saves** and
+**FUNC + HOME, DOWN, OK starts or stops JAM REC**; the list wraps, so the file rows are a few UPs
+away. JAM REC has a key of its own as well: **FUNC + REC twice** (RESAMPLE, then again), as
+FUNC + EDIT twice is KIT.
 
 | Row | What OK does | Value (LEFT/RIGHT, B, or OK steps) |
 | --- | --- | --- |
 | SAVE | saves the project, closes the menu | |
-| SAVE AS | PROJECTS page with the name entry open | |
-| OPEN PROJECT | PROJECTS page; OK twice there opens | |
-| NEW PROJECT | OK twice within 2 s: a new, empty project (the factory sounds, every pan centred, no steps, scenes or macros) | |
-| RELOAD PROJECT | OK twice within 2 s: read the project back from the card | |
-| CLEAR PATTERN | OK twice within 2 s: every track's trigs and locks gone, one undo level (FUNC + CLR) | |
-| KITS | the kit browser | |
-| RELOAD SAMPLE | load the selected track's sample again | |
-| TRACK SPEED | | selected track's speed: 2, 3/2 (16th-note triplets), 1, 3/4, 1/2, 1/4, 1/8 (`T1 LEN 16 X3/2`) |
-| TRACK PLAY | | selected track's play mode: FWD, REV, PING, RND1, RND2, RND4, RND8, RND16 (`T3 PLAY RND4`). Which step sounds in each slot; the pattern is not changed. One undo level a change |
-| CHAIN | | ON / OFF |
-| CHAIN END | | SONG (play once) / LOOP |
-| AUTO-FILL | | OFF 4 8 16 bars |
-| QUANTIZE | | record quantize, by 5 |
-| REC MODE | | `REPLACE` (default) / `ADD`: what a note recorded onto a chord track's step does. REPLACE: the first note of a pass on a step takes it over (its notes and chord type go), the rest of that pass's notes join it. ADD: every note joins the step's notes. Saved with the project |
+| JAM REC | starts recording the finished master to `/RECORD/JAM_<n>.WAV` and closes the menu (`JAM REC JAM 3`); OK again stops it (`JAM STOPPING`, then `SAVED JAM 3` once the file is closed). FUNC + HOME, DOWN, OK. FUNC + REC on RESAMPLE does the same and stays on RESAMPLE, whose last line shows the time and `FUNC+REC: STOP JAM` (`JAM OFF` when none runs) | `OFF`, or how long it has run, `4:07`, `1:02:33` |
+| ARR REC | starts a take (`ARR REC ON`, or `ARR: PRESS PLAY` with the transport stopped) and closes the menu; OK again ends it (`ARR 23 SECTIONS`). FUNC + HOME, DOWN, DOWN, OK. See ARR REC below | `OFF`, `ON`, or `ON 7`: the sections written so far |
 | CLICK | | the metronome, `ON` / `OFF`: a click on every beat while the transport runs, higher on a bar's first. Not saved |
 | COUNT-IN | | `OFF`, `1 BAR`, `2 BAR`: a PLAY from stop with REC on clicks that many bars first (`COUNT-IN 4` .. `1`), then the pattern starts on step 1. Internal clock only. Not saved |
+| REC MODE | | `REPLACE` (default) / `ADD`: what a note recorded onto a chord track's step does. REPLACE: the first note of a pass on a step takes it over (its notes and chord type go), the rest of that pass's notes join it. ADD: every note joins the step's notes. Saved with the project |
+| QUANTIZE | | record quantize, by 5 |
+| AUTO-FILL | | OFF 4 8 16 bars |
 | FX GLIDE | | how long a button's jump in the performance mixer rides: `OFF`, `1/16`, `1 BEAT` (default), `1 BAR`, at the tempo. Not saved |
-| FREEZE | freeze the selected track (its loop from the next bar line), or unfreeze it | `T3 1 BAR` (1 2 4 8), `T3 WAIT` / `REC` while recording, `T3 ON` frozen |
+| TRANSPOSE | | `SCALE` (default) / `SEMI`: what a FUNC + screen key step of TRANSPOSE is, a step of the scale or a semitone. Not saved |
 | LOOP LEN | | the performance mixer's looper: `4 BAR` (1 2 4 8), what push VALUE + STEP 16 records |
-| LOAD DEMO | OK twice within 2 s: the factory demo project (the boot beat), under a new name | |
-| JAM REC | starts recording the finished master to `/RECORD/JAM_<n>.WAV` and closes the menu (`JAM REC JAM 3`); OK again stops it (`JAM STOPPING`, then `SAVED JAM 3` once the file is closed). The last row: FUNC + HOME, UP, OK | `OFF`, or how long it has run, `4:07`, `1:02:33` |
+| CHAIN | | ON / OFF |
+| CHAIN END | | SONG (play once) / LOOP |
+| ARR UNDO | swaps the chain the last ARR REC take replaced back in (`ARR UNDONE`); OK again brings the take back (`ARR REDONE`), unless the take captured launched lanes: then the undo also empties the slots it captured into and is final. `NO ARR TO UNDO` with none, or during a take | |
+| PROG CHG OUT | | `OFF` (a new project) / `ON`: a program change on MIDI CH every time the playing pattern changes, the pattern's number 0-127. Saved with the project |
+| SAVE AS | PROJECTS page with the name entry open | |
+| OPEN PROJECT | PROJECTS page; OK twice there opens | |
+| KITS | the kit browser | |
+| NEW PROJECT | OK twice within 2 s: a new, empty project (the factory sounds, every pan centred, no steps, scenes or macros) | |
+| RELOAD PROJECT | OK twice within 2 s: read the project back from the card | |
+| CLEAR PATTERN | OK twice within 2 s: every track's trigs and locks gone, one undo level (FUNC + CLR). The second-last row: FUNC + HOME, UP, UP | |
+| LOAD DEMO | OK twice within 2 s: the factory demo project (the boot beat), under a new name. The last row: FUNC + HOME, UP | |
 
 Moved here from: FUNC + PROJECT twice (save), PROJECT's FUNC + UP/DOWN/LEFT/RIGHT (chain,
-sample reload, reload, new), PROJECTS' FUNC + DOWN (save as, still there too), CHAIN's FUNC +
-RIGHT (song), PATTERN's FUNC + UP (chain), PERFORM's FUNC + UP/DOWN (auto-fill), FUNC + screen
-keys (speed), FUNC + EDIT twice (kits, still there too). CHAIN's FUNC + LEFT twice (remove an
+reload, new), PROJECTS' FUNC + DOWN (save as, still there too), CHAIN's FUNC +
+RIGHT (song), PATTERN's FUNC + UP (chain), PERFORM's FUNC + UP/DOWN (auto-fill), FUNC + EDIT
+twice (kits, still there too). Sample reload (from PROJECT's FUNC + DOWN), the track speed (from
+FUNC + screen keys), TRACK PLAY and FREEZE were rows here too, until 2026-11-28 moved them to the
+track menu with the rest of the selected track's settings. CHAIN's FUNC + LEFT twice (remove an
 entry) became CLR twice: CLR is what clears.
 
 ## FUNC chords that stay
@@ -180,23 +203,27 @@ Printed labels (above), and the moves made while playing:
 | Chord | Does |
 | --- | --- |
 | FUNC + CLR / OK | undo / redo |
-| FUNC + UP / DOWN | copy / paste (editing screens; on PROJECT's slots a whole pattern, the paste twice). Card lists: read again / store here (KIT save, PROJECTS save as). FUNC + LEFT twice on PROJECT's slots clears the pattern under the cursor |
-| FUNC + lower pad | mute that track on the next bar (at once while stopped). Several pads before the bar all land; the same pad twice takes it back |
+| FUNC + UP / DOWN | copy / paste (editing screens; on PROJECT's slots a whole pattern, the paste twice). Card lists: read again / store here (KIT save, PROJECTS save as). SOUNDS: copy the track's sound (the PASTE row under AS WAS loads it, on any track) / store it as your own, named (on one of your own: replace it). ARPS: `ARPS: NOT SAVED`. FUNC + LEFT twice on PROJECT's slots clears the pattern under the cursor |
+| FUNC + lower pad | mute that track on the next bar (at once while stopped). Several pads before the bar all land; the same pad twice takes it back. In PERFORM: that track in or out of LIVE RND (below) |
 | FUNC + FILL / REPEAT / THROW | note repeat on/off / pitched-down repeat / reverb throw |
 | FUNC + push A / B / C | kill LOW / MID / HI |
+| FUNC + push D | kill all three bands; with all three out, all back (`KILL ALL`, `ALL BANDS BACK`). On every screen, PERFORM included |
 | FUNC + pad-row key | selected track's length; held, it repeats (after 0.4 s, 20 steps a second) |
 | FUNC + STEP | trigless step, on every playing screen, PERFORM included |
 | FUNC + A / B / C on GRID | Euclidean fill |
 | FUNC + MUTATE, held half a second | **LOCK**: store the live set as the playing pattern's lock (`LOCK A01 STORED`); again later overwrites it |
 | FUNC + turn A / B in PERFORM | **REL ALL** / **LEN ALL** (below) |
 | FUNC + turn C in PERFORM | **ENERGY**: from a sparse breakdown to the peak (below) |
-| FUNC + turn D / push D in PERFORM | **LIVE RND**: the unit / the selected track in or out (below) |
+| FUNC + turn D in PERFORM | **LIVE RND**: the unit (below) |
+| FUNC + turn VALUE | **VariSpeed**: the tempo and every machine's pitch together, on every screen (below) |
+| FUNC + SEL< / SEL> | **TRANSPOSE**: the melodic tracks a scale step (or a semitone) down / up, on every screen; both screen keys together, back to 0 (below) |
 | FUNC + MUTATE, tapped | Jump to that lock at once (`BACK TO LOCK A01`); tapped again, swap back to the state from just before the jump (`SWAPPED BACK A01`). No lock: `NO LOCK: HOLD STORES` |
 
 Retired 2026-11-25 (backlog D1, D5; CHANGELOG "Gestures that moved"): FUNC + VALUE (DJ filter,
 now slots 1-2), FUNC + hold push D (tape stop, slot 8) and FUNC + hold MUTATE (delay freeze,
-slot 5). Each now only names its slot (`DJ FILTER: SLOT 1/2`, `TAPE STOP: SLOT 8`,
-`FREEZE: SLOT 5`), apart from FUNC + MUTATE, which is LOCK since the next change (below); FUNC +
+slot 5). Each now only names its slot (`TAPE STOP: SLOT 8`, `FREEZE: SLOT 5`), apart from
+FUNC + MUTATE, which is LOCK since the next change (below), FUNC + push VALUE + turn, the tempo
+nudge since 2026-11-28, and FUNC + push D, the kill for all bands since 2026-11-28 (D2); FUNC +
 push D with a STEP held toggles the slide of that step's D lock, as FUNC + push A-C do theirs.
 
 ## LOCK (FUNC + MUTATE)
@@ -207,10 +234,10 @@ lot, and jump back in one tap; tap again to compare with where you were.
 | Holds | Does not hold |
 | --- | --- |
 | The playing pattern whole: steps, p-locks, conditions, lengths, swing | Other patterns, the bank, the chain |
-| Every track's sound bytes (all eight EDIT pages) and fader | The samples, the machines: a lock taken before a machine switch restores the parameters only |
+| Every track's sound bytes (every EDIT page) and fader | The samples, the machines: a lock taken before a machine switch restores the parameters only |
 | The send and master bytes | The kill EQ's switches, the tempo (not STRATA's under an outside clock) |
 | The mutes (D4) | The eight stored mute states |
-| The morph position, the four macro positions, REL ALL, LEN ALL, LIVE RND and ENERGY | The scenes and the macro setup |
+| The morph position, the four macro positions, REL ALL, LEN ALL, LIVE RND, ENERGY and TRANSPOSE | The scenes and the macro setup |
 
 - **One lock per pattern (D14), in RAM only**: not saved, and a project load or NEW clears them.
 - **At once (D3)**, on the next audio block. The performance mixer is not in a lock: the jump
@@ -240,34 +267,46 @@ changed meaning. C and D with FUNC are ENERGY and LIVE RND (below).
 - **Rest is 0, and 0 is a detent**: a turn that would cross it stops on it. At rest the sound is
   the programmed one to the bit (the rule the macros and the morph keep).
 - **Two counts a click**, like the macros. Not saved, not undone; a LOCK holds both (D4), and a
-  jump or swap puts them where the lock had them.
+  jump or swap puts them where the lock had them. A project load or NEW puts both back to rest.
 - **On screen**: PERFORM's line under the macros reads `FUNC+A/B REL/LEN ALL` at rest and
   `REL -12 LEN 71%` away from it; the live strip adds `RL-` / `RL+` and `LN-` / `LN+`.
+- **A turn keeps its layer**: a knob still turning stays on the layer its turn started on, the
+  macro or this one, until it rests for a quarter second. FUNC let go (or pressed) with the knob
+  still moving does not hand the last clicks to the other layer. The same for ENERGY and LIVE RND.
+- **While FUNC is held** in PERFORM the four gauges are this layer (U1, 2026-11-28): `REL`,
+  `LEN`, `NRG` and `RND` under the letters, each gauge with its value (`-12`, `71`, `+40`, `4`,
+  `OFF`), lit away from rest; the hint line gives way to them. Let go, and the macros are back.
 - **LEN ALL leaves a note with no gate alone** (a drum, a pad hit, a held key, the arpeggiator's
   own GATE): REL ALL is what shortens drums.
 
 ## LIVE RND (FUNC + D in PERFORM)
 
 CyDrums' P1, the live half (backlog Phase 5; the controls concept: "the PATTERN page plus one
-PERFORM knob gesture"), `core/liverand.hpp`. The pattern half is the FUNC menu's TRACK PLAY. FUNC
-+ D in PERFORM was a duplicate of the macro (turn) and the tape stop's hint (push), so no gesture
-that did something changed meaning; FUNC + push D still names slot 8 on every other screen.
+PERFORM knob gesture"), `core/liverand.hpp`. The pattern half is the track menu's PLAY. FUNC
++ turn D in PERFORM was a duplicate of the macro, so no gesture that did something changed
+meaning. The armed set was on FUNC + push D until 2026-11-28 (D2), when that became the kill for
+all bands on every screen.
 
 | Gesture | Does | Says |
 | --- | --- | --- |
-| FUNC + turn D | The unit for every armed track: OFF, 1, 2, 4, 8, 16, one a click, stopping at both ends | `LIVE RND4 8 TRK`, `LIVE RND OFF` |
-| FUNC + push D | The selected track out of the armed set, or back in. All eight at start | `T1 RND OUT 7 TRK`, `T1 RND IN 8 TRK` |
+| FUNC + turn D | The unit for every armed track: OFF, 1, 2, 4, 8, 16, one a click, stopping at both ends | `LIVE RND4 7 TRK`, `LIVE RND OFF` |
+| FUNC + lower pad | That track out of the armed set, or back in. No mute, no track selected | `T2 RND OUT 6 TRK`, `T2 RND IN 7 TRK` |
 
-- **What it plays**: exactly TRACK PLAY's RND mode of that size, from the same seeded draw (the
+- **The kick stays** (D3, 2026-11-28): turned on from OFF, LIVE RND arms every track but those
+  playing KICK, so the floor holds while the rest jumps (`LIVE RND4 7 TRK` on the factory kit).
+  Once a FUNC + lower pad (or a LOCK jump) has chosen the set, it stays as chosen.
+
+- **What it plays**: exactly the track menu PLAY's RND mode of that size, from the same seeded draw (the
   pattern's seed, the track, the block, the pass), over the track's own mode while it is on.
   Blocks keep their steps in order and their place in the bar.
 - **Recoverable**: the pattern is never written. OFF is the programmed order from the next slot;
   a track's own mode (REV, PING ...) comes back with it.
 - **Not saved, not undone**, like REL ALL. A LOCK holds the unit and the armed set (D4); a jump
-  or swap puts both back. Live recording lands a hit on the step that was sounding.
+  or swap puts both back. A project load or NEW turns it OFF, with every track but the kicks to
+  come in. Live recording lands a hit on the step that was sounding.
 - **On screen**: PERFORM's line under the macros reads `LIVE RND4 FUNC+D`, or `REL -12 LEN 71% R4`
   with REL/LEN ALL away from rest; the track meters mark the armed tracks with a dot; the live
-  strip adds `RN4`. The FUNC help's third PERFORM page lists both gestures.
+  strip adds `RN4`. The FUNC help's second PERFORM page lists both gestures.
 
 ## ENERGY (FUNC + turn C in PERFORM)
 
@@ -278,7 +317,7 @@ ALL. FUNC + turn C in PERFORM only duplicated the macro before, so no gesture ch
 | Direction | Does |
 | --- | --- |
 | Down (-2 .. -64) | Every track drops its weakest hits first: 16ths, then 8ths, then beats, the one last, an accent counting for more. The tracks go in an order from their machines: HAT at once, then PERC, SNARE and SAMPLE (and MID), the MONO lines, the pads (POLY, WAVE POLY, FM4, GRAIN), and KICK from -40. At -64 the drums and lines are silent and the pads keep only their strongest hits |
-| Up (+2 .. +64) | Empty steps may get a quiet ghost (velocity about 40-86) with the note, length and locks of the trig before it on that track, off-beats first: HAT fills most, then PERC, SNARE and SAMPLE, the MONO lines; KICK only above +32; pads and MID never. A track with no trig stays silent. Step probabilities lift towards 100 (a 50% step plays every pass at +64) |
+| Up (+2 .. +64) | Empty steps may get a quiet ghost (velocity about 40-86) with the note, length and locks of the trig before it on that track that plays every pass (no condition, a probability above 0: a FILL-only crash or a 1:4 hit is never copied), off-beats first: HAT fills most, then PERC, SNARE and SAMPLE, the MONO lines; KICK only above +32; pads and MID never. A track with no trig stays silent. A ghost is one note with the arp on, and lights no step or trig glow. Step probabilities lift towards 100 (a 50% step plays every pass at +64) |
 
 - **Rest is 0, and 0 is a detent**, two counts a click, like REL ALL. At rest the part is the
   programmed one to the bit.
@@ -288,17 +327,88 @@ ALL. FUNC + turn C in PERFORM only duplicated the macro before, so no gesture ch
 - **What it never touches**: the pattern (nothing is written, saved or undone), trigless steps,
   conditions and the PRE/NEI chain (a thinned hit still counts as a pass), the recorder. A kept
   step keeps its ratchet; a thinned one loses it whole.
-- **A LOCK holds it**, and a jump or swap puts it back.
+- **A LOCK holds it**, and a jump or swap puts it back. A project load or NEW puts it to 0.
 - **On screen**: the notice `ENERGY -20` / `ENERGY +12`, `EN-20` on PERFORM's status line (the
   `BAR` line while stopped), `EN-` / `EN+` in the live strip. The FUNC help's third PERFORM page
   lists it.
 
-## GEN and EVOLVE (hold OK in GRID)
+## VariSpeed (FUNC + turn VALUE)
 
-Roland, 2026-11-27: generate a drum or melodic part, random but in the key, and let it mutate on
-its own every few loops. `core/generate.hpp`, `core/evolve.hpp`, `app/ui_trackmenu.hpp`. OK in
-GRID with nothing held did nothing, so the hold costs no gesture; a tap says where the menu is
-(`HOLD OK: TRACK MENU`).
+CyDrums' P7 (backlog, After 1.0 > Performance), `core/varispeed.hpp`. VALUE is the tempo; FUNC +
+VALUE is the tempo with every machine's pitch tied to it, like a turntable. On every screen, an
+effect picked or not (a picked effect owns VALUE's plain turn, not FUNC's).
+
+| Gesture | Does | Says |
+| --- | --- | --- |
+| FUNC + turn VALUE | A tenth of a semitone a click, -12.0 .. +12.0; the clock runs at the project's tempo times 2^(n/12), and every machine plays n semitones off | `VARISPEED +1.2 140.3` |
+| FUNC + tap VALUE, no effect picked | Back to rest at once | `VARISPEED 0 130.0` |
+
+- **Rest is 0, and 0 is a detent**: a turn that would cross it stops on it. At rest the tempo and
+  the sound are the project's to the bit.
+- **The project keeps its tempo**: a save stores the unmoved tempo, and VALUE alone turns it with
+  VariSpeed riding on top. A turn that would take the clock past 20-300 BPM stops where it fits,
+  and a faster tempo (VALUE, or a section's BPM) holds VariSpeed back towards 0 rather than past
+  300, saying `VARISPEED HELD +3.0`. The amount set is kept: at a slower tempo it comes back
+  (`VARISPEED +5.0 135.0`).
+- **What moves**: the clock (so the delay's division follows); the drums' base frequency and
+  SAMPLE's and GRAIN's read rate; the synths' and FM4's pitch by semitones, as the LFO on TUN
+  does. Held notes and ringing hits follow. Envelope times do not, and MID's notes go out as
+  played.
+- **Internal clock only** (Enaga owns the clock): under MIDI or SYNC the turn says `EXT CLOCK`,
+  and a change of CLOCK SRC takes VariSpeed to rest (`VARISPEED 0 EXT CLOCK`).
+- **Not saved, not undone, not in a LOCK**, like the tempo. A project load or NEW puts it to rest,
+  and the clock runs at the new project's tempo.
+- **On screen**: the top bar shows the tempo the clock runs at; the live strip adds `VS+` / `VS-`.
+  The FUNC help's FUNC + KNOB OR PAD page lists it.
+
+## TRANSPOSE (FUNC + the screen keys)
+
+Backlog, After 1.0 > Performance (2026-11-28), `core/transpose.hpp`. The melodic tracks moved
+through the key (or by semitones) while the beat plays, from any screen. The screen keys with FUNC did nothing but turn
+the FUNC help's pages once it was up; the help keeps LEFT/RIGHT for that, so no chord that did
+something changed meaning. A gesture that paged the help instead whenever FUNC had been held a
+moment too long would not be one you can play.
+
+| Gesture | Does | Says |
+| --- | --- | --- |
+| FUNC + SEL> | Up a step, to +12 at most | `TRANSPOSE +2 IN KEY`; on SEMI `TRANSPOSE +3 C` |
+| FUNC + SEL< | Down a step, to -12 at most | `TRANSPOSE -1 IN KEY`; on SEMI `TRANSPOSE -1 G#` |
+| FUNC + both screen keys | Back to 0: the second key pressed while the first is down. A press waits 40 ms for the other key before it moves anything, so both pressed together go to 0 with no step heard first | `TRANSPOSE 0` |
+| FUNC menu, TRANSPOSE | `SCALE` (every start) or `SEMI`: what a step is. The amount stays and is heard in the new unit | `TRANSPOSE SEMITONES`, `TRANSPOSE IN SCALE` |
+
+- **Which tracks move: the ones that fold into the scale**, by the same rule: VA MONO, VA POLY,
+  WAVE MONO, WAVE POLY, FM4, GRAIN, and SAMPLE while unsliced (SLC 1). The drums, a sliced SAMPLE
+  (its note is the slice) and MID (maybe a drum machine) stay where they are.
+- **SCALE stays in the key** (Roland, 2026-11-28: in scale by default, semitones in the menu).
+  Every note walks that many steps of the project's scale, so a riff moves the way a progression
+  does in the key: in A minor, -2 takes a line on A to F and the i chord to the VI (F major),
+  every note still A minor's. A note outside the key keeps its distance to the in-key note it
+  folds to. Under CHROMATIC a step is a semitone.
+- **SEMI moves the key with the notes.** A step folds into the project's key and then moves,
+  which is the same as folding into the key that many semitones up: the parts keep their shape
+  and their chords their colour (A minor +3 plays C minor). The notice names that key, in sharps.
+- **Every note those tracks play**: steps, chords, the arp's hits (a run follows a change at its
+  next hit), pads, KEYS keys and MIDI IN notes, note repeat, and MIDI OUT's copy of them. A held
+  key keeps the pitch it started at and is let go of there.
+- **Nothing is written.** A KEYS note recorded while transposed is stored as the key played and
+  plays back moved, as it was heard. Not saved, not undone; a LOCK holds the amount (not the
+  row), and a jump or swap puts it back; a project load or NEW puts it to 0. The FUNC menu row is
+  not saved either, and keeps its setting across a load.
+- **On screen**: the notice; `TR+3` on PERFORM's status line (beside `BAR` while stopped) and in
+  the live strip on every screen. The FUNC help's FUNC + KNOB OR PAD page lists it.
+- **In a song**: a section's TRN sets it as the entry starts (SECTION, below), and ARR REC records
+  it, so a key change made in a take replays.
+
+## The track menu: GEN, EVOLVE and the track's settings (hold OK in GRID or KEYS)
+
+Everything that belongs to the selected track. Roland, 2026-11-27: generate a drum or melodic
+part, random but in the key, and let it mutate on its own every few loops. The track's SPEED,
+PLAY, FREEZE and RELOAD SAMPLE joined it from the FUNC menu (usability review, 2026-11-28).
+`core/generate.hpp`, `core/evolve.hpp`, `app/ui_trackmenu.hpp`. OK in GRID with nothing held did
+nothing, so the hold costs no gesture; a tap says where the menu is (`HOLD OK: TRACK MENU`). KEYS
+has the same hold and tap (usability review, 2026-11-28): GEN on a melodic track while playing
+the pads. There the pads stay the piano, and the arrows are the menu's until CLR closes it
+(`KEYS`).
 
 | Row | Does | Says |
 | --- | --- | --- |
@@ -312,10 +422,16 @@ GRID with nothing held did nothing, so the hold costs no gesture; a tap says whe
 | MUTATION, AMOUNT | What EVOLVE plays: PERFORM's MUTATE setting and amount, the same two values. **MIX** (after NOTES) draws a different mutation each turn, and on the MUTATE pad each press | `MUTATION MIX` |
 | KEEP | OK: what plays becomes HOME, EVOLVE stops | `KEPT: EVOLVE OFF` |
 | HOME | OK: back to HOME (one undo level), EVOLVE stops | `HOME: EVOLVE OFF` |
+| SPEED | the track's speed: 2, 3/2 (16th-note triplets), 1, 3/4, 1/2, 1/4, 1/8. The arrows stop at the ends, OK goes round. One undo level a change | `T1 LEN 16 X3/2` |
+| PLAY | the track's play mode: FWD, REV, PING, RND1, RND2, RND4, RND8, RND16. Which step sounds in each slot; the pattern is not changed. One undo level a change | `T3 PLAY RND4` |
+| FREEZE | OK: freeze the track (its loop from the next bar line), or unfreeze it; the menu stays open. LEFT/RIGHT: the loop's length. The row reads `1 BAR` (1 2 4 8), `WAIT` / `REC` while recording, `ON` frozen | `FREEZE ARMED`, `UNFROZEN` |
+| RELOAD SAMPLE | OK: load the track's sample again, the way back from a `FAIL` or a card that was out | `LOADING`, `NO SAMPLE` |
+| CAPTURE | OK: Track Launch's CAPTURE (LAUNCH, below) into the playing bank: what plays, launched lanes and all, becomes a pattern of its own in the first free slot, so a READ ONLY lane edits again. The row reads `TO A`, the bank; the menu stays open | `CAPTURING`, `CAPTURED A05` |
 
 UP/DOWN or A pick the row, LEFT/RIGHT or B change it, OK runs (and steps a setting forward), CLR
 closes. A lower pad still selects the track, so one menu walks GEN over a kit; the menu keeps its
-row between openings.
+row between openings. The list wraps: from GENERATE, UP reaches CAPTURE, RELOAD SAMPLE, FREEZE,
+PLAY and SPEED. While the menu is open in GRID, notices show as a toast over the page tabs' line.
 
 - **Drum or melodic** is the machine's: the VAs, WAVE, FM4, GRAIN, an unsliced SAMPLE and MID get
   notes; the drums and a sliced SAMPLE get a rhythm with accents and ghosts, their notes kept.
@@ -341,6 +457,20 @@ and UP/DOWN or VALUE when `>` is on it. One line: `OFF`, `DRIFT 1-6`, `WAVE 1-6`
   from the pattern and the bar position, so a pass plays the same after a reload.
 - Saved in the pattern (an optional section; older files load OFF), undoable, held by a LOCK.
 
+## Queue a pattern from any screen (hold PROJECT + STEP)
+
+Hold PROJECT and press STEP n: slot n of the shown bank (the bank PROJECT last showed) is queued,
+and the screen stays where it is. The toast names the slot and when it lands, `A05 QUEUED END`,
+by the QUEUE mode on PROJECT's knob A. Several STEP keys while PROJECT is held queue each in
+turn; the last one is what lands. PROJECT lights green while held.
+
+- PROJECT opens on its release, and only when no STEP was pressed while it was held. With a STEP
+  held as a modifier (a lock, the step page), PROJECT opens at once and ends the hold.
+- The chord means the same on every screen, PROJECT's own pages and KIT included. FUNC +
+  PROJECT stays SAMPLES.
+- To queue from another bank, pick the bank on PROJECT first (the pad-row keys); the chord
+  keeps using it.
+
 ## LAUNCH: one track from another pattern (PROJECT twice)
 
 Track Launch, Roland's decisions of 2026-11-27, `core/launch.hpp`, `app/ui_launch.hpp`. Each track
@@ -351,11 +481,11 @@ pattern of the project. PROJECT pressed twice quickly opens LAUNCH, PROJECT's la
 | Key | Does | Says |
 | --- | --- | --- |
 | STEP 1-16 | launch that slot of the shown bank on the selected lane, or on every held lower pad. The same STEP again while it is queued drops it | `T3 < B07 AT END`, `LAUNCH OFF` |
-| Lower pads | select the lane, held for a launch of several. **Silent** on this page | |
+| Lower pads | select the lane, held for a launch of several. **Silent** on this page; the first on a visit says why | `PADS PICK LANES` |
 | UP / DOWN | the lane | |
 | LEFT / RIGHT | the slot cursor | |
 | OK | tap: launch the cursor's slot. Hold (0.5 s): **CAPTURE** | |
-| CLR | the lane back to its own part; on a lane already on its own part, back to SLOT | `T3 < OWN` |
+| CLR | the lane back to its own part, and only that: on a lane already on its own part it says so and the page stays (U2); the screen keys leave | `T3 < OWN`, `T3 PLAYS ITS OWN` |
 | push B | PIN the lane: a pattern change leaves it playing what it plays | `T3 PINNED` |
 | FUNC + STEP | a whole-pattern change, as on SLOT | |
 | The bank keys | the shown bank | |
@@ -368,19 +498,120 @@ pattern of the project. PROJECT pressed twice quickly opens LAUNCH, PROJECT's la
   A pinned lane on its own part keeps playing the pattern being left. Launches queued for the same
   boundary land after the change, over the new pattern.
 - **Read only**: a launched lane plays another pattern's part, and edits to it (a trig, a lock,
-  LEN, speed, GEN, recording ...) are refused with `T3 B07 READ ONLY`. EVOLVE pauses on it.
+  LEN, speed, GEN, recording, a paste ...) are refused with `T3 B07 READ ONLY`. COPY only reads,
+  so it works, and copies the part the lane plays: paste it on another track or pattern to keep
+  one lane without a CAPTURE. The refusal, on GRID and KEYS,
+  takes turns with `HOLD OK: CAPTURE` (U2): the track menu's CAPTURE row makes it a pattern of its
+  own. EVOLVE pauses on it.
   Sounds, mutes and the mixer are the track's as ever: only the steps come from elsewhere.
-- **CAPTURE** (hold OK): what plays, every lane's part, is written to the first empty slot of the
+- **CAPTURE** (hold OK, or the CAPTURE row of the track menu in GRID and KEYS, which writes to the
+  playing bank): what plays, every lane's part, is written to the first empty slot of the
   shown bank and plays from there with every lane on its own part, so it edits again.
   `CAPTURED A02`; `NO FREE SLOT IN BANK` or `LOCKS FULL` when it cannot. Not undoable; the source
   patterns are untouched. Master length, swing, key, FEEL and the seed come from the playing
   pattern.
-- **LOCK** (FUNC + MUTATE) stores what you hear, launched parts included, as the playing
-  pattern's own.
+- **LOCK** (FUNC + MUTATE) stores the playing pattern and, apart from it, what each lane plays.
+  A jump puts the lanes back on those parts and the pattern's own tracks back as they were; the
+  swap-back does the same with the state from before the jump. A borrowed part never becomes the
+  pattern's own (CAPTURE does that). The pins are not in a lock.
 - **GRID** draws each lane's playing part; a launched lane's number is underlined, a queued one
   blinks, and the info line ends `<B07`.
 - **Saved** in the project (PROJECT.BIN section 8): each lane's source and the pins. Not in the
   chain. A project from before this opens with every lane on its own part.
+
+## ARR REC: a jam written into the chain (the FUNC menu)
+
+The arrangement concept, Roland's decisions of 2026-11-28, `core/arrrec.hpp`. ARR REC records the
+structure of a jam, not its audio (JAM REC does that; the two are independent and can run
+together).
+
+| Key | Does | Says |
+| --- | --- | --- |
+| FUNC + HOME, DOWN, DOWN, OK | ARR REC on: the chain is kept for ARR UNDO and emptied, and the chain stops being followed; the menu closes. Recording starts with the next PLAY, or at once with the transport running | `ARR: PRESS PLAY` / `ARR REC ON` |
+| the same row, OK (or LEFT/RIGHT, B) | ARR REC off: the take is over | `ARR 23 SECTIONS` |
+| STOP | ends the take too | `ARR 23 SECTIONS` |
+| FUNC menu CHAIN ON | ends the take and plays what it wrote | `ARR 23 SECTIONS` |
+| FUNC menu ARR UNDO, OK | the chain from before the take; again, the take (not after a take that captured, below) | `ARR UNDONE` / `ARR REDONE` |
+
+- **A pass at a time.** At the end of each pass of the playing pattern, the pass is compared with
+  the chain's last entry: the same pattern with the same mute mask, scene on side B, morph side
+  (past half way is B), ENERGY, TRANSPOSE and tempo adds a repeat; anything else starts a new entry
+  holding them as section fields (MUT CAP, SCN, MRP SNAP or SNAP A, NRG, TRN, BPM). A pass is what played at
+  its start: a mute or an ENERGY move inside a pass shows from the next one, except in the pass's
+  first 12 ticks (half a sixteenth, the queue's grace), which still count for it.
+- **X16** is an entry's most: a seventeenth pass of the same starts a new entry of it. **64
+  entries** end the take when a new one is needed (`ARR FULL 64 SECTIONS`).
+- **Passes cut short** (a pattern change at once or on a 16 / 32 grid, a LOCK jump, STOP, ARR REC
+  off, a take turned on mid-pass) are written when at least half of the pass was recorded.
+- **A take that kept nothing** puts the old chain back (`ARR NOTHING KEPT`), with nothing to undo.
+- **ARR UNDO** keeps one chain: the next take replaces it, and opening a project drops it.
+- **Under an outside clock** the sections carry no BPM, so the song follows the clock it plays to.
+- **BPM only where the tempo changed.** A take at one tempo writes BPM `--` everywhere, so the
+  song plays at the project's tempo and VALUE moves all of it. A change of tempo during a take
+  writes the new BPM on that entry and the take's starting tempo on its first entry, so a looped
+  song comes back to it. A take whose chain was edited by hand leaves its first entry alone.
+- **While a take runs** the live strip starts with `ARR` and the sections written (`ARR7`), the
+  menu row reads `ON 7`, and the REC key blinks dim red, in time with JAM REC's blink.
+- **Track Launch.** The chain holds no launch states, so a pass with a borrowed lane (LAUNCH) is
+  written as a pattern of its own: what every lane played goes into the first free slot of the
+  playing pattern's bank, as CAPTURE would write it but without switching to it, and the entry
+  names that slot (`LAUNCH IN A05`). More passes of the same mix in a row use the same slot; the
+  same mix after something else takes a new one. With no free slot, or more locks than a pattern
+  holds, the pass is written as the playing pattern alone (`LAUNCH NOT KEPT`). Each part replays
+  from the slot's step 1, so a launch landed NOW or on a 16 / 32 grid replays shifted to it. A
+  slot a queued pattern change or a queued launch is about to land on is never taken, so the
+  empty pattern you queued is still empty when you get there.
+- **ARR UNDO after a take that captured** also empties the slots the take captured into (Roland,
+  2026-11-28), so the jam leaves nothing behind in the bank. A captured slot you have edited
+  since, or one playing at the moment of the undo, is kept. Its patterns gone, such a take cannot
+  come back: a second ARR UNDO says `NO ARR TO UNDO`.
+- Editing the chain by hand during a take is allowed; the next pass then starts a new entry.
+- The take's passes mark the project for the next save, as an edit would.
+
+## SECTION: a chain entry as a song section (push A on CHAIN)
+
+The arrangement concept, Roland's decisions of 2026-11-28, `core/queue.hpp` (`SectionExtra`,
+`section_step`), `app/ui_section.hpp`. A chain entry is a section: its pattern, repeats and mute
+state, plus a scene, a morph move, an ENERGY, a TRANSPOSE and a tempo applied as the entry starts. **Push A** on
+a CHAIN entry opens its SECTION view; the list's own keys are unchanged.
+
+| Key | Does | Says |
+| --- | --- | --- |
+| A-D | the page's four fields: **SECT** PAT REP MUT SCN, **MOVE** MRP NRG BPM TRN | |
+| push A-D | the field back to `--` (PAT and REP have none) | `SCN --`, `PAT HAS NO --` |
+| Screen keys | SECT / MOVE | |
+| UP / DOWN | the previous / next entry, staying in the view | `SECT 3/8` |
+| LEFT / RIGHT | the entry's pattern, as on the list | |
+| STEP 1-16 | that slot of the shown bank into the entry, as on the list | |
+| VALUE | the entry's repeats, as on the list | |
+| OK | tap: back to the list. Hold (0.5 s): **quick fill** from what plays | `SECTION FILLED` |
+| CLR | back to the list | |
+
+- **The fields.** MUT `--`, M1-M8 or **CAP** (an exact mute mask the entry stores; turned to CAP
+  it takes the mutes as they stand). SCN `--` or 1-16: that scene goes on morph side B. MRP `--`,
+  **SNAP** (the morph jumps to B), **RIDE** (it rides to B over the whole entry), **BACK** (it
+  rides to A over the whole entry), **SNAP A** (it jumps to A). NRG `--` or -64..+64: ENERGY on the boundary. BPM `--` or
+  20-300, a whole BPM a click: the tempo on the boundary. TRN `--` or -12..+12: TRANSPOSE on the
+  boundary, in the unit the FUNC menu's TRANSPOSE row has (scale steps or semitones).
+- `--` leaves that thing as it is, so an entry with every field `--` plays exactly as a chain
+  entry always has. NRG, BPM and TRN leave `--` on any turn, at ENERGY 0, the tempo playing and
+  TRANSPOSE 0.
+- **The hands win** until the next entry: a mute, the morph (VALUE in PERFORM, the mixer's slot)
+  ENERGY or TRANSPOSE turned during a section takes over at once, and ends a RIDE or BACK where it is.
+- **BPM under an outside clock** is skipped, with `EXT CLOCK: BPM SKIPPED` once per run of the
+  transport; the song follows the outside clock. A section's tempo plays (the clock, the screen
+  and the tempo-synced delay) but does not become the project's saved tempo; a turn of VALUE goes
+  on from it and is saved as usual.
+- **Quick fill** (hold OK): MUT CAP with the mutes as they stand, SCN the scene on side B, MRP
+  SNAP when the morph is past half way to B, else SNAP A, NRG the ENERGY, TRN the TRANSPOSE,
+  BPM the tempo playing. Dial the
+  breakdown in by ear, then hold OK.
+- **The list** marks an entry with fields of its own: under its mute state on the lane, `S4`
+  (its scene) or `+` for any other field; the cursor's entry lists them under MUTES.
+- **Saved** in PROJECT.BIN section 10. A project from before this opens with every field `--`; an
+  older build plays pattern, repeats and mute recall, and reads a CAP entry as `--`. TRN sits in
+  a byte of the record that builds before it wrote 0 and ignore, so they play such an entry
+  untransposed.
 
 ## The performance mixer (push VALUE + STEP)
 
@@ -628,7 +859,7 @@ SAMPLES (the sample browser) lists seven rows and draws what the track plays und
 same picture, over the `NOW` line. **Push A hears the file under the cursor** without loading it
 (dsp/audition.hpp): streamed whole from its start, straight to the output, after every effect.
 With the transport running it takes a second push on the same file within 2 s (the first says
-`A AGAIN TO HEAR`): there is no cue output, so it would go out to the room with the beat.
+`A AGAIN: HEAR`): there is no cue output, so it would go out to the room with the beat.
 Push A again stops it; while one plays, UP/DOWN, turning A and the pages hear the file the cursor
 lands on; OK, CLR, another folder or leaving SAMPLES stops it. A one-pixel line under the heard
 file's name grows as it plays, and a toast reads `HEARING 3/12S` (`OPENING` until it sounds).
@@ -672,9 +903,10 @@ FUNC held for 0.6 s with nothing else pressed shows help for **the screen that i
 (Roland, 2026-11-23): what A-D do there, named as on the screen and said in words (`B FMA FM
 AMOUNT` on a kick's SRC, `A SRC SOURCE TRACK` on MIXER DUCK), and the gestures that work there
 (the step page, the hold-and-press LEN, MACRO LEARN, NOTE view, SLC AUTO, rename and delete,
-KEYS on the pads ...). While FUNC is still held, **the screen keys (or LEFT/RIGHT) turn the help's
-pages**, as they turn every screen's pages; the help's last line says
-`PAGE 1/11`. The last five pages are the same everywhere: FUNC + each function key,
+KEYS on the pads ...). While FUNC is still held, **LEFT/RIGHT turn the help's pages**, as they
+turn every screen's pages; the help's last line says
+`PAGE 1/11`, and on the first page `< LAST`: the pages go round, so LEFT reaches the last. The
+last five pages are the same everywhere: FUNC + each function key,
 FUNC + a knob or pad, the upper pads, and the performance mixer's gestures and slots
 (`VALUE FX MIXER:`, `VALUE FX STEPS:`). Every hold starts on the screen's own page.
 
@@ -682,8 +914,9 @@ A quick tap of FUNC alone (let go before the help shows, nothing else pressed) s
 `HOLD FUNC: HELP`, unless another notice or a MUTATE waiting for OK or CLR is up: nothing else
 on the panel says the help is there.
 
-FUNC + a screen key or LEFT/RIGHT does nothing anywhere else, and the help only takes them once
-it is up, so no chord changes meaning. Any other key, knob or pad, or letting go of FUNC, takes
+FUNC + LEFT/RIGHT does nothing anywhere else, and the help only takes them once it is up, so no
+chord changes meaning. FUNC + a screen key is TRANSPOSE (above), and never turns the help's pages:
+the screen keys turned them too until 2026-11-28. Any other key, knob or pad, or letting go of FUNC, takes
 the help away, so a chord never sees it. Not while a name is being typed.
 
 The screens and their pages, from `core/help.cpp`:
@@ -695,9 +928,10 @@ The screens and their pages, from `core/help.cpp`:
 | EDIT in MACRO LEARN | what a push does now, then the page's knobs |
 | KEYS | the pads as a piano, the page's knobs, the pad lights |
 | Step page | the three field pages, what each field is |
-| MIXER | the page that is up (TRK, DCK, DUCK, WID, DLY, DLY+, REV, REV+, ROUTE, CHO, MST, EQ) |
-| PERFORM | macros, LEARN, scenes, morph, mutate |
+| MIXER | the page that is up (TRK, DCK, DUCK, WID, DLY, DLY+, REV, REV+, ROUTE, CHO, IN, IN+, MST, EQ) |
+| PERFORM | macros, LEARN, scenes, morph, mutate; second, PERFORM LIVE: the layer FUNC + turn reaches (REL ALL, LEN ALL, ENERGY, LIVE RND) |
 | PROJECT, CHAIN, PATTERN, SETUP | one page each |
+| SECTION (push A on CHAIN) | one page |
 | LAUNCH | one page |
 | PROJECTS | open, rename, delete, save as; typing a name |
 | MACHINE, KIT, SAMPLES, SOUNDS, RESAMPLE, FUNC menu | one page each |

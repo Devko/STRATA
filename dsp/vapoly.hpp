@@ -122,6 +122,7 @@ public:
         pitch_mod_ = semis;
         settings_.pitch_mod = semis;
     }
+    void set_tick_frames(float frames) override;
 
     // --- for the UI, and for tests that need to pin a mapping rather than guess at it -------
 
@@ -192,6 +193,10 @@ public:
     float voice_pitch(int slot) const {
         return slot >= 0 && slot < kVoices ? slots_[slot].voice.pitch() : 0.0f;
     }
+    // A voice's SCN travel, 0-1, as of its last control step (tests).
+    float voice_scan_travel(int slot) const {
+        return slot >= 0 && slot < kVoices ? slots_[slot].voice.scan_travel() : 0.0f;
+    }
 
 private:
     // One voice and the trig it is waiting for.
@@ -239,6 +244,7 @@ private:
 
     float detune_ = 0.0f;                    // DET, semitones
     float pitch_mod_ = 0.0f;                 // the LFO on TUN, kept across prepare
+    float tick_frames_ = 0.0f;               // frames a clock tick, for a synced SCN SPD
     bool wave_ = false;                      // WAVE POLY
     int steal_cursor_ = 0;                   // rotates, so equal voices are stolen in turn
     bool active_ = false;

@@ -237,7 +237,7 @@ void macro_apply_master(const Macro &macro, uint8_t position, uint8_t out[kMaste
 // Does this target name something this build has: a track parameter, or a master EQ band?
 constexpr bool macro_target_usable(const MacroTarget &target) {
     return target.enabled != 0 &&
-           ((target.track < kTracks && target.param < kKitParams) ||
+           ((target.track < kTracks && kit_param_real(target.param)) ||
             (target.track == kMacroMasterTrack && target.param < kMasterBands));
 }
 
@@ -349,6 +349,10 @@ constexpr uint16_t kSectionPerformSceneOsc = 7;
 // scenes' and the macros' WAV and DST bytes are numbers. Optional on read: a file without it holds
 // the old bands, converted once (kit_lfo_from_band).
 constexpr uint16_t kSectionPerformLfoLayout = 8;
+// The scenes' SCN bytes (the WAVE machines' MOD, SPD, END and CRV), laid out as the ASR section
+// is: the four values, then a byte whose low four bits say which are stored -- the low half of the
+// sixth mask byte. OPTIONAL on read.
+constexpr uint16_t kSectionPerformSceneScn = 9;
 
 // Loading is value-tolerant but structure-strict, exactly as the other three file types are: a
 // macro naming a track that does not exist is dropped, while a bad magic, an unknown version, a

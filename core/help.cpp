@@ -27,7 +27,7 @@ struct Text {
 // --- the shared pages: the last five on every screen -------------------------------------------
 
 constexpr Text kFuncKeys = {"FUNC + KEY:", {
-    "REC    RESAMPLE",
+    "REC    RESAMPLE  JAM",
     "PROJ   SAMPLES",
     "HOME   MENU",
     "PLAY   RESTART",
@@ -40,16 +40,16 @@ constexpr Text kFuncKeys = {"FUNC + KEY:", {
 }};
 
 constexpr Text kFuncKnobs = {"FUNC + KNOB OR PAD:", {
-    "PUSH A-C   KILL L/M/H",
+    "PUSH A-D KILL LMH ALL",
     "LOWER PAD  BAR MUTE",
     "STEP       TRIGLESS",
     "TURN A-C  EUCLID GRID",
-    "DJ TAPE FREEZE: MIXER",
-    "  PUSH VALUE+STEP",
+    "VALUE VARI/PUSH NUDGE",
+    "SCREEN KEYS TRANSPOSE",
     "WITHOUT FUNC:",
-    "VALUE      TEMPO",
+    "VALUE  TURN/TAP TEMPO",
     "PUSH+TURN VALUE SWING",
-    "LOWER PAD  TRACK",
+    "HOLD PROJ+STEP QUEUE",
 }};
 
 constexpr Text kUpperPads = {"UPPER PADS TRK1-7:", {
@@ -75,7 +75,7 @@ constexpr Text kValueMixer = {"VALUE FX MIXER:", {
     "  HOLD STEP  PUSH IN",
     "VALUE  AMOUNT 0 = DRY",
     "TAP VALUE  RIDE TO 0",
-    "FUNC+TAP VALUE  CUT",
+    "FUNC+TAP  CUT/VARI 0",
     "PUSH+LEFT/RIGHT  NEXT",
     "PUSH+CLR  ALL OFF",
     "  AGAIN  CLEARS LOOP",
@@ -264,19 +264,21 @@ constexpr Text kPerform2 = {"PERFORM MORE:", {
     "MUTATE PAD  TRY IT",
     "OK KEEPS CLR REVERTS",
     "AUTO-FILL  FUNC MENU",
-    "FUNC+A/B REL/LEN ALL",
+    "FUNC+PUSH D KILL ALL",
 }};
 
+// Second, after the screen's own page: the layer FUNC + turn reaches, which the gauges name
+// while FUNC is held (U1).
 constexpr Text kPerform3 = {"PERFORM LIVE:", {
     "FUNC+A     REL ALL",
     "FUNC+B     LEN ALL",
     "FUNC+C     ENERGY",
     "  - THINS  + FILLS",
     "FUNC+D     LIVE RND",
-    "  OFF 1 2 4 8 16",
-    "FUNC+PUSH D  TRACK",
+    "  1-16  KICK STAYS",
+    "FUNC+LOWER PAD TRACK",
     "  IN OR OUT OF RND",
-    "PATTERN NOT CHANGED",
+    "HELD FUNC SHOWS THEM",
     "LOCK HOLDS THEM ALL",
 }};
 
@@ -303,7 +305,20 @@ constexpr Text kChain = {"CHAIN:", {
     "CLR TWICE  REMOVE",
     "PAD-ROW KEYS  BANK",
     "ON/OFF+END FUNC MENU",
-    nullptr,
+    "PUSH A     SECTION",
+}};
+
+constexpr Text kSection = {"SECTION:", {
+    "A-D   THE PAGE FIELDS",
+    "PUSH  FIELD TO --",
+    "SCREEN KEYS SECT/MOVE",
+    "UP/DOWN    ENTRY",
+    "HOLD OK FILL FROM NOW",
+    "OK OR CLR  BACK",
+    "MUT --/M1-M8/CAP",
+    "SCN  SCENE ON SIDE B",
+    "MRP SNAP/RIDE/BACK/A",
+    "NRG ENERGY  BPM TEMPO",
 }};
 
 constexpr Text kLaunch = {"LAUNCH:", {
@@ -400,13 +415,15 @@ constexpr Text kSamples = {"SAMPLES:", {
 
 constexpr Text kSounds = {"SOUNDS:", {
     "UP/DOWN/A  SOUND",
-    "LEFT/RIGHT FIRST/LAST",
     "SCREEN KEYS TRACK",
     "OK  LOAD INTO TRACK",
     "AS WAS  YOURS BACK",
+    "FUNC+DOWN  SAVE YOURS",
+    "FUNC+UP    COPY",
+    "PASTE ROW  ANY TRACK",
+    "PUSH B  RENAME YOURS",
+    "PUSH C  DELETE YOURS",
     "CLR        BACK",
-    "ONE TRACK ONLY",
-    nullptr, nullptr, nullptr,
 }};
 
 constexpr Text kResample = {"RESAMPLE:", {
@@ -416,7 +433,7 @@ constexpr Text kResample = {"RESAMPLE:", {
     "LEFT/RIGHT FILE/TRACK",
     "OK         ARM",
     "CLR        CANCEL",
-    "STARTS ON THE BAR",
+    "FUNC+REC   JAM REC",
     "MIC NEEDS HEADPHONES",
     "DONE: OK PUTS ON TRK",
     "DONE: CLR KEEPS FILE",
@@ -431,8 +448,22 @@ constexpr Text kMenu = {"FUNC MENU:", {
     "FUNC+HOME OK  SAVES",
     "NEW RELOAD CLEAR",
     "PATTERN  OK TWICE",
-    "TRACK PLAY FWD-RND16",
-    "UP OK  JAM REC ON/OFF",
+    "TRACK ROWS: HOLD OK",
+    "FUNC+REC TWICE  JAM",
+}};
+
+// ARR REC and ARR UNDO, the FUNC menu's arrangement rows (core/arrrec.hpp).
+constexpr Text kArrRec = {"ARR REC:", {
+    "THE ROW UNDER JAM REC",
+    "ON: THE JAM GOES INTO",
+    "THE CHAIN A PASS AT",
+    "A TIME OLD CHAIN KEPT",
+    "SAME AGAIN ONE MORE X",
+    "CHANGED  A NEW ENTRY",
+    "X16 OR 64 ENTRIES MAX",
+    "OFF OR STOP ENDS IT",
+    "ARR UNDO  SWAP BACK",
+    "STRIP: ARR AND COUNT",
 }};
 
 // The MIXER's pages, in app/app.hpp's kMixerPages order (its static_assert holds the count).
@@ -467,6 +498,10 @@ constexpr Text kMixer[kHelpMixerPages] = {
                         "SAVED IN THE KIT", nullptr}},
     {"MIXER CHO:", {"A RAT SWEEP RATE", "B DEP DEPTH", "C LVL LEVEL", "D C>R INTO REVERB",
                     "SENDS: CHO 1-4 5-8", nullptr}},
+    {"MIXER IN:", {"A LVL LEVEL", "B PAN PAN", "C DLY DELAY SEND", "D REV REVERB SEND",
+                   "PUSH A  IN ON OR OFF", "THE INPUT JACK INTO", "THE MIX  OFF = QUIET", nullptr}},
+    {"MIXER IN+:", {"A CHO CHORUS SEND", "B DCK DUCK DEPTH", "C TON TONE", "D SRC JACK",
+                    "PUSH A  IN ON OR OFF", "PUSH D  GAIN", "SAVED IN THE PROJECT", nullptr}},
     {"MIXER MST:", {"A DJ  DJ FILTER", "B CMP COMPRESSOR", "C LIM LIMITER", "D LVL LEVEL",
                     nullptr}},
     {"MIXER EQ:", {"A LOW BELOW 250 HZ", "B MID MIDDLE", "C HI  ABOVE 2.5 KHZ", "D ---",
@@ -474,7 +509,8 @@ constexpr Text kMixer[kHelpMixerPages] = {
 };
 
 // Rows every MIXER page ends with, under its own.
-constexpr const char *kMixerKeys[] = {"LEFT/RIGHT PAGE", "SCREEN KEYS PAGE", "STEP KEYS  TRIGS",
+constexpr const char *kMixerKeys[] = {"LEFT/RIGHT PAGE", "UP/DOWN    GROUP", "SCREEN KEYS PAGE",
+                                      "STEP KEYS  TRIGS",
                                       "FUNC+MIXER PERFORM"};
 
 // --- what each knob does ------------------------------------------------------------------------
@@ -522,13 +558,18 @@ constexpr const char *kGrainAsrWords[4] = {"ATTACK", "SUSTAIN", "RELEASE", ""};
 // SAMPLE's: SUS and REL only, its attack being AMP's (dsp/sample.cpp).
 constexpr const char *kSampleAsrWords[4] = {"", "SUSTAIN", "RELEASE", ""};
 constexpr const char *kGrainOscWords[4] = {"SCAN SPEED", "PITCH SPRAY", "", ""};
+// The WAVE pair's SCAN page (dsp/va.cpp, "SCN").
+constexpr const char *kScnWords[4] = {"SCAN MODE", "SCAN SPEED", "SCAN END FRAME", "SCAN CURVE"};
+constexpr int kScanHelpPage = 10;
 
-const char *const kEditPageNames[kHelpEditPages] = {"SRC", "FLTR", "AMP", "FX",
-                                                    "LFO", "ARP", "ENV", "OSC"};
+const char *const kEditPageNames[kHelpEditPages] = {"SRC", "FLTR", "AMP", "FX",   "LFO", "ARP",
+                                                    "ENV", "OSC",  "---", "---", "SCAN"};
 
-// Does the machine read EDIT's page 6 (ASR) or 7 (OSC)?
+// Does the machine read EDIT's page 6 (ASR), 7 (OSC) or 10 (SCAN)? Nobody reads the hole.
 bool reads_page(uint8_t machine, int page) {
-    return page == 6 ? machine_reads_asr(machine) : machine_reads_osc(machine);
+    if (page == 6) return machine_reads_asr(machine);
+    if (page == 7) return machine_reads_osc(machine);
+    return page == kScanHelpPage && machine_reads_scn(machine);
 }
 
 const char *osc_words(uint8_t machine, int slot) {
@@ -589,7 +630,9 @@ void knob_rows(const HelpPlace &place, bool slc_auto, char rows[kHelpRows][kHelp
                int &count) {
     const int page = place.page < kHelpEditPages ? place.page : 0;
     if (page >= 6 && !reads_page(place.machine, page)) {
-        add_row(rows, count, page == 6 ? "ASR: SYNTHS GRN SMP" : "OSC: VA WAVE FM GRN");
+        add_row(rows, count, page == 6   ? "ASR: SYNTHS GRN SMP"
+                             : page == 7 ? "OSC: VA WAVE FM GRN"
+                                         : "SCAN: WAVE ONLY");
         return;
     }
     for (int slot = 0; slot < 4; slot++) knob_row(place, slot, rows[count++]);
@@ -643,6 +686,13 @@ void knob_rows(const HelpPlace &place, bool slc_auto, char rows[kHelpRows][kHelp
                 add_row(rows, count, "OS2 64+  SYNC");
             }
             break;
+        case kScanHelpPage:
+            add_row(rows, count, "POS TO END EACH NOTE");
+            add_row(rows, count, "MOD OFF FWD REV LOOP");
+            add_row(rows, count, "LREV PING RET SINE");
+            add_row(rows, count, "RAND DRFT");
+            add_row(rows, count, "SPD 64+ SYNCED");
+            break;
         default: break;
     }
     if (page == 0 && machine_is_wave(place.machine)) add_row(rows, count, "TBL 16 TABLES  8 EACH");
@@ -670,18 +720,18 @@ void edit_title(const char *screen, const HelpPlace &place, char title[kHelpChar
 
 // The screen's own pages, before the five shared ones. Indexed from 0; returns false past
 // the last, so help_page_count can count them with the same code that writes them.
-// GRID's track menu (app/ui_trackmenu.hpp): GEN and EVOLVE.
+// GRID's and KEYS' track menu (app/ui_trackmenu.hpp): GEN, EVOLVE and the track's settings.
 constexpr Text kTrackMenu = {"HOLD OK: TRACK MENU", {
     "GENERATE  NEW PART",
     "DENS RANGE LEAP WHAT",
-    "EVOLVE  MUTATE EVERY",
-    "  1 2 4 8 LOOPS",
-    "ORBIT  AROUND HOME",
-    "DRIFT  WANDERS OFF",
-    "KEEP  PLAYING = HOME",
-    "HOME  BACK AND STOP",
+    "EVOLVE 1 2 4 8 LOOPS",
+    "ORBIT DRIFT KEEP HOME",
+    "SPEED  2X TO 1/8",
+    "PLAY FWD REV PING RND",
+    "FREEZE  LOOP IN RAM",
+    "RELOAD SAMPLE",
+    "CAPTURE  LAUNCHED MIX",
     "UP/DN A ROW  LR B SET",
-    "OK RUN  CLR CLOSE",
 }};
 
 bool own_page(const HelpPlace &place, int page, char title[kHelpChars + 1],
@@ -716,6 +766,7 @@ bool own_page(const HelpPlace &place, int page, char title[kHelpChars + 1],
             list[listed++] = &kKeysPads;
             knobs = true;
             list[listed++] = &kKeysLights;
+            list[listed++] = &kTrackMenu;
             break;
         case HelpScreen::step:
             list[listed++] = &kStepPage;
@@ -724,12 +775,13 @@ bool own_page(const HelpPlace &place, int page, char title[kHelpChars + 1],
         case HelpScreen::mixer:     knobs = true; break;
         case HelpScreen::perform:
             list[listed++] = &kPerform;
-            list[listed++] = &kPerform2;
             list[listed++] = &kPerform3;
+            list[listed++] = &kPerform2;
             break;
         case HelpScreen::project:   list[listed++] = &kProject; break;
         case HelpScreen::launch:    list[listed++] = &kLaunch; break;
         case HelpScreen::chain:     list[listed++] = &kChain; break;
+        case HelpScreen::section:   list[listed++] = &kSection; break;
         case HelpScreen::pattern:   list[listed++] = &kPattern; break;
         case HelpScreen::setup:     list[listed++] = &kSetup; break;
         case HelpScreen::projects:  list[listed++] = &kProjects; list[listed++] = &kNaming; break;
@@ -738,7 +790,7 @@ bool own_page(const HelpPlace &place, int page, char title[kHelpChars + 1],
         case HelpScreen::samples:   list[listed++] = &kSamples; break;
         case HelpScreen::sounds:    list[listed++] = &kSounds; break;
         case HelpScreen::resample:  list[listed++] = &kResample; break;
-        case HelpScreen::menu:      list[listed++] = &kMenu; break;
+        case HelpScreen::menu:      list[listed++] = &kMenu; list[listed++] = &kArrRec; break;
         case HelpScreen::count:     break;
     }
 
@@ -822,7 +874,9 @@ const char *help_param_words(uint8_t machine, int index) {
                    : machine_is_grain(machine)               ? kGrainAsrWords[slot]
                    : machine == uint8_t(MachineId::sample)   ? kSampleAsrWords[slot]
                                                              : kAsrWords[slot];
-        default: return osc_words(machine, slot);
+        case 7: return osc_words(machine, slot);
+        case kScanHelpPage: return machine_reads_scn(machine) ? kScnWords[slot] : "";
+        default: return "";
     }
 }
 

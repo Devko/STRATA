@@ -36,6 +36,7 @@
 // `Storage::init` hands the engine its 64 MiB region exactly as `App::init` does on the unit, so
 // `Cmd::set_sample`'s offset, frame-count and alignment checks are reachable here, and
 // tests/test_engine_gaps.cpp drives them.
+#include <cstdlib>
 #include "apprig.hpp"
 #include "check.hpp"
 #include "fakehost.hpp"
@@ -1730,6 +1731,635 @@ TEST(engine_song_mode_plays_the_chain_once_and_asks_for_a_stop) {
     pump();
 }
 
+// --- song sections (core/project.hpp, SectionExtra) -----------------------------------------
+
+namespace {
+
+// A two-entry chain, A01 X1 then A02 X2, with the given section fields, loaded as a file would
+// load it, and the scenes on 1 and 2.
+Engine &section_chain(const SectionExtra &first, const SectionExtra &second) {
+    Engine &engine = clean();
+    Project &incoming = engine.project_for_load();
+    incoming.settings.chain_length = 2;
+    incoming.settings.scene_a = 0;
+    incoming.settings.scene_b = 1;
+    incoming.chain[0] = ChainEntry{0, 0, 1, 0};
+    incoming.chain[1] = ChainEntry{0, 1, 2, 0};
+    for (int i = 2; i < kChainEntries; i++) incoming.chain[i] = ChainEntry{};
+    for (int i = 0; i < kChainEntries; i++) incoming.chain_extra[i] = SectionExtra{};
+    incoming.chain_extra[0] = first;
+    incoming.chain_extra[1] = second;
+    post(Cmd::project_loaded);
+    pump();
+    return engine;
+}
+
+void section_chain_done() {
+    post(Cmd::set_chain, 0, 0, 0);
+    post(Cmd::set_morph);
+    post(Cmd::set_energy, 0, 0, 0);
+    for (uint8_t t = 0; t < kTracks; t++) post(Cmd::set_mute, t, 0, 0, 0);
+    FakeHost::the().set_running(false);
+    pump();
+}
+
+}  // namespace
+
+TEST(engine_a_section_applies_its_fields_as_its_entry_starts) {
+    SectionExtra first;
+    first.cap = 1;
+    first.mask = 0x05;
+    first.scene = 5;
+    first.morph = kSectionMorphSnap;
+    first.energy = section_energy_byte(32);
+    first.bpm = 14000;
+    SectionExtra second;
+    second.energy = section_energy_byte(-40);
+    Engine &engine = section_chain(first, second);
+    const Status &status = engine.status();
+    const uint8_t events = status.section_event.load();
+    const uint8_t due = status.tempo_due.load();
+    const uint16_t saved = engine.project().settings.tempo_centi_bpm;
+    const float delay = engine.sends().delay_seconds;
+
+    FakeHost::the().set_running(true);
+    tick_at(0);
+    post(Cmd::set_chain, 0, 0, 1);
+    pump();
+    // The BPM plays (the delay follows it at once) but is not the project's saved tempo, so a
+    // save during or after the song keeps the tempo the project was set to (the review's M1).
+    CHECK_EQ(int(engine.project().settings.tempo_centi_bpm), int(saved));
+    CHECK_NEAR(engine.sends().delay_seconds, delay * float(saved) / 14000.0f, 0.0005f);
+    // Entry 1: the exact mute mask, scene 5 on side B, the morph at B, ENERGY +32, a tempo asked
+    // of the main context.
+    CHECK(engine.muted(0));
+    CHECK(!engine.muted(1));
+    CHECK(engine.muted(2));
+    CHECK_EQ(engine.scene_slot(1), 4);
+    CHECK_EQ(engine.project().settings.scene_b, 4);   // what a save writes
+    CHECK_EQ(engine.scene_slot(0), 0);                // side A is not a section's
+    CHECK_EQ(int(engine.morph()), int(kMorphScale));
+    CHECK_EQ(int(engine.energy()), 32);
+    CHECK_EQ(int(uint8_t(status.tempo_due.load() - due)), 1);
+    CHECK_EQ(int(status.section_tempo.load()), 14000);
+    CHECK_EQ(int(uint8_t(status.section_event.load() - events)), 1);
+
+    // The hands take over inside the section: a mute, and the morph.
+    post(Cmd::set_mute, 1, 0, 1, 0);
+    post(Cmd::set_morph, 0, 0, 0, 0, 0);
+    pump();
+    tick_at(1);
+    tick_at(1536);                                    // entry 2: only NRG is its own
+    tick_at(1537);                                    // a switch re-derives the boundary
+    CHECK_EQ(live_slot(), 1);
+    CHECK_EQ(int(engine.energy()), -40);
+    CHECK(engine.muted(1));                           // `--` leaves the hands' work alone
+    CHECK(engine.muted(0));
+    CHECK_EQ(engine.scene_slot(1), 4);
+    CHECK_EQ(int(engine.morph()), 0);
+    CHECK_EQ(int(uint8_t(status.tempo_due.load() - due)), 1);   // no BPM, no tempo asked
+    CHECK_EQ(int(uint8_t(status.section_event.load() - events)), 2);
+
+    // The next pass of entry 2 is not a new entry: nothing is applied again.
+    post(Cmd::set_energy, 0, 0, 5);
+    pump();
+    tick_at(2u * 1536u);
+    CHECK_EQ(int(engine.energy()), 5);
+    CHECK_EQ(int(uint8_t(status.section_event.load() - events)), 2);
+
+    // Round to entry 1 again: its fields once more.
+    tick_at(3u * 1536u);
+    CHECK_EQ(live_slot(), 0);
+    CHECK_EQ(int(engine.energy()), 32);
+    CHECK(!engine.muted(1));
+    CHECK_EQ(int(engine.morph()), int(kMorphScale));
+    section_chain_done();
+}
+
+TEST(engine_an_entry_with_no_section_fields_plays_as_it_always_did) {
+    Engine &engine = section_chain(SectionExtra{}, SectionExtra{});
+    const uint8_t events = engine.status().section_event.load();
+    post(Cmd::set_energy, 0, 0, uint8_t(int8_t(-12)));
+    post(Cmd::set_morph, 0, 0, 0, 0, 0);
+    post(Cmd::set_mute, 3, 0, 1, 0);
+    pump();
+    FakeHost::the().set_running(true);
+    tick_at(0);
+    post(Cmd::set_chain, 0, 0, 1);
+    pump();
+    tick_at(1);
+    tick_at(1536);
+    tick_at(1537);
+    CHECK_EQ(int(engine.energy()), -12);
+    CHECK(engine.muted(3));
+    CHECK_EQ(engine.scene_slot(1), 1);
+    CHECK_EQ(int(engine.status().section_event.load()), int(events));
+    section_chain_done();
+}
+
+TEST(engine_a_section_sets_the_transpose_and_keeps_its_unit) {
+    // TRN (review L1): the amount as the entry starts, in the unit the FUNC menu's row has.
+    SectionExtra first;
+    first.transpose = section_transpose_byte(3);
+    SectionExtra second;
+    second.transpose = section_transpose_byte(0);
+    Engine &engine = section_chain(first, second);
+    post(Cmd::set_transpose, 0, 0, uint8_t(int8_t(-5)), 1);   // semitones
+    pump();
+    FakeHost::the().set_running(true);
+    tick_at(0);
+    post(Cmd::set_chain, 0, 0, 1);
+    pump();
+    CHECK_EQ(int(engine.transpose()), 3);
+    CHECK(engine.transpose_semitones());
+    tick_at(1);
+    tick_at(1536);                                    // the second entry: TRN 0, the key back
+    CHECK_EQ(int(engine.transpose()), 0);
+    section_chain_done();
+    post(Cmd::set_transpose, 0, 0, 0, 0);
+    pump();
+}
+
+TEST(engine_a_section_snaps_the_morph_to_either_side) {
+    SectionExtra first;
+    first.morph = kSectionMorphSnap;
+    SectionExtra second;
+    second.morph = kSectionMorphSnapA;
+    Engine &engine = section_chain(first, second);
+    FakeHost::the().set_running(true);
+    tick_at(0);
+    post(Cmd::set_chain, 0, 0, 1);
+    pump();
+    CHECK_EQ(int(engine.morph()), int(kMorphScale));
+    tick_at(1);
+    tick_at(1536);                                    // the second entry: back to A at once
+    CHECK_EQ(int(engine.morph()), 0);
+    CHECK_EQ(int(engine.status().morph_riding.load()), 0);
+    section_chain_done();
+}
+
+TEST(engine_a_section_rides_the_morph_over_its_whole_entry) {
+    SectionExtra first;
+    first.morph = kSectionMorphSnap;
+    SectionExtra second;
+    second.morph = kSectionMorphBack;               // to A over two passes: 3072 ticks
+    Engine &engine = section_chain(first, second);
+    const Status &status = engine.status();
+    FakeHost::the().set_running(true);
+    tick_at(0);
+    post(Cmd::set_chain, 0, 0, 1);
+    pump();
+    CHECK_EQ(int(engine.morph()), int(kMorphScale));
+    CHECK_EQ(int(status.morph_riding.load()), 0);
+    tick_at(1);
+    tick_at(1536);
+    CHECK_EQ(int(status.morph_riding.load()), 1);
+    CHECK_EQ(int(engine.morph()), int(kMorphScale));
+    tick_at(1537);
+    tick_at(1536 + 768);
+    CHECK(std::abs(int(engine.morph()) - int(kMorphScale) * 3 / 4) <= 1);
+    tick_at(1536 + 1536);                             // a pass boundary inside the entry
+    CHECK(std::abs(int(engine.morph()) - int(kMorphScale) / 2) <= 1);
+    CHECK_EQ(int(status.morph_riding.load()), 1);
+    tick_at(1536 + 3071);
+    CHECK(int(engine.morph()) <= 1);
+    // The next entry's SNAP takes it from there.
+    tick_at(3u * 1536u);
+    CHECK_EQ(int(engine.morph()), int(kMorphScale));
+    CHECK_EQ(int(status.morph_riding.load()), 0);
+    tick_at(3u * 1536u + 1);
+
+    // RIDE goes the other way, from wherever the morph is. A hand on the morph ends the ride.
+    SectionExtra up;
+    up.morph = kSectionMorphRide;
+    Command edit;
+    edit.cmd = Cmd::chain_edit;
+    edit.step = 1;
+    edit.a = uint8_t(ChainEdit::section);
+    edit.e = up.morph;
+    CHECK(engine.commands().post(edit));
+    post(Cmd::set_morph, 0, 0, 0, 0, 0);
+    pump();
+    tick_at(4u * 1536u);                              // entry 2 again, riding up from 0
+    CHECK_EQ(int(engine.morph()), 0);
+    tick_at(4u * 1536u + 1);
+    tick_at(4u * 1536u + 1536);
+    CHECK(std::abs(int(engine.morph()) - int(kMorphScale) / 2) <= 1);
+    Command hand;
+    hand.cmd = Cmd::set_morph;
+    hand.u = 700;
+    CHECK(engine.commands().post(hand));
+    pump();
+    CHECK_EQ(int(status.morph_riding.load()), 0);
+    tick_at(4u * 1536u + 2000);
+    CHECK_EQ(int(engine.morph()), 700);
+    section_chain_done();
+}
+
+TEST(engine_a_ride_starts_again_when_the_transport_jumps_back) {
+    SectionExtra first;
+    first.morph = kSectionMorphRide;                  // over one pass
+    Engine &engine = section_chain(first, SectionExtra{});
+    FakeHost::the().set_running(true);
+    tick_at(0);
+    post(Cmd::set_morph, 0, 0, 0, 0, 0);
+    pump();
+    tick_at(10);
+    post(Cmd::set_chain, 0, 0, 1);                    // armed at tick 10
+    pump();
+    tick_at(768 + 10);
+    CHECK(std::abs(int(engine.morph()) - int(kMorphScale) / 2) <= 1);
+    // STOP and PLAY: the clock is back at 0 and the ride starts again from where it was.
+    tick_at(0);
+    const int at = int(engine.morph());
+    tick_at(768);
+    CHECK(int(engine.morph()) > at);
+    CHECK(int(engine.morph()) < int(kMorphScale));
+    section_chain_done();
+}
+
+TEST(engine_section_edits_copy_and_quick_fill) {
+    Engine &engine = section_chain(SectionExtra{}, SectionExtra{});
+    // The whole record in one command, NRG and BPM packed in `u`.
+    Command edit;
+    edit.cmd = Cmd::chain_edit;
+    edit.step = 0;
+    edit.a = uint8_t(ChainEdit::section);
+    edit.b = 1;
+    edit.c = 0x30;
+    edit.d = 9;
+    edit.e = kSectionMorphRide;
+    edit.u = uint32_t(section_energy_byte(-8)) | (uint32_t(12550) << 8);
+    CHECK(engine.commands().post(edit));
+    pump();
+    const SectionExtra &e = engine.project().chain_extra[0];
+    CHECK_EQ(int(e.cap), 1);
+    CHECK_EQ(int(e.mask), 0x30);
+    CHECK_EQ(int(e.scene), 9);
+    CHECK_EQ(int(e.morph), int(kSectionMorphRide));
+    CHECK_EQ(section_energy(e.energy), -8);
+    CHECK_EQ(int(e.bpm), 12550);
+    // Out of range: refused whole, counted.
+    const uint32_t before = engine.status().refused.load();
+    edit.d = 17;
+    CHECK(engine.commands().post(edit));
+    pump();
+    CHECK_EQ(int(engine.project().chain_extra[0].scene), 9);
+    CHECK_EQ(int(engine.status().refused.load() - before), 1);
+
+    // OK's copy carries the fields; the entry after it moves up.
+    chain_op(ChainEdit::copy, 0);
+    CHECK_EQ(chain_length(engine.project()), 3);
+    CHECK_EQ(int(engine.project().chain_extra[1].scene), 9);
+    CHECK_EQ(int(engine.project().chain[2].slot), 1);
+    CHECK(section_empty(engine.project().chain_extra[2]));
+
+    // Quick fill: what plays now.
+    post(Cmd::set_mute, 6, 0, 1, 0);
+    post(Cmd::scene_select, 0, 0, 1, 11);
+    Command morph;
+    morph.cmd = Cmd::set_morph;
+    morph.u = kMorphScale * 3 / 4;
+    CHECK(engine.commands().post(morph));
+    post(Cmd::set_energy, 0, 0, uint8_t(int8_t(20)));
+    post(Cmd::set_transpose, 0, 0, uint8_t(int8_t(-2)), 0);
+    pump();
+    chain_op(ChainEdit::fill, 2);
+    const SectionExtra &f = engine.project().chain_extra[2];
+    CHECK_EQ(int(f.cap), 1);
+    CHECK_EQ(int(f.mask), 0x40);
+    CHECK_EQ(int(f.scene), 12);
+    CHECK_EQ(int(f.morph), int(kSectionMorphSnap));
+    CHECK_EQ(section_energy(f.energy), 20);
+    CHECK_EQ(int(f.bpm), int(engine.project().settings.tempo_centi_bpm));
+    CHECK_EQ(section_transpose(f.transpose), -2);
+    post(Cmd::set_transpose, 0, 0, 0, 0);
+    pump();
+    // The morph at rest fills SNAP A, so the section brings it home after one that moved it.
+    post(Cmd::set_morph, 0, 0, 0, 0, 0);
+    pump();
+    chain_op(ChainEdit::fill, 2);
+    CHECK_EQ(int(engine.project().chain_extra[2].morph), int(kSectionMorphSnapA));
+    section_chain_done();
+}
+
+// --- ARR REC (core/arrrec.hpp) ----------------------------------------------------------------
+
+namespace {
+
+constexpr uint32_t kArrPass = 1536u;   // a pass of the blank project's 64-step patterns
+
+uint8_t arr_event_count() { return strata::test::engine().status().arr_event.load(); }
+ArrEvent arr_last() { return ArrEvent(strata::test::engine().status().arr_last.load()); }
+int arr_arg() { return int(strata::test::engine().status().arr_arg.load()); }
+
+// A chain to keep, A06 X3, loaded as a file would load it.
+Engine &arr_project() {
+    Engine &engine = clean();
+    Project &incoming = engine.project_for_load();
+    incoming.settings.chain_length = 1;
+    incoming.chain[0] = ChainEntry{0, 5, 3, 0};
+    for (int i = 1; i < kChainEntries; i++) incoming.chain[i] = ChainEntry{};
+    for (int i = 0; i < kChainEntries; i++) incoming.chain_extra[i] = SectionExtra{};
+    post(Cmd::project_loaded);
+    pump();
+    return engine;
+}
+
+void arr_done() {
+    post(Cmd::arr_rec, 0, 0, 0);
+    post(Cmd::set_chain, 0, 0, 0);
+    post(Cmd::set_energy, 0, 0, 0);
+    for (uint8_t t = 0; t < kTracks; t++) post(Cmd::set_mute, t, 0, 0, 0);
+    FakeHost::the().set_running(false);
+    pump();
+}
+
+}  // namespace
+
+TEST(engine_arr_rec_writes_a_jam_into_the_chain_pass_by_pass) {
+    Engine &engine = arr_project();
+    CHECK_EQ(int(master_loop_ticks(engine.project().live())), int(kArrPass));
+    const Status &status = engine.status();
+    const uint8_t events = arr_event_count();
+
+    // Armed with the transport stopped: the chain is kept and emptied, nothing is recorded yet.
+    post(Cmd::arr_rec, 0, 0, 1);
+    pump();
+    CHECK_EQ(int(status.arr_on.load()), 1);
+    CHECK_EQ(int(status.arr_undo_ready.load()), 1);
+    CHECK_EQ(chain_length(engine.project()), 0);
+    CHECK_EQ(int(uint8_t(arr_event_count() - events)), 1);
+    CHECK(arr_last() == ArrEvent::started);
+
+    // Intro: A01 with track 1 muted, two passes.
+    post(Cmd::set_mute, 0, 0, 1, 0);
+    FakeHost::the().set_running(true);
+    pump();
+    tick_at(0);
+    tick_at(kArrPass / 2);
+    // A mute inside the first pass belongs to the next one.
+    post(Cmd::set_mute, 2, 0, 1, 0);
+    pump();
+    tick_at(kArrPass);
+    CHECK_EQ(chain_length(engine.project()), 1);
+    CHECK_EQ(int(engine.project().chain_extra[0].mask), 0x01);
+    // ...and a mute a few ticks after the boundary still belongs to the pass it was meant for:
+    // track 3 back in at tick +4.
+    post(Cmd::set_mute, 2, 0, 0, 0);
+    pump();
+    tick_at(kArrPass + 4);
+    tick_at(2 * kArrPass);
+    CHECK_EQ(chain_length(engine.project()), 1);
+    CHECK_EQ(int(engine.project().chain[0].repeats), 2);
+
+    // ENERGY down for one pass.
+    post(Cmd::set_energy, 0, 0, uint8_t(int8_t(-30)));
+    pump();
+    tick_at(2 * kArrPass + 1);
+    tick_at(3 * kArrPass);
+    CHECK_EQ(chain_length(engine.project()), 2);
+    CHECK_EQ(section_energy(engine.project().chain_extra[1].energy), -30);
+    CHECK_EQ(int(engine.project().chain_extra[1].mask), 0x01);
+
+    // A queued change to A02 at the end of the pass: the pass ends with the switch.
+    // (Queued past the grace window: a press just after a boundary lands at once.)
+    post(Cmd::set_energy, 0, 0, 0);
+    pump();
+    tick_at(3 * kArrPass + 1);
+    tick_at(3 * kArrPass + 100);
+    post(Cmd::queue_pattern, 0, 0, 0, 1, uint8_t(QueueMode::end_of_pattern));
+    pump();
+    tick_at(4 * kArrPass);
+    CHECK_EQ(live_slot(), 1);
+    CHECK_EQ(chain_length(engine.project()), 3);
+    CHECK_EQ(int(engine.project().chain[2].slot), 0);
+    CHECK_EQ(section_energy(engine.project().chain_extra[2].energy), 0);
+    tick_at(4 * kArrPass + 1);
+    tick_at(5 * kArrPass);
+    CHECK_EQ(chain_length(engine.project()), 4);
+    CHECK_EQ(int(engine.project().chain[3].slot), 1);
+    CHECK_EQ(int(status.arr_written.load()), 4);
+
+    // STOP three quarters into the next pass of A02: kept, as a repeat, and the take is over.
+    tick_at(5 * kArrPass + kArrPass * 3 / 4);
+    FakeHost::the().set_running(false);
+    pump();
+    CHECK_EQ(int(status.arr_on.load()), 0);
+    CHECK(arr_last() == ArrEvent::ended);
+    CHECK_EQ(arr_arg(), 4);
+    CHECK_EQ(chain_length(engine.project()), 4);
+    const int repeats[] = {2, 1, 1, 2};
+    for (int i = 0; i < 4; i++) {
+        CHECK_EQ(int(engine.project().chain[i].repeats), repeats[i]);
+        CHECK_EQ(int(engine.project().chain_extra[i].cap), 1);
+        // One tempo all take: no BPM anywhere, so VALUE moves the whole song (the review's M1).
+        CHECK_EQ(int(engine.project().chain_extra[i].bpm), 0);
+    }
+    arr_done();
+}
+
+TEST(engine_arr_rec_replays_as_it_was_played) {
+    Engine &engine = arr_project();
+    post(Cmd::arr_rec, 0, 0, 1);
+    post(Cmd::set_mute, 1, 0, 1, 0);
+    FakeHost::the().set_running(true);
+    pump();
+    tick_at(0);
+    tick_at(kArrPass);
+    post(Cmd::set_mute, 1, 0, 0, 0);
+    post(Cmd::set_energy, 0, 0, 20);
+    pump();
+    tick_at(kArrPass + 1);
+    tick_at(2 * kArrPass);
+    post(Cmd::arr_rec, 0, 0, 0);
+    pump();
+    CHECK_EQ(chain_length(engine.project()), 2);
+    CHECK_EQ(int(engine.project().chain_extra[0].mask), 0x02);
+    CHECK_EQ(int(engine.project().chain_extra[1].mask), 0x00);
+    CHECK_EQ(section_energy(engine.project().chain_extra[1].energy), 20);
+
+    // The hands left elsewhere; the chain puts each section back as it starts.
+    post(Cmd::set_mute, 1, 0, 0, 0);
+    post(Cmd::set_energy, 0, 0, 0);
+    FakeHost::the().set_running(false);
+    pump();
+    FakeHost::the().set_running(true);
+    tick_at(0);
+    post(Cmd::set_chain, 0, 0, 1);
+    pump();
+    CHECK(engine.muted(1));
+    CHECK_EQ(int(engine.energy()), 0);
+    tick_at(1);
+    tick_at(kArrPass);
+    CHECK(!engine.muted(1));
+    CHECK_EQ(int(engine.energy()), 20);
+    arr_done();
+}
+
+TEST(engine_arr_rec_turned_on_mid_pass_keeps_the_pass_by_the_half_rule) {
+    Engine &engine = arr_project();
+    FakeHost::the().set_running(true);
+    pump();
+    tick_at(0);
+    tick_at(kArrPass / 4);
+    post(Cmd::arr_rec, 0, 0, 1);              // three quarters of the pass still to come
+    pump();
+    tick_at(kArrPass);
+    CHECK_EQ(chain_length(engine.project()), 1);
+    tick_at(kArrPass + 1);
+    tick_at(kArrPass + kArrPass / 4);
+    post(Cmd::arr_rec, 0, 0, 0);              // off a quarter in: that pass is dropped
+    pump();
+    CHECK_EQ(chain_length(engine.project()), 1);
+    CHECK_EQ(int(engine.project().chain[0].repeats), 1);
+    CHECK(arr_last() == ArrEvent::ended);
+    arr_done();
+}
+
+TEST(engine_arr_rec_that_wrote_nothing_gives_the_chain_back) {
+    Engine &engine = arr_project();
+    FakeHost::the().set_running(true);
+    pump();
+    tick_at(0);
+    tick_at(100);
+    post(Cmd::arr_rec, 0, 0, 1);
+    pump();
+    CHECK_EQ(chain_length(engine.project()), 0);
+    tick_at(200);
+    post(Cmd::arr_rec, 0, 0, 0);
+    pump();
+    CHECK(arr_last() == ArrEvent::empty);
+    CHECK_EQ(chain_length(engine.project()), 1);
+    CHECK_EQ(int(engine.project().chain[0].slot), 5);
+    CHECK_EQ(int(engine.status().arr_undo_ready.load()), 0);
+    arr_done();
+}
+
+TEST(engine_arr_undo_swaps_the_take_and_the_chain_before_it) {
+    Engine &engine = arr_project();
+    // Nothing to undo yet.
+    post(Cmd::arr_undo);
+    pump();
+    CHECK(arr_last() == ArrEvent::no_undo);
+    post(Cmd::arr_rec, 0, 0, 1);
+    FakeHost::the().set_running(true);
+    pump();
+    tick_at(0);
+    tick_at(kArrPass);
+    // Not during a take.
+    post(Cmd::arr_undo);
+    pump();
+    CHECK(arr_last() == ArrEvent::no_undo);
+    CHECK_EQ(int(engine.status().arr_on.load()), 1);
+    post(Cmd::arr_rec, 0, 0, 0);
+    pump();
+    CHECK_EQ(chain_length(engine.project()), 1);
+    CHECK_EQ(int(engine.project().chain[0].slot), 0);
+    post(Cmd::arr_undo);
+    pump();
+    CHECK(arr_last() == ArrEvent::undone);
+    CHECK_EQ(int(engine.project().chain[0].slot), 5);
+    CHECK_EQ(int(engine.project().chain[0].repeats), 3);
+    post(Cmd::arr_undo);
+    pump();
+    CHECK(arr_last() == ArrEvent::redone);
+    CHECK_EQ(int(engine.project().chain[0].slot), 0);
+    // A load drops it.
+    post(Cmd::project_loaded);
+    pump();
+    CHECK_EQ(int(engine.status().arr_undo_ready.load()), 0);
+    arr_done();
+}
+
+TEST(engine_arr_rec_stops_following_the_chain_and_playing_it_ends_the_take) {
+    Engine &engine = arr_project();
+    FakeHost::the().set_running(true);
+    tick_at(0);
+    post(Cmd::set_chain, 0, 0, 1);
+    pump();
+    CHECK(engine.chain().active);
+    CHECK_EQ(live_slot(), 5);
+    post(Cmd::arr_rec, 0, 0, 1);
+    pump();
+    CHECK(!engine.chain().active);
+    CHECK(!engine.project().settings.chain_enabled);
+    tick_at(1);
+    tick_at(kArrPass);
+    tick_at(kArrPass + 1);
+    tick_at(2 * kArrPass);
+    CHECK_EQ(live_slot(), 5);                 // the jam plays on where it was
+    CHECK_EQ(chain_length(engine.project()), 1);
+    CHECK_EQ(int(engine.project().chain[0].repeats), 2);
+    // Turning the chain on ends the take and plays what it wrote.
+    post(Cmd::set_chain, 0, 0, 1);
+    pump();
+    CHECK_EQ(int(engine.status().arr_on.load()), 0);
+    CHECK(arr_last() == ArrEvent::ended);
+    CHECK(engine.chain().active);
+    arr_done();
+}
+
+TEST(engine_arr_rec_records_no_tempo_under_an_outside_clock) {
+    Engine &engine = arr_project();
+    FakeHost::the().set_source(ENAGA_CLOCK_MIDI);
+    post(Cmd::arr_rec, 0, 0, 1);
+    FakeHost::the().set_running(true);
+    pump();
+    tick_at(0);
+    tick_at(kArrPass);
+    CHECK_EQ(chain_length(engine.project()), 1);
+    CHECK_EQ(int(engine.project().chain_extra[0].bpm), 0);
+    FakeHost::the().set_source(ENAGA_CLOCK_INTERNAL);
+    arr_done();
+}
+
+TEST(engine_a_pass_after_stop_and_play_ends_on_its_own_boundary) {
+    // A plain STOP and PLAY puts the clock back to 0 with the pattern's origin already at 0, and
+    // the end of the pass known from the old run stood: a chain started on the pattern already
+    // playing (no switch to re-derive it) held its first entry until the old run's boundary.
+    Engine &engine = clean();
+    Project &incoming = engine.project_for_load();
+    incoming.settings.chain_length = 2;
+    incoming.chain[0] = ChainEntry{0, 0, 1, 0};
+    incoming.chain[1] = ChainEntry{0, 1, 1, 0};
+    for (int i = 2; i < kChainEntries; i++) incoming.chain[i] = ChainEntry{};
+    for (int i = 0; i < kChainEntries; i++) incoming.chain_extra[i] = SectionExtra{};
+    post(Cmd::project_loaded);
+    pump();
+    FakeHost::the().set_running(true);
+    tick_at(0);
+    tick_at(1536 * 2 + 100);                     // two passes in: the next end is 4608
+    FakeHost::the().set_running(false);
+    pump();
+    FakeHost::the().set_running(true);
+    tick_at(0);
+    post(Cmd::set_chain, 0, 0, 1);
+    pump();
+    CHECK_EQ(live_slot(), 0);
+    tick_at(1);
+    tick_at(1536);
+    CHECK_EQ(live_slot(), 1);
+    post(Cmd::set_chain, 0, 0, 0);
+    FakeHost::the().set_running(false);
+    pump();
+}
+
+TEST(engine_a_mute_armed_for_the_bar_does_not_survive_a_project_load) {
+    Engine &engine = clean();
+    post(Cmd::set_mute, 1, 0, 1, 1);             // FUNC + pad: track 2 at the next bar
+    pump();
+    post(Cmd::project_loaded);
+    pump();
+    FakeHost::the().set_running(true);
+    tick_at(0);
+    tick_at(kTicksPerBar);
+    tick_at(2 * kTicksPerBar);
+    CHECK(!engine.muted(1));
+    FakeHost::the().set_running(false);
+    pump();
+}
+
 TEST(engine_starting_an_empty_chain_is_refused) {
     Engine &engine = clean();
     CHECK_EQ(chain_length(engine.project()), 0);
@@ -2175,7 +2805,7 @@ TEST(engine_a_scene_capture_takes_the_knob_and_not_the_stored_kit) {
     post(Cmd::scene_erase, 0, 0, 5);
     post(Cmd::scene_capture, kMono, 0, 5, 1);
     pump();
-    CHECK_EQ(scene_count(engine.scenes().scenes[5]), kKitParams);
+    CHECK_EQ(scene_count(engine.scenes().scenes[5]), kKitRealParams);
     CHECK(scene_has(engine.scenes().scenes[5], kMono, kLvl));
     CHECK(!scene_has(engine.scenes().scenes[5], kPoly, kLvl));
 
@@ -4092,4 +4722,132 @@ TEST(engine_a_slid_lock_glides_to_the_next_playing_step) {
     pump();
     for (int block = 0; block < 20; block++) pump();
     CHECK_EQ(int(engine.sounding(kPoly).v[kDec]), 20);
+}
+
+// --- song position in ------------------------------------------------------------------------
+//
+// An outside sequencer's MIDI song position pointer makes Enaga locate its clock while stopped
+// (ENAGA_TRANSPORT_LOCATE under MIDI clock), and the app posts Cmd::locate with the position.
+
+void locate_to(uint32_t tick) {
+    Command command;
+    command.cmd = Cmd::locate;
+    command.u = tick;
+    CHECK(strata::test::engine().commands().post(command));
+    pump();
+}
+
+uint32_t pattern_origin() {
+    return strata::test::engine().status().pattern_origin.load(std::memory_order_relaxed);
+}
+
+// A01 x1, A02 x2, A03 x1, each 64 steps (1536 ticks): A02 runs 1536-4607, A03 4608-6143.
+Engine &chain_for_locate(bool song) {
+    Engine &engine = clean();
+    Project &incoming = engine.project_for_load();
+    incoming.settings.chain_length = 3;
+    incoming.chain[0] = ChainEntry{0, 0, 1, 0};
+    incoming.chain[1] = ChainEntry{0, 1, 2, 0};
+    incoming.chain[2] = ChainEntry{0, 2, 1, 0};
+    for (int i = 3; i < kChainEntries; i++) incoming.chain[i] = ChainEntry{};
+    incoming.settings.chain_song = song;
+    post(Cmd::project_loaded);
+    pump();
+    post(Cmd::set_chain, 0, 0, 1);
+    pump();
+    return engine;
+}
+
+TEST(engine_a_song_position_puts_the_chain_on_the_entry_and_pass_it_falls_in) {
+    Engine &engine = chain_for_locate(false);
+    CHECK_EQ(live_slot(), 0);
+    locate_to(1536 + 1536 + 96);                   // A02's second pass, step 5
+    CHECK_EQ(live_slot(), 1);
+    CHECK_EQ(int(engine.chain().entry), 1);
+    CHECK_EQ(int(engine.chain().played), 1);
+
+    // The CONTINUE: the pass runs from there, and A03 comes in where the outside song has it.
+    FakeHost::the().set_running(true);
+    tick_at(1536 + 1536 + 96);
+    CHECK_EQ(pattern_origin(), 1536u);
+    CHECK_EQ(playhead(0), 4);
+    tick_at(4607);
+    CHECK_EQ(live_slot(), 1);
+    tick_at(4608);
+    CHECK_EQ(live_slot(), 2);
+    CHECK_EQ(pattern_origin(), 4608u);
+
+    post(Cmd::set_chain, 0, 0, 0);
+    FakeHost::the().set_running(false);
+    pump();
+}
+
+TEST(engine_a_song_position_back_to_the_start_goes_back_to_entry_1) {
+    Engine &engine = chain_for_locate(false);
+    locate_to(5000);                               // A03
+    CHECK_EQ(live_slot(), 2);
+    locate_to(0);
+    CHECK_EQ(live_slot(), 0);
+    CHECK_EQ(int(engine.chain().entry), 0);
+    locate_to(6144 + 1600);                        // round again: A02's first pass
+    CHECK_EQ(live_slot(), 1);
+    CHECK_EQ(int(engine.chain().played), 0);
+    post(Cmd::set_chain, 0, 0, 0);
+    pump();
+}
+
+TEST(engine_a_song_position_past_the_end_of_a_song_is_silent) {
+    Engine &engine = chain_for_locate(true);
+    put_trig(kMono, 0);                            // A01, step 1
+    locate_to(6144 + 1536 * 4);                    // four patterns past the end
+    CHECK_EQ(live_slot(), 0);                      // back on entry 1 for the next PLAY
+    CHECK_EQ(int(engine.chain().entry), 0);
+    FakeHost::the().set_running(true);
+    CHECK_EQ(fired_on(kMono, 6144 + 1536 * 4), 0);
+    CHECK_EQ(fired_on(kMono, 6144 + 1536 * 5), 0);   // A01's step 1 again, and still silent
+    post(Cmd::set_chain, 0, 0, 0);
+    FakeHost::the().set_running(false);
+    pump();
+}
+
+TEST(engine_a_song_position_with_no_chain_plays_the_pattern_from_0) {
+    clean();
+    put_trig(kMono, 4);                            // step 5: tick 96 of each pass
+    // A queued pattern change landed at once while stopped: A02 from its own start.
+    post(Cmd::queue_pattern, 0, 0, 0, 1, uint8_t(QueueMode::immediate));
+    pump();
+    put_trig(kMono, 4);
+    FakeHost::the().set_running(true);
+    tick_at(0);
+    tick_at(700);                                  // somewhere in the pass
+    post(Cmd::stop, 0, 0, 0);
+    FakeHost::the().set_running(false);
+    pump();
+
+    locate_to(1536 * 3 + 96);                      // the fourth pass's step 5
+    FakeHost::the().set_running(true);
+    CHECK_EQ(fired_on(kMono, 1536 * 3 + 96), 1);
+    CHECK_EQ(pattern_origin(), 0u);
+    CHECK_EQ(playhead(kMono), 4);
+    FakeHost::the().set_running(false);
+    post(Cmd::stop, 0, 0, 0);
+    pump();
+}
+
+TEST(engine_a_song_position_lands_a_queued_change_at_once) {
+    clean();
+    post(Cmd::queue_pattern, 0, 0, 0, 3, uint8_t(QueueMode::end_of_pattern));
+    FakeHost::the().set_running(true);
+    tick_at(0);
+    tick_at(100);                                  // past the grace window after tick 0
+    post(Cmd::queue_pattern, 0, 0, 0, 5, uint8_t(QueueMode::end_of_pattern));
+    tick_at(110);
+    CHECK_EQ(live_slot(), 3);                      // A04 waits for the boundary
+    post(Cmd::stop, 0, 0, 0);
+    FakeHost::the().set_running(false);
+    pump();
+    locate_to(384);
+    CHECK_EQ(live_slot(), 5);                      // the old boundary is gone: A06 now
+    post(Cmd::stop, 0, 0, 0);
+    pump();
 }

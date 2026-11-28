@@ -255,6 +255,52 @@
         notice_logged(notice_buffer_);
     }
 
+    // TRANSPOSE (core/transpose.hpp): FUNC + SEL< / SEL> a step (a scale step, or a semitone
+    // with the FUNC menu's row on SEMI), the other screen key held as well puts it back to 0.
+    // A press waits kTransposeChordMs before it moves anything (or until its key comes up), so
+    // both keys pressed together go straight to 0 without a step sounding first (review L3,
+    // 2026-11-28); a second key pressed later still finds the first step taken, and resets.
+    static constexpr uint32_t kTransposeChordMs = 40;
+
+    void transpose_press(int delta) {
+        if (sel_left_down_ && sel_right_down_) {
+            transpose_pending_ = 0;
+            transpose_set(0);
+            return;
+        }
+        if (transpose_pending_ != 0) transpose_commit();
+        transpose_pending_ = int8_t(delta);
+        transpose_pending_ms_ = last_ms_;
+    }
+
+    void transpose_commit() {
+        const int delta = transpose_pending_;
+        transpose_pending_ = 0;
+        if (delta != 0) transpose_set(transpose_turn(transpose_, delta));
+    }
+
+    // From update(): a press held past the wait with no second key is a step.
+    void service_transpose() {
+        if (transpose_pending_ != 0 &&
+            uint32_t(last_ms_ - transpose_pending_ms_) >= kTransposeChordMs) {
+            transpose_commit();
+        }
+    }
+
+    // Posted absolute with the mode; the notice is logged so a scenario can follow it:
+    // `TRANSPOSE +2 IN KEY`, `TRANSPOSE +3 C` (SEMI: the key the parts are in), `TRANSPOSE 0`.
+    void transpose_set(int8_t amount) {
+        transpose_ = amount;
+        post_transpose();
+        transpose_text(transpose_, transpose_semis_, engine_.key_root(), notice_buffer_,
+                       kTransposeTextMax);
+        notice_logged(notice_buffer_);
+    }
+
+    void post_transpose() {
+        post(Cmd::set_transpose, 0, 0, uint8_t(transpose_), transpose_semis_ ? 1 : 0);
+    }
+
     // LIVE RND's notice, logged so a scenario can follow it: `LIVE RND4 8 TRK` (the unit and how
     // many tracks it moves), `LIVE RND OFF` at rest.
     void live_rnd_notice() {
@@ -272,9 +318,10 @@
         notice_logged(notice_buffer_);
     }
 
-    // FUNC + push D in PERFORM: track `track` in or out of LIVE RND (`T3 RND OUT 7 TRK`).
+    // FUNC + lower pad in PERFORM: track `track` in or out of LIVE RND (`T3 RND OUT 7 TRK`).
     void live_rnd_arm(int track) {
         rnd_armed_ = uint8_t(rnd_armed_ ^ (1u << track));
+        rnd_armed_chosen_ = true;
         post(Cmd::set_live_rnd, 0, 0, rnd_unit_, rnd_armed_);
         const bool in = ((rnd_armed_ >> track) & 1u) != 0;
         char *out = notice_buffer_;
@@ -314,9 +361,50 @@
         // pressed, and the FUNC help has the gestures. Stopped, the scope's rows hold the lines a
         // hand needs before it plays.
 
+        // While FUNC is held the knobs are the Moves layer (FUNC + turn A-D), so the gauges are
+        // too: REL ALL, LEN ALL, ENERGY and LIVE RND with their values, lit away from rest.
+        const bool moves = shift_;
+        for (int m = 0; moves && m < kMacros; m++) {
+            const int cx = m * 31 + 15;
+            int value = 0;                                 // the gauge, 0-127
+            out = line;
+            switch (m) {
+                case 0:
+                    value = engine_.rel_all() + 64;
+                    append_signed(out, engine_.rel_all());
+                    break;
+                case 1:
+                    value = engine_.len_all() + 64;
+                    append_number(out, uint32_t(len_all_percent(engine_.len_all())));
+                    break;
+                case 2:
+                    value = engine_.energy() + 64;
+                    append_signed(out, engine_.energy());
+                    break;
+                default:
+                    value = int(rnd) * 127 / int(kLiveRndMax);
+                    append(out, rnd == kLiveRndOff ? "OFF" : live_rnd_name(rnd) + 3);
+                    break;
+            }
+            *out = 0;
+            static const char *const kMoveNames[kMacros] = {"REL", "LEN", "NRG", "RND"};
+            const bool off_rest = m == 3 ? rnd != kLiveRndOff
+                                         : (m == 0 ? engine_.rel_all() != 0
+                                                   : (m == 1 ? engine_.len_all() != 0
+                                                             : engine_.energy() != 0));
+            draw_gauge(canvas, cx, 30, 11, value < 0 ? 0 : (value > 127 ? 127 : value), -1,
+                       off_rest, false);
+            paint::small_text(px, cx - paint::small_width(line) / 2, 36, line,
+                              off_rest ? 15 : 8);
+            const char letter[2] = {char('A' + m), 0};
+            canvas.rect(cx - 11, 43, 7, 7, 4);
+            paint::small_text(px, cx - 9, 44, letter, 13);
+            paint::small_text(px, cx - 2, 44, kMoveNames[m], off_rest ? 15 : 11);
+        }
+
         // The four macros: a gauge each, the value inside, the letter as a badge under it (the
         // selected one lit) and how many parameters it drives. An empty macro's gauge is dim.
-        for (int m = 0; m < kMacros; m++) {
+        for (int m = 0; !moves && m < kMacros; m++) {
             const int x = m * 31;
             const int cx = x + 15;
             const int targets = macro_count(engine_.macros().macros[m]);
@@ -363,6 +451,10 @@
                 append(out, " EN");
                 append_signed(out, engine_.energy());
             }
+            if (engine_.transpose() != 0) {
+                append(out, " TR");
+                append_signed(out, engine_.transpose());
+            }
             *out = 0;
             paint::small_text(px, 16, 52, line, 9);
             if (engine_.rel_all() != 0 || engine_.len_all() != 0) {
@@ -399,7 +491,8 @@
                 append(out, " FUNC+D");
                 *out = 0;
                 canvas.text(0, 57, line, 12);
-            } else {
+            } else if (!moves) {
+                // While FUNC is held the gauges name the layer, so the hint has nothing to add.
                 canvas.text(0, 57, "FUNC+A/B REL/LEN ALL", 7);
             }
             // The fill and AUTO-FILL where they are on, or where AUTO-FILL lives.
@@ -415,8 +508,8 @@
             } else {
                 canvas.text(0, 66, "AUTOFILL: FUNC MENU", 7);
             }
-            // The bar, ENERGY away from rest and the held modes: "BAR 1000 EN-64 NRPT" is 19
-            // characters, and FRZ goes on only while it fits the line.
+            // The bar, ENERGY and TRANSPOSE away from rest and the held modes: "BAR 1000 EN-64
+            // TR-12" is 20 characters, so NRPT and FRZ go on only while they fit the line.
             out = line;
             append(out, "BAR ");
             append_number(out, engine_.bar() % 1000u + 1u);
@@ -424,7 +517,11 @@
                 append(out, " EN");
                 append_signed(out, engine_.energy());
             }
-            if (note_repeat_mode_) append(out, " NRPT");
+            if (engine_.transpose() != 0) {
+                append(out, " TR");
+                append_signed(out, engine_.transpose());
+            }
+            if (note_repeat_mode_ && out - line + 5 <= kLineChars) append(out, " NRPT");
             if (engine_.delay_frozen() && out - line + 4 <= kLineChars) append(out, " FRZ");
             *out = 0;
             canvas.text(0, 75, line, 9);

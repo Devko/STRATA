@@ -133,7 +133,7 @@ TEST(sounds_a_preset_writes_its_pages_and_leaves_the_mix_the_lfo_and_the_arp) {
             std::memset(params, 0xAA, sizeof params);         // not a knob byte: shows any write
             CHECK(sound_preset_apply(uint8_t(m), i, params));
             CHECK(sound_preset_matches(uint8_t(m), i, params));
-            const uint32_t mask = sound_preset_writes(uint8_t(m));
+            const uint64_t mask = sound_preset_writes(uint8_t(m));
             for (int p = 0; p < kKitParams; p++) {
                 const bool written = params[p] != 0xAA;
                 CHECK_EQ(written, ((mask >> p) & 1u) != 0);
@@ -228,6 +228,7 @@ namespace {
 bool reads_for_sound(uint8_t machine, int p) {
     if (p < 12) return true;
     if (p >= kSoundAsrFirst && p < kSoundAsrFirst + 4) return machine_reads_asr(machine);
+    if (p >= kSoundScnFirst && p < kSoundScnFirst + 4) return machine_reads_scn(machine);
     return machine_reads_osc(machine) && p >= kSoundOscFirst && p < kSoundOscFirst + 4;
 }
 
@@ -294,13 +295,16 @@ TEST(sounds_switching_a_track_loads_the_new_machines_defaults) {
     storage().request_new();
     CHECK(settle());
     // Track 6 is VA MONO: leave odd values everywhere, then switch it to SAMPLE.
-    for (int p = 0; p < kTrackParams; p++) post(Cmd::set_param, 5, 0, uint8_t(p), 37);
+    for (int p = 0; p < kTrackParams; p++) {
+        if (track_param_real(p)) post(Cmd::set_param, 5, 0, uint8_t(p), 37);
+    }
     pump(2);
     post(Cmd::set_machine, 5, 0, uint8_t(MachineId::sample));
     pump(2);
     uint8_t want[kKitParams];
     // 37 where the parameter goes that high: WAV and DST stop at their last number.
     for (int p = 0; p < kKitParams; p++) want[p] = kit_param_max(p) < 37 ? kit_param_max(p) : 37;
+    for (int p = kKitOscEnd; p < kKitScnFirst; p++) want[p] = 0;   // the hole takes no value
     CHECK(machine_defaults_apply(uint8_t(MachineId::sample), want));
     for (int p = 0; p < kTrackParams; p++) {
         CHECK_EQ(int(e.params(5).v[p]), int(want[p]));
@@ -420,4 +424,40 @@ TEST(sounds_bytes_come_from_their_own_page_and_matching_checks_them_all) {
     CHECK_EQ(int(sample[7]), 0);
     CHECK_EQ(int(sample[8]), 0);
     CHECK_EQ(int(sample[10]), 0);
+}
+
+TEST(sounds_the_wave_pair_has_scanning_presets_and_the_rest_scan_nothing) {
+    // A preset with SCN bytes writes them; one without writes the kit's default (MOD OFF), so a
+    // pick on a track that was scanning stops the scan. Each WAVE machine has at least two that
+    // scan, and the first preset -- the one a fresh track plays -- is not one of them.
+    const MachineId pair[] = {MachineId::wave_mono, MachineId::wave_poly};
+    for (const MachineId machine : pair) {
+        const uint8_t id = uint8_t(machine);
+        int scanning = 0;
+        for (int i = 0; i < sound_preset_count(id); i++) {
+            uint8_t params[kKitParams] = {};
+            for (int p = kSoundScnFirst; p < kKitParams; p++) params[p] = 77;
+            CHECK(sound_preset_apply(id, i, params));
+            const SoundPreset *preset = sound_preset(id, i);
+            const bool scans = preset->scn[0] != 0;
+            for (int k = 0; k < kKitScnParams; k++) {
+                const int want = scans ? preset->scn[k] : kKitScnDefault[k];
+                CHECK_EQ(int(params[kSoundScnFirst + k]), want);
+                CHECK(params[kSoundScnFirst + k] <= kit_param_max(kSoundScnFirst + k));
+            }
+            CHECK(sound_preset_matches(id, i, params));
+            if (scans) {
+                scanning++;
+                CHECK(preset->scn[2] != preset->src[1]);     // END apart from POS: it travels
+            }
+        }
+        CHECK(scanning >= 2);
+        CHECK_EQ(int(sound_preset(id, 0)->scn[0]), 0);
+    }
+    // Only the WAVE pair reads the page.
+    for (int m = 0; m < kMachines; m++) {
+        const MachineId machine = MachineId(m);
+        CHECK_EQ(machine_reads_scn(uint8_t(m)),
+                 machine == MachineId::wave_mono || machine == MachineId::wave_poly);
+    }
 }

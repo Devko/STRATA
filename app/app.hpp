@@ -36,15 +36,19 @@
 #include "engine.hpp"
 #include "help.hpp"         // the FUNC help's pages, one set per screen
 #include "energy.hpp"       // ENERGY: FUNC + C in PERFORM
+#include "transpose.hpp"    // TRANSPOSE: FUNC + the screen keys
+#include "varispeed.hpp"    // VariSpeed: FUNC + VALUE, tempo and pitch together
 #include "liverand.hpp"     // LIVE RND: FUNC + D in PERFORM
 #include "paint.hpp"        // the drawing kit: lines, arcs, the small font, afterglow
 #include "spectrum.hpp"     // the output's spectrum for MIXER's master pages
 #include "record.hpp"       // live recording's stamping and quantizing, used from here only
 #include "sounds.hpp"       // SOUNDS: the factory sounds for one track
+#include "usersounds.hpp"   // and your own, saved on the card
 #include "arppresets.hpp"   // ARPS: the factory arps for one track
 #include "stepnotes.hpp"    // a chord step's extra notes: counted on the step page, not as locks
 #include "storage.hpp"      // projects, autosave and the sample loader: the card side
 #include "tuning.hpp"       // TUN and PIT as notes: the NOTE view
+#include "taptempo.hpp"     // tap tempo on VALUE, the nudge on FUNC + push VALUE + turn
 
 #include <enaga/app.hpp>
 #include <enaga/clock.hpp>
@@ -181,6 +185,11 @@ constexpr MixerPage kMixerPages[] = {
     {"CHO 5-8", false, {-1, -1, -1, -1}},
     {"CHO", false, {int8_t(SendField::chorus_rate), int8_t(SendField::chorus_depth),
                     int8_t(SendField::chorus_level), int8_t(SendField::chorus_to_reverb)}},
+    // The line input's strip (core/project.hpp, InputField): the fader, pan and the two sends,
+    // then the chorus send, the duck, the tone and the jack. Project bytes, handled on their own
+    // like the duck's: `field` is unused. Push A on either turns the input on and off.
+    {"IN", false, {-1, -1, -1, -1}},
+    {"IN+", false, {-1, -1, -1, -1}},
     {"MST", true, {int8_t(MasterField::dj), int8_t(MasterField::compressor),
                    int8_t(MasterField::limit), int8_t(MasterField::level)}},
     // The kill EQ, next to the master it sits in. Push A, B or C to throw that band's kill
@@ -233,9 +242,61 @@ constexpr bool mixer_chorus_send_page(int page) {
     return page == kMixerChorusSendPage || page == kMixerChorusSendPage + 1;
 }
 
+// The line input's two pages, after the chorus and before the master: the scenarios that go
+// round from TRK 1-4 to MST and EQ still find them one and two presses away.
+constexpr int kMixerInputPage = kMixerChorusPage + 1;
+static_assert(kMixerPages[kMixerInputPage].name[0] == 'I' && kMixerPages[kMixerInputPage].name[2] == 0 &&
+                  kMixerPages[kMixerInputPage + 1].name[2] == '+',
+              "the line input's pages moved");
+constexpr bool mixer_input_page(int page) {
+    return page == kMixerInputPage || page == kMixerInputPage + 1;
+}
+// Which field each of the IN pages' four encoders moves, in InputField numbers.
+constexpr InputField kInputPageFields[2][4] = {
+    {InputField::level, InputField::pan, InputField::delay, InputField::reverb},
+    {InputField::chorus, InputField::duck, InputField::tone, InputField::source},
+};
+// The sources as the IN+ page names them, in core/project.hpp's numbering, and the route Enaga
+// takes for each (enaga_input_source).
+struct InputRoute {
+    const char *name;
+    int route;
+};
+constexpr InputRoute kInputRoutes[kInputSources] = {
+    {"LINE", ENAGA_INPUT_LINE_STEREO}, {"LINE L", ENAGA_INPUT_LINE_MONO}, {"MIC", ENAGA_INPUT_MIC},
+    {"DYN MIC", ENAGA_INPUT_DYNAMIC_MIC}, {"HI-Z", ENAGA_INPUT_HIZ},     {"USB", ENAGA_INPUT_USB},
+};
+
 static_assert(kMixerPages[kMixerEqPage].master &&
                   kMixerPages[kMixerEqPage].field[0] == int8_t(MasterField::eq_low),
               "kMixerEqPage no longer names the kill EQ's page");
+
+// MIXER's groups, for UP/DOWN (usability review, 2026-11-28): each group's first page, in page
+// order. Levels, the duck, the widths, the delay, the reverb (with ROUTE), the chorus, the line
+// input, the master. LEFT/RIGHT still walk page by page; UP/DOWN jump to the first page of the group before
+// or after the one showing, round the ends as LEFT/RIGHT go round.
+constexpr int kMixerGroupStart[] = {0, kMixerDuckDepthPage, kMixerWidthPage, kMixerDelayPage,
+                                    kMixerHallPage - 1, kMixerChorusSendPage, kMixerInputPage,
+                                    kMixerEqPage - 1};
+constexpr int kMixerGroups = int(sizeof(kMixerGroupStart) / sizeof(kMixerGroupStart[0]));
+static_assert(kMixerPages[kMixerHallPage - 1].field[0] == int8_t(SendField::reverb_decay_s) &&
+                  kMixerPages[kMixerEqPage - 1].field[0] == int8_t(MasterField::dj),
+              "MIXER's groups no longer start on REV and MST");
+
+constexpr int mixer_group_of(int page) {
+    int group = 0;
+    for (int g = 0; g < kMixerGroups; g++) group = page >= kMixerGroupStart[g] ? g : group;
+    return group;
+}
+
+// The page UP (delta -1) or DOWN (+1) lands on from `page`.
+constexpr int mixer_group_jump(int page, int delta) {
+    const int group = (mixer_group_of(page) + delta % kMixerGroups + kMixerGroups) % kMixerGroups;
+    return kMixerGroupStart[group];
+}
+static_assert(mixer_group_jump(0, 1) == kMixerDuckDepthPage && mixer_group_jump(0, -1) == kMixerEqPage - 1 &&
+                  mixer_group_jump(kMixerEqPage, 1) == 0 && mixer_group_jump(kMixerDuckPage, -1) == 0,
+              "MIXER's group jumps");
 
 // Every send and master field has a slot on some page. Without this a field added to
 // dsp/buses.hpp would be saved, loaded and completely unreachable -- which is the bug this whole
@@ -475,6 +536,7 @@ const char *page_name(Page page) {
         case Page::arp:  return "ARP";
         case Page::asr:  return "ENV";      // the whole envelope (Roland, 2026-11-26)
         case Page::osc:  return "OSC";
+        case Page::scn:  return "SCAN";
         default:         return "?";
     }
 }
@@ -484,12 +546,18 @@ const char *page_name(Page page) {
 constexpr const char *kAsrNames[kAsrParams] = {"ATK", "SUS", "REL", "FSU"};
 // And their OSC page's (dsp/va.cpp): OSC 1's wave, what OSC 2 does, the sub, the drive.
 constexpr const char *kOscNames[kOscParams] = {"WAV", "OS2", "SUB", "DRV"};
+// And the WAVE pair's SCN page (dsp/va.cpp): the scan's mode, speed, end frame and curve.
+constexpr const char *kScnNames[kScnParams] = {"MOD", "SPD", "END", "CRV"};
 
 // EDIT's pages: the four of sound, then the track's LFO (dsp/lfo.hpp), its arpeggiator
-// (core/arp.hpp), the VA machines' note envelope, ASR, and their oscillators, OSC (dsp/va.cpp).
-// The selection keys walk all eight; everywhere else a page is still four encoders over four
+// (core/arp.hpp), the VA machines' note envelope, ASR, and their oscillators, OSC (dsp/va.cpp),
+// then the WAVE pair's scan, SCAN. Pages 8 and 9 are the hole between OSC and SCN
+// (dsp/track.hpp): no knob on them is live on any machine, so the selection keys step over them
+// as they step over a drum's ENV. Everywhere else a page is still four encoders over four
 // parameters.
-constexpr int kEditPages = kPages + 4;
+constexpr int kEditPages = int(Page::scn) + 1;
+constexpr bool edit_page_hole(int page) { return page * kParamsPerPage >= kOscEnd &&
+                                                 page * kParamsPerPage < kScnFirst; }
 
 // Encoder counts per click: one zone on the arp's MOD RAT OCT, one shape or destination on the
 // LFO's WAV and DST, one count everywhere else (ASR and OSC included).
@@ -577,6 +645,7 @@ public:
 
 #include "ui_project.hpp"
 #include "ui_launch.hpp"
+#include "ui_section.hpp"
 #include "ui_trackmenu.hpp"
 #include "ui_pickview.hpp"
 #include "ui_listview.hpp"
@@ -624,6 +693,91 @@ private:
         post_command(command);
     }
 
+    // --- VariSpeed (core/varispeed.hpp) ------------------------------------
+    //
+    // Enaga's tempo is the playing tempo times VariSpeed's ratio. Every place that sets the
+    // clock's tempo goes through here, so the clock and the pitch never part: VALUE's turn, a
+    // tap, a loaded project's tempo, a section's BPM, the end of a nudge, and VariSpeed itself.
+    // `centi` (the tempo before VariSpeed) is kept in `clock_centi_`, which VariSpeed and the
+    // nudge build on. False when Enaga refuses (an outside clock), as enaga::clock::set_tempo.
+    bool set_clock_tempo(uint32_t centi) {
+        clock_centi_ = uint16_t(centi);
+        // A faster tempo can take the moved one past 300 BPM (or a slower one under 20):
+        // VariSpeed comes back towards 0 until it fits, rather than the clock clamping and the
+        // pitch going on alone. The amount the user set is kept in `vari_set_`, so it comes back
+        // when the tempo drops again; both moves are said (the review's L4).
+        const int8_t fitted = vari_fit(vari_set_, centi, kTempoCentiMin, kTempoCentiMax);
+        if (fitted != vari_) {
+            vari_ = fitted;
+            post(Cmd::set_varispeed, 0, 0, uint8_t(vari_));
+            if (fitted != vari_set_) {
+                char *out = notice_buffer_;
+                append(out, "VARISPEED HELD ");
+                char amount[kVariTextMax];
+                vari_text(vari_, amount, kVariTextMax);
+                append(out, amount);
+                *out = 0;
+                notice_logged(notice_buffer_);
+            } else {
+                vari_notice();
+            }
+        }
+        const float bpm = float(centi) * 0.01f * vari_ratio(vari_);
+        return enaga::clock::set_tempo(bpm);
+    }
+
+    // VariSpeed to `tenths`: the clock first, then the machines' pitch and the delay's beat. The
+    // project's tempo is left alone, so a save stores the tempo the song was written at.
+    void vari_apply(int8_t tenths) {
+        vari_set_ = tenths;
+        vari_ = tenths;
+        clock_refused_ = !set_clock_tempo(clock_centi_);
+        post(Cmd::set_varispeed, 0, 0, uint8_t(vari_));
+    }
+
+    // FUNC + turn VALUE: one tenth of a semitone a click, 0 a detent, held where the tempo still
+    // fits Enaga's 20-300 BPM. Refused under an outside clock, like VALUE's tempo.
+    void vari_turn_by(int delta) {
+        if (enaga::clock::source() != ENAGA_CLOCK_INTERNAL) {
+            clock_refused_ = true;
+            notice("EXT CLOCK");
+            return;
+        }
+        vari_apply(vari_fit(vari_turn(vari_, delta), clock_centi_, kTempoCentiMin,
+                            kTempoCentiMax));
+        vari_notice();
+    }
+
+    // The clock source changed (the user's CLOCK SRC). VariSpeed is internal clock only: under
+    // MIDI or SYNC the tempo is not ours, so the pitch drops back with it rather than staying
+    // moved against a tempo that is not; back on INTERNAL the clock takes the project's tempo
+    // again, since Enaga kept the one VariSpeed last set.
+    void vari_follow_source(int source) {
+        if (source == ENAGA_CLOCK_INTERNAL) {
+            clock_refused_ = !set_clock_tempo(clock_centi_);
+            return;
+        }
+        vari_set_ = 0;
+        if (vari_ == 0) return;
+        vari_ = 0;
+        post(Cmd::set_varispeed, 0, 0, 0);
+        notice_logged("VARISPEED 0 EXT CLOCK");
+    }
+
+    // `VARISPEED +1.2 138.3`: the amount in semitones and the tempo it runs at. Logged, so a
+    // scenario can follow it.
+    void vari_notice() {
+        char *out = notice_buffer_;
+        append(out, "VARISPEED ");
+        char amount[kVariTextMax];
+        vari_text(vari_, amount, kVariTextMax);
+        append(out, amount);
+        *out++ = ' ';
+        append_tenths(out, vari_tempo_tenths((uint32_t(clock_centi_) + 5u) / 10u, vari_));
+        *out = 0;
+        notice_logged(notice_buffer_);
+    }
+
     // An encoder delta, as a signed byte. The audio side applies it to the authoritative step,
     // which is why these carry a delta and not a value (app/commands.hpp explains the choice).
     void post_delta(Cmd cmd, int track, int step, uint8_t a, int delta) {
@@ -661,8 +815,25 @@ private:
     // like nothing happened.
     void notice(const char *text) {
         notice_ = text;
+        notice_alt_ = nullptr;
         notice_at_ms_ = last_ms_;
         notice_screen_ = screen_key();
+    }
+
+    // A notice that takes turns with a second line, three-quarters of a second each, for twice
+    // as long: what was refused, then what to do about it ("T3 B07 READ ONLY", "HOLD OK:
+    // CAPTURE"). The log and UiProbe::notice see `text`.
+    void notice_alternating(const char *text, const char *alt) {
+        notice(text);
+        notice_alt_ = alt;
+    }
+
+    // The line a notice shows now: its text, or its second line on the alternate turns.
+    const char *notice_shown() const {
+        if (notice_alt_ != nullptr && (uint32_t(last_ms_ - notice_at_ms_) / 750u) % 2u == 1u) {
+            return notice_alt_;
+        }
+        return notice_;
     }
 
     // Which screen and page is up, as one number: a notice's toast belongs to the screen it was
@@ -682,12 +853,24 @@ private:
     }
 
     bool notice_showing() const {
-        return notice_ != nullptr && uint32_t(last_ms_ - notice_at_ms_) < 1500u;
+        return notice_ != nullptr &&
+               uint32_t(last_ms_ - notice_at_ms_) < (notice_alt_ != nullptr ? 3000u : 1500u);
     }
 
     Engine engine_;
     uint32_t stream_late_seen_ = 0;    // Status::stream_late as last noticed
     uint8_t song_end_seen_ = 0;        // Status::song_end as last acted on
+    // Song sections: Status::section_event and Status::tempo_due as last acted on, and whether
+    // this run of the transport has already said a section's BPM was refused (once a song).
+    uint8_t section_event_seen_ = 0;
+    uint8_t tempo_due_seen_ = 0;
+    // Status::project_loads as last acted on: a change is a load, whose tempo the clock takes.
+    uint8_t project_loads_seen_ = 0;
+    bool bpm_skip_said_ = false;
+    // ARR REC: Status::arr_event and Status::arr_passes as last acted on.
+    uint8_t arr_event_seen_ = 0;
+    uint8_t arr_passes_seen_ = 0;
+    uint8_t arr_captures_seen_ = 0;    // Status::arr_captures as last acted on
     uint32_t stream_late_said_ms_ = 0;
 
     // The card side: projects, autosave and the sample loader, all in this context. It owns the
@@ -699,7 +882,14 @@ private:
     int selected_ = 0;
     int shown_bank_ = 0;                        // PROJECT mode browses a bank without switching
     QueueMode queue_mode_ = QueueMode::end_of_pattern;
-    uint32_t jam_lost_seen_ = 0;                // JAM REC's dropped frames last said
+    // Hold PROJECT + STEP queues a pattern from any screen (app/ui_input.hpp, on_project_hold).
+    // `project_down_` follows the key itself; `project_open_` is a plain press waiting for its
+    // release to open PROJECT, which a STEP pressed meanwhile cancels. `project_steps_` are the
+    // STEP keys the chord took, whose releases it swallows too.
+    bool project_down_ = false;
+    bool project_open_ = false;
+    uint16_t project_steps_ = 0;
+    uint32_t jam_lost_seen_ = 0;               // JAM REC's dropped frames last said
     uint32_t jam_lost_ms_ = 0;
     char notice_buffer_[24] = {};               // notice() keeps the pointer, so dynamic text
                                                 // needs somewhere of its own to live
@@ -721,7 +911,7 @@ private:
     uint8_t perform_held_ = 0;                  // upper pads down, bit = pad id / 2
     int mutate_track_ = 0;                      // the track the last MUTATE went to
     uint8_t mutate_unchanged_seen_ = 0;         // Status::mutate_unchanged as last noticed
-    int freeze_bars_index_ = 0;                 // FUNC menu FREEZE's length, into kTakeBars
+    int freeze_bars_index_ = 0;                 // the track menu FREEZE's length, into kTakeBars
     int loop_bars_index_ = 2;                   // FUNC menu LOOP LEN, into kTakeBars: 4 bars
     // The performance mixer (core/perffx.hpp): the slot VALUE turns, the effect that is up and
     // its amount, the looper's mix, and the STEP keys a pick took (their releases are its too).
@@ -806,6 +996,9 @@ private:
     int take_level_ = ENAGA_INPUT_NORMAL;
     bool input_applied_ = false;
     int input_result_ = 0;
+    // The line input strip's route as last applied to the codec, source * kInputGains + gain, or
+    // -1 for none yet or one RESAMPLE changed since (service_input_route).
+    int input_route_applied_ = -1;
 
     int pressure_pad_ = -1;
     uint8_t pressure_sent_ = 0;
@@ -814,13 +1007,28 @@ private:
     // macro, and read back from the engine after a LOCK jump.
     int8_t rel_all_ = 0;
     int8_t len_all_ = 0;
-    // LIVE RND (core/liverand.hpp): the unit FUNC + D left (0 OFF) and the tracks FUNC + push D
-    // armed. Posted absolute, like REL ALL, and read back from the engine after a LOCK jump.
+    // LIVE RND (core/liverand.hpp): the unit FUNC + D left (0 OFF) and the tracks FUNC + lower
+    // pad armed. Posted absolute, like REL ALL, and read back from the engine after a LOCK jump.
+    // Until the set is chosen by hand, turning LIVE RND on arms every track but the kicks (D3).
     uint8_t rnd_unit_ = kLiveRndOff;
     uint8_t rnd_armed_ = kLiveRndAllTracks;
+    bool rnd_armed_chosen_ = false;
     // ENERGY (core/energy.hpp): where FUNC + C left it, posted absolute like REL ALL and read
     // back from the engine after a LOCK jump.
     int8_t energy_ = 0;
+    // TRANSPOSE (core/transpose.hpp): where FUNC + the screen keys left it, posted absolute and
+    // read back from the engine after a LOCK jump. Which screen keys are down, for the reset.
+    int8_t transpose_ = 0;
+    bool transpose_semis_ = false;      // the FUNC menu's TRANSPOSE row: SEMI, else SCALE
+    int8_t transpose_pending_ = 0;      // a FUNC + screen key step not yet applied (-1, +1, 0)
+    uint32_t transpose_pending_ms_ = 0; // when that key went down
+    bool sel_left_down_ = false;
+    bool sel_right_down_ = false;
+    // VariSpeed (core/varispeed.hpp): tenths of a semitone, 0 rest. Not in a LOCK, not saved.
+    // `vari_` is what plays; `vari_set_` what the user set, which `vari_` falls short of while
+    // the tempo would otherwise pass the clock's range (set_clock_tempo).
+    int8_t vari_ = 0;
+    int8_t vari_set_ = 0;
     uint16_t morph_ = 0;
     bool repeat_held_ = false;
     RepeatLength repeat_length_ = RepeatLength::sixteenth;
@@ -861,12 +1069,19 @@ private:
     // the last Status::launch_event said, and the lane sources and live pattern last seen, so a
     // landed launch is said once.
     uint8_t launch_held_ = 0;
+    bool launch_pad_said_ = false;   // PADS PICK LANES said on this visit to LAUNCH
     bool launch_ok_held_ = false;
     uint32_t launch_ok_down_ms_ = 0;
     uint8_t launch_landed_seen_ = 0;
     uint8_t launch_event_seen_ = 0;
     uint8_t launch_seen_[kTracks] = {};
     uint8_t launch_seen_live_ = 0;
+    // CHAIN's SECTION view (app/ui_section.hpp): open over the entry under `chain_cursor_`, which
+    // of its two pages, and OK's hold for the quick fill.
+    bool section_open_ = false;
+    int section_page_ = 0;
+    bool section_ok_held_ = false;
+    uint32_t section_ok_down_ms_ = 0;
     int pattern_field_ = 0;        // the PATTERN page's field: 0 LEN, 1 SWG, 2 FEEL, 3-10 swings
     static const char *project_page_name(ProjectPage page) {
         switch (page) {
@@ -887,7 +1102,9 @@ private:
     enaga::ui::TextEntry name_entry_;
     // What the name entry is for: SAVE AS (FUNC+DOWN, the menu) or a rename (push B), and the
     // project the rename is of.
-    enum class EntryFor : uint8_t { save_as, rename };
+    // SOUNDS uses it too: saving the track's sound (FUNC+DOWN), replacing one of yours with it,
+    // or renaming one (push B).
+    enum class EntryFor : uint8_t { save_as, rename, sound_save, sound_replace, sound_rename };
     EntryFor entry_for_ = EntryFor::save_as;
     char rename_from_[Storage::kNameBytes] = {};
     bool projects_op_reread_ = false;  // list again once a rename or delete is done
@@ -901,6 +1118,7 @@ private:
     uint32_t slot_ok_down_ms_ = 0;
     // The track menu (hold OK in GRID, app/ui_trackmenu.hpp): GEN's knobs and EVOLVE.
     bool track_menu_ = false;
+    Mode track_menu_mode_ = Mode::grid;   // GRID or KEYS: the screen it opened over
     int track_menu_cursor_ = 0;
     bool track_ok_held_ = false;
     uint32_t track_ok_down_ms_ = 0;
@@ -942,6 +1160,24 @@ private:
     int sound_track_ = -1;                      // the track whose sound the engine remembers
     Mode sounds_return_ = Mode::edit;           // where CLR goes back to
     bool sounds_arps_ = false;                  // the list is ARPS (core/arppresets.hpp)
+    // SOUNDS' clipboard (FUNC+UP): a track's sound and the machine it is for.
+    struct SoundClip {
+        bool has = false;
+        uint8_t machine = 0;
+        uint8_t track = 0;
+        uint8_t params[kKitParams] = {};
+        UserSoundExtras extras;
+    };
+    SoundClip sound_clip_;
+    // The name entry SOUNDS opened: which bank slot, for which machine, and (a save) the bytes
+    // taken when FUNC+DOWN was pressed, so a knob turned while naming does not change what saves.
+    int sound_entry_slot_ = -1;
+    uint8_t sound_entry_machine_ = 0;
+    uint8_t sound_entry_params_[kKitParams] = {};
+    UserSoundExtras sound_entry_extras_ = {};
+    int sound_delete_armed_ = -1;               // push C on this slot; OK twice deletes it
+    int sound_delete_oks_ = 0;
+    uint32_t sound_delete_ok_at_ms_ = 0;
     KitAction kit_armed_ = KitAction::none;     // KIT: OK or F1 + DOWN pressed once
     uint32_t kit_armed_at_ms_ = 0;
     static constexpr uint32_t kSaveArmMs = 2000;
@@ -951,13 +1187,20 @@ private:
     bool project_tapped_ = false;         // PROJECT double-tapped is LAUNCH, as HOME's is KEYS
     uint32_t project_tapped_at_ms_ = 0;
 
-    // The project tempo this side has already reconciled with the clock, so that a LOAD is
-    // adopted and the engine's echo of our own knob move is not.
-    uint16_t adopted_tempo_centi_ = 13000;
+    // The tempo on the clock before VariSpeed, in centi-BPM: the project's, or a section's
+    // while one plays (set_clock_tempo keeps it).
+    uint16_t clock_centi_ = 13000;
 
     // The screen last logged, as mode * 16 + page. -1 so the first pass logs whatever is up.
     int logged_screen_ = -1;
     bool shift_ = false;
+    // PERFORM's A-D: whether each knob's last turn reached the FUNC layer, and when. A turn
+    // keeps that layer while the knob has not rested for kKnobLayerMs (knob_layer_moves), so
+    // FUNC let go (or pressed) mid-turn does not hand the last clicks to the other layer.
+    bool knob_moves_[kMacros] = {};
+    uint32_t knob_turn_ms_[kMacros] = {};
+    bool knob_turned_[kMacros] = {};
+    static constexpr uint32_t kKnobLayerMs = 250;
     bool stop_armed_ = false;
     bool clock_refused_ = false;   // the last transport call was refused: an external source
     bool muted_[kTracks] = {};
@@ -1043,6 +1286,7 @@ private:
     bool tune_notes_ = true;
 
     const char *notice_ = nullptr;
+    const char *notice_alt_ = nullptr;   // notice_alternating's second line, or none
     uint32_t notice_at_ms_ = 0;
     uint32_t notice_screen_ = 0;    // screen_key() when the notice was said
     static constexpr uint32_t kWaveSliceMs = 2;   // the WAVE build's share of a pass (update)
@@ -1136,6 +1380,12 @@ private:
 
     LedShadow leds_;
     uint32_t tempo_tenths_ = 1300;
+    // Tap tempo (a VALUE tap while VALUE is on the tempo) and the nudge (FUNC + push VALUE + turn),
+    // core/taptempo.hpp.
+    TapTempo tap_;
+    Nudge nudge_;
+    // The MIDI CH last posted to the engine, -1 before the first.
+    int posted_midi_channel_ = -1;
 
     bool logged_running_ = false;
     int logged_source_ = -1;

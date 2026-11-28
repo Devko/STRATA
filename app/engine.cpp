@@ -4,10 +4,12 @@
 #include "factory.hpp"
 #include "liverand.hpp"    // LIVE RND: the unit held to its range
 #include "energy.hpp"      // ENERGY: the amount held to its range, the tiers
+#include "transpose.hpp"   // TRANSPOSE: which tracks move, and the note moved
 #include "chainloops.h"    // strata_choke_fade, a choke group's fade
 #include "masterloops.h"   // strata_master_peak, for the input meter
 #include "pcm.hpp"         // a streamed file's bytes to int16, in top_up_streams
 #include "sounds.hpp"      // Cmd::sound_preset: the factory sounds
+#include "usersounds.hpp"  // Cmd::sound_bytes: saved and copied sounds
 #include "arppresets.hpp"  // Cmd::arp_preset: the factory arps
 #include "stepnotes.hpp"   // a step's played-in extra notes, as locks
 #include "tuning.hpp"      // a knob click in NOTE view: tune_step
@@ -70,6 +72,8 @@ static_assert(kFactorySrc == page_first(Page::src) && kFactoryFltr == page_first
 static_assert(kSoundAsrFirst == kAsrFirst, "core/sounds.hpp's ASR page and dsp/track.hpp's have diverged");
 static_assert(kSoundOscFirst == kOscFirst && kFactoryOsc == kOscFirst,
               "core/'s OSC page and dsp/track.hpp's have diverged");
+static_assert(kSoundScnFirst == kScnFirst && kKitScnFirst == kScnFirst && kKitOscEnd == kOscEnd,
+              "core/'s SCN page and dsp/track.hpp's have diverged");
 
 static_assert(kLfoTrigFree == uint8_t(LfoTrig::free) && kLfoTrigRetrig == uint8_t(LfoTrig::retrig) &&
                   kLfoTrigOneShot == uint8_t(LfoTrig::one_shot) &&
@@ -313,6 +317,41 @@ void Engine::build_placeholder_sample() {
 
 // --- commands -------------------------------------------------------------
 
+// Cmd::set_machine's work, and AS WAS's when a paste had switched the machine (Cmd::sound_preset).
+void Engine::switch_machine(int track, uint8_t id) {
+    // The machine being LEFT is silenced first. It will not be rendered again, so it
+    // cannot release its own tail -- and a voice left sounding in an object nothing
+    // calls is a note that never ends and never ends up in the voice count either.
+    silence_track(track);
+
+    machine_id_[track] = id;
+    project_.kit.tracks[track].machine = id;
+    cc_known_[track] = false;     // a MID track's CCs start from what they are now
+    rewire_machines();
+
+    // The new machine reads this track's parameters, which mean different things to it:
+    // slot 10 is GLD on VA MONO and DET on VA POLY, and the FLTR page is the insert
+    // chain's on both. Until 2026-11-23 the knobs kept their positions across a switch.
+    //
+    // Since then (Roland) a switch loads the new machine's default sound
+    // (core/sounds.hpp, machine_defaults_apply) into its sound pages, so nothing the old
+    // machine left there leaks into the new one: a VA's knobs made a new SAMPLE start
+    // half way into the file, sliced, and fade early. The mix, LFO and ARP stay. A lock on
+    // the current step still wins until the next step, as for a knob or a preset.
+    if (machine_defaults_apply(id, params_[track].v)) {
+        const uint64_t locked = locked_[track];
+        for (int p = 0; p < kTrackParams; p++) {
+            if ((locked >> p & 1u) == 0) effective_[track].v[p] = params_[track].v[p];
+        }
+    }
+    if (machines_[track] != nullptr) machines_[track]->prepare(effective_[track]);
+
+    // And the sample, if the new machine plays one. The loader's path is in the kit; a
+    // track switched to SAMPLE or GRAIN before any card has been read falls back to the
+    // placeholder every machine in the pool was given at init.
+    perform_dirty_ = true;
+}
+
 void Engine::apply_commands() {
     Command command;
     // The spec's limit: a burst of edits must not be able to break the deadline.
@@ -437,21 +476,24 @@ void Engine::forget_prepared() {
         machine_prepared_for_[t] = nullptr;
         chain_prepared_valid_[t] = false;
     }
+    input_prepared_scale_ = -1.0f;
 }
 
 void Engine::prepare_machine(int track) {
     Machine *machine = machines_[track];
     if (machine == nullptr) return;
     const TrackParams &params = sounding(track);
-    // The sound's 16 and the ASR and OSC pages' 8: a VA reads all of them (dsp/track.hpp). The
+    // The sound's 16, the ASR and OSC pages' 8 and SCN's 4: a WAVE reads all of them (dsp/track.hpp). The
     // LFO and arp bytes between them are not compared, so turning an LFO knob does not re-prepare
     // a machine.
-    static_assert(kOscFirst == kAsrFirst + kAsrParams && kTrackParams == kOscFirst + kOscParams,
-                  "ASR and OSC are the last eight bytes, compared as one run");
+    static_assert(kOscFirst == kAsrFirst + kAsrParams && kTrackParams == kScnFirst + kScnParams,
+                  "ASR and OSC are eight bytes compared as one run, SCN the last four");
     if (prepare_memo_ && machine_prepared_for_[track] == machine &&
         __builtin_memcmp(machine_prepared_[track].v, params.v, kParams) == 0 &&
         __builtin_memcmp(machine_prepared_[track].v + kAsrFirst, params.v + kAsrFirst,
-                         kAsrParams + kOscParams) == 0) {
+                         kAsrParams + kOscParams) == 0 &&
+        __builtin_memcmp(machine_prepared_[track].v + kScnFirst, params.v + kScnFirst,
+                         kScnParams) == 0) {
         return;
     }
     machine->prepare(params);
@@ -482,6 +524,55 @@ void Engine::prepare_chain(int track) {
     chain_prepared_mix_[track] = mix;
     chain_prepared_valid_[track] = true;
     chain_prepared_tone_[track] = tone;
+}
+
+// The line input's strip as an insert chain: TON alone (D8, the chain's `tone` mode, so drive is
+// off and the filter is one knob, flat at 64), PAN, the delay and reverb sends from the same
+// slots a track's are read from, and the fader, the duck and the chorus in the ChainMix. Only
+// when a byte or the MUTE BUS moved: the tone's exp2 and the pan's sine are not per block work.
+void Engine::prepare_input(bool on) {
+    const uint8_t *bytes = project_.settings.input;
+    const float scale = on ? perf_plan_.tracks : 0.0f;
+    if (prepare_memo_ && input_prepared_on_ == on && input_prepared_scale_ == scale &&
+        __builtin_memcmp(input_prepared_, bytes, sizeof input_prepared_) == 0) {
+        return;
+    }
+    TrackParams params{};
+    const int fltr = page_first(Page::fltr);
+    const int fx = page_first(Page::fx);
+    params.v[fltr + 1] = bytes[int(InputField::tone)];
+    params.v[fx + 1] = bytes[int(InputField::pan)];
+    params.v[fx + 2] = bytes[int(InputField::delay)];
+    params.v[fx + 3] = bytes[int(InputField::reverb)];
+    // The fader: square law on the byte over kInputLevelUnity, so 100 is 0 dB, 127 about +4 dB
+    // and the bottom of the travel thins out as a fader's does.
+    const float u = float(bytes[int(InputField::level)]) * (1.0f / float(kInputLevelUnity));
+    ChainMix mix;
+    mix.level = u * u * scale;
+    const uint8_t depth = bytes[int(InputField::duck)];
+    mix.duck = float(depth > kDuckDepthMax ? kDuckDepthMax : depth) / 100.0f;
+    mix.chorus = float(bytes[int(InputField::chorus)] > 127 ? 127 : bytes[int(InputField::chorus)]) *
+                 (1.0f / 127.0f);
+    mixer_.input_chain().prepare(params, mix, true);
+    __builtin_memcpy(input_prepared_, bytes, sizeof input_prepared_);
+    input_prepared_scale_ = scale;
+    input_prepared_on_ = on;
+}
+
+void Engine::run_input(const float *in, uint32_t frames) {
+    const bool on = project_.settings.input[int(InputField::on)] != 0;
+    if (!on && !input_live_) return;
+    if (on && !input_live_) {
+        // From rest: no filter state from the last time, and the gain ramps from 0, so turning
+        // the input on fades it in over one block instead of clicking.
+        mixer_.input_chain().reset();
+        input_prepared_scale_ = -1.0f;
+        input_live_ = true;
+    }
+    // Off: one more block, prepared at level 0, so the ramp takes it down to silence.
+    prepare_input(on);
+    if (in != nullptr) mixer_.add_input(in, int(frames));
+    if (!on) input_live_ = false;
 }
 
 void Engine::apply(const Command &command) {
@@ -520,7 +611,7 @@ void Engine::apply(const Command &command) {
 bool Engine::apply_sound(const Command &command, int track, int) {
     switch (command.cmd) {
         case Cmd::set_param:
-            if (command.a < kTrackParams) {
+            if (track_param_real(command.a)) {
                 uint8_t value = command.b;
                 if (command.c == kSemitoneFlag && tune_param(machine_id_[track]) == command.a) {
                     value = tune_step(machine_id_[track], params_[track].v[command.a],
@@ -554,7 +645,17 @@ bool Engine::apply_sound(const Command &command, int track, int) {
             if (command.b == kSoundPresetKeep) {
                 sound_back_ = params_[track];
                 sound_back_track_ = track;
+                sound_back_machine_ = machine_id_[track];
+                sound_back_extras_ = user_sound_extras_of(project_.kit.tracks[track]);
+                sound_back_all_ = false;
                 break;
+            }
+            if (command.b == kSoundPresetBack && sound_back_track_ == track &&
+                machine_id_[track] != sound_back_machine_) {
+                // A paste switched the machine since the list opened: switch it back. The
+                // paste wrote every parameter, so everything is put back below.
+                switch_machine(track, sound_back_machine_);
+                sound_back_all_ = true;
             }
             const uint8_t machine = machine_id_[track];
             uint8_t *bytes = params_[track].v;
@@ -563,9 +664,20 @@ bool Engine::apply_sound(const Command &command, int track, int) {
                     status_.bump_refused();
                     break;
                 }
-                const uint32_t mask = sound_preset_writes(machine);
+                // After a user sound or a paste, which write every parameter and the LFO and
+                // ARP pages' kit settings (Cmd::sound_bytes), all of it goes back. After factory
+                // sounds only, just the bytes they write: a pan move made meanwhile is the
+                // user's and stays.
+                const uint64_t factory = sound_preset_writes(machine);
                 for (int p = 0; p < kTrackParams; p++) {
-                    if ((mask >> p) & 1u) bytes[p] = sound_back_.v[p];
+                    if (sound_back_all_ || (factory >> p & 1u) != 0) bytes[p] = sound_back_.v[p];
+                }
+                if (sound_back_all_) {
+                    KitTrack &kit = project_.kit.tracks[track];
+                    kit.lfo_trig = sound_back_extras_.lfo_trig;
+                    for (int m = 0; m < kModSlots; m++) kit.mod[m] = sound_back_extras_.mod[m];
+                    kit.arp = sound_back_extras_.arp;
+                    lfo_[track].rest();          // as Cmd::set_lfo_trig
                 }
             } else if (command.a != machine || !sound_preset_apply(machine, command.b, bytes)) {
                 // Picked for a machine the track no longer hosts, or no such preset.
@@ -577,6 +689,32 @@ bool Engine::apply_sound(const Command &command, int track, int) {
                 // A lock on the current step still wins until the next step, as for a knob.
                 if ((locked >> p & 1u) == 0) effective_[track].v[p] = bytes[p];
             }
+            perform_dirty_ = true;
+            break;
+        }
+
+        case Cmd::sound_bytes: {
+            // core/usersounds.hpp: a saved or copied sound, eight bytes at a time, written as
+            // sound_preset writes a factory one -- every parameter a sound owns, into the kit
+            // and, where no lock holds them, effective_. Its kit settings follow by their own
+            // commands (set_lfo_trig, set_mod_slot, set_arp_ext).
+            const uint8_t machine = machine_id_[track];
+            if (command.a != machine || !user_sounds_supported(machine)) {
+                status_.bump_refused();
+                break;
+            }
+            const uint8_t bytes[8] = {command.b, command.c, command.d, command.e,
+                                      uint8_t(command.u), uint8_t(command.u >> 8),
+                                      uint8_t(command.u >> 16), uint8_t(command.u >> 24)};
+            const uint64_t locked = locked_[track];
+            for (int i = 0; i < 8; i++) {
+                const int p = int(command.step) + i;
+                if (p >= kTrackParams || !user_sound_owns(machine, p)) continue;
+                const uint8_t top = kit_param_max(p);
+                params_[track].v[p] = bytes[i] > top ? top : bytes[i];
+                if ((locked >> p & 1u) == 0) effective_[track].v[p] = params_[track].v[p];
+            }
+            if (sound_back_track_ == track) sound_back_all_ = true;   // AS WAS puts it all back
             perform_dirty_ = true;
             break;
         }
@@ -684,38 +822,7 @@ bool Engine::apply_sound(const Command &command, int track, int) {
                 break;
             }
             if (machine_id_[track] == command.a) break;      // already hosting it
-
-            // The machine being LEFT is silenced first. It will not be rendered again, so it
-            // cannot release its own tail -- and a voice left sounding in an object nothing
-            // calls is a note that never ends and never ends up in the voice count either.
-            silence_track(track);
-
-            machine_id_[track] = command.a;
-            project_.kit.tracks[track].machine = command.a;
-            cc_known_[track] = false;     // a MID track's CCs start from what they are now
-            rewire_machines();
-
-            // The new machine reads this track's parameters, which mean different things to it:
-            // slot 10 is GLD on VA MONO and DET on VA POLY, and the FLTR page is the insert
-            // chain's on both. Until 2026-11-23 the knobs kept their positions across a switch.
-            //
-            // Since then (Roland) a switch loads the new machine's default sound
-            // (core/sounds.hpp, machine_defaults_apply) into its sound pages, so nothing the old
-            // machine left there leaks into the new one: a VA's knobs made a new SAMPLE start
-            // half way into the file, sliced, and fade early. The mix, LFO and ARP stay. A lock on
-            // the current step still wins until the next step, as for a knob or a preset.
-            if (machine_defaults_apply(command.a, params_[track].v)) {
-                const uint64_t locked = locked_[track];
-                for (int p = 0; p < kTrackParams; p++) {
-                    if ((locked >> p & 1u) == 0) effective_[track].v[p] = params_[track].v[p];
-                }
-            }
-            if (machines_[track] != nullptr) machines_[track]->prepare(effective_[track]);
-
-            // And the sample, if the new machine plays one. The loader's path is in the kit; a
-            // track switched to SAMPLE or GRAIN before any card has been read falls back to the
-            // placeholder every machine in the pool was given at init.
-            perform_dirty_ = true;
+            switch_machine(track, command.a);
             break;
         }
 
@@ -765,7 +872,7 @@ bool Engine::apply_step_edit(const Command &command, int track, int step) {
             break;
 
         case Cmd::lock_range_delta: {
-            if (command.a >= kTrackParams) break;
+            if (!track_param_real(command.a)) break;
             const int width =
                 int(pattern_get_range(live(), track, step, command.a)) + int(int8_t(command.b));
             const uint8_t wanted = uint8_t(width < 0 ? 0 : (width > 127 ? 127 : width));
@@ -779,7 +886,7 @@ bool Engine::apply_step_edit(const Command &command, int track, int step) {
         }
 
         case Cmd::lock_slide: {
-            if (command.a >= kTrackParams) break;
+            if (!track_param_real(command.a)) break;
             const uint8_t param = command.a;
             uint8_t value = 0;
             if (!pattern_get_lock(live(), track, step, param, value)) {
@@ -808,7 +915,7 @@ bool Engine::apply_step_edit(const Command &command, int track, int step) {
             break;
 
         case Cmd::lock_delta: {
-            if (command.a >= kTrackParams) break;
+            if (!track_param_real(command.a)) break;
             const uint8_t param = command.a;
 
             // The base is the step's own lock if it has one, and the kit value if it does not --
@@ -1053,6 +1160,8 @@ bool Engine::apply_perform(const Command &command, int track, int step) {
             break;
 
         case Cmd::set_morph:
+            // The hand takes over from a section's ride, as a knob does from a scene.
+            morph_ride_stop();
             morph_ = uint16_t(command.u > kMorphScale ? kMorphScale : command.u);
             perform_dirty_ = true;
             break;
@@ -1080,6 +1189,23 @@ bool Engine::apply_perform(const Command &command, int track, int step) {
             perform_.energy = energy_turn(int8_t(command.a), 0);    // held to the range
             break;
 
+        case Cmd::set_transpose:
+            // Heard from the next note: a note already sounding keeps its pitch, as a key
+            // change on a keyboard leaves the held keys alone.
+            transpose_ = transpose_turn(int8_t(command.a), 0);      // held to the range
+            transpose_semis_ = command.b != 0;
+            break;
+
+        case Cmd::set_varispeed:
+            // The pitch half. The clock is the main context's (app/ has set Enaga's tempo); the
+            // machines take the semitones on the next run_lfos, and the delay's beat follows the
+            // clock from apply_mixer_bytes.
+            vari_tenths_ = vari_turn(int8_t(command.a), 0);         // held to the range
+            vari_semis_ = vari_semis(vari_tenths_);
+            vari_inv_ratio_ = vari_ratio(int8_t(-vari_tenths_));
+            apply_mixer_bytes();
+            break;
+
         case Cmd::set_macro:
             if (command.a < kMacros) {
                 macro_position_[command.a] = command.b > 127 ? uint8_t(127) : command.b;
@@ -1088,9 +1214,11 @@ bool Engine::apply_perform(const Command &command, int track, int step) {
             break;
 
         case Cmd::macro_assign:
-            // `b` past the twenty track parameters names a master EQ band: kTrackParams + 0-2.
+            // `b` past the track parameters names a master EQ band: kTrackParams + 0-2. One in the hole
+            // between OSC and SCN names nothing.
             // The track byte cannot carry it -- every command naming track 8 is refused at the top.
-            if (command.a >= kMacros || command.b >= kTrackParams + kMasterBands) {
+            if (command.a >= kMacros || command.b >= kTrackParams + kMasterBands ||
+                (command.b < kTrackParams && !track_param_real(command.b))) {
                 // Counted, like the "macro is full" refusal below it. Two refusals in one
                 // command reported two different ways is how a user concludes the box is broken.
                 status_.bump_refused();
@@ -1254,7 +1382,11 @@ bool Engine::apply_notes(const Command &command, int track, int) {
             // machine and sound the moment the track was unmuted.
             if (machines_[track] && !muted_[track]) {
                 Trig trig;
-                trig.note = clamp_7bit(command.a);
+                // TRANSPOSE moves a played note as it moves a step's. A held key remembers the
+                // shift it took, so its release lets go of that pitch (Cmd::release_note).
+                const uint8_t played = clamp_7bit(command.a);
+                trig.note = transposed(track, played);
+                if (command.c == 1) key_shift_[track][played] = int8_t(int(trig.note) - int(played));
                 trig.velocity = uint8_t(command.b < 1 ? 1 : (command.b > 127 ? 127 : command.b));
                 trig.frame = 0;
                 trig.held = command.c == 1;   // a key or MIDI IN note: its release comes
@@ -1317,10 +1449,13 @@ bool Engine::apply_notes(const Command &command, int track, int) {
             // A KEYS key coming up. Not refused on a muted track or with nothing holding the
             // note: a release with nothing to let go is the second half of a gesture whose
             // first half was swallowed, and it changes nothing (dsp/track.hpp, `release`).
-            if (machines_[track]) machines_[track]->release(clamp_7bit(command.a));
-            midi_out_.release(midi_sink_, track, clamp_7bit(command.a));
-            // And out of the arp's held notes, if it was one.
+            // At the pitch it sounded at: the transpose of its press, not of now.
             const uint8_t note = clamp_7bit(command.a);
+            const uint8_t sounded = transpose_note(note, key_shift_[track][note]);
+            key_shift_[track][note] = 0;
+            if (machines_[track]) machines_[track]->release(sounded);
+            midi_out_.release(midi_sink_, track, sounded);
+            // And out of the arp's held notes, if it was one.
             uint8_t &count = held_count_[track];
             for (int i = 0; i < count; i++) {
                 if (held_notes_[track][i] != note) continue;
@@ -1346,6 +1481,20 @@ bool Engine::apply_notes(const Command &command, int track, int) {
             cc_known_[track] = false;
             break;
         }
+
+        case Cmd::set_program_out:
+            project_.settings.program_out = command.a != 0;
+            // Turned off, a change still waiting to leave stays behind.
+            if (!project_.settings.program_out) program_pending_ = -1;
+            break;
+
+        case Cmd::set_midi_channel:
+            midi_channel_ = uint8_t(command.a & 0x0Fu);
+            break;
+
+        case Cmd::locate:
+            locate(command.u);
+            break;
 
         default:
             return false;
@@ -1455,6 +1604,38 @@ bool Engine::apply_mixer(const Command &command, int track, int) {
             apply_mixer_bytes();
             break;
 
+        case Cmd::set_input: {
+            if (command.a >= uint8_t(kInputFields)) {
+                status_.bump_refused();
+                break;
+            }
+            uint8_t &byte = project_.settings.input[command.a];
+            const InputField field = InputField(command.a);
+            if (command.c == 1) {
+                // A push: ON over, SRC and GAIN one round on; nothing else has a push.
+                if (field == InputField::on) {
+                    byte = byte != 0 ? 0 : 1;
+                } else if (field == InputField::source) {
+                    byte = uint8_t(byte + 1 < kInputSources ? byte + 1 : 0);
+                } else if (field == InputField::gain) {
+                    byte = uint8_t(byte + 1 < kInputGains ? byte + 1 : 0);
+                } else {
+                    status_.bump_refused();
+                }
+                break;
+            }
+            int next = int(byte) + int(int8_t(command.b));
+            // The two choices stop at their ends rather than wrap, as every encoder does here.
+            const int top = field == InputField::on       ? 1
+                            : field == InputField::duck   ? int(kDuckDepthMax)
+                            : field == InputField::source ? int(kInputSources) - 1
+                            : field == InputField::gain   ? int(kInputGains) - 1
+                                                          : 127;
+            next = next < 0 ? 0 : (next > top ? top : next);
+            byte = input_field_sanitized(command.a, uint8_t(next));
+            break;
+        }
+
         case Cmd::eq_kill: {
             if (command.a >= uint8_t(kKillBands) || command.b > 2) {
                 status_.bump_refused();
@@ -1561,6 +1742,8 @@ bool Engine::apply_bulk_edit(const Command &command, int track, int step) {
             gesture.step = uint8_t(step);
             gesture.seq = command.b;
             undo_.mark(live(), gesture);
+            // An edit to a slot ARR REC captured into: ARR UNDO keeps it now.
+            arr_touched(arr_, arr_backup_, int(project_.bank), int(project_.slot));
             break;
         }
 
@@ -1586,7 +1769,10 @@ bool Engine::apply_bulk_edit(const Command &command, int track, int step) {
             break;
 
         case Cmd::range_copy:
-            range_copy(live(), track, step, int(command.a), clip_);
+            // From what the lane plays: a launched lane copies the part it borrows (only a read,
+            // so the read-only guard lets it through), the way to keep one lane's part when a
+            // whole CAPTURE is more than wanted.
+            range_copy(lane_pattern(project_, track), track, step, int(command.a), clip_);
             break;
 
         case Cmd::range_paste:
@@ -1736,6 +1922,8 @@ bool Engine::apply_transport(const Command &command, int, int) {
                 project_.settings.tempo_centi_bpm =
                     sane ? uint16_t(rounded) : project_.settings.tempo_centi_bpm;
                 if (!sane) status_.bump_refused();
+                // The hand on VALUE wins over a section's BPM until the next one.
+                if (sane) section_tempo_centi_ = 0;
             }
             apply_mixer_bytes();
             break;
@@ -1812,6 +2000,8 @@ bool Engine::apply_arrangement(const Command &command, int, int) {
         case Cmd::chain_edit: {
             const int at = int(command.step);
             bool done = false;
+            // During a take, an entry edited by hand is no longer the take's to extend.
+            if (arr_.on) arr_chain_edited(arr_);
             switch (ChainEdit(command.a)) {
                 case ChainEdit::set:
                     done = chain_set(project_, at, command.b, command.c, command.d, command.e);
@@ -1829,6 +2019,51 @@ bool Engine::apply_arrangement(const Command &command, int, int) {
                     project_.settings.chain_song = command.b != 0;
                     done = true;
                     break;
+                case ChainEdit::section: {
+                    SectionExtra extra;
+                    extra.cap = command.b;
+                    extra.mask = command.c;
+                    extra.scene = command.d;
+                    extra.morph = command.e;
+                    extra.energy = uint8_t(command.u & 0xFFu);
+                    extra.bpm = uint16_t(command.u >> 8);
+                    extra.transpose = uint8_t(command.u >> 24);
+                    done = chain_set_section(project_, at, extra);
+                    break;
+                }
+                case ChainEdit::copy:
+                    if (at >= chain_length(project_)) break;
+                    {
+                        const ChainEntry entry = project_.chain[at];
+                        const SectionExtra extra = project_.chain_extra[at];
+                        done = chain_insert(project_, at + 1, entry.bank, entry.slot,
+                                            entry.repeats, entry.mutes, &extra);
+                    }
+                    if (done) chain_player_inserted(chain_, at + 1);
+                    break;
+                case ChainEdit::section_delta:
+                    done = section_step(project_, at, SectionField(command.b),
+                                        int(int8_t(command.c)), mute_state_capture(muted_),
+                                        playing_tempo_centi());
+                    break;
+                case ChainEdit::section_clear:
+                    done = section_clear(project_, at, SectionField(command.b));
+                    break;
+                case ChainEdit::fill: {
+                    // What plays now, as the section's fields: the room by ear, then hold OK.
+                    SectionExtra extra;
+                    extra.cap = 1;
+                    extra.mask = mute_state_capture(muted_);
+                    extra.scene = uint8_t(scene_b_ + 1);
+                    // The morph where it sits, to the nearer side: SNAP to B or SNAP A.
+                    extra.morph = morph_ * 2u > kMorphScale ? kSectionMorphSnap
+                                                            : kSectionMorphSnapA;
+                    extra.energy = section_energy_byte(perform_.energy);
+                    extra.transpose = section_transpose_byte(transpose_);
+                    extra.bpm = playing_tempo_centi();
+                    done = chain_set_section(project_, at, extra);
+                    break;
+                }
                 case ChainEdit::pattern_delta:
                 case ChainEdit::repeats_delta:
                 case ChainEdit::mutes_delta: {
@@ -1866,6 +2101,54 @@ bool Engine::apply_arrangement(const Command &command, int, int) {
                 chain_.active = false;
                 project_.settings.chain_enabled = false;
             }
+            break;
+        }
+
+        case Cmd::arr_rec:
+            if (command.a != 0) {
+                if (arr_.on) break;                  // already on: nothing to start
+                arr_start(project_, arr_, arr_backup_);
+                arr_undone_ = false;
+                status_.arr_capture_banks.store(0, std::memory_order_relaxed);
+                // The chain is being written, so it is not followed: the jam plays on.
+                chain_.active = false;
+                project_.settings.chain_enabled = false;
+                // With the transport running the take starts here, mid-pass (the half rule
+                // decides whether this pass is kept); stopped, it starts with the next PLAY.
+                if (was_running_) {
+                    arr_pass_begin(arr_, arr_now(), tick_, uint32_t(master_loop_ticks(live())));
+                }
+                arr_origin_ = origin_;
+                arr_switched_ = false;
+                arr_publish();
+                status_.bump_arr_event(uint8_t(ArrEvent::started), 0);
+            } else if (arr_.on) {
+                arr_end(tick_, false);
+            }
+            break;
+
+        case Cmd::arr_undo: {
+            uint8_t emptied = 0;
+            if (!arr_undo(project_, arr_, arr_backup_, &emptied)) {
+                status_.bump_refused();
+                status_.bump_arr_event(uint8_t(ArrEvent::no_undo), 0);
+                break;
+            }
+            arr_undone_ = !arr_undone_;
+            // The slots the take captured into were emptied: their banks are saved again.
+            if (emptied != 0) {
+                status_.arr_capture_banks.store(emptied, std::memory_order_relaxed);
+                status_.arr_captures.store(
+                    uint8_t(status_.arr_captures.load(std::memory_order_relaxed) + 1),
+                    std::memory_order_release);
+            }
+            // The chain under a running player has been swapped: it stops being followed, as
+            // an emptied chain does, and the pattern plays on.
+            chain_.active = false;
+            project_.settings.chain_enabled = false;
+            arr_publish();
+            status_.bump_arr_event(uint8_t(arr_undone_ ? ArrEvent::undone : ArrEvent::redone),
+                                   uint8_t(chain_length(project_)));
             break;
         }
 
@@ -1957,6 +2240,8 @@ bool Engine::apply_arrangement(const Command &command, int, int) {
         }
 
         case Cmd::set_chain:
+            // Playing the chain ends a take: the chain cannot be recorded and followed at once.
+            if (command.a != 0 && arr_.on) arr_end(tick_, false);
             if (command.a != 0) {
                 // Starting a chain jumps to its first entry (app/commands.hpp). chain_start
                 // leaves the player inactive for an empty chain, which is a refusal the UI
@@ -2078,6 +2363,19 @@ bool Engine::apply_project(const Command &command, int, int) {
             undo_.clear();
             // Locks are RAM only and belong to the project they were taken in.
             locks_.clear();
+            // And so do the live moves a lock holds, and VariSpeed: none is saved, so the
+            // project opens at rest, as it was written. Left as they were, ENERGY -64 opened a
+            // project nearly silent and VariSpeed +12.0 an octave up. The UI's copies follow
+            // from Status::project_loads, bumped at the end of this case.
+            rel_all_ = 0;
+            len_all_ = 0;
+            perform_.rnd_unit = kLiveRndOff;
+            perform_.rnd_armed = kLiveRndAllTracks;
+            perform_.energy = 0;
+            transpose_ = 0;                 // the mode (SCALE or SEMI) is the user's, and stays
+            vari_tenths_ = 0;
+            vari_semis_ = 0.0f;
+            vari_inv_ratio_ = 1.0f;
             // So is EVOLVE's HOME: each track the file says evolves takes the pattern as loaded
             // as its HOME, with the file's mode, mutation and amount.
             evolve_from_settings();
@@ -2089,6 +2387,14 @@ bool Engine::apply_project(const Command &command, int, int) {
             }
             lane_follows_ = 0xFF;
             chain_.active = false;
+            // A mute armed for the next bar (FUNC + pad) was for the project just left: landing
+            // on this one's mutes would flip a track nobody asked for.
+            mute_latch_ = MuteLatch{};
+            // ARR REC: a take and its undo belong to the project they were made in.
+            arr_ = ArrRec{};
+            arr_backup_.valid = false;
+            arr_undone_ = false;
+            arr_publish();
             // A project saved with its chain running reopens with it running. The flag was
             // written by every save and read by nothing, so the chain came back off while the
             // file -- and the next save -- said on. The saved live pattern still opens; the
@@ -2115,6 +2421,7 @@ bool Engine::apply_project(const Command &command, int, int) {
             for (int t = 0; t < kTracks; t++) locked_[t] = 0;
             clear_slides();
             reconfigure();
+            section_tempo_centi_ = 0;        // a section of the project just left
             // The sends and the master, which arrived with the file as fourteen bytes. Without
             // this the mixer would keep running the PREVIOUS project's delay and reverb while
             // the screen drew the new project's numbers.
@@ -2133,6 +2440,8 @@ bool Engine::apply_project(const Command &command, int, int) {
                 project_.settings.scene_a = scene_a_;
                 project_.settings.scene_b = scene_b_;
             }
+            // Last: the UI reads the loaded project's tempo when it sees this.
+            status_.bump_project_loads();
             break;
 
         case Cmd::set_rec_mode:
@@ -2447,18 +2756,25 @@ void Engine::kit_from_params() {
     }
 }
 
+// The tempo that plays, before VariSpeed: a section's BPM while one is in force, else the
+// project's. Clamped to the clock's range.
+uint16_t Engine::playing_tempo_centi() const {
+    const uint16_t tempo =
+        section_tempo_centi_ != 0 ? section_tempo_centi_ : project_.settings.tempo_centi_bpm;
+    return tempo < kTempoCentiMin ? uint16_t(kTempoCentiMin)
+                                  : (tempo > kTempoCentiMax ? uint16_t(kTempoCentiMax) : tempo);
+}
+
 void Engine::apply_mixer_bytes() {
     // 60 / BPM, the length of a beat, which is all dsp/buses.cpp needs to turn the delay's
     // division into a time. The tempo is in centi-BPM, so this is 6000 / centi -- one divide at
     // control rate, through `reciprocal` rather than `/` because that is the rule for every
     // divide in this layer and a knob move is not the place to make an exception.
     const ProjectSettings &settings = project_.settings;
-    const uint16_t centi = settings.tempo_centi_bpm < kTempoCentiMin
-                               ? uint16_t(kTempoCentiMin)
-                               : (settings.tempo_centi_bpm > kTempoCentiMax
-                                      ? uint16_t(kTempoCentiMax)
-                                      : settings.tempo_centi_bpm);
-    const float beat_seconds = 6000.0f * enaga::dsp::reciprocal(float(centi));
+    const uint16_t centi = playing_tempo_centi();
+    // VariSpeed runs the clock at the project's tempo times its ratio, so the beat is shorter by
+    // the same ratio (exactly 1 at rest).
+    const float beat_seconds = 6000.0f * enaga::dsp::reciprocal(float(centi)) * vari_inv_ratio_;
 
     sends_from_bytes(sends_, settings.sends, beat_seconds);
     master_from_bytes(master_, settings.master);
@@ -2657,6 +2973,7 @@ void Engine::apply_perf_plan(SendSettings &sends, MasterSettings &master) const 
 // --- pattern changes ------------------------------------------------------
 
 void Engine::pattern_replaced(int bank, int slot) {
+    arr_touched(arr_, arr_backup_, bank, slot);   // written whole by hand: ARR UNDO keeps it
     if (bank != int(project_.bank) || slot != int(project_.slot)) {
         // Track Launch: a lane borrowing the slot just written plays the new part from its step
         // 1, measured again, as a launch would.
@@ -2693,6 +3010,8 @@ void Engine::pattern_replaced(int bank, int slot) {
 void Engine::switch_pattern(int bank, int slot) {
     if (!project_index_valid(bank, slot)) return;
     if (bank == int(project_.bank) && slot == int(project_.slot)) return;
+    // ARR REC: the pass of the pattern being left ends here (resolve_tick's next tick).
+    arr_switched_ = true;
 
     // EVOLVE: in ORBIT the pattern being left goes back to HOME, so leaving it never leaves it
     // changed; DRIFT leaves it where it wandered. Either way every evolving track then re-homes
@@ -2710,6 +3029,12 @@ void Engine::switch_pattern(int bank, int slot) {
     const int old_slot = int(project_.slot);
     project_.bank = uint8_t(bank);
     project_.slot = uint8_t(slot);
+    // PROG CHG OUT: the new pattern's number, whoever changed it -- a press, a queue landing, a
+    // chain moving on, a program change in. Sent at once, ahead of the new pattern's first notes.
+    if (project_.settings.program_out) {
+        program_pending_ = int16_t(bank * kPatternsPerBank + slot);
+        send_program_pending();
+    }
     // Track Launch: unpinned lanes come home to the new pattern's parts and restart with it; a
     // pinned lane keeps what it plays, and its place. A lane that followed the pattern's start
     // and is kept gets that start as its own, since `origin_` is about to move.
@@ -2927,10 +3252,172 @@ void Engine::evolve_from_settings() {
     status_.bump_evolve_loaded();
 }
 
-// A chain entry has just started: its mute recall, if it has one, now (song mode).
+// A chain entry has just started: its mute recall, if it has one, now (song mode), and its
+// section fields (core/project.hpp, SectionExtra). Every `--` leaves what the hands set alone.
+// Whatever the last entry rode is let go: a section's morph is its own or the hand's.
 void Engine::chain_entry_started() {
+    morph_ride_stop();
     const int state = chain_entry_mutes(project_, chain_);
     if (state >= 0) apply_mutes(project_.settings.mute_states[state]);
+    const SectionExtra *section = chain_entry_section(project_, chain_);
+    if (section == nullptr || section_empty(*section)) return;
+    if (section->cap != 0) apply_mutes(section->mask);
+    if (section->scene != 0 && section->scene <= kScenes) {
+        scene_b_ = uint8_t(section->scene - 1);
+        project_.settings.scene_b = scene_b_;
+        perform_dirty_ = true;
+    }
+    if (section->morph == kSectionMorphSnap || section->morph == kSectionMorphSnapA) {
+        morph_ = section->morph == kSectionMorphSnap ? kMorphScale : 0;
+        perform_dirty_ = true;
+    } else if (section->morph == kSectionMorphRide || section->morph == kSectionMorphBack) {
+        // Over the whole entry: its repeats times the pattern's pass, from where the morph is.
+        const uint32_t repeats = project_.chain[chain_.entry].repeats;
+        const uint32_t length = repeats * uint32_t(master_loop_ticks(live()));
+        morph_ride_start(section->morph == kSectionMorphRide ? kMorphScale : 0, length);
+    }
+    if (section->energy != 0) perform_.energy = energy_turn(int8_t(section_energy(section->energy)), 0);
+    // TRN: the amount, in the unit the FUNC menu's row has now (a LOCK holds it the same way).
+    if (section->transpose != 0) {
+        transpose_ = transpose_turn(int8_t(section_transpose(section->transpose)), 0);
+    }
+    // Only the main context may set Enaga's clock: ask, and the UI sets it or says it was refused.
+    // The delay follows here, at once; the project's saved tempo is left alone (the review's M1).
+    // Under an outside clock the BPM is skipped, so nothing here changes either.
+    if (section->bpm != 0) {
+        status_.bump_tempo_due(section->bpm);
+        if (enaga::clock::source() == ENAGA_CLOCK_INTERNAL) {
+            section_tempo_centi_ = section->bpm;
+            apply_mixer_bytes();
+        }
+    }
+    status_.bump_section_event();
+}
+
+// MRP RIDE and BACK: the morph from where it is to `to` over `length` ticks, one step a tick in
+// resolve_tick. The rate is worked out once here, in 1/65536 of a morph unit a tick, because this
+// chip has no integer divide and a tick comes every 2 ms at 300 BPM.
+void Engine::morph_ride_start(uint16_t to, uint32_t length) {
+    ride_from_ = morph_;
+    ride_to_ = to;
+    ride_start_ = tick_;
+    ride_length_ = length < 1u ? 1u : length;
+    const int32_t span = int32_t(to) - int32_t(morph_);
+    ride_rate_ = int32_t((int64_t(span) * 65536) / int64_t(ride_length_));
+    ride_on_ = true;
+    status_.morph_riding.store(1, std::memory_order_relaxed);
+}
+
+void Engine::morph_ride_stop() {
+    ride_on_ = false;
+    status_.morph_riding.store(0, std::memory_order_relaxed);
+}
+
+// The ride's position at `tick`. Ends exactly on its target, at the entry's last tick.
+void Engine::morph_ride_tick(uint32_t tick) {
+    if (!ride_on_) return;
+    // A transport that jumped back (STOP and PLAY) starts the ride again from here.
+    if (tick < ride_start_) ride_start_ = tick;
+    const uint32_t elapsed = tick - ride_start_;
+    uint16_t next;
+    if (elapsed >= ride_length_) {
+        next = ride_to_;
+        morph_ride_stop();
+    } else {
+        const int32_t moved = int32_t((int64_t(ride_rate_) * int64_t(elapsed)) >> 16);
+        const int32_t at = int32_t(ride_from_) + moved;
+        next = uint16_t(at < 0 ? 0 : (at > int32_t(kMorphScale) ? int32_t(kMorphScale) : at));
+    }
+    if (next != morph_) {
+        morph_ = next;
+        perform_dirty_ = true;
+    }
+}
+
+// --- ARR REC (core/arrrec.hpp) ----------------------------------------------
+
+// What plays now, as a section holds it.
+ArrState Engine::arr_now() const {
+    ArrState state = arr_state(project_.bank, project_.slot, mute_state_capture(muted_), scene_b_,
+                               morph_, int(perform_.energy), int(transpose_), playing_tempo_centi(),
+                               enaga::clock::source() != ENAGA_CLOCK_INTERNAL);
+    arr_state_lanes(state, project_);
+    return state;
+}
+
+// What the queues are about to land on, so a capture leaves those slots alone (ArrRec::queued).
+void Engine::arr_note_queued() {
+    arr_.queued[0] = queue_.pending ? lane_source(int(queue_.bank), int(queue_.slot)) : kLaneOwn;
+    for (int t = 0; t < kTracks; t++) {
+        arr_.queued[t + 1] = lane_queue_[t].queue.pending ? lane_queue_[t].source : kLaneOwn;
+    }
+}
+
+// What the pass just written did with Track Launch, told to the UI: the slot a borrowed mix was
+// captured into (and its bank, for the save), or that it could not be kept.
+void Engine::arr_say_launch() {
+    if (arr_.launch == ArrLaunch::none) return;
+    const uint8_t bank = arr_.launch_bank;
+    if (arr_.launch == ArrLaunch::kept) {
+        status_.arr_capture_banks.store(
+            uint8_t(status_.arr_capture_banks.load(std::memory_order_relaxed) | (1u << bank)),
+            std::memory_order_relaxed);
+        status_.arr_captures.store(uint8_t(status_.arr_captures.load(std::memory_order_relaxed) + 1),
+                                   std::memory_order_release);
+        status_.bump_arr_event(uint8_t(ArrEvent::launch_kept),
+                               uint8_t(bank * kPatternsPerBank + arr_.launch_slot));
+    } else {
+        status_.bump_arr_event(uint8_t(ArrEvent::launch_lost), 0);
+    }
+    arr_.launch = ArrLaunch::none;
+}
+
+// Once a tick while a take is on. `new_pass`: a pass of the pattern begins at this tick.
+void Engine::arr_tick(uint32_t tick, uint32_t previous, bool new_pass, bool jumped_back) {
+    const uint32_t loop = uint32_t(master_loop_ticks(live()));
+    if (!arr_.pass_open) {
+        // The first tick after PLAY (or of a take armed with the transport stopped).
+        arr_pass_begin(arr_, arr_now(), tick, loop);
+        return;
+    }
+    if (new_pass || jumped_back) {
+        // A transport that jumped back ended the pass where it was, not here.
+        arr_note_queued();
+        const ArrPass ended = arr_pass_end(project_, arr_, jumped_back ? previous : tick);
+        arr_say_launch();
+        if (ended == ArrPass::full) {
+            arr_end(tick, true);
+            return;
+        }
+        if (ended == ArrPass::added || ended == ArrPass::extended) {
+            status_.arr_passes.store(
+                uint8_t(status_.arr_passes.load(std::memory_order_relaxed) + 1),
+                std::memory_order_release);
+        }
+        arr_pass_begin(arr_, arr_now(), tick, loop);
+        arr_publish();
+        return;
+    }
+    // The pass's first ticks still count as its start: a mute a hair after the downbeat is the
+    // pass it was meant for (kQueueGraceTicks, the forgiveness a queued change gets).
+    if (tick - arr_.pass_from <= uint32_t(kQueueGraceTicks)) arr_.pass = arr_now();
+}
+
+// The take is over: STOP, ARR REC off, the chain started, or a 65th entry needed (`full`).
+void Engine::arr_end(uint32_t tick, bool full) {
+    arr_note_queued();
+    const int written = arr_finish(project_, arr_, arr_backup_, tick);
+    arr_say_launch();
+    arr_publish();
+    const ArrEvent event = written == 0 ? ArrEvent::empty
+                                        : (full ? ArrEvent::full : ArrEvent::ended);
+    status_.bump_arr_event(uint8_t(event), uint8_t(written));
+}
+
+void Engine::arr_publish() {
+    status_.arr_on.store(arr_.on ? 1 : 0, std::memory_order_relaxed);
+    status_.arr_written.store(arr_.written, std::memory_order_relaxed);
+    status_.arr_undo_ready.store(arr_backup_.valid ? 1 : 0, std::memory_order_relaxed);
 }
 
 Project &Engine::project_for_load() { return project_; }
@@ -2983,7 +3470,8 @@ void Engine::land_launch(int track, uint8_t source, bool restart, uint32_t start
 
 // The read-only guard (Roland, 2026-11-27): a lane playing another pattern's part takes no edit
 // until CAPTURE makes it a part of its own. The borrowed pattern is never changed by being
-// borrowed, and undo stays one pattern's history.
+// borrowed, and undo stays one pattern's history. COPY is not refused: it only reads, and copies
+// the borrowed part (Cmd::range_copy).
 bool Engine::launch_refuses(const Command &command, int track) {
     switch (command.cmd) {
         case Cmd::toggle_trig:
@@ -3002,7 +3490,6 @@ bool Engine::launch_refuses(const Command &command, int track) {
         case Cmd::set_track_speed:
         case Cmd::set_track_play:
         case Cmd::set_track_swing:
-        case Cmd::range_copy:
         case Cmd::range_paste:
         case Cmd::range_erase:
         case Cmd::track_erase:
@@ -3030,6 +3517,7 @@ void Engine::resolve_tick(uint32_t tick, uint32_t frame) {
     // happens now, at this tick, from the new pattern's step 1: the same reading a change queued
     // with the clock stopped gets (Cmd::queue_pattern).
     const bool jumped_back = tick < tick_;
+    const uint32_t previous_tick = tick_;
     tick_ = tick;
     // A finished song plays again from a transport that went back (a stop and PLAY).
     if (jumped_back) song_over_ = false;
@@ -3040,6 +3528,11 @@ void Engine::resolve_tick(uint32_t tick, uint32_t frame) {
         origin_ = 0;
         boundary_known_ = false;
     }
+    // And any jump back re-derives the end of the pass: the one known was measured on the old
+    // position. With the origin at 0 (a plain STOP and PLAY), the stale boundary used to stand,
+    // so the first pass after a PLAY lasted until the tick the old run would have ended it on,
+    // and a chain started on the pattern already playing held its first entry that much longer.
+    if (jumped_back) boundary_known_ = false;
     for (int t = 0; t < kTracks; t++) {
         if (tick < lane_origin_[t]) lane_origin_[t] = 0;
     }
@@ -3075,6 +3568,7 @@ void Engine::resolve_tick(uint32_t tick, uint32_t frame) {
     // rather than derived.
     // Passes are counted from the pattern's own start, `origin_`, not from tick 0.
     const uint32_t loop = uint32_t(master_loop_ticks(live()));
+    bool crossed_boundary = false;
     if (!boundary_known_) {
         next_boundary_ = origin_ + ((tick - origin_) / loop + 1) * loop;
         boundary_known_ = true;
@@ -3082,7 +3576,18 @@ void Engine::resolve_tick(uint32_t tick, uint32_t frame) {
         const uint32_t crossed = next_boundary_;
         next_boundary_ = origin_ + ((tick - origin_) / loop + 1) * loop;
         cross_boundary(crossed);
+        crossed_boundary = true;
     }
+    // ARR REC: a pass begins on a boundary, on a pattern switch, and wherever the pattern's
+    // start moved to (a queued change, even to the pattern already playing, restarts it).
+    if (arr_.on) {
+        arr_tick(tick, previous_tick, crossed_boundary || arr_switched_ || origin_ != arr_origin_,
+                 jumped_back);
+    }
+    arr_switched_ = false;
+    arr_origin_ = origin_;
+    // A section's morph ride (MRP RIDE / BACK), after the boundary that may have started it.
+    morph_ride_tick(tick);
     // EVOLVE's turns, in the last ticks before the boundary (evolve_lead says why).
     if (boundary_known_ && next_boundary_ > tick &&
         next_boundary_ - tick <= uint32_t(kEvolveLeadTicks)) {
@@ -3272,6 +3777,17 @@ void Engine::span_tick(uint32_t tick, uint32_t frame) {
     }
 }
 
+// TRANSPOSE (core/transpose.hpp): `note` as `track` plays it now, through the key or by
+// semitones. Unmoved at rest and on every track that does not fold into the scale; SAMPLE asks
+// its slice count as the fold does.
+uint8_t Engine::transposed(int track, uint8_t note) const {
+    if (transpose_ == 0 || machines_[track] == nullptr ||
+        !transpose_moves(machine_id_[track], pool_[track].sampler.slices())) {
+        return note;
+    }
+    return transpose_apply(note, transpose_, transpose_semis_, key_root(), int(key_scale()));
+}
+
 // --- note repeat ---------------------------------------------------------
 
 float Engine::roll_period_frames() const {
@@ -3289,7 +3805,7 @@ void Engine::roll_fire(int track, uint32_t frame) {
     if (machines_[track] == nullptr || muted_[track]) return;
     const Roll &roll = rolls_[track];
     Trig trig;
-    trig.note = roll.note;
+    trig.note = transposed(track, roll.note);   // each hit at the transpose of now
     trig.velocity = roll.velocity;
     trig.frame = frame;
     trig.gate_frames = roll_gate_frames();
@@ -3440,6 +3956,10 @@ void Engine::arp_hit(int track, ArpRun &run, uint32_t frame) {
 void Engine::arp_play(int track, uint8_t note, uint8_t velocity, bool accent, uint32_t frame,
                       uint32_t gate_frames) {
     if (machines_[track] == nullptr || muted_[track]) return;
+    // TRANSPOSE here, on every hit, so a run moves the moment the transpose does, and a KEYS
+    // arp's held notes move with the steps' (core/transpose.hpp). `fire` hands the arp the
+    // folded notes unmoved for that reason.
+    note = transposed(track, note);
     Trig trig;
     trig.note = note;
     trig.velocity = velocity;
@@ -3582,7 +4102,7 @@ void Engine::start_slides(int track, const StepEvent &event) {
     for (const Lock *lock = locks.begin(); lock != locks.end(); ++lock) {
         if (!lock_slides(lock->param)) continue;
         const uint8_t param = lock_param(lock->param);
-        if (param >= kTrackParams || slide_count_[track] >= kLocksPerStep) continue;
+        if (!track_param_real(param) || slide_count_[track] >= kLocksPerStep) continue;
         // What the step glided to will play: its lock and range, or the sound it starts from.
         uint8_t to = lock_resolve(pattern, track, int(event.glide_step), event.glide_loop,
                                   int(param), performed_[track][param]);
@@ -3666,7 +4186,7 @@ void Engine::fire(const StepEvent &event) {
     uint64_t ranged = 0;
     for (const Lock *lock = locks.begin(); lock != locks.end(); ++lock) {
         const uint8_t param = lock_param(lock->param);
-        if (param >= kTrackParams || applied >= kMaxLocksApplied) continue;
+        if (!track_param_real(param) || applied >= kMaxLocksApplied) continue;
         applied++;
         if (lock_is_range(lock->param)) {
             ranged = ranged | (uint64_t(1) << param);
@@ -3679,7 +4199,7 @@ void Engine::fire(const StepEvent &event) {
         const uint32_t seed = playing.seed;
         for (const Lock *lock = locks.begin(); lock != locks.end(); ++lock) {
             const uint8_t param = lock_param(lock->param);
-            if (!lock_is_range(lock->param) || param >= kTrackParams) continue;
+            if (!lock_is_range(lock->param) || !track_param_real(param)) continue;
             effective_[track].v[param] =
                 lock_spread(effective_[track].v[param], lock->value, seed, track,
                             int(event.step), event.loop, int(param));
@@ -3741,9 +4261,15 @@ void Engine::fire(const StepEvent &event) {
         const uint8_t key_root_now = key_root();
         const int key_scale_now = int(key_scale());
         const int slices = pool_[track].sampler.slices();
-        const uint8_t note = machine_folds_note(machine_id_[track], slices)
-                                 ? scale_fold(event.note, key_root_now, key_scale_now)
-                                 : event.note;
+        const uint8_t folded = machine_folds_note(machine_id_[track], slices)
+                                   ? scale_fold(event.note, key_root_now, key_scale_now)
+                                   : event.note;
+        // TRANSPOSE (core/transpose.hpp) after the fold, on exactly the tracks that fold: the
+        // key moves with the notes. 0 on every other track and at rest.
+        const bool moves = transpose_ != 0 && transpose_moves(machine_id_[track], slices);
+        const uint8_t note = moves ? transpose_apply(folded, transpose_, transpose_semis_,
+                                                     key_root_now, key_scale_now)
+                                   : folded;
         sent_note_[track] = note;
 
         Trig trig;
@@ -3765,13 +4291,17 @@ void Engine::fire(const StepEvent &event) {
         const uint8_t midi_velocity = event.accent ? uint8_t(127) : event.velocity;
         const uint32_t midi_gate_frames = midi_gate(track, trig.gate_frames);
         const ArpSettings arp = arp_settings(track);
-        if (arp.on()) {
+        // An ENERGY ghost on an arp track is one note, the step's own, and leaves a running arp
+        // alone: a whole run on every filled-in off-beat is a second part, not a ghost. Only the
+        // one-note machines get ghosts (pads and MID never fill, core/energy.hpp), so the note
+        // goes down the plain path below.
+        if (arp.on() && !event.ghost) {
             // The arp takes the step: its notes (the chord on POLY, the one note elsewhere) become
             // a cycle walked at the arp's rate for the step's length -- or until the next step,
             // for a step with no length. The first hit is now, on the step's own frame.
             uint8_t input[kChordMaxNotes];
             int count = 1;
-            input[0] = note;
+            input[0] = folded;   // arp_play transposes each hit
             const uint8_t packed = folding.tracks[track].steps[event.step].chord;
             if (polys_[track] != nullptr) {
                 count = chord_expand(event.note, packed, key_root_now, key_scale_now, input,
@@ -3840,6 +4370,10 @@ void Engine::fire(const StepEvent &event) {
             // folded like the rest of the chord, within the same six voices.
             voiced = with_extra_notes(folding, track, event.step, notes, voiced, key_root_now,
                                       key_scale_now, true, PolyMachine::kVoices);
+            for (int i = 0; i < voiced && moves; i++) {
+                notes[i] = transpose_apply(notes[i], transpose_, transpose_semis_, key_root_now,
+                                           key_scale_now);
+            }
             for (int i = 0; i < voiced; i++) {
                 trig.note = notes[i];
                 // The budget across every POLY track (kPolyVoiceBudget, engine.hpp).
@@ -3875,8 +4409,9 @@ void Engine::fire(const StepEvent &event) {
 
         // Once per step, not once per note: a chord is one trig as far as the screen is
         // concerned, and eight LEDs flashing six times would be a worse display, not a better
-        // one.
-        note_started(track, trig.velocity, event.frame);
+        // one. A ghost lights nothing: `event.step` is the trig it borrows from, not a step
+        // that played, and the GRID glow would mark a hit the pattern does not have.
+        note_started(track, trig.velocity, event.frame, !event.ghost);
 
         if (track == duck_source_) mixer_.trigger_duck(event.frame);
     }
@@ -4023,12 +4558,23 @@ void Engine::run_lfos(uint32_t frames, bool running, uint32_t position, float fr
 
         // To the machine only when it changes, or when the track has a new machine: with the
         // LFO off and nothing sent before, two compares.
+        // VariSpeed rides on the same call (core/varispeed.hpp): for a synth it adds to the LFO's
+        // semitones, and every other machine has no LFO pitch here, so it gets VariSpeed alone.
         Machine *machine = machines_[t];
-        if (pitch_mod != pitch_mod_[t] || machine != pitch_mod_machine_[t]) {
-            if (machine != nullptr) machine->set_pitch_mod(pitch_mod);
+        const float sent = pitch_mod + vari_semis_;
+        if (sent != sent_pitch_[t] || machine != pitch_mod_machine_[t]) {
+            if (machine != nullptr) machine->set_pitch_mod(sent);
             pitch_mod_machine_[t] = machine;
-            pitch_mod_[t] = pitch_mod;
+            sent_pitch_[t] = sent;
         }
+        // And the tempo, for a machine with a synced setting of its own (the WAVE pair's SCN
+        // SPD): when it changes, or when the track has a new machine. Two compares otherwise.
+        if (samples_per_tick_ != tick_frames_sent_[t] || machine != tick_frames_machine_[t]) {
+            if (machine != nullptr) machine->set_tick_frames(samples_per_tick_);
+            tick_frames_machine_[t] = machine;
+            tick_frames_sent_[t] = samples_per_tick_;
+        }
+        pitch_mod_[t] = pitch_mod;
     }
 }
 
@@ -4100,6 +4646,8 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     // MIDI out's note-offs that fall in this block, and any a full queue refused earlier.
     // Before this block's trigs, so a note ending as the same pitch starts again is ended first.
     midi_out_.begin_block(midi_sink_, frames);
+    // A program change a full queue refused (switch_pattern), tried again each block.
+    send_program_pending();
 
     // The kit with the morph, the macros and any throw over it. Control rate, and only when one
     // of them has moved.
@@ -4115,6 +4663,8 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     if (was_running_ && !clock_now.running) {
         count_in_end_ = 0;
         click_.stop();
+        // ARR REC: STOP ends the take, the pass in progress by the half rule.
+        if (arr_.on) arr_end(tick_, false);
     }
     was_running_ = clock_now.running != 0;
     // Everything below that follows the beat (the LFOs' sync, the master effects' phase) follows
@@ -4303,6 +4853,9 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
         voices++;
     }
 
+    // The line input's strip, after the tracks: both scratch blocks are free again.
+    run_input(in, frames);
+
     mixer_.finish_block(out, int(frames));
 
     for (int t = 0; t < kTracks; t++) {
@@ -4369,8 +4922,9 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
 
     // JAM REC: the same finished master, every block, into the jam's file (app/storage.hpp, "jam
     // recording"). Before the audition and the click, so neither is ever on it. The writer turns
-    // the floats into 24-bit PCM and hands them to Enaga's ring, which never waits; a block the
-    // ring has no room for is dropped whole and counted (Writer::frames_lost), not waited for.
+    // the floats into 24-bit PCM and hands them to Enaga's ring, which never waits; when the ring
+    // is full the frames that do not fit are dropped and counted (Writer::frames_lost), and the
+    // ones that fit are kept.
     if (jam_on_) jam_.write(out, frames);
 
     // The input's level, every block, for the RESAMPLE screen's meter: one pass of the master's
@@ -4540,6 +5094,56 @@ void Engine::end_midi_for_shutdown() {
     midi_all_notes_off();
 }
 
+void Engine::send_program_pending() {
+    if (program_pending_ < 0) return;
+    uint8_t bytes[2];
+    midi_program(bytes, uint8_t(midi_channel_ + 1u), uint8_t(program_pending_));
+    if (midi_sink_.send(bytes, 2)) program_pending_ = -1;
+}
+
+// An outside clock's song position pointer: Enaga moved the clock while it was stopped (it
+// locates only then) and the CONTINUE that follows resumes from `tick`. Everything STRATA counts
+// from a start is put where an uninterrupted run from 0 would have it at that tick: the chain's
+// entry and pass, the pattern's origin and so its steps and pass count, the bars. What was
+// waiting on the old position goes, as on a restart (Cmd::restart). With no chain the playing
+// pattern runs from 0, so its steps fall where the outside song's bars do.
+void Engine::locate(uint32_t tick) {
+    count_in_end_ = 0;
+    deferred_count_ = 0;
+    span_clear();
+    for (int t = 0; t < kTracks; t++) {
+        seq_arp_[t].on = false;
+        lane_queue_clear(lane_queue_[t]);
+    }
+    song_over_ = false;
+    uint32_t origin = 0;
+    if (chain_.active) {
+        bool over = false;
+        if (chain_locate(project_, tick, chain_, origin, over)) {
+            const ChainEntry &entry = project_.chain[chain_.entry];
+            switch_pattern(int(entry.bank), int(entry.slot));
+            chain_entry_started();
+            // Past a song's end: silent until the outside transport stops or starts again, as a
+            // song that played out is.
+            song_over_ = over;
+        }
+        queue_clear(queue_);          // the song position decides the pattern, not a queue
+    } else if (queue_.pending) {
+        // A change queued for a boundary of the old position: it happens now, as a jump back
+        // makes it (resolve_tick).
+        switch_pattern(int(queue_.bank), int(queue_.slot));
+        queue_clear(queue_);
+    }
+    origin_ = origin;
+    for (int t = 0; t < kTracks; t++) lane_origin_[t] = origin;
+    tick_ = tick;
+    // 1ST is true only if the position is in the pattern's first pass.
+    const uint32_t into = tick >= origin ? tick - origin : 0u;
+    scheduler_.reset(into < uint32_t(master_loop_ticks(live())));
+    boundary_known_ = false;
+    bar_known_ = false;
+}
+
 void Engine::midi_all_notes_off() {
     bool done[kMidiChannels + 1] = {};
     for (int t = 0; t < kTracks; t++) {
@@ -4653,10 +5257,11 @@ void Engine::watch_streams() {
 // macro positions); these two gather it into one LiveState and put one back.
 
 void Engine::capture_live(LiveState &state) const {
-    // What you hear, launched lanes included (core/launch.hpp); a jump back plays it with every
-    // lane on its own part. Parts whose locks do not fit one pattern store the playing pattern.
-    if (lane_borrowed_mask(project_) == 0 || !launch_compose(project_, state.pattern)) {
-        __builtin_memcpy(&state.pattern, &live(), sizeof state.pattern);
+    // The playing pattern as it is, and apart from it what each lane plays (core/lockstore.hpp,
+    // "Launched lanes stay launched"): a borrowed part is never copied into the pattern.
+    __builtin_memcpy(&state.pattern, &live(), sizeof state.pattern);
+    for (int t = 0; t < kTracks; t++) {
+        state.lanes[t] = lane_borrowed(project_, t) ? project_.settings.lane_source[t] : kLaneOwn;
     }
     static_assert(kKitParams == kTrackParams, "a lock holds the kit's bytes as the engine has them");
     for (int t = 0; t < kTracks; t++) {
@@ -4673,6 +5278,7 @@ void Engine::capture_live(LiveState &state) const {
     state.rnd_unit = perform_.rnd_unit;
     state.rnd_armed = perform_.rnd_armed;
     state.energy = perform_.energy;
+    state.transpose = transpose_;
 }
 
 // At once (D3): the next step plays from the restored pattern, and the sound is heard in this
@@ -4681,9 +5287,13 @@ void Engine::capture_live(LiveState &state) const {
 // lock taken before a machine switch restores the parameters only (docs/MANUAL.md).
 void Engine::apply_live(const LiveState &state) {
     __builtin_memcpy(&live(), &state.pattern, sizeof state.pattern);
-    // A lock is what was heard, as one pattern: every lane plays its own part again, each from
-    // where it counted.
-    launch_all_own(project_);
+    // Each lane back on the part it played in that state, as a NOW launch: from where it counted.
+    // A lane that changes part drops what waited for the old one (land_launch).
+    for (int t = 0; t < kTracks; t++) {
+        const uint8_t source = lane_source_valid(state.lanes[t]) ? state.lanes[t] : kLaneOwn;
+        const uint8_t now = lane_borrowed(project_, t) ? project_.settings.lane_source[t] : kLaneOwn;
+        if (source != now) land_launch(t, source, false, tick_);
+    }
     deferred_count_ = 0;                 // ratchet hits of the steps just replaced
     span_clear();   // and the rolls of spanning ratchets
     for (int t = 0; t < kTracks; t++) {
@@ -4700,12 +5310,14 @@ void Engine::apply_live(const LiveState &state) {
     apply_mixer_bytes();
     apply_mutes(state.mutes);
     for (int m = 0; m < kMacros; m++) macro_position_[m] = state.macros[m];
+    morph_ride_stop();   // a LOCK jump is a hand on the morph
     morph_ = state.morph;
     rel_all_ = state.rel_all;
     len_all_ = state.len_all;
     perform_.rnd_unit = state.rnd_unit;
     perform_.rnd_armed = state.rnd_armed;
     perform_.energy = energy_turn(state.energy, 0);
+    transpose_ = transpose_turn(state.transpose, 0);
     perform_dirty_ = true;
     reconfigure();
 }

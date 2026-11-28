@@ -12,9 +12,13 @@
     // change a setting row, CLR or FUNC + HOME closes it and returns to the screen it opened
     // over. The cursor always starts on SAVE, so FUNC + HOME, OK saves.
 
-    enum class MenuItem : uint8_t { save, save_as, open, fresh, reload, clear, kits, sample,
-                                    speed, play, chain, song, autofill, quantize, rec_mode, click,
-                                    count_in, glide, freeze, loop_len, demo, jam, count };
+    // Project-wide rows only, ordered by how often a jam reaches for them: the live toggles
+    // first, the file actions at the bottom. The selected track's rows (SPEED, PLAY, FREEZE,
+    // RELOAD SAMPLE) are in GRID's track menu (app/ui_trackmenu.hpp).
+    enum class MenuItem : uint8_t { save, jam, arr, click, count_in, rec_mode, quantize,
+                                    autofill, glide, transpose, loop_len, chain, song, arr_undo,
+                                    prog_out, save_as, open, kits, fresh, reload, clear, demo,
+                                    count };
     static constexpr int kMenuItems = int(MenuItem::count);
     static constexpr int kMenuRows = 9;
 
@@ -27,21 +31,21 @@
             case MenuItem::reload:   return "RELOAD PROJECT";
             case MenuItem::clear:    return "CLEAR PATTERN";
             case MenuItem::kits:     return "KITS";
-            case MenuItem::sample:   return "RELOAD SAMPLE";
-            case MenuItem::speed:    return "TRACK SPEED";
-            case MenuItem::play:     return "TRACK PLAY";
             case MenuItem::chain:    return "CHAIN";
             case MenuItem::song:     return "CHAIN END";
+            case MenuItem::prog_out: return "PROG CHG OUT";
             case MenuItem::autofill: return "AUTO-FILL";
             case MenuItem::quantize: return "QUANTIZE";
             case MenuItem::rec_mode: return "REC MODE";
             case MenuItem::click:    return "CLICK";
             case MenuItem::count_in: return "COUNT-IN";
-            case MenuItem::freeze:   return "FREEZE";
             case MenuItem::loop_len: return "LOOP LEN";
             case MenuItem::glide:    return "FX GLIDE";
+            case MenuItem::transpose: return "TRANSPOSE";
             case MenuItem::demo:     return "LOAD DEMO";
             case MenuItem::jam:      return "JAM REC";
+            case MenuItem::arr:      return "ARR REC";
+            case MenuItem::arr_undo: return "ARR UNDO";
             default:                 return "?";
         }
     }
@@ -49,23 +53,14 @@
     // A setting row's value as the row shows it, or "" for an action row.
     void menu_item_value(MenuItem item, char *out) {
         switch (item) {
-            case MenuItem::speed:
-                *out++ = 'T';
-                append_number(out, uint32_t(selected_) + 1);
-                *out++ = ' ';
-                append(out, speed_name(Speed(engine_.pattern().tracks[selected_].speed)));
-                break;
-            case MenuItem::play:
-                *out++ = 'T';
-                append_number(out, uint32_t(selected_) + 1);
-                *out++ = ' ';
-                append(out, play_mode_name(PlayMode(engine_.pattern().tracks[selected_].play)));
-                break;
             case MenuItem::chain:
                 append(out, engine_.chain().active ? "ON" : "OFF");
                 break;
             case MenuItem::song:
                 append(out, engine_.project().settings.chain_song ? "SONG" : "LOOP");
+                break;
+            case MenuItem::prog_out:
+                append(out, engine_.project().settings.program_out ? "ON" : "OFF");
                 break;
             case MenuItem::autofill:
                 append(out, auto_fill_name(engine_.auto_fill()));
@@ -76,23 +71,6 @@
             case MenuItem::rec_mode:
                 append(out, rec_add() ? "ADD" : "REPLACE");
                 break;
-            case MenuItem::freeze: {
-                // The selected track: frozen, recording its loop, or how many bars OK records.
-                *out++ = 'T';
-                append_number(out, uint32_t(selected_) + 1);
-                *out++ = ' ';
-                if (frozen(selected_)) {
-                    append(out, "ON");
-                } else if (storage_.freezing_track() == selected_) {
-                    const uint8_t state =
-                        engine_.status().resample_state.load(std::memory_order_relaxed);
-                    append(out, state == 2u ? "REC" : "WAIT");
-                } else {
-                    append_number(out, uint32_t(kTakeBars[freeze_bars_index_]));
-                    append(out, " BAR");
-                }
-                break;
-            }
             case MenuItem::loop_len:
                 // How many bars push VALUE + STEP 16 records (dsp/looper.hpp).
                 append_number(out, uint32_t(kTakeBars[loop_bars_index_]));
@@ -112,6 +90,22 @@
             case MenuItem::glide:
                 // How long a button's jump in the performance mixer rides (core/perffx.hpp).
                 append(out, perf_glide_name(perf_glide_));
+                break;
+            case MenuItem::transpose:
+                // What a FUNC + screen key step is (core/transpose.hpp).
+                append(out, transpose_semis_ ? "SEMI" : "SCALE");
+                break;
+            case MenuItem::arr:
+                // OFF, ON, or ON and the sections written so far: ON 7.
+                if (!arr_on()) {
+                    append(out, "OFF");
+                } else {
+                    append(out, "ON");
+                    if (arr_written() > 0) {
+                        *out++ = ' ';
+                        append_number(out, uint32_t(arr_written()));
+                    }
+                }
                 break;
             case MenuItem::jam:
                 // OFF, or how long the jam has run, as a clock: 4:07, 1:02:33.
@@ -138,16 +132,95 @@
         append_padded(out, secs, 2);
     }
 
-    // JAM REC's OK: start the jam, or stop it. The menu closes on a start, so the music is back on
-    // the screen with the REC dot in the top bar; a stop's SAVED comes once the file is closed.
-    void toggle_jam() {
+    // JAM REC's mark, the top bar's dot and the REC key's blink: lit for 600 ms of each second
+    // while the jam records, steady while its file is being closed, dark otherwise.
+    bool jam_mark_on() const {
+        return storage_.jam_running() && (!storage_.jam_recording() || last_ms_ % 1000u < 600u);
+    }
+
+    // --- ARR REC (core/arrrec.hpp): the jam written into the chain -------------------------------
+
+    bool arr_on() const { return engine_.status().arr_on.load(std::memory_order_relaxed) != 0; }
+    int arr_written() const {
+        return int(engine_.status().arr_written.load(std::memory_order_relaxed));
+    }
+
+    // The REC key's blink and the strip's ARR mark: a take on, blinking in time with JAM REC's.
+    bool arr_mark_on() const { return arr_on() && last_ms_ % 1000u < 600u; }
+
+    // ARR REC's row: a take on, or over. On closes the menu, so the music is back on the screen
+    // with ARR in the strip; what the take wrote comes as its own notice (service_arr).
+    void toggle_arr(bool from_menu) {
+        const bool on = !arr_on();
+        post(Cmd::arr_rec, 0, 0, on ? 1 : 0);
+        if (on && from_menu) close_menu(false);
+    }
+
+    // What the audio side did with ARR REC or ARR UNDO, said once, and the chain it wrote marked
+    // for the next save: a pass written by a take comes with no command.
+    void service_arr() {
+        const Status &status = engine_.status();
+        const uint8_t passes = status.arr_passes.load(std::memory_order_acquire);
+        const uint8_t event = status.arr_event.load(std::memory_order_acquire);
+        if (passes != arr_passes_seen_ || event != arr_event_seen_) {
+            arr_passes_seen_ = passes;
+            storage_.note_command(Cmd::chain_edit,
+                                  int(status.live_bank.load(std::memory_order_relaxed)));
+        }
+        // A pass with a borrowed lane was captured into a slot (Track Launch): its bank is saved.
+        const uint8_t captures = status.arr_captures.load(std::memory_order_acquire);
+        if (captures != arr_captures_seen_) {
+            arr_captures_seen_ = captures;
+            const uint8_t banks = status.arr_capture_banks.load(std::memory_order_relaxed);
+            const int live = int(status.live_bank.load(std::memory_order_relaxed));
+            for (int b = 0; b < kBanks; b++) {
+                if ((banks >> b & 1u) != 0) storage_.note_command(Cmd::launch_capture, live, b);
+            }
+        }
+        if (event == arr_event_seen_) return;
+        arr_event_seen_ = event;
+        const uint32_t count = status.arr_arg.load(std::memory_order_relaxed);
+        char *out = notice_buffer_;
+        switch (ArrEvent(status.arr_last.load(std::memory_order_relaxed))) {
+            case ArrEvent::started:
+                append(out, enaga::clock::running() ? "ARR REC ON" : "ARR: PRESS PLAY");
+                break;
+            case ArrEvent::ended:
+            case ArrEvent::full:
+                if (ArrEvent(status.arr_last.load(std::memory_order_relaxed)) == ArrEvent::full) {
+                    append(out, "ARR FULL ");
+                } else {
+                    append(out, "ARR ");
+                }
+                append_number(out, count);
+                append(out, count == 1 ? " SECTION" : " SECTIONS");
+                break;
+            case ArrEvent::empty:   append(out, "ARR NOTHING KEPT"); break;
+            case ArrEvent::undone:  append(out, "ARR UNDONE"); break;
+            case ArrEvent::redone:  append(out, "ARR REDONE"); break;
+            case ArrEvent::no_undo: append(out, "NO ARR TO UNDO"); break;
+            case ArrEvent::launch_kept:                  // "LAUNCH IN A05"
+                append(out, "LAUNCH IN ");
+                *out++ = bank_letter(int(count >> 4));
+                append_padded(out, (count & 15u) + 1, 2);
+                break;
+            case ArrEvent::launch_lost: append(out, "LAUNCH NOT KEPT"); break;
+        }
+        *out = 0;
+        notice_logged(notice_buffer_);
+    }
+
+    // JAM REC, from the menu's row (OK) or FUNC + REC on RESAMPLE: start the jam, or stop it. From
+    // the menu, the menu closes on a start, so the music is back on the screen with the REC dot in
+    // the top bar; a stop's SAVED comes once the file is closed.
+    void toggle_jam(bool from_menu) {
         if (storage_.jam_running()) {
             storage_.request_jam_stop();
             notice_logged("JAM STOPPING");
             return;
         }
         if (!storage_.request_jam_start()) return;     // the reason comes as a jam message
-        close_menu(false);
+        if (from_menu) close_menu(false);
         char *out = notice_buffer_;
         append(out, "JAM REC ");
         const char *name = storage_.jam_name();
@@ -227,7 +300,9 @@
             len_all_ = engine_.len_all();
             rnd_unit_ = engine_.live_rnd_unit();
             rnd_armed_ = engine_.live_rnd_armed();
+            rnd_armed_chosen_ = true;              // the lock's set, kept as chosen
             energy_ = engine_.energy();
+            transpose_ = engine_.transpose();
             // The mixer to rest over FX GLIDE (a lock holds no effect); a loop plays on.
             if (perf_target_fx() != PerfFx::none) perf_ride_to(perf_target_fx(), 0, false);
         }
@@ -572,11 +647,53 @@
             perf_notice(perf_picked_, false, 0);
             return;
         }
-        if (shift_) return;
+        if (shift_) {
+            // FUNC + tap with nothing to cut: VariSpeed snaps back to the project's tempo and
+            // pitch (core/varispeed.hpp). Nothing at rest, so a stray tap says nothing.
+            if (vari_ != 0) {
+                vari_apply(0);
+                vari_notice();
+            }
+            return;
+        }
         if (mode_ == Mode::perform || perf_picked_ == PerfFx::morph) {
             morph_set(0);
             notice("MORPH 0");
+            return;
         }
+        if (value_on_tempo()) tap_value_tempo();
+    }
+
+    // Where a plain turn of VALUE turns the tempo: nothing picked, not PERFORM (the morph), not
+    // PROJECT's CHAIN or PATTERN page (the field under the cursor), no beat repeat held.
+    bool value_on_tempo() const {
+        if (perf_picked_ != PerfFx::none || mode_ == Mode::perform || repeat_held_) return false;
+        return !(mode_ == Mode::project && (project_page_ == ProjectPage::chain ||
+                                            project_page_ == ProjectPage::pattern));
+    }
+
+    // Tap tempo (core/taptempo.hpp): a VALUE tap where VALUE turns the tempo is a beat, stamped
+    // at its press. Three taps that agree set the tempo; from then the tempo follows the taps,
+    // set and saved as a turn of VALUE sets it. Two stray taps set nothing. Refused under an outside clock, as the turn is.
+    void tap_value_tempo() {
+        if (enaga::clock::source() != ENAGA_CLOCK_INTERNAL) {
+            clock_refused_ = true;
+            notice("EXT CLOCK");
+            return;
+        }
+        const uint32_t tenths = tap_tempo(tap_, value_down_ms_);
+        if (tenths == 0) {
+            notice_logged("TAP TEMPO");
+            return;
+        }
+        tempo_tenths_ = tenths;
+        clock_refused_ = !set_clock_tempo(tenths * 10u);      // times VariSpeed's
+        post_tempo(float(tenths) * 0.1f);
+        char *out = notice_buffer_;
+        append(out, "TAP ");
+        append_tenths(out, tenths);
+        *out = 0;
+        notice_logged(notice_buffer_);   // tests/scenario_tempo.sh reads it
     }
 
     // VALUE with an effect picked: its amount, two counts a click (the whole range in 64
@@ -647,17 +764,6 @@
     // so one key reaches every value; the arrows stop at the ends where the list has ends.
     void menu_value(int delta, bool wrap) {
         switch (MenuItem(menu_cursor_)) {
-            case MenuItem::speed: {
-                const uint8_t current = engine_.pattern().tracks[selected_].speed;
-                const bool slowest =
-                    uint8_t(kSpeedDisplayOrder[int(Speed::count) - 1]) == current;
-                if (wrap && slowest) walk_speed(-int(Speed::count));
-                else walk_speed(delta);
-                break;
-            }
-            case MenuItem::play:
-                walk_play(delta, wrap);
-                break;
             case MenuItem::chain: {
                 const bool on = engine_.chain().active;
                 post(Cmd::set_chain, 0, 0, on ? 0 : 1);
@@ -668,6 +774,18 @@
                 const bool song = !engine_.project().settings.chain_song;
                 post_chain(ChainEdit::song, 0, song ? 1 : 0);
                 notice(song ? "SONG: PLAY ONCE" : "LOOP CHAIN");
+                break;
+            }
+            case MenuItem::prog_out: {
+                // PROG CHG OUT (core/project.hpp): pattern changes go out as program changes on
+                // the MIDI CH, which the notice names as gear prints it.
+                const bool on = !engine_.project().settings.program_out;
+                post(Cmd::set_program_out, 0, 0, on ? 1 : 0);
+                char *out = notice_buffer_;
+                append(out, on ? "PROG OUT CH " : "PROG OUT OFF");
+                if (on) append_number(out, uint32_t((enaga::midi::channel() & 0x0F) + 1));
+                *out = 0;
+                notice(notice_buffer_);
                 break;
             }
             case MenuItem::autofill: {
@@ -695,18 +813,6 @@
                 const bool add = !rec_add();
                 post(Cmd::set_rec_mode, 0, 0, add ? 1 : 0);
                 notice_logged(add ? "REC ADDS NOTES" : "REC REPLACES");
-                break;
-            }
-            case MenuItem::freeze: {
-                // The length, 1, 2, 4 or 8 bars, as RESAMPLE's; it wraps like AUTO-FILL.
-                const int next = (freeze_bars_index_ + delta + kTakeBarChoices) % kTakeBarChoices;
-                freeze_bars_index_ = next;
-                char *out = notice_buffer_;
-                append(out, "FREEZE ");
-                append_number(out, uint32_t(kTakeBars[freeze_bars_index_]));
-                append(out, " BAR");
-                *out = 0;
-                notice(notice_buffer_);
                 break;
             }
             case MenuItem::loop_len: {
@@ -742,6 +848,10 @@
                 notice_logged(notice_buffer_);
                 break;
             }
+            case MenuItem::arr:
+                // A switch: either arrow, B or OK flips it. OK closes the menu on a start.
+                toggle_arr(wrap);
+                break;
             case MenuItem::glide: {
                 // OFF, 1/16, 1 BEAT, 1 BAR; it wraps like AUTO-FILL.
                 const int count = int(PerfGlide::count);
@@ -753,6 +863,13 @@
                 notice_logged(notice_buffer_);       // tests/scenario_glide.sh reads it
                 break;
             }
+            case MenuItem::transpose:
+                // A switch: either arrow, B or OK flips it. The amount stays where it is and
+                // is heard in the new unit at once (+2 IN KEY becomes +2 semitones).
+                transpose_semis_ = !transpose_semis_;
+                post_transpose();
+                notice_logged(transpose_semis_ ? "TRANSPOSE SEMITONES" : "TRANSPOSE IN SCALE");
+                break;
             default:
                 break;
         }
@@ -783,7 +900,7 @@
                 leave_mode();
                 project_page_ = ProjectPage::files;
                 list_projects();
-                notice("OK TWICE OPENS");
+                notice("OK TWICE: OPEN");
                 break;
             case MenuItem::fresh:
             case MenuItem::demo:
@@ -802,18 +919,12 @@
             case MenuItem::kits:
                 open_kits();
                 break;
-            case MenuItem::sample:
-                // The one thing a user can do about a FAIL, and the only way back after a card
-                // has been out.
-                if (storage_.request_sample(selected_)) notice("LOADING");
-                else notice("NO SAMPLE");
-                break;
-            case MenuItem::freeze:
-                toggle_freeze();
-                close_menu(false);
-                break;
             case MenuItem::jam:
-                toggle_jam();
+                toggle_jam(true);
+                break;
+            case MenuItem::arr_undo:
+                // One level, both ways: the audio side says which (service_arr).
+                post(Cmd::arr_undo);
                 break;
             default:
                 menu_value(+1, true);
@@ -916,7 +1027,7 @@
                     storage_.request_kit_load(kit_cursor_);
                     notice("LOADING KIT");
                 } else {
-                    notice("OK AGAIN TO LOAD");
+                    notice("OK AGAIN: LOAD");
                 }
                 return true;
             }
@@ -947,7 +1058,7 @@
                         storage_.request_kit_save(kit_cursor_);
                         notice("SAVING KIT");
                     } else {
-                        notice("AGAIN TO OVERWRITE");
+                        notice("DOWN AGAIN: REPLACE");
                     }
                 }
                 return true;
@@ -1026,6 +1137,7 @@
         if (source < 0) return;
         input_result_ = enaga::system::input(source, take_level_);
         input_applied_ = input_result_ == 0;
+        input_route_applied_ = -1;      // the strip's route is no longer the codec's (service_input_route)
         notice(input_result_ == 0 ? kTakeSources[take_source_].name : "INPUT REFUSED");
     }
 

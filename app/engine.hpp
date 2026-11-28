@@ -47,7 +47,10 @@
 #include "lockstore.hpp" // LOCK: FUNC + MUTATE stores, jumps and swaps back
 #include "launch.hpp"    // Track Launch: a lane playing another slot's part
 #include "moveall.hpp"   // REL ALL and LEN ALL: every track's release and note length
+#include "varispeed.hpp" // VariSpeed: every machine's pitch with the tempo
+#include "usersounds.hpp"  // UserSoundExtras: what AS WAS puts back after a user sound
 #include "arp.hpp"       // the arpeggiator's notes
+#include "arrrec.hpp"    // ARR REC: the jam written into the chain
 #include "sample.hpp"
 #include "scale.hpp"       // the global key and scale: Cmd::set_root and set_scale
 #include "scope.hpp"       // the master output for the screen's scopes and spectra
@@ -203,6 +206,12 @@ public:
     uint8_t live_rnd_armed() const { return perform_.rnd_armed; }
     // ENERGY (core/energy.hpp): -64 .. +64, 0 is rest.
     int8_t energy() const { return perform_.energy; }
+    // TRANSPOSE (core/transpose.hpp): steps on the melodic tracks, 0 is rest; scale steps, or
+    // semitones while `transpose_semitones()`.
+    int8_t transpose() const { return transpose_; }
+    bool transpose_semitones() const { return transpose_semis_; }
+    // VariSpeed (core/varispeed.hpp): tenths of a semitone on every machine, 0 is rest.
+    int8_t varispeed() const { return vari_tenths_; }
     AutoFill auto_fill() const { return auto_fill_; }
     // EVOLVE (core/evolve.hpp): a track's period index (0 OFF) and the shared settings.
     uint8_t evolve_period(int track) const {
@@ -487,6 +496,14 @@ private:
     };
     EnagaMidi midi_sink_;
     MidiOut midi_out_;
+    // PROG CHG OUT: the user's MIDI CH (0-15, from the main context) and a program change still
+    // to send, -1 for none. Kept until the queue takes it, as a refused note-off is: a lost
+    // program change leaves the other gear on the wrong pattern for the rest of the set.
+    uint8_t midi_channel_ = 0;
+    int16_t program_pending_ = -1;
+    void send_program_pending();
+    // Cmd::locate: the pattern or chain put where an outside song position falls.
+    void locate(uint32_t tick);
 
     // Send `count` notes of one trig to the track's MIDI OUT channel, if it has one.
     void send_midi_notes(int track, const uint8_t *notes, int count, uint8_t velocity,
@@ -625,11 +642,19 @@ private:
     // switching makes that an assumption rather than a fact, so it is re-derived on every
     // change: a closed hat chokes an open one only while both tracks still host a Hat.
     void rewire_machines();
+    // Cmd::set_machine's work: silence, switch, load the machine's default sound.
+    void switch_machine(int track, uint8_t id);
 
     Machine *machines_[kTracks] = {};
 
     uint8_t machine_id_[kTracks] = {};
     uint8_t sent_note_[kTracks] = {};  // see sent_note()
+    // TRANSPOSE (core/transpose.hpp), and the shift each held KEYS key or MIDI IN note took, so
+    // its release lets go of the note that sounded even after the transpose moved on.
+    int8_t transpose_ = 0;
+    bool transpose_semis_ = false;
+    int8_t key_shift_[kTracks][128] = {};
+    uint8_t transposed(int track, uint8_t note) const;
 
     // And which tracks host a VaPoly, for the same reason and recorded the same way: a chord is
     // several notes on one frame, so `fire` has to know that this track can take them. A track
@@ -665,6 +690,30 @@ private:
     // stops or starts again (`cross_boundary`).
     bool song_over_ = false;
     void chain_entry_started();
+    // A section's MRP RIDE / BACK (chain_entry_started): the morph from `ride_from_` to
+    // `ride_to_` over `ride_length_` ticks from `ride_start_`, `ride_rate_` a tick in 1/65536.
+    void morph_ride_start(uint16_t to, uint32_t length);
+    void morph_ride_stop();
+    void morph_ride_tick(uint32_t tick);
+    bool ride_on_ = false;
+    // ARR REC (core/arrrec.hpp): the take, the chain it replaced, and what resolve_tick watches
+    // to see a pass begin (a boundary, a pattern switch, the pattern's start moved).
+    ArrRec arr_;
+    ArrBackup arr_backup_;
+    bool arr_undone_ = false;        // the backup holds the take, the chain the one before it
+    bool arr_switched_ = false;      // switch_pattern ran since the last tick
+    uint32_t arr_origin_ = 0;        // origin_ as resolve_tick last saw it
+    void arr_note_queued();
+    ArrState arr_now() const;
+    void arr_tick(uint32_t tick, uint32_t previous, bool new_pass, bool jumped_back);
+    void arr_end(uint32_t tick, bool full);
+    void arr_publish();
+    void arr_say_launch();
+    uint16_t ride_from_ = 0;
+    uint16_t ride_to_ = 0;
+    uint32_t ride_start_ = 0;
+    uint32_t ride_length_ = 1;
+    int32_t ride_rate_ = 0;
 
     // See `kit_for_recall`. Written by the main context, read by `Cmd::kit_recall` only.
     Kit kit_inbox_;
@@ -676,6 +725,9 @@ private:
     // its AS WAS row can put it back. -1 when nothing is remembered.
     TrackParams sound_back_ = {};
     int sound_back_track_ = -1;
+    uint8_t sound_back_machine_ = 0;   // and its machine, which a paste may have switched
+    UserSoundExtras sound_back_extras_ = {};   // its LFO TRIG, mod slots and arp settings
+    bool sound_back_all_ = false;      // a user sound or paste landed since: AS WAS puts back all
     // And `Cmd::arp_preset`'s: the ARP bytes and the arp's kit settings when ARPS opened.
     uint8_t arp_back_[kArpBytes] = {};
     KitArp arp_back_ext_ = {};
@@ -766,11 +818,28 @@ private:
     // machine hands the new one the current value, so none keeps a stale offset.
     float pitch_mod_[kTracks] = {};
     Machine *pitch_mod_machine_[kTracks] = {};
+    // The tempo as each track's machine last heard it (Machine::set_tick_frames).
+    float tick_frames_sent_[kTracks] = {};
+    Machine *tick_frames_machine_[kTracks] = {};
+    // What the machine was last handed: the LFO's semitones plus VariSpeed's.
+    float sent_pitch_[kTracks] = {};
+    // VariSpeed (Cmd::set_varispeed): the amount, its semitones for the machines, and the ratio
+    // the delay's beat is divided by so its echoes keep to the faster or slower clock.
+    int8_t vari_tenths_ = 0;
+    float vari_semis_ = 0.0f;
+    float vari_inv_ratio_ = 1.0f;
+    // A song section's BPM, in centi-BPM, while it plays; 0 follows the project's tempo. A
+    // section sets the clock without becoming the project's saved tempo (the review's M1), but
+    // the tempo-synced delay and what ARR REC and the quick fill record follow what plays.
+    // Cleared by a turn of VALUE (Cmd::set_tempo) and by a load.
+    uint16_t section_tempo_centi_ = 0;
+    uint16_t playing_tempo_centi() const;
 
     // Every note-on a track's machine takes -- a step, a chord, an arp or roll hit, a pad or a
     // key -- goes through here: the screen's trig light, and LFO TRIG's restart.
-    void note_started(int track, uint8_t velocity, uint32_t frame) {
-        status_.bump_triggered(track);
+    // `lit` false (an ENERGY ghost) keeps the trig light off and does the rest.
+    void note_started(int track, uint8_t velocity, uint32_t frame, bool lit = true) {
+        if (lit) status_.bump_triggered(track);
         lfo_restart_[track] = true;
         mod_velocity_[track] = velocity;
         choke_group(track, frame);
@@ -863,6 +932,15 @@ private:
 
     void prepare_machine(int track);
     void prepare_chain(int track);
+    // The line input's strip (ProjectSettings::input), between the tracks and the sends: fades in
+    // when turned on, plays one block down to silence when turned off, and costs nothing while
+    // off. `in` is audio()'s input buffer, nullptr where the host gives none.
+    void run_input(const float *in, uint32_t frames);
+    void prepare_input(bool on);
+    bool input_live_ = false;                    // the chain is running (on, or its last block)
+    uint8_t input_prepared_[kInputFields] = {};
+    float input_prepared_scale_ = -1.0f;         // the MUTE BUS's fader scale it was prepared at
+    bool input_prepared_on_ = false;
     void forget_prepared();
     TrackParams machine_prepared_[kTracks] = {};
     const Machine *machine_prepared_for_[kTracks] = {};

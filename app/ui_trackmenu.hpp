@@ -1,10 +1,14 @@
 // (Included inside class StrataApp; see app/app.hpp.)
 //
-    // --- the track menu: hold OK in GRID ------------------------------------------------------
+    // --- the track menu: hold OK in GRID or KEYS ----------------------------------------------
     //
-    // GEN and EVOLVE for the selected track (Roland, 2026-11-27), opened the way the pattern menu
-    // opens on PROJECT's slots: a hold of kTrackMenuHoldMs on OK in GRID with nothing held. A
-    // tap does what OK in GRID always did, which is nothing, so the hold costs no gesture.
+    // Everything that belongs to the selected track: GEN and EVOLVE (Roland, 2026-11-27), and
+    // SPEED, PLAY, FREEZE and RELOAD SAMPLE (moved here from the FUNC menu, 2026-11-28). Opened
+    // the way the pattern menu opens on PROJECT's slots: a hold of kTrackMenuHoldMs on OK in GRID
+    // or KEYS with nothing held. A tap does what OK there always did, which is nothing, so the
+    // hold costs no gesture. KEYS has it too (usability review, 2026-11-28): GEN on a melodic
+    // track while playing the pads. In KEYS the pads stay the piano; the arrows are the menu's
+    // while it is open.
     //
     // UP/DOWN or A pick a row, LEFT/RIGHT or B change it, OK runs an action row (and steps a
     // setting row forward, wrapping), CLR closes. A lower pad still selects the track, so one menu
@@ -22,9 +26,18 @@
     //   AMOUNT        and how hard, also shared
     //   KEEP          OK: what plays becomes HOME, EVOLVE stops
     //   HOME          OK: back to HOME (one undo level), EVOLVE stops
+    //   SPEED         the track's step speed (core/timing.hpp, kSpeedDisplayOrder)
+    //   PLAY          its play mode: FWD, REV, PING, RND1-RND16
+    //   FREEZE        OK freezes it for the bars on the row (LEFT/RIGHT: 1, 2, 4, 8), or gives
+    //                 it back (dsp/frozen.hpp)
+    //   RELOAD SAMPLE OK: load its sample again, the way back from a FAIL or a pulled card
+    //   CAPTURE       OK: what plays, launched lanes and all, into the first free slot of the
+    //                 playing bank (Track Launch's CAPTURE, core/launch.hpp; U2, D4). Last, so
+    //                 UP from GENERATE reaches it: it is the answer to READ ONLY
     static constexpr uint32_t kTrackMenuHoldMs = 500;
     enum class TrackRow : uint8_t { generate, density, range, leap, what, evolve, mode, kind,
-                                    amount, keep, home, count };
+                                    amount, keep, home, speed, play, freeze, sample,
+                                    capture, count };
     static constexpr int kTrackRows = int(TrackRow::count);
     static constexpr int kTrackRowsShown = 9;
 
@@ -40,13 +53,23 @@
             case TrackRow::kind:     return "MUTATION";
             case TrackRow::amount:   return "AMOUNT";
             case TrackRow::keep:     return "KEEP";
-            default:                 return "HOME";
+            case TrackRow::home:     return "HOME";
+            case TrackRow::speed:    return "SPEED";
+            case TrackRow::play:     return "PLAY";
+            case TrackRow::freeze:   return "FREEZE";
+            case TrackRow::capture:  return "CAPTURE";
+            default:                 return "RELOAD SAMPLE";
         }
     }
 
+    // The screens the menu opens over, and draws in place of.
+    bool track_menu_screen() const {
+        return (mode_ == Mode::grid || mode_ == Mode::keys) && !step_page_;
+    }
+
     bool track_ok_target() const {
-        return mode_ == Mode::grid && !step_page_ && held_step_ < 0 && range_first_ < 0 &&
-               !shift_ && !mutation_pending_;
+        return track_menu_screen() && held_step_ < 0 && range_first_ < 0 && !shift_ &&
+               !mutation_pending_;
     }
 
     void track_row_value(TrackRow row, char *out) {
@@ -64,6 +87,30 @@
             case TrackRow::mode:    append(out, evolve_mode_name(evolve_mode_ui_)); break;
             case TrackRow::kind:    append(out, mutation_name(mutation_)); break;
             case TrackRow::amount:  append_number(out, uint32_t(mutate_amount_)); break;
+            case TrackRow::speed:
+                append(out, speed_name(Speed(engine_.pattern().tracks[selected_].speed)));
+                break;
+            case TrackRow::play:
+                append(out, play_mode_name(PlayMode(engine_.pattern().tracks[selected_].play)));
+                break;
+            case TrackRow::freeze:
+                // Frozen, recording its loop, or how many bars OK records.
+                if (frozen(selected_)) {
+                    append(out, "ON");
+                } else if (storage_.freezing_track() == selected_) {
+                    const uint8_t state =
+                        engine_.status().resample_state.load(std::memory_order_relaxed);
+                    append(out, state == 2u ? "REC" : "WAIT");
+                } else {
+                    append_number(out, uint32_t(kTakeBars[freeze_bars_index_]));
+                    append(out, " BAR");
+                }
+                break;
+            case TrackRow::capture:
+                // Where it goes: the playing bank.
+                append(out, "TO ");
+                *out++ = bank_letter(int(engine_.project().bank));
+                break;
             default: break;
         }
         *out = 0;
@@ -133,6 +180,29 @@
                 mutate_amount_ = walk(mutate_amount_, delta * 10, 0, 100);
                 post_evolve_config();
                 break;
+            case TrackRow::speed: {
+                // The arrows stop at the ends; OK's step goes round from the slowest.
+                const uint8_t current = engine_.pattern().tracks[selected_].speed;
+                const bool slowest =
+                    uint8_t(kSpeedDisplayOrder[int(Speed::count) - 1]) == current;
+                if (wrap && slowest) walk_speed(-int(Speed::count));
+                else walk_speed(delta);
+                break;
+            }
+            case TrackRow::play:
+                walk_play(delta, wrap);
+                break;
+            case TrackRow::freeze: {
+                // The length, 1, 2, 4 or 8 bars, as RESAMPLE's; it wraps.
+                freeze_bars_index_ = step_wrap(freeze_bars_index_, delta, 0, kTakeBarChoices - 1);
+                char *out = notice_buffer_;
+                append(out, "FREEZE ");
+                append_number(out, uint32_t(kTakeBars[freeze_bars_index_]));
+                append(out, " BAR");
+                *out = 0;
+                notice(notice_buffer_);
+                break;
+            }
             default:
                 break;
         }
@@ -180,6 +250,21 @@
                 end_gesture();
                 notice_logged("HOME: EVOLVE OFF");
                 break;
+            case TrackRow::freeze:
+                // The menu stays open: the row shows WAIT, REC and ON as the take goes.
+                toggle_freeze();
+                break;
+            case TrackRow::sample:
+                // The one thing a user can do about a FAIL, and the only way back after a card
+                // has been out.
+                notice(storage_.request_sample(selected_) ? "LOADING" : "NO SAMPLE");
+                break;
+            case TrackRow::capture:
+                // As a held OK on LAUNCH, into the playing bank: the audio side answers
+                // CAPTURED or NO FREE SLOT IN BANK (service_launch). The menu stays.
+                post(Cmd::launch_capture, uint8_t(engine_.project().bank));
+                notice_logged("CAPTURING");
+                break;
             default:
                 track_row_change(+1, true);
                 break;
@@ -197,7 +282,7 @@
             switch (key) {
                 case ENAGA_KEY_CLR:
                     track_menu_ = false;
-                    notice_logged("GRID");
+                    notice_logged(mode_ == Mode::keys ? "KEYS" : "GRID");
                     break;
                 case ENAGA_KEY_UP:
                 case ENAGA_KEY_DOWN:
@@ -222,8 +307,8 @@
             return true;
         }
         if (track_ok_held_) {
-            // A tap: OK in GRID has no other job, so it says where the menu is (usability
-            // review, 2026-11-28: the hold was only in the FUNC help's sixth page).
+            // A tap: OK in GRID and KEYS has no other job, so it says where the menu is
+            // (usability review, 2026-11-28: the hold was only in the FUNC help's sixth page).
             track_ok_held_ = false;
             notice("HOLD OK: TRACK MENU");
             return true;
@@ -231,9 +316,10 @@
         return false;
     }
 
-    // update(): a held OK opens the menu, and leaving GRID closes it.
+    // update(): a held OK opens the menu, and leaving the screen it opened over closes it (GRID
+    // to KEYS too: HOME twice is a screen change).
     void service_track_menu() {
-        if (track_menu_ && (mode_ != Mode::grid || step_page_)) track_menu_ = false;
+        if (track_menu_ && (!track_menu_screen() || mode_ != track_menu_mode_)) track_menu_ = false;
         if (!track_ok_held_) return;
         if (!track_ok_target()) {
             track_ok_held_ = false;
@@ -242,6 +328,7 @@
         if (uint32_t(last_ms_ - track_ok_down_ms_) < kTrackMenuHoldMs) return;
         track_ok_held_ = false;
         track_menu_ = true;
+        track_menu_mode_ = mode_;
         post_evolve_config();
         char *out = notice_buffer_;
         append(out, "TRACK T");

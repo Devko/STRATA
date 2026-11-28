@@ -56,6 +56,10 @@ struct StepEvent {
     bool accent = false;
     bool slide = false;          // MONO tracks only
     bool trigless = false;       // apply locks, do not start a note
+    // An ENERGY ghost (core/energy.hpp) on an empty step. `step` is the trig it borrows its
+    // locks and chord from, NOT where it plays, so nothing may light that step for it: a ghost
+    // lights no step and no trig glow. On a track whose arp is on it plays one note, not a run.
+    bool ghost = false;
     uint32_t frame = 0;          // frame within the audio block: sample accuracy
     uint8_t ratchet_index = 0;   // 0 for the first hit of a step, then 1, 2, ...
     uint8_t ratchet_count = 1;   // how many hits this step produces in total

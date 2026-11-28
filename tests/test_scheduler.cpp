@@ -2106,7 +2106,7 @@ TEST(random_play_repeats_exactly_for_one_seed_and_differs_for_another) {
 
 // --- LIVE RND (core/liverand.hpp) --------------------------------------------
 
-// LIVE RND on an armed track plays exactly what TRACK PLAY's RND mode of the same size would,
+// LIVE RND on an armed track plays exactly what the track PLAY mode's RND of the same size would,
 // from the same draw; an unarmed track plays its own mode; the pattern is never written.
 TEST(live_rnd_plays_what_track_play_would_on_armed_tracks_only_and_writes_nothing) {
     static Pattern live, programmed, before;

@@ -177,6 +177,20 @@ bool chain_resume(const Project &project, ChainPlayer &player);
 // under the next entry's name.
 bool chain_advance(const Project &project, ChainPlayer &player, uint8_t &bank, uint8_t &slot);
 
+// Song position in: where a chain started at tick 0 and played without a break has got to at
+// `tick`. An outside sequencer's MIDI song position pointer locates Enaga's clock (it sends
+// ENAGA_TRANSPORT_LOCATE under MIDI clock), and STRATA puts the chain where that position falls
+// rather than carrying on from wherever it stopped.
+//
+// Sets `player` to the entry and its finished passes, and `origin` to the tick that entry's
+// pattern started on: the first of a run of consecutive entries naming the same pattern, which
+// is where `chain_advance` leaves it (it does not restart a pattern that simply repeats). A
+// looping chain wraps; in song mode a tick at or past the song's end is `over`, with the player
+// back on entry 1 and `origin` at the end, as a song that played out leaves it. False, with the
+// player inactive, for an empty chain.
+bool chain_locate(const Project &project, uint32_t tick, ChainPlayer &player, uint32_t &origin,
+                  bool &over);
+
 // Song mode: is the pass now ending the chain's last? True on the last pass of the last entry,
 // which is where a song stops instead of wrapping. False for an inactive player, an empty chain
 // and a player whose entry was removed (it has a next entry to go to).
@@ -195,17 +209,64 @@ int chain_entry_mutes(const Project &project, const ChainPlayer &player);
 // 0, leaving the project as it was.
 
 // Replace entry `at` (0 .. length-1). `mutes` is the entry's mute recall, 0-8
-// (`ChainEntry::mutes`); past 8 is refused.
+// (`ChainEntry::mutes`); past 8 is refused. The entry's section fields stay, except that a mute
+// recall drops a CAP: MUT is one field holding `--`, M1-M8 or CAP.
 bool chain_set(Project &project, int at, uint8_t bank, uint8_t slot, uint8_t repeats,
                uint8_t mutes = 0);
 
 // Insert a new entry so that it becomes entry `at` (0 .. length); the entries from `at` on move
 // up one. False when the chain already holds kChainEntries.
+//
+// `extra` is the new entry's section fields (a copy of an entry carries its own); none gives
+// every field `--`. A mute recall drops a CAP, as `chain_set` does; fields `section_valid`
+// refuses refuse the insert.
 bool chain_insert(Project &project, int at, uint8_t bank, uint8_t slot, uint8_t repeats,
-                  uint8_t mutes = 0);
+                  uint8_t mutes = 0, const SectionExtra *extra = nullptr);
 
 // Remove entry `at` (0 .. length-1); the entries after it move down one.
 bool chain_remove(Project &project, int at);
+
+// --- song sections (core/project.hpp, SectionExtra) ------------------------
+
+// True when every field is in its range: CAP 0 or 1 with no mask unless set, SCN 0-16, MRP
+// 0-3, NRG 0-129, BPM 0 or kTempoCentiMin .. kTempoCentiMax.
+bool section_valid(const SectionExtra &extra);
+
+// Replace entry `at`'s section fields. A CAP drops the entry's mute recall. False, with the
+// project as it was, for an index outside the chain or fields `section_valid` refuses.
+bool chain_set_section(Project &project, int at, const SectionExtra &extra);
+
+// The fields of the entry the chain is playing, or null when it plays none (inactive, or the
+// playing entry was removed). Read when an entry starts, as `chain_entry_mutes` is.
+const SectionExtra *chain_entry_section(const Project &project, const ChainPlayer &player);
+
+// The section fields a knob edits, in the order the detail view lays them out after PAT and REP.
+enum class SectionField : uint8_t { mut = 0, scn, mrp, nrg, bpm, trn, count };
+
+// One knob turn of `field` on entry `at`, `delta` clicks:
+//   MUT walks --, M1-M8, CAP; arriving on CAP stores `live_mutes` as its mask.
+//   SCN walks --, 1-16 and MRP --, SNAP, RIDE, BACK, SNAP A, stopping at the ends.
+//   NRG and BPM leave `--` for a value on any turn (ENERGY 0; `tempo_centi`, the tempo playing),
+//   then walk -64..+64 and 20-300 BPM a whole BPM a click. TRN likewise leaves `--` for 0, then
+//   walks -12..+12 a step a click. Back to `--` is `section_clear`.
+// False for an index outside the chain or a field past the six.
+bool section_step(Project &project, int at, SectionField field, int delta, uint8_t live_mutes,
+                  uint16_t tempo_centi);
+
+// `field` of entry `at` back to `--` (push the knob). MUT `--` clears a recall and a CAP alike.
+bool section_clear(Project &project, int at, SectionField field);
+
+// ENERGY from NRG's byte (1-129), and back. Byte 0 is `--` and has no ENERGY.
+constexpr int section_energy(uint8_t byte) { return int(byte) - int(kSectionEnergyZero); }
+constexpr uint8_t section_energy_byte(int energy) {
+    return uint8_t((energy < -64 ? -64 : (energy > 64 ? 64 : energy)) + int(kSectionEnergyZero));
+}
+
+// TRANSPOSE from TRN's byte (1-25), and back. Byte 0 is `--` and has no TRANSPOSE.
+constexpr int section_transpose(uint8_t byte) { return int(byte) - int(kSectionTransposeZero); }
+constexpr uint8_t section_transpose_byte(int steps) {
+    return uint8_t((steps < -12 ? -12 : (steps > 12 ? 12 : steps)) + int(kSectionTransposeZero));
+}
 
 // Keep a running player on the entry it is actually playing across an edit. `chain_insert` and
 // `chain_remove` renumber the entries, and `ChainPlayer::entry` is an index: without these, an

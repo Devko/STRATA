@@ -10,9 +10,11 @@ not append a history. Measurements go to `docs/BUDGET.md`, releases to `CHANGELO
 
 **STRATA runs on the unit and has six releases**, v0.1.0 to v0.5.0 (`docs/PLAN.md` has the
 table). **v0.5.0 (2026-11-27, Enaga 0.4.0) was planned as the release candidate for 1.0**; Roland lifted
-the feature freeze on 2026-11-28. Since the tag,
-`main` has gained the CPU guard fix (#211), 16th-note triplets, stereo width and the chorus send
-(#213-#216, `CHANGELOG.md` "Unreleased"). On the unit, v0.3.1 and builds from `main` boot and
+the feature freeze on 2026-11-28. Since the tag, `main` has gained about thirty
+features and fixes, all in `CHANGELOG.md` "Unreleased": among them the CPU guard fix, triplets,
+stereo width and the chorus send, JAM REC, ENERGY, Track Launch with CAPTURE, VariSpeed, song
+sections, ARR REC, TRANSPOSE, the line input strip, user sounds, WAVE scan and PERFORM's FUNC
+layer. Their combined CPU cost is `scenario_stack` (`docs/BUDGET.md`, "Everything turned up"). On the unit, v0.3.1 and builds from `main` boot and
 play; A01 reads 15-28% on the top line and dense generated parts 40-60% (Roland, 2026-11-27).
 Most of what came after v0.2.0 has not been walked through on the unit yet: the walkthrough at
 the top of `docs/UNIT_CHECKLIST.md` is the next pass.
@@ -23,10 +25,10 @@ the top of `docs/UNIT_CHECKLIST.md` is the next pass.
 
 | | |
 | --- | --- |
-| `make -C host test` | **3,923,641 checks, 0 failures** on `main` after #217 (2026-11-28): `core/`, `dsp/` and all of `app/`. The same under ASan and UBSan, with `ASAN_OPTIONS=detect_leaks=0` |
+| `make -C host test` | **4,876,600 checks, 0 failures** on this branch after the 2026-11-28 review fixes: `core/`, `dsp/` and all of `app/`. The same under ASan and UBSan, with `ASAN_OPTIONS=detect_leaks=0` |
 | CI | `.github/workflows/ci.yml` on every PR: the suite with GCC, again under ASan and UBSan at -O1, the layout check, the screenshots, and the repo checks (`audit_commands.sh`, `check_rules.sh`, `enaga_check.sh`, `check_scripts.sh`, the packaging and build-cache scripts' tests, the card builder's tests). A docs-only PR skips the test jobs. `tools/ci_local.sh` runs the same lanes in WSL. `enaga-upstream.yml` reports new Enaga releases weekly. No device build or scenario runs in CI |
-| `tools/build.sh` | links. Last measured image (cl6x, 2026-11-25): payload 1,224,160 bytes, bss 1,605,248; no BOOT / MCU / SPI sections. `tests/test_memory.cpp` reads these two figures from here, so update both together |
-| `tools/scenarios.sh` | **51 scenarios**, run on Roland's PC only. All 50 that existed passed with cl6x on 2026-11-27 with the chorus and stereo width in; worst **34.20%**, `genload` (GENERATE at full density on all eight tracks). The v0.5.0 build: worst 26.34% cl6x, 55.06% GCC-only. Every run's figures, and what each change cost, are in `docs/BUDGET.md`. `tools/profile_guest.py` gives a scenario's guest profile by function |
+| `tools/build.sh` | links. Last measured image (cl6x, 2026-11-28): payload 1,833,672 bytes, bss 1,684,400 (at `af72cfa`); no BOOT / MCU / SPI sections. `tests/test_memory.cpp` reads these two figures from here, so update both together |
+| `tools/scenarios.sh` | `--changed` is a PR's set (CLAUDE.md, "The check loop"); with no names, every emulator scenario, run on Roland's PC only; each full pass and its worst peak is in `docs/SCENARIO_LOG.md`, what each change cost in `docs/BUDGET.md`. `tools/profile_guest.py` gives a scenario's guest profile by function |
 | unit | v0.3.1 and builds from `main` boot and play. Load on the top line (2026-11-27, main after #208): A01 15-28%, GENERATE on all tracks 40-60%, so the unit reads about 1.2-1.8x the emulator on a light beat and 2.0-2.4x on dense parts (`docs/BUDGET.md`, "GENERATE on every track"). MAX readings from SETUP are still owed |
 | memory | init takes **97.32 MiB of a 120 MiB heap**: 22.68 MiB spare against an 8 MiB headroom rule. `tests/test_memory.cpp` itemises it. Never checked on the unit |
 | milestones | M0–M7 code-complete; every load and feel exit criterion waits for the unit (`docs/PLAN.md`) |
@@ -40,7 +42,7 @@ the top of `docs/UNIT_CHECKLIST.md` is the next pass.
    release). Features keep landing on `main`; 1.0 comes when Roland says so. No thread tags or
    releases on its own: a release runs from its own thread (`docs/release/RELEASING.md`).
 1. **On the unit: the walkthrough** at the top of `docs/UNIT_CHECKLIST.md`: N1-N7 (Enaga 0.4),
-   the smoke test S1-S20, then W1-W64, on a cl6x build from `main` with Enaga 0.4.0 firmware.
+   the smoke test S1-S20, then the W items, on a cl6x build from `main` with Enaga 0.4.0 firmware.
 2. **Write the readings down where they belong**: unit rows in `docs/BUDGET.md` (MAX from SETUP
    on A01 and on GENERATE, to pin both ratios), ticks in the reference half of
    `docs/UNIT_CHECKLIST.md`, the Unit column of `docs/FEATURES.md`, and anything odd as an issue
@@ -49,9 +51,9 @@ the top of `docs/UNIT_CHECKLIST.md` is the next pass.
    guard's thresholds (`core/cpuguard.hpp`: rise at a 70% average over 85 ms or one 90% block,
    fall after a second's worth of blocks under 55%), and the performance mixer's worst case
    (host estimate: about +2 points).
-4. **On Roland's PC, when there is time:** the per-voice costs still owed in `docs/BUDGET.md`
-   (E13 the VA rework, E14 WAVE, both compilers; `scenario_wave` and `scenario_fm` themselves
-   run in every full pass).
+4. **On Roland's PC, when there is time:** a full scenario pass after each batch of merges, logged
+   in `docs/SCENARIO_LOG.md`. Still owed from `docs/BUDGET.md`: WAVE's time to its first table
+   (E14) and `tools/ti_loops.py` on the FM loops (E15).
 5. **Then, from the reference half of `docs/UNIT_CHECKLIST.md`**, the checks that decide whether a
    milestone stands: a start with no card, pulling the card during a save and during sample
    loading, swapping a sample on a sounding track, the M5 30-minute jam, and M7's hour locked to
@@ -115,7 +117,10 @@ turns reach: that every page **draws** on the C674x with the real font, which ma
 draw off the canvas is a hard fault on the unit and a silent pass on the host. `app/ui_lights.hpp`
 logs `scr <MODE> <PAGE>` on each screen change for this, and `notice_logged` puts a notice in the
 log; on the unit the first tells "wedged" from "on a page I did not expect". Enaga's log ring
-keeps 16 lines, so a scenario that logs more loses its first lines.
+keeps 32 lines and emulate.py reports 16, but `tools/enaga_cached.py` reads the ring after every
+1 M-cycle slice, so a scenario's report holds every line since boot (`log_lost` counts any a
+slice overran). Its turns hold each encoder phase until Enaga's decoder has seen it, so a slow
+main-loop pass no longer drops detents. Menus are walked by row name (`tools/menu_rows.py`).
 
 ### 3. Why the unit may read higher than the emulator
 
@@ -240,7 +245,8 @@ file-scope, never locals), `fresh()`, `pump()`, `pump_until_idle()`, `settle()`,
   protocol is in section 6 above.
 
 - **Test order.** The host suite passes in registration order, with `--only` on any one test,
-  as contiguous shards (`--shard K/N`, what `make -C host test JOBS=N` and CI run), and since
+  as contiguous shards (`--shard K/N`, what `make -C host test JOBS=N` and CI run; cut by
+  weight, so a test of seconds is `TEST_WEIGHTED`, tests/check.hpp), and since
   2026-11-26 in shuffled orders: 37 seeds clean with `tools/test_shuffle.sh BIN [SEEDS...]`,
   where they had failed 28-55 checks each. What leaked, now fixed: the scenes and macros (they
   load beside `Project`, so `project_init` left them), every UI cursor and page, the take
@@ -303,16 +309,18 @@ quotes, and a script file in the scratchpad for anything longer than one command
 container none of that applies.
 
 **Threads work in worktrees** (`D:\DEV\STRATA-wt\<name>`, each with its own `ENAGA_BUILD`), made
-by Windows git, because several threads share `D:\DEV\STRATA` and none may switch its branch. A
-new worktree needs `git submodule update --init`. WSL's git cannot read such a worktree, so
-`tools/env.sh` sets `STRATA_GIT` / `STRATA_GH` to Windows' `git.exe` / `gh.exe` there (WSL runs
-them), and `tools/enaga_check.sh` and `tools/publish_release.sh` use those; gh and the GitHub
+by Windows git, because several threads share `D:\DEV\STRATA` and none may switch its branch.
+`tools/wt.sh new <name> [<branch>]` (from WSL) makes one with Enaga checked out, and inside it
+`tools/env.sh` defaults `ENAGA_BUILD` to `$HOME/strata-build-<name>`. WSL's git cannot read such
+a worktree, so `tools/env.sh` sets `STRATA_GIT` / `STRATA_GH` to Windows' `git.exe` / `gh.exe`
+there (WSL runs them), and `tools/enaga_check.sh` and `tools/publish_release.sh` use those; gh and the GitHub
 credentials exist only on Windows anyway. The emulator clone is untracked and lives in the main
 checkout only: `tools/env.sh` finds it from a worktree, and `tools/scenarios.sh` refuses to run
 without one rather than report every scenario's SKIP as a pass.
 
 **Worktrees and build folders pile up.** Each thread leaves a worktree, a branch, an
-`$HOME/strata-build-<name>` in WSL and often a `build\card-*` folder; nothing removes them. When a
-thread's PR has merged, its worktree can go (`git.exe worktree remove`, then `git.exe worktree
-prune`) together with its build folder. Clean up only from a script with absolute paths, and only
-with Roland's yes.
+`$HOME/strata-build-<name>` in WSL and often a `build\card-*` folder. When a thread's PR has
+merged, `tools/wt.sh rm <name>` removes its worktree, local branch and build folder, and refuses
+(changing nothing) while anything there is uncommitted, unpushed, or ignored but not build output;
+`tools/wt.sh list` shows which are which. Anything wider (`build\card-*`, other threads'
+worktrees) only from a script with absolute paths, and only with Roland's yes.

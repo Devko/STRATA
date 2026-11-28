@@ -491,6 +491,7 @@ void Mixer::init(float sample_rate) {
 
     duck_.init(sample_rate);
     for (int t = 0; t < kTracks; t++) chains_[t].init(sample_rate);
+    input_chain_.init(sample_rate);
 
     reverb_high_pass_.reset();
     dj_l_a_.reset();
@@ -674,7 +675,26 @@ void Mixer::add_pair(int track, float *left, float *right, float *tap) {
 
 void Mixer::add_any(int track, float *mono, float *right, float *tap) {
     if (track < 0 || track >= kTracks || frames_ <= 0) return;
-    InsertChain &insert = chains_[track];
+    add_through(chains_[track], mono, right, tap);
+}
+
+void Mixer::add_input(const float *interleaved, int frames) {
+    if (interleaved == nullptr || frames_ <= 0) return;
+    const int n = frames < frames_ ? frames : frames_;
+    // The codec's block is interleaved, the chain works on planes: one pass splits it into the
+    // two scratch blocks, which add_through then consumes like a stereo track's pair.
+    for (int i = 0; i < n; i++) {
+        scratch_[i] = interleaved[2 * i];
+        scratch_r_[i] = interleaved[2 * i + 1];
+    }
+    for (int i = n; i < frames_; i++) {
+        scratch_[i] = 0.0f;
+        scratch_r_[i] = 0.0f;
+    }
+    add_through(input_chain_, scratch_, scratch_r_, nullptr);
+}
+
+void Mixer::add_through(InsertChain &insert, float *mono, float *right, float *tap) {
 
     // A non-zero send gain on a track the app is bothering to render is what "the send is being
     // fed" means here: it costs nothing to test, and the alternative (scanning the bus for a

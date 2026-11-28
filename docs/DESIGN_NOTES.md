@@ -60,12 +60,46 @@ on the PATTERN page (`core/timing.hpp` feel_offset, pattern file section 5, D tu
 `scenario_moveall` turns REL/LEN ALL in the emulator (`move_all_notice` logs each click);
 `scenario_feel` walks FEEL. UNIT_CHECKLIST W29 walks both.
 
+## VariSpeed
+
+**VariSpeed** (CyDrums P7, `core/varispeed.hpp`, docs/CONTROLS.md "VariSpeed") is the whole
+unit, not samples only: a turntable moves everything, and a sample-only speed would leave the
+drums and synths at the old pitch against a moved tempo. FUNC + turn VALUE, because VALUE is
+already the tempo and FUNC + VALUE was free since D1 (it only named the DJ filter's slots). The
+app sets Enaga's clock to the project's tempo times the ratio (`set_clock_tempo`, the one path
+every tempo change takes) and posts `Cmd::set_varispeed`; the engine adds the semitones to the
+LFO's pitch in `run_lfos` and hands the sum to `Machine::set_pitch_mod`, whose default now keeps
+a ratio the non-synth machines multiply in (`pitch_mod_ratio_`, exactly 1 at rest, so the golden
+renders are unchanged). The delay's beat is divided by the ratio in `apply_mixer_bytes`. MID is
+left alone (no pitch bend range to rely on). Not in a LOCK, not saved: the tempo is not either,
+and the project keeps its own tempo so a save is never the moved one. Internal clock only;
+`vari_follow_source` drops it on a CLOCK SRC change. UNIT_CHECKLIST W70, `scenario_varispeed`.
+
+## TRANSPOSE
+
+**TRANSPOSE** (backlog After 1.0 > Performance, `core/transpose.hpp`, docs/CONTROLS.md
+"TRANSPOSE") is FUNC + the screen keys on every screen: the help keeps LEFT/RIGHT for its pages,
+and a gesture that sometimes paged the help would not be playable. The engine shifts AFTER the
+fold, at each place a note becomes a machine's trig on a track `transpose_moves` (=
+`machine_folds_note`) allows: `fire` (the plain note and every chord note), `arp_play` (every arp
+hit, a KEYS arp's included, so `fire` hands the arp the folded notes unmoved), `Cmd::trigger_note`
+and `roll_fire`, all through `transpose_apply`. `key_shift_[track][note]` keeps how far a held
+key moved so `Cmd::release_note` lets go of the pitch that sounded. Scale steps by default
+(Roland, 2026-11-28), `scale_step` on the folded note, with an out-of-key note (a KEYS pad)
+keeping its distance to its fold; the FUNC menu's TRANSPOSE row (not saved) makes it semitones,
+where fold(x, root) + n == fold(x + n, root + n) away from the MIDI range's edges
+(tests/test_transpose.cpp checks every note, root, scale and shift), so "the key moves with it"
+needs no second fold. The amount is in a LOCK (`LiveState` grew a byte), the row is not. A section field (NRG's sibling) is the
+natural next step and not built. UNIT_CHECKLIST W75, `scenario_transpose`.
+
 ## LIVE RND
 
 **LIVE RND** (CyDrums P1's live half, `core/liverand.hpp`, docs/CONTROLS.md "LIVE RND"): FUNC +
-turn D in PERFORM sets a unit (OFF, 1-16) for the armed tracks, FUNC + push D arms or disarms the
-selected one (all eight at start). It lives in `PerformState` (`rnd_unit`, `rnd_armed`) and the
-scheduler asks `live_play_mode` for each track's mode every tick, so it reuses TRACK PLAY's RND
+turn D in PERFORM sets a unit (OFF, 1-16) for the armed tracks, FUNC + lower pad arms or disarms
+that one. The set at start is every track but KICK's (D3): the UI computes it each time LIVE RND
+comes on from OFF until the set is chosen by hand (`rnd_armed_chosen_`, which a LOCK jump sets too),
+so the engine's `rnd_armed` default of 0xFF never reaches the sound. It lives in `PerformState` (`rnd_unit`, `rnd_armed`) and the
+scheduler asks `live_play_mode` for each track's mode every tick, so it reuses the track PLAY mode's RND
 draw and never writes the pattern; the recorder asks the same function. In a LOCK (`LiveState`
 grew two bytes), not saved. Default armed set is all eight: Roland may prefer the kick out by
 default. `scenario_liverand` walks it; UNIT_CHECKLIST W36.
@@ -162,8 +196,8 @@ to the pattern as last saved" is NOT built: it needs a copy of every pattern as 
 with no lock says `NO LOCK: HOLD STORES`. Undo is untouched by a jump. The emulator cannot press
 pads, so LOCK is host-tested only (tests/test_lockstore.cpp, tests/test_ui.cpp); UNIT_CHECKLIST
 20c walks it. FX GLIDE lives in the UI (`perf_ride_to`, `core/perffx.hpp` `perf_ride_at`); the
-UI tests run with it OFF (`fresh()`), and its own tests turn it on. FUNC + MUTATE, FUNC + push D and
-FUNC + VALUE only show a hint now (`notice_logged` in app/app.hpp), so LOCK can take FUNC +
+UI tests run with it OFF (`fresh()`), and its own tests turn it on. FUNC + MUTATE and FUNC + VALUE
+only showed a hint then (FUNC + push D too, the kill for all bands since D2) (`notice_logged` in app/app.hpp), so LOCK can take FUNC +
 MUTATE outright. The master DJ byte stayed on MIXER's MST page on purpose: an old project saved
 with it set must be able to put it back.
 
@@ -188,6 +222,24 @@ seed, track, step, pass and parameter. The scheduler looks ahead for a slid step
 before the LFOs. Hold STEP + FUNC + push no longer clears a lock: it toggles the slide.
 `scenario_locks` walks both gestures; UNIT_CHECKLIST W37.
 
+## WAVE scan (the SCAN page)
+
+CyDrums' S1. The page is MOD SPD END CRV at parameter ids **40-43**, not 32-35: ids 32-36 are
+taken as lock ids by a step's extra chord notes (core/stepnotes.hpp), and a lock id is a
+parameter index, so 32-39 is a hole that no parameter, scene bit, macro target or file byte uses
+(`track_param_real`, `kit_param_real`; kTrackParams and kKitParams are 44, kKitRealParams 36).
+The EDIT pages follow: `Page::scn` is 10, pages 8 and 9 are skipped like any dead page. The KIT
+section (16) and the PERFORM section (9) hold only the four real bytes; an older file loads MOD
+OFF. MOD is a number 0-9 (format decision C), clamped on the way in.
+
+The scan is per voice, restarted in `gate_on` unless the note slid, and runs at control rate: the
+shape (mode, then CRV as u^c) is worked out every fourth control step and ramped between, which
+took its cost from 12-24% of a WAVE voice to 2-6% on the host (the power and the cosine were the
+cost, not the reader). SPD is the LFO's RAT; a synced SPD needs the tempo, which reaches the
+machine through `Machine::set_tick_frames` (Engine::run_lfos sends it when it or the machine
+changes). RAND and DRFT draw from their own LCG, so the noise stream and the golden renders are
+unchanged. The SCN bytes are not LFO or mod-slot destinations (those stop at OSC).
+
 ## Track Launch
 
 `core/launch.hpp` has the design and Roland's decisions (2026-11-27). The scheduler plays each
@@ -200,3 +252,147 @@ guard, listing every track-edit command. CAPTURE copies every lane's part and co
 pool into one free slot, then switches to it keeping each lane's origin, so nothing restarts.
 LAUNCH is PROJECT's last page so the page walks in older tests and scenarios stay valid.
 `tests/scenario_launch.sh` drives it in the emulator; CAPTURE and held pads are host-tested only.
+A LOCK holds the playing pattern and the lane sources apart (`LiveState::lanes`, review H1,
+Roland 2026-11-28): a jump or swap-back lands each changed lane as a NOW launch
+(`land_launch`), so it keeps counting from where it counted. Storing the composed mix wrote
+borrowed parts over the pattern's own tracks and made the swap-back lossy.
+
+## Tap tempo, the nudge, PROG CHG OUT and song position in
+
+The arithmetic is `core/taptempo.hpp` (taps, nudge) and `core/queue.hpp`'s `chain_locate`.
+**Tap tempo** hangs off `value_reset`: a VALUE tap that resets nothing, where `value_on_tempo()`
+says VALUE turns the tempo, is a tap, stamped at the press (`value_down_ms_`). It sets the tempo
+the way a VALUE turn does (`set_tempo`, `post_tempo`, `adopted_tempo_centi_`). **The nudge** is
+main context only: FUNC + push VALUE + turn sets the clock to `nudged_bpm` and `update()` puts
+`tempo_tenths_` back once `nudge_due`; nothing is posted, so the project's tempo and the
+tempo-synced delay never see it. FUNC + turn VALUE without the push is VariSpeed; the nudge and the end of it go through VariSpeed's ratio (the release through `set_clock_tempo`), and tap tempo sets the clock through `set_clock_tempo` as a turn does.
+
+**PROG CHG OUT** is sent from `Engine::switch_pattern`, so every path that changes the live
+pattern sends it, a program change IN included (same channel, same number: a MIDI loop back into
+STRATA lands on the pattern already playing, which `switch_pattern` ignores). The user's MIDI CH
+is read in the main context and posted as `Cmd::set_midi_channel` when it changes; a refused send
+is kept in `program_pending_` and retried each block. The byte sits on the end of PROJECT.BIN's
+MIDI section (section 6, 9 bytes), so a v0.5.0 build reads the eight channels and skips it.
+
+**Song position in.** Enaga does the MIDI parsing (`firmware/kernel/clock.c`): under CLOCK SRC
+MIDI an SPP while stopped sets the clock to `16ths x 24` and raises `ENAGA_TRANSPORT_LOCATE`; the
+CONTINUE that follows resumes there. `on_transport` posts `Cmd::locate` only when the source is
+MIDI, because under the internal clock LOCATE is STRATA's own restart (`locate(0)`), which
+`Cmd::restart` handles. `Engine::locate` walks the chain from tick 0 (`chain_locate`: entry, pass,
+and the start of the run of entries on the same pattern, since `chain_advance` keeps the origin
+across a repeated pattern), sets `origin_` and every lane origin to it and `tick_` to the
+position, so `resolve_tick` sees no jump. A pending queue lands at once (no chain) or is dropped
+(chain). The emulator cannot send MIDI in, so only the host suite and the unit (W72) cover it.
+
+## Your own sounds and copy / paste in SOUNDS
+
+`core/usersounds.hpp` has the design and the file's bytes; `app/storage.hpp` ("your own sounds")
+the protocol. The decisions behind it:
+
+- **One file per machine, not per sound**: `SOUNDS/<MCH>.BIN`, sixteen slots, read when SOUNDS
+  opens on that machine and written whole after each save, rename or delete (a few hundred bytes,
+  one pass, through files::save's .TMP). One read per list, and no scan of sixteen files.
+- **Beside the projects, never in them**, like the kit library: every project file is unchanged,
+  so every older project opens as it did, and a sound saved once is in every project.
+- **Versioned like every STRATA file**: the container's version, and in the record its own length
+  and parameter count, so a later build can save more per sound (the WAVE scan page's bytes) and
+  this one still reads it, and a record with fewer bytes takes the machine's defaults for the rest.
+  A file this build cannot read is never written over (`failed`), so nothing a newer build or a
+  damaged card holds is lost by saving.
+- **A saved sound is all of the sound** (Roland, 2026-11-28: "save should have all parameter of
+  a sound"): loading writes every real parameter (`user_sound_owns` = `kit_param_real`), FX, LFO
+  and ARP included, and the kit settings of the LFO and ARP pages (`UserSoundExtras`: TRIG, the
+  mod slots, VAR, RHYTHM, ACCENT, RATCHET), which travel in the file's optional section 2 (a file
+  without it loads them as a fresh track's) and reach the engine by the commands their pages post.
+  A factory sound still writes only `sound_preset_writes`. The mixer's settings (fader, chorus,
+  WID, duck, choke group) stay the track's: they are how it sits beside the others.
+- **AS WAS after a saved sound or paste puts back everything** (`Engine::sound_back_all_`, set
+  when `Cmd::sound_bytes` lands): every parameter and the kit settings as they were when the list
+  opened. After factory sounds only, it puts back just their bytes, so a pan move made while
+  trying them stays.
+- **Loading goes as bytes, not a preset index**: `Cmd::sound_bytes` carries eight a command (b-e
+  and `u`), six commands a sound, then the seven kit-setting commands, posted together so they
+  land in one block. No shared buffer
+  between the contexts is needed.
+- **Copy is a clipboard row, not a target picker**: FUNC+UP takes the track's sound into the UI's
+  clipboard and OK on the PASTE row loads it, so "paste" is the list's own OK. Pasting onto
+  another machine posts `Cmd::set_machine` first; `Cmd::sound_preset`'s AS WAS remembers the
+  machine too and switches it back (`Engine::switch_machine`).
+- `tests/scenario_usersounds.sh` walks save, load, copy, paste and AS WAS; UNIT_CHECKLIST W68.
+
+## Line input as a mixer strip
+
+The jam review's idea 4. `ProjectSettings::input` holds the strip (`InputField` order, PROJECT.BIN's
+optional section 9, which grows on the end: a short section reads what it has). It is a project
+setting, not a kit one, for MIDI OUT's reason: it is cabling. `Engine::run_input` runs after the
+tracks, through `Mixer::add_input`, a ninth `InsertChain` prepared in TON mode (no drive), so the
+strip has a fader (square law, 100 = 0 dB), PAN, the three sends, the kit's duck and TON. The MUTE
+BUS scales its fader as it does the tracks'; the send raise and the bounce tap do not reach it.
+Turning it on resets the chain so its gain ramps from 0; off, it runs one more block prepared at
+level 0. The codec route is set by the UI (`service_input_route`, main context only), whenever the
+strip is on and its jack or gain differs from what was last applied; RESAMPLE's own input sources
+invalidate that and win while RESAMPLE is up. The IN pages sit before MST so the scenarios that go
+round to MST and EQ still count the same; CHO moved two pages further (scenario_chorus, m7).
+UNIT_CHECKLIST W69.
+
+## Song sections
+
+Roland approved the arrangement concept on 2026-11-28 (no section names, no kit per section, MOVE's D free; ARR REC and launch capture follow in their own PRs).
+Each chain entry has a `SectionExtra` (core/project.hpp), saved in PROJECT.BIN section 10: a
+layout byte, then 8 bytes for each of the 64 entries. A CAP entry writes `--` into section 5, so
+a build without section 10 leaves the mutes alone rather than recalling a stale state. The reader
+reads anything it does not understand as `--`. `chain_insert`, `chain_remove` and
+`chain_normalize` move the extras with their entries.
+
+`Engine::chain_entry_started` applies the fields on the audio side as an entry starts: the mute
+recall or CAP mask, the scene on side B, the morph (SNAP and SNAP A at once; RIDE and BACK through
+`morph_ride_*`, a rate worked out once and stepped in `resolve_tick`, since the C674x has no
+integer divide), the energy. A BPM goes to the main context through `Status::tempo_due`,
+because only it may call `clock::set_tempo`; under an outside clock the UI skips it and says so
+once a run. Every edit is a `ChainEdit` the audio side applies as a delta to the authoritative
+record. Quick fill (hold OK) writes SNAP or SNAP A, the morph's nearer side, so a filled section
+brings the morph back after one that moved it.
+`tests/scenario_sections.sh` drives the view and a section in the emulator.
+
+## ARR REC
+
+The second step of the arrangement concept (Roland, 2026-11-28). `core/arrrec.hpp` is plain
+arithmetic on a `Project`: `arr_pass_begin` / `arr_pass_end` with ticks the caller passes, so the
+host tests run synthetic jams. The engine owns the take and its `ArrBackup` (one level, 776 bytes)
+on the audio side, where the chain is written; the main context sees `Status::arr_*`.
+
+A pass begins wherever `resolve_tick` sees one begin: a boundary crossed, `switch_pattern` (a
+flag, so a LOCK jump or a NOW change counts), or `origin_` moved (a queued change restarts the
+pattern without crossing, even to the pattern already playing). A transport that jumped back
+ends the pass at the tick before the jump. The pass's state is taken at its start and again on
+each of its first `kQueueGraceTicks`, so a late press belongs to the pass it was meant for, the
+same forgiveness as the queue. One rule decides every cut pass: written when at least half of it
+was recorded, compared as `played * 2 >= loop` (no integer divide on the C674x).
+
+Comparing a pass with the chain's last entry uses the morph's side (past half way is B), as
+quick fill does, so a small wiggle of the morph does not split a section. BPM is `--` under an
+outside clock, whose drift would otherwise split a section every pass. A take that wrote
+nothing restores the backup at once. ARR UNDO swaps rather than restores, so it is its own
+redo. The backup is dropped by the next take and by a project load, and kept across a save
+(an autosave would otherwise take the undo away at a random moment; the concept said "until a
+save"). Starting the chain ends a take, and so does STOP (`was_running_` falling). The passes
+come with no command, so the UI marks PROJECT.BIN dirty from `Status::arr_passes`.
+
+Found on the way: a jump back of the transport left `boundary_known_` set when the origin was
+already 0 (a plain STOP and PLAY), so the first pass ran to the old run's boundary. Fixed in
+`resolve_tick`; `engine_a_pass_after_stop_and_play_ends_on_its_own_boundary`.
+`tests/scenario_arrrec.sh` records a jam in the emulator.
+
+**Track Launch** (the concept's choice 4, third step). `ArrState::lanes` holds each borrowed
+lane's source, refreshed in the grace ticks like the rest, so a launch landing on the boundary
+(it lands after `arr_tick`) belongs to the pass it starts. A pass is written as a pattern: the
+one its mix (pattern and lane sources) went into last time when it is the same as the last pass
+written, the live one when nothing is borrowed, otherwise a capture. The capture runs when the
+pass ends, so `launch_compose_lanes` composes from the pass's recorded sources rather than the
+project's, which a pattern change on that tick has already reset, and
+`launch_capture_slot_avoiding` skips both what the pass played and what plays now. Only the
+last pass written is remembered: the same mix after something else is captured again, since a
+part may have been edited in between. A full chain is checked before the capture, so the take's
+end fills no slot. No command writes the slot, so `Status::arr_captures` and
+`arr_capture_banks` tell the UI which banks to save. ARR UNDO swaps the chain only: captured
+slots stay. `tests/scenario_arrlaunch.sh` drives it in the emulator.

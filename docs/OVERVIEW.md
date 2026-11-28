@@ -71,6 +71,8 @@ any machine. The factory kit:
   pressure-sensitive keyboard, with the pattern's scale lit, while the STEP keys stay steps
 - 8 banks of 16 patterns with queued changes, a pattern menu (copy, paste, clear, double), and
   a chain that becomes a song: each entry can recall a mute state, and SONG mode stops at the end
+- **ARR REC** writes a jam into the chain as you play it, a section for each change of pattern,
+  mutes, scene, morph, ENERGY or tempo, to replay and edit afterwards
 - **GENERATE** a drum or melodic part in the key, and **EVOLVE** it every few loops, orbiting
   the part or drifting away from it (hold OK in GRID)
 - 16 levels of undo
@@ -91,6 +93,8 @@ any machine. The factory kit:
 - **ENERGY:** one knob from a breakdown to the peak: turned down, every track drops its weakest
   hits, hats first and kick last; turned up, quiet ghosts fill the empty off-beats. The pattern
   itself never changes
+- **TRANSPOSE:** FUNC + the screen keys walk the melodic tracks through the key a step at a time
+  (or by semitones), while the drums and sliced loops stay put
 - **LOCK:** store the live set of a pattern, change everything, and jump back in one tap; tap
   again to swap back
 - **Freeze** a track to a loop in memory to save CPU, **resample** the master or an input, or

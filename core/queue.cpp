@@ -297,6 +297,56 @@ bool chain_current(const Project &project, const ChainPlayer &player, uint8_t &b
     return true;
 }
 
+bool chain_locate(const Project &project, uint32_t tick, ChainPlayer &player, uint32_t &origin,
+                  bool &over) {
+    over = false;
+    origin = 0;
+    const int length = chain_length(project);
+    if (length <= 0) {
+        player = ChainPlayer{};
+        return false;
+    }
+    // One pass through the chain, in ticks. At most 64 entries x 255 repeats x 64 steps x 24
+    // ticks, about 25 million: no overflow.
+    uint32_t total = 0;
+    for (int i = 0; i < length; i++) {
+        const ChainEntry &entry = project.chain[i];
+        const Pattern &pattern = project.patterns[entry.bank][entry.slot];
+        total += uint32_t(entry.repeats) * uint32_t(master_loop_ticks(pattern));
+    }
+    player.active = true;
+    player.orphaned = false;
+    player.entry = 0;
+    player.played = 0;
+    if (project.settings.chain_song && tick >= total) {
+        over = true;
+        origin = total;
+        return true;
+    }
+    // A looping chain: the position inside this time round, and where this time round began.
+    // One division, once per locate: not a hot path.
+    const uint32_t within = tick % total;
+    const uint32_t round = tick - within;
+
+    uint32_t at = 0, run = 0;
+    for (int i = 0; i < length; i++) {
+        const ChainEntry &entry = project.chain[i];
+        const uint32_t loop = uint32_t(master_loop_ticks(project.patterns[entry.bank][entry.slot]));
+        const uint32_t span = uint32_t(entry.repeats) * loop;
+        const bool same = i > 0 && entry.bank == project.chain[i - 1].bank &&
+                          entry.slot == project.chain[i - 1].slot;
+        if (!same) run = at;
+        if (within < at + span) {
+            player.entry = uint8_t(i);
+            player.played = uint8_t((within - at) / loop);
+            origin = round + run;
+            return true;
+        }
+        at += span;
+    }
+    return true;   // not reached: `within` is below `total`
+}
+
 // --- editing a chain -----------------------------------------------------------
 
 namespace {
@@ -305,7 +355,10 @@ namespace {
 // treat `length` as the truth. Returns the length.
 int chain_normalize(Project &project) {
     const int length = chain_length(project);
-    for (int i = length; i < kChainEntries; i++) project.chain[i] = ChainEntry{};
+    for (int i = length; i < kChainEntries; i++) {
+        project.chain[i] = ChainEntry{};
+        project.chain_extra[i] = SectionExtra{};
+    }
     project.settings.chain_length = uint8_t(length);
     return length;
 }
@@ -324,17 +377,33 @@ bool chain_set(Project &project, int at, uint8_t bank, uint8_t slot, uint8_t rep
     if (at < 0 || at >= chain_length(project)) return false;
     chain_normalize(project);
     project.chain[at] = ChainEntry{bank, slot, repeats, mutes};
+    // A mute recall replaces a CAP: the two are one field, MUT, on the screen.
+    if (mutes != 0) {
+        project.chain_extra[at].cap = 0;
+        project.chain_extra[at].mask = 0;
+    }
     return true;
 }
 
 bool chain_insert(Project &project, int at, uint8_t bank, uint8_t slot, uint8_t repeats,
-                  uint8_t mutes) {
+                  uint8_t mutes, const SectionExtra *extra) {
     if (!chain_entry_valid(bank, slot, repeats, mutes)) return false;
+    if (extra != nullptr && !section_valid(*extra)) return false;
     const int usable = chain_length(project);
     if (at < 0 || at > usable || usable >= kChainEntries) return false;
+    // Read before the shift: `extra` may point into the chain itself (a copy of an entry).
+    SectionExtra fields = extra != nullptr ? *extra : SectionExtra{};
+    if (mutes != 0) {
+        fields.cap = 0;
+        fields.mask = 0;
+    }
     const int length = chain_normalize(project);
-    for (int i = length; i > at; i--) project.chain[i] = project.chain[i - 1];
+    for (int i = length; i > at; i--) {
+        project.chain[i] = project.chain[i - 1];
+        project.chain_extra[i] = project.chain_extra[i - 1];
+    }
     project.chain[at] = ChainEntry{bank, slot, repeats, mutes};
+    project.chain_extra[at] = fields;
     project.settings.chain_length = uint8_t(length + 1);
     return true;
 }
@@ -342,8 +411,12 @@ bool chain_insert(Project &project, int at, uint8_t bank, uint8_t slot, uint8_t 
 bool chain_remove(Project &project, int at) {
     if (at < 0 || at >= chain_length(project)) return false;
     const int length = chain_normalize(project);
-    for (int i = at; i + 1 < length; i++) project.chain[i] = project.chain[i + 1];
+    for (int i = at; i + 1 < length; i++) {
+        project.chain[i] = project.chain[i + 1];
+        project.chain_extra[i] = project.chain_extra[i + 1];
+    }
     project.chain[length - 1] = ChainEntry{};
+    project.chain_extra[length - 1] = SectionExtra{};
     project.settings.chain_length = uint8_t(length - 1);
     return true;
 }
@@ -378,6 +451,112 @@ void chain_player_removed(ChainPlayer &player, int at) {
         player.orphaned = true;
         player.played = 0;
     }
+}
+
+
+bool section_valid(const SectionExtra &extra) {
+    return extra.cap <= 1 && (extra.cap != 0 || extra.mask == 0) &&
+           extra.scene <= kSectionScenesMax && extra.morph <= kSectionMorphMax &&
+           extra.energy <= kSectionEnergyMax && extra.transpose <= kSectionTransposeMax &&
+           (extra.bpm == 0 || (extra.bpm >= kTempoCentiMin && extra.bpm <= kTempoCentiMax));
+}
+
+bool chain_set_section(Project &project, int at, const SectionExtra &extra) {
+    if (!section_valid(extra)) return false;
+    if (at < 0 || at >= chain_length(project)) return false;
+    chain_normalize(project);
+    const SectionExtra &fields = extra;
+    project.chain_extra[at] = fields;
+    // CAP replaces a mute recall: one field, MUT, on the screen and in the file.
+    if (fields.cap != 0) project.chain[at].mutes = 0;
+    return true;
+}
+
+namespace {
+
+int clamp_walk(int value, int delta, int low, int high) {
+    const int next = value + delta;
+    return next < low ? low : (next > high ? high : next);
+}
+
+}  // namespace
+
+bool section_step(Project &project, int at, SectionField field, int delta, uint8_t live_mutes,
+                  uint16_t tempo_centi) {
+    if (at < 0 || at >= chain_length(project) || field >= SectionField::count) return false;
+    chain_normalize(project);
+    SectionExtra &e = project.chain_extra[at];
+    ChainEntry &entry = project.chain[at];
+    switch (field) {
+        case SectionField::mut: {
+            // One line of ten: --, M1 .. M8, CAP.
+            const int now = e.cap != 0 ? int(kChainMutesMax) + 1 : int(entry.mutes);
+            const int next = clamp_walk(now, delta, 0, int(kChainMutesMax) + 1);
+            if (next == now) break;
+            if (next > int(kChainMutesMax)) {
+                e.cap = 1;
+                e.mask = live_mutes;
+                entry.mutes = 0;
+            } else {
+                e.cap = 0;
+                e.mask = 0;
+                entry.mutes = uint8_t(next);
+            }
+            break;
+        }
+        case SectionField::scn:
+            e.scene = uint8_t(clamp_walk(int(e.scene), delta, 0, int(kSectionScenesMax)));
+            break;
+        case SectionField::mrp:
+            e.morph = uint8_t(clamp_walk(int(e.morph), delta, 0, int(kSectionMorphMax)));
+            break;
+        case SectionField::nrg:
+            e.energy = e.energy == 0 ? kSectionEnergyZero
+                                     : uint8_t(clamp_walk(int(e.energy), delta, 1,
+                                                          int(kSectionEnergyMax)));
+            break;
+        case SectionField::bpm: {
+            const int from = e.bpm != 0 ? int(e.bpm) : int(tempo_centi);
+            const int step = e.bpm != 0 ? delta * 100 : 0;
+            e.bpm = uint16_t(clamp_walk(from, step, int(kTempoCentiMin), int(kTempoCentiMax)));
+            break;
+        }
+        case SectionField::trn:
+            e.transpose = e.transpose == 0 ? kSectionTransposeZero
+                                           : uint8_t(clamp_walk(int(e.transpose), delta, 1,
+                                                                int(kSectionTransposeMax)));
+            break;
+        case SectionField::count:
+            break;
+    }
+    return true;
+}
+
+bool section_clear(Project &project, int at, SectionField field) {
+    if (at < 0 || at >= chain_length(project) || field >= SectionField::count) return false;
+    chain_normalize(project);
+    SectionExtra &e = project.chain_extra[at];
+    switch (field) {
+        case SectionField::mut:
+            e.cap = 0;
+            e.mask = 0;
+            project.chain[at].mutes = 0;
+            break;
+        case SectionField::scn: e.scene = 0; break;
+        case SectionField::mrp: e.morph = kSectionMorphNone; break;
+        case SectionField::nrg: e.energy = 0; break;
+        case SectionField::bpm: e.bpm = 0; break;
+        case SectionField::trn: e.transpose = 0; break;
+        case SectionField::count: break;
+    }
+    return true;
+}
+
+const SectionExtra *chain_entry_section(const Project &project, const ChainPlayer &player) {
+    if (!player.active || player.orphaned) return nullptr;
+    const ChainCursor cursor = chain_cursor(project, player);
+    if (cursor.length <= 0) return nullptr;
+    return &project.chain_extra[cursor.entry];
 }
 
 }  // namespace strata

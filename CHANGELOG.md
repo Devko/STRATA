@@ -8,23 +8,139 @@ the project file format or the controls.
 
 ### Added
 
+- **TRN: a song section sets TRANSPOSE.** The SECTION view's MOVE page has TRN on D (`--`,
+  -12..+12, in the FUNC menu row's unit), applied as the entry starts; quick fill takes the
+  TRANSPOSE playing, the CHAIN list shows it (`T+2`), and **ARR REC records it**, so a key change
+  made in a take replays. Saved in a byte of PROJECT.BIN's song section that older builds wrote 0
+  and ignore.
+- **COPY on a launched lane.** COPY only reads, so the read-only guard lets it through, and it
+  copies the part the lane plays: paste it elsewhere to keep one borrowed part.
+- New emulator scenario `stack`: generated parts on all eight tracks with the line input on, REL
+  ALL, LEN ALL and ENERGY at the top, VariSpeed +12.0, TRANSPOSE and JAM REC running, the
+  features of 2026-11-28 measured together (`docs/BUDGET.md`, "Everything turned up").
+
+- **PERFORM shows its FUNC layer.** While FUNC is held in PERFORM the four gauges read `REL`,
+  `LEN`, `NRG` and `RND` with where REL ALL, LEN ALL, ENERGY and LIVE RND are, so the turn you are
+  about to make is on the screen. The FUNC help's second PERFORM page is PERFORM LIVE, and its
+  first page's last line ends `< LAST`: LEFT goes round to the last page.
+- **FUNC + push D kills all three bands**, on every screen (`KILL ALL`); with all three out, it
+  brings them back (`ALL BANDS BACK`).
+- **CAPTURE in GRID's track menu.** The track menu's last row, one UP from GENERATE, CAPTUREs what
+  plays, launched lanes and all, into the first free slot of the playing bank. An edit refused on
+  a launched lane says `T3 B07 READ ONLY` and then `HOLD OK: CAPTURE`, taking turns. The first
+  lower pad on LAUNCH says `PADS PICK LANES`, since it makes no sound there.
+
+- **TRANSPOSE: FUNC + the screen keys, on every screen.** The melodic tracks a step of the scale
+  down (SEL<) or up (SEL>), 12 steps either way, staying in the key (`TRANSPOSE +2 IN KEY`); both
+  screen keys together go back to 0. The FUNC menu's new TRANSPOSE row switches to semitones
+  (`SEMI`), where the key moves with the notes and the notice names it in sharps
+  (`TRANSPOSE +3 C`). The tracks that move are the ones that fold into the scale (VA MONO and
+  POLY, WAVE MONO and POLY, FM4, GRAIN, SAMPLE while unsliced); drums, sliced samples and MID stay.
+  Steps, chords, the arp, pads, KEYS, MIDI IN notes and MIDI OUT all follow; a held key lets go
+  at the pitch it started. Nothing is written or saved; a LOCK holds it. PERFORM and the live
+  strip show `TR+3`. New emulator scenario `transpose`.
+- **ARR REC: a jam written into the chain.** A FUNC menu row under JAM REC. On, it keeps the
+  chain for undo, empties it, and from the next PLAY (or at once, mid-pass) writes every pass of
+  the jam into it as song sections: the same pattern with the same mutes, scene, morph side,
+  ENERGY and tempo adds a repeat, anything else starts a new entry holding them (MUT CAP, SCN,
+  MRP SNAP or SNAP A, NRG, BPM). A change made in a pass shows from the next one; one in the
+  first few ticks of a pass counts for that pass. X16 starts a new entry of the same; the take
+  ends at 64 entries (`ARR FULL 64 SECTIONS`), on STOP, on OK again, or when the chain is turned
+  on (`ARR 23 SECTIONS`). A pass cut short counts when at least half of it was played. A take
+  that kept nothing gives the old chain back (`ARR NOTHING KEPT`). ARR UNDO, a row under CHAIN
+  END, swaps the chain from before the take back in, and again swaps the take back. While a take
+  runs the live strip reads `ARR7` and the REC key blinks as for JAM REC. Under an outside clock
+  the sections carry no BPM. Independent of JAM REC. New emulator scenario `arrrec`.
+- **ARR REC keeps Track Launch.** A pass in which a lane plays another pattern's part is written
+  into the first free slot of the playing pattern's bank, as CAPTURE would write it but without
+  switching, and the chain entry names that slot (`LAUNCH IN A05`). More passes of the same mix
+  in a row share the slot. With no free slot or too many locks the pass is written as the playing
+  pattern alone (`LAUNCH NOT KEPT`). New emulator scenario `arrlaunch`.
+- **WAVE scan modes: the SCAN page.** WAVE MONO and WAVE POLY have a ninth EDIT page, SCAN:
+  MOD moves the wavetable position from POS towards END with each note (OFF, FWD, REV, LOOP,
+  LREV, PING, RET, SINE, RAND, DRFT), SPD sets the speed free or synced like the LFO's RAT, END
+  where it heads and CRV the curve. The page draws the path. A slid note carries on its scan; a
+  chord scans together. Locks, scenes and macros reach it; LFOs and mod slots do not. SOUNDS gains
+  SCANLD and WOBBLE (WAVE MONO) and DRIFT and SWIRL (WAVE POLY). Projects saved before it load
+  with MOD OFF and sound as they did; the kit and the performance files gain an optional section.
+  New emulator scenario `wavescan`.
+- **Tap tempo and nudge.** Tap VALUE in time, twice or more, wherever VALUE turns the tempo
+  (`TAP 128.0`); the tempo follows the last four taps. FUNC + push VALUE + turn nudges: 4% faster
+  or slower for a quarter of a second a detent, then back to the set tempo, to line STRATA up by
+  ear with something that sends no clock.
+- **MIDI song position pointer.** Under MIDI clock, a master that moves its song position while
+  stopped puts STRATA's chain on the entry and pass that position falls in (with the chain off,
+  the pattern runs from the top of the song), so a CONTINUE from the middle of a song plays the
+  right section.
+- **PROG CHG OUT.** A FUNC menu row: every pattern change sends the pattern's number as a program
+  change on your MIDI CH, so a second STRATA or a sequencer follows. Off in a new project; saved
+  on the end of PROJECT.BIN's MIDI section (451 bytes), which older builds skip.
+- **Song sections on the chain.** Push A on a CHAIN entry opens its SECTION view: besides the
+  pattern, repeats and mute state, an entry can put a scene on morph side B (SCN), jump the morph to
+  B or A, or ride it there over the whole entry (MRP SNAP, SNAP A, RIDE, BACK), set ENERGY (NRG) and the
+  tempo (BPM) as it starts, and store an exact mute mask (MUT CAP). `--` leaves each one as it is,
+  and the hands take over until the next entry. Hold OK in the view to fill the fields from what
+  plays. A BPM is skipped under an outside clock (`EXT CLOCK: BPM SKIPPED`). Saved in PROJECT.BIN
+  section 10: older projects open with every field `--`, and older builds play the chain as before.
+  New emulator scenario `sections`.
+- **VariSpeed: FUNC + turn VALUE, on every screen.** The whole unit faster or slower like a
+  turntable: the tempo and the pitch of every machine move together, an octave either way in
+  tenths of a semitone (`VARISPEED +1.2 140.3`, the amount and the tempo it runs at). The drums,
+  SAMPLE and GRAIN read faster, the synths and FM4 move by semitones, held notes and ringing hits
+  included, and the delay's echoes keep to the moved tempo. The project keeps its own tempo, so a
+  save stores the tempo the song was written at; VALUE alone still turns it. Rest is a detent,
+  and FUNC + tap VALUE (with no effect picked) snaps back. Internal clock only: refused with
+  `EXT CLOCK`, and back to rest when CLOCK SRC changes. The live strip says `VS+` or `VS-`. FUNC
+  + VALUE used to say `DJ FILTER: SLOT 1/2`. New emulator scenario `varispeed`.
+- **Line input as a mixer channel.** MIXER's new IN and IN+ pages, after CHO, play whatever is
+  on the INPUT jacks through STRATA's mix: LVL, PAN, the delay, reverb and chorus sends, a duck
+  depth, a tone knob, the jack (LINE, LINE L, MIC, DYN MIC, HI-Z, USB) and its gain on push D.
+  Push A turns it on and off with a short fade. It goes through the master, so the kill EQ, the
+  performance mixer, the looper, REPEAT and JAM REC take it too. Off in new and older projects;
+  saved in PROJECT.BIN's new optional section 9, which older builds ignore. The pages the
+  scenarios count to from the end (MST, EQ) stay where they were; CHO is two pages further. New
+  emulator scenario `linein`.
+- **Your own sounds in SOUNDS.** FUNC+DOWN saves the track's sound under a name of up to eight
+  characters; it is listed after the factory sounds as `+NAME` and loads with OK on any track with
+  the same machine, in every project. FUNC+DOWN on one of your own replaces it, push B renames and
+  push C deletes it (OK twice). Up to 16 per machine, kept in `ENAGA/DATA/STRATA/SOUNDS/<MCH>.BIN`,
+  a versioned file per machine beside the projects; project files do not change. A saved sound
+  is all of the track's sound: every page, FX, LFO and ARP included, and the TRIG, mod slot and
+  arp settings pushed on the LFO and ARP pages. The mixer's settings stay the track's.
+- **Copy a sound to another track.** FUNC+UP in SOUNDS copies the track's sound; a `PASTE T1 KCK`
+  row then sits under AS WAS on every track, and OK on it gives that track the sound, switching
+  its machine first when it hosts another; the paste is all of the sound, as a saved one is. AS
+  WAS takes a paste or a saved sound back, machine and kit settings included. New
+  emulator scenario `usersounds`.
+- **Queue a pattern from any screen.** Hold PROJECT and press STEP n: slot n of the shown bank is
+  queued (`A05 QUEUED END`) and the screen you play on stays up. PROJECT now opens when the key
+  comes up, and not at all when a STEP was pressed while it was held. The FUNC help's FUNC + KNOB
+  OR PAD page lists the chord in place of two lines for gestures retired on 2026-11-25.
+- **JAM REC on FUNC+REC twice.** FUNC+REC opens RESAMPLE as before; pressed again there it
+  starts JAM REC, and again stops it. RESAMPLE's last line shows the time and `FUNC+REC: STOP
+  JAM` (`JAM OFF` when none runs), and the REC key blinks a dim red with the top bar's dot while
+  a jam records. The FUNC menu's JAM REC row stays.
+- **MIXER: UP/DOWN jump a group of pages.** The levels, the duck, the widths, the delay, the
+  reverb, the chorus and the master, each to its first page and round the ends; LEFT/RIGHT still
+  go page by page.
+- **The track menu in KEYS.** Hold OK in KEYS for GENERATE and EVOLVE, as in GRID; the pads stay
+  the piano while it is open. New emulator scenario `shortcuts` for the three.
 - **Two reminders on the screen.** A quick tap of FUNC alone says `HOLD FUNC: HELP`, and a tap of
   OK in GRID says `HOLD OK: TRACK MENU`. Both keys did nothing visible on their own, and nothing
   on the panel pointed at the FUNC help or the GEN and EVOLVE menu. Neither covers another notice.
-- **JAM REC: the whole jam to the card.** The FUNC menu's last row (FUNC+HOME, UP, OK) records
+- **JAM REC: the whole jam to the card.** The FUNC menu's second row (FUNC+HOME, DOWN, OK) records
   everything STRATA plays to `/RECORD/JAM_<n>.WAV` until OK again: 48 kHz 24-bit stereo, about
   1 GB an hour, up to 3 h 51 min. The finished master as RESAMPLE hears it, never the click or
   the sample audition. A dot blinks in the top bar while it runs and the row counts the time. A
   full card or the length limit closes the file cleanly and says so; switching off closes it
-  too. RESAMPLE, freeze and the looper still work meanwhile. Every FUNC menu row counted
-  upwards from SAVE is one further on (LOAD DEMO is UP twice now). New emulator scenario
-  `jamrec`.
+  too. RESAMPLE, freeze and the looper still work meanwhile. New emulator scenario `jamrec`.
 - **ENERGY, one knob from breakdown to peak.** In PERFORM, FUNC + turn C (-64 .. +64, rest at 0
   with a detent). Down, every track drops its weakest hits first, in an order: hats at once, then
   percussion, snare and samples, the lines, the pads (which keep their strongest hits), and the
   kick last. Up, empty off-beats get quiet ghosts with the sound of the hit before them (hats most,
-  the kick only near the top, pads never) and probabilities lift towards 100. Each position plays
-  the same groove every bar; the pattern is never written, and a LOCK holds it. New emulator
+  the kick only near the top, pads never; one note on an arp track, lighting no step or glow) and
+  probabilities lift towards 100. Each position plays the same groove every bar; the pattern is
+  never written, and a LOCK holds it. New emulator
   scenario `energy`.
 - **Starter content in the card builder.** strata.einblick.dev can now put something to play on
   the card with STRATA: ten starter projects to open and jam on (TECHNO, DEEP, DUB, DRIFT,
@@ -72,6 +188,57 @@ the project file format or the controls.
   the slot of the one wanted least recently, which waits two audio blocks before it is written.
   While it waited, STRATA went on taking out every other table not playing, so turning back to
   a table played a moment ago built it again, its first notes sub only. It takes out one.
+- **FUNC + both screen keys** go to TRANSPOSE 0 without a step sounding first: a press waits
+  40 ms for the other key before it moves anything.
+- **ARR REC never captures into a slot a queue is about to land on**, so an empty pattern you
+  queued (or a queued launch's empty source) is still empty when it lands.
+- **ARR UNDO after a take that captured launched lanes empties the slots it captured into**
+  (not one edited since, nor one playing), so the jam leaves nothing behind in the bank. Such a
+  take cannot be brought back with a second ARR UNDO.
+- Docs: the FUNC menu table in CONTROLS lists PROG CHG OUT, and the CHEATSHEET's mode table lists
+  TRANSPOSE.
+
+- **A project opens at rest.** ENERGY, TRANSPOSE, VariSpeed, REL ALL, LEN ALL and LIVE RND carried
+  over into the next project on an OPEN, a reload, NEW or LOAD DEMO, while the LOCKs were cleared:
+  a project could open nearly silent (ENERGY -64) or an octave up (VariSpeed +12.0). All six go
+  back to rest, and the next turn starts from there.
+- **ENERGY's ghosts no longer copy conditional or 0% trigs.** A ghost took the sound of the trig
+  before it whatever its condition or probability, so a FILL-only crash, a 1:4 hit or a step at 0%
+  played every bar once ENERGY was up. A ghost passes over those to the nearest trig that plays
+  every pass.
+- **A song no longer rewrites the project's tempo.** A section's BPM plays and shows on the
+  screen, but a save during or after the song keeps the tempo the project was set to.
+- **ARR REC writes a BPM only where the tempo changed.** A take at one tempo has no BPM in any
+  entry, so VALUE moves the whole recorded song instead of lasting until the next entry. A tempo
+  change in a take writes the new BPM there and the starting tempo on the take's first entry.
+- **The clock no longer jumps back to the old tempo** for a moment after a section's BPM, a turn
+  of VALUE or a tap, and a fast turn of VALUE keeps every click.
+- **A fast turn with VALUE pushed keeps every detent.** Swing (push + turn) and the nudge
+  (FUNC + push + turn) lost detents: every pass wrote the STEP keys twice, once for the step and
+  once for the performance slots over them, which slowed the main loop past a quick turn. The
+  LAUNCH page wrote them twice too.
+- **Tap tempo needs three taps that agree.** Two stray taps of VALUE used to set and save a tempo
+  (1.2 s apart gave 50 BPM); nothing is set until two gaps agree within a quarter.
+- **VariSpeed held back by a fast tempo says so and comes back.** Near 300 BPM it is held to what
+  fits (`VARISPEED HELD +3.0`), and the amount set returns at a slower tempo.
+- **A knob in PERFORM keeps its layer while it turns.** Letting go of FUNC with C still turning
+  gave the last clicks to macro C, so ENERGY moved the macro too, and turning ENERGY back to 0
+  left the macro moved. A turn of A-D stays on the layer it started on (the macro, or REL ALL,
+  LEN ALL, ENERGY and LIVE RND with FUNC) until the knob rests for a quarter second.
+- **A LOCK no longer writes launched parts over the pattern's own tracks.** With a track
+  launched from another pattern, storing a lock and jumping to it (or swapping back) copied the
+  borrowed part into the playing pattern, replacing the track's own steps, and the next save kept
+  it. A lock holds the pattern and each track's launch apart: a jump and the swap-back put both
+  back as they were.
+- **A section's BPM keeps VariSpeed.** With VariSpeed off rest, an entry's BPM set the clock to the
+  plain tempo until VALUE was touched; it is now the tempo times VariSpeed's ratio, as VALUE's turn.
+- **A mute armed for the next bar (FUNC + pad) no longer lands on a project opened before that
+  bar.**
+- **The first pass after STOP and PLAY ends on its own boundary.** It lasted until the tick the
+  previous run would have ended it on, so a chain started on the pattern already playing held its
+  first entry longer than its repeats.
+- **A JAM REC start the card refuses no longer uses up a number.** The jam's number is taken
+  only once its file exists, so the next jam that starts is the next after the last real one.
 - **The CPU guard no longer thins chords that were never in danger.** With generated parts on
   every track the unit read 40-60% and showed `GUARD1`-`GUARD4`, shedding POLY voices and grains
   with no block anywhere near an overrun. The guard averaged the load over 11 ms, which follows
@@ -81,8 +248,26 @@ the project file format or the controls.
 
 ### Changed
 
+- **LIVE RND's tracks are picked with FUNC + lower pad** in PERFORM (`T2 RND OUT 6 TRK`), since
+  FUNC + push D is the kill for all bands. LIVE RND comes on with every track in but the kick, so
+  the floor holds; once you have picked the tracks, it keeps your pick.
+- **CLR on LAUNCH only sends the lane home.** On a lane already on its own part it says
+  `T3 PLAYS ITS OWN` and LAUNCH stays; the screen keys leave.
+- **Every confirmation reads the same way**: the key to press again and what it does, `OK AGAIN:
+  DELETE`, `OK AGAIN: OPEN`, `CLR AGAIN: REMOVE`, `DOWN AGAIN: REPLACE`, `A AGAIN: HEAR`,
+  `OK AGAIN: RELOAD`; a delete started with push C asks `OK TWICE: DELETE`.
+- **The FUNC help turns its pages on LEFT/RIGHT only.** FUNC + a screen key is TRANSPOSE (above),
+  so holding FUNC a moment too long can never turn a transpose into a page of help.
+- **A slimmer FUNC menu.** FUNC+HOME holds the project-wide rows only, in the order a jam reaches
+  for them: SAVE, JAM REC, CLICK, COUNT-IN, REC MODE, QUANTIZE, AUTO-FILL, FX GLIDE, LOOP LEN,
+  CHAIN, CHAIN END, then the file rows from SAVE AS down to LOAD DEMO (UP once from SAVE). The
+  selected track's TRACK SPEED, TRACK PLAY, FREEZE and RELOAD SAMPLE are in GRID's track menu
+  (hold OK) as SPEED, PLAY, FREEZE and RELOAD SAMPLE, after HOME: UP from GENERATE reaches them.
+  FREEZE keeps the menu open, its row reading `WAIT`, `REC`, `ON`, and EDIT on a frozen track
+  says `FROZEN: TRACK MENU`. The emulator scenarios `triplets`, `playmode` and `freeze` hold OK
+  for the track menu through `tools/emu_drive.py`.
 - **Sample audition with the beat playing takes two pushes.** In SAMPLES, push A while the
-  transport runs only says `A AGAIN TO HEAR`; a second push on the same file within 2 s plays
+  transport runs only says `A AGAIN: HEAR`; a second push on the same file within 2 s plays
   it. The SmplTrek has no cue output, so the audition goes out with the beat, and one bump of
   the knob in a set should not put a file into the room. Stopped, one push hears it as before.
 - **The clap sounds like a clap.** Its noise moved from 5-10 kHz down to about 2-3 kHz, and each

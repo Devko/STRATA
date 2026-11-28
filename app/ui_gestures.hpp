@@ -60,6 +60,21 @@
         notice("PASTED");
     }
 
+    // Which layer a turn of A-D reaches in PERFORM: the Moves layer (REL ALL, LEN ALL, ENERGY,
+    // LIVE RND) with FUNC held, else the macros. A knob still turning keeps the layer its turn
+    // started on until it rests for kKnobLayerMs: a hand lets go of FUNC (or presses it) with
+    // the knob still moving, and those clicks used to land on the macro and stay there (Roland
+    // on the unit, 2026-11-28: "energy also changes macro C").
+    bool knob_layer_moves(int encoder) {
+        const bool turning = knob_turned_[encoder] &&
+                             uint32_t(last_ms_ - knob_turn_ms_[encoder]) < kKnobLayerMs;
+        const bool moves = turning ? knob_moves_[encoder] : shift_;
+        knob_moves_[encoder] = moves;
+        knob_turn_ms_[encoder] = last_ms_;
+        knob_turned_[encoder] = true;
+        return moves;
+    }
+
     void on_encoder(int encoder, int delta) override {
         shift_alone_ = false;                   // FUNC + a knob: the hand knew; no help
         value_alone_ = false;                   // push VALUE + any turn is a chord, not a reset
@@ -119,6 +134,28 @@
                 morph_set(int(morph_) + delta * (int(kMorphScale) / 64));
                 return;
             }
+            if (value_pushed_ && shift_) {
+                // FUNC + push VALUE + turn is the tempo nudge (core/taptempo.hpp): each detent
+                // holds the tempo 4% faster or slower for a quarter of a second, then it goes
+                // back, so the beat moves against a source that sends no clock and the tempo
+                // stays where it was set. Not saved. Beside swing (push + turn), the other
+                // timing move; FUNC + turn VALUE is VariSpeed (Roland, 2026-11-28).
+                if (enaga::clock::source() != ENAGA_CLOCK_INTERNAL) {
+                    clock_refused_ = true;
+                    notice("EXT CLOCK");
+                    return;
+                }
+                // Times VariSpeed's ratio, as every clock tempo is (set_clock_tempo), but straight
+                // to the clock: through set_clock_tempo a nudge near 300 BPM would pull
+                // VariSpeed back for good, where it only has to clamp for a quarter second.
+                nudge_turn(nudge_, delta, last_ms_);
+                float bpm = nudged_bpm(tempo_tenths_, nudge_.direction) * vari_ratio(vari_);
+                if (bpm < float(kTempoTenthsMin) * 0.1f) bpm = float(kTempoTenthsMin) * 0.1f;
+                if (bpm > float(kTempoTenthsMax) * 0.1f) bpm = float(kTempoTenthsMax) * 0.1f;
+                clock_refused_ = !enaga::clock::set_tempo(bpm);
+                notice_logged(nudge_.direction > 0 ? "NUDGE FASTER" : "NUDGE SLOWER");
+                return;
+            }
             if (value_pushed_) {
                 // VALUE pushed and turned is the pattern's swing, as the spec's key table says.
                 mark(GestureKind::length, 0, 0);
@@ -126,11 +163,11 @@
                 return;
             }
             if (shift_) {
-                // FUNC + VALUE was the master DJ filter until 2026-11-25 (backlog D1): the
-                // filter's live home is the mixer's slots 1 and 2, and its setting MIXER's MST
-                // page, where a project saved with it set can still put it back. Free for now,
-                // so it says where the filter went rather than turning the tempo.
-                notice_logged("DJ FILTER: SLOT 1/2");
+                // FUNC + VALUE is VariSpeed (core/varispeed.hpp): VALUE is the tempo, and with
+                // FUNC the pitch moves with it, like a record's speed. It was the master DJ
+                // filter until 2026-11-25 (backlog D1), whose live home is the mixer's slots 1
+                // and 2, and then free, naming those slots.
+                vari_turn_by(delta);
                 return;
             }
             // REFUSED under an external clock, rather than moved and then ignored. docs/SPEC.md:
@@ -152,13 +189,12 @@
             if (tenths > 3000) tenths = 3000;
             tempo_tenths_ = uint32_t(tenths);
             // Main context again.
-            clock_refused_ = !enaga::clock::set_tempo(float(tempo_tenths_) * 0.1f);
+            clock_refused_ = !set_clock_tempo(tempo_tenths_ * 10u);      // times VariSpeed's
             // And the project, which is where the tempo is SAVED. Nothing posted this before, so
             // `ProjectSettings::tempo_centi_bpm` round-tripped through the serializer while
             // holding the default for ever: a project saved at 142 reopened at 130. The engine
             // also re-derives the tempo-synced delay from it.
             post_tempo(float(tempo_tenths_) * 0.1f);
-            adopted_tempo_centi_ = uint16_t(tempo_tenths_ * 10);
             return;
         }
 
@@ -169,7 +205,9 @@
         // FUNC + turn A / B in PERFORM: REL ALL and LEN ALL (core/moveall.hpp), the Moves layer's
         // two global controls beside the macros. Before the macros, which FUNC + turn only
         // duplicated. 0 is a detent and rest: the programmed sound to the bit.
-        if (mode_ == Mode::perform && shift_ && (encoder == 0 || encoder == 1)) {
+        const bool moves = mode_ == Mode::perform && encoder >= 0 && encoder < kMacros &&
+                           knob_layer_moves(encoder);
+        if (moves && (encoder == 0 || encoder == 1)) {
             int8_t &amount = encoder == 0 ? rel_all_ : len_all_;
             amount = all_turn(amount, delta);
             post(Cmd::set_move_all, 0, 0, uint8_t(encoder), uint8_t(amount));
@@ -180,7 +218,7 @@
         // FUNC + turn C in PERFORM: ENERGY (core/energy.hpp), from a sparse breakdown at -64 to
         // the peak at +64. 0 is a detent and rest: the programmed part to the bit. Before the
         // macros, which FUNC + turn only duplicated.
-        if (mode_ == Mode::perform && shift_ && encoder == 2) {
+        if (moves && encoder == 2) {
             energy_ = energy_turn(energy_, delta);
             post(Cmd::set_energy, 0, 0, uint8_t(energy_));
             energy_notice();
@@ -189,8 +227,20 @@
 
         // FUNC + turn D in PERFORM: LIVE RND (core/liverand.hpp), the unit for every armed track,
         // OFF 1 2 4 8 16 and stopping at both ends.
-        if (mode_ == Mode::perform && shift_ && encoder == 3) {
+        if (moves && encoder == 3) {
+            const uint8_t was = rnd_unit_;
             rnd_unit_ = live_rnd_turn(rnd_unit_, delta);
+            // LIVE RND starts with the kick out (Roland, 2026-11-28, D3): a kick drawn out of
+            // order takes the floor away. Every track but those playing KICK, each time it comes
+            // on from OFF, until a FUNC + lower pad (or a LOCK) has chosen the set by hand.
+            if (was == kLiveRndOff && rnd_unit_ != kLiveRndOff && !rnd_armed_chosen_) {
+                rnd_armed_ = kLiveRndAllTracks;
+                for (int t = 0; t < kTracks; t++) {
+                    if (engine_.machine_id(t) == uint8_t(MachineId::kick)) {
+                        rnd_armed_ = uint8_t(rnd_armed_ & ~(1u << t));
+                    }
+                }
+            }
             post(Cmd::set_live_rnd, 0, 0, rnd_unit_, rnd_armed_);
             live_rnd_notice();
             return;
@@ -240,8 +290,8 @@
 
         // The FUNC menu: A scrolls it, as UP and DOWN do, and B changes the value of a setting
         // row, as LEFT and RIGHT do. C and D have nothing to set here.
-        // The track menu in GRID, the same way: A the row, B the value.
-        if (track_menu_ && mode_ == Mode::grid && !step_page_ && held_step_ < 0 && encoder >= 0 &&
+        // The track menu in GRID and KEYS, the same way: A the row, B the value.
+        if (track_menu_ && track_menu_screen() && held_step_ < 0 && encoder >= 0 &&
             encoder < 4) {
             if (encoder == 0) {
                 track_menu_cursor_ = step_wrap(track_menu_cursor_, delta > 0 ? 1 : -1, 0,
@@ -302,6 +352,10 @@
         // settings" can mean.
         // CHAIN: A is the entry's repeat count. PATTERN: A is LEN, B is SWG and C the swing of
         // the track under the cursor (the selected track's, when the cursor is on LEN or SWG).
+        if (section_view()) {
+            section_turn(encoder, delta);         // app/ui_section.hpp
+            return;
+        }
         if (mode_ == Mode::project && project_page_ == ProjectPage::chain) {
             if (encoder == 0) chain_delta(ChainEdit::repeats_delta, delta);
             if (encoder == 1) chain_delta(ChainEdit::mutes_delta, delta);
@@ -426,6 +480,10 @@
             }
             if (mixer_chorus_send_page(mixer_bank_)) {
                 edit_chorus_send(mixer_bank_, encoder, delta);
+                return;
+            }
+            if (mixer_input_page(mixer_bank_)) {
+                edit_input(mixer_bank_, encoder, delta);
                 return;
             }
             // LEARN takes the kill EQ's bands here (D11): before the delta is posted, so the
@@ -603,6 +661,14 @@
         if (track < 0 || track >= kTracks) return;
         // LAUNCH: the pad picks the lane, silently (app/ui_launch.hpp).
         if (launch_pad(track, true)) return;
+
+        // FUNC + lower pad in PERFORM: that track in or out of LIVE RND (core/liverand.hpp),
+        // heard at once while a unit is on (Roland, 2026-11-28, D2: FUNC + push D is the kill EQ's
+        // on every screen). MUTE mode keeps the pads mutes.
+        if (shift_ && mode_ == Mode::perform && !mute_mode_) {
+            live_rnd_arm(track);
+            return;
+        }
 
         // F1 + pad mutes in any mode, and MUTE mode makes the lower pads mutes outright. With
         // F1 the mute waits for the bar: a held F1 is the performer asking for it to land in

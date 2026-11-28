@@ -168,6 +168,9 @@ TEST(lockstore_two_states_compare_by_every_field) {
     __builtin_memcpy(&b, &a, sizeof a);
     b.energy = -4;
     CHECK(!live_state_same(a, b));
+    __builtin_memcpy(&b, &a, sizeof a);
+    b.lanes[kTracks - 1] = 23;    // a lane borrowing B07
+    CHECK(!live_state_same(a, b));
 }
 
 // --- the engine -------------------------------------------------------------------------------

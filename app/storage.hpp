@@ -60,6 +60,7 @@
 #include "perform.hpp"
 #include "project.hpp"
 #include "samplepool.hpp"
+#include "usersounds.hpp"
 
 #include <enaga/files.hpp>
 #include <enaga/settings.hpp>
@@ -202,6 +203,8 @@ public:
     void note_command(Cmd cmd, int live_bank, int target_bank = -1);
 
     bool dirty() const;
+    // Whether bank `bank` waits for the next save (false for an index that is no bank).
+    bool bank_dirty(int bank) const { return bank >= 0 && bank < kBanks && bank_dirty_[bank]; }
 
     // --- samples ----------------------------------------------------------
 
@@ -322,7 +325,7 @@ public:
         return e;
     }
 
-    // --- jam recording: JAM REC, the FUNC menu's last row ---
+    // --- jam recording: JAM REC, the FUNC menu's second row ---
     //
     // The whole jam to the card: the finished master (what RESAMPLE's MASTER take hears, so never
     // the click or the audition) to /RECORD/JAM_<n>.WAV, 48 kHz 24-bit stereo, for as long as it
@@ -334,7 +337,8 @@ public:
     //   1. request_jam_start() creates the file through an Enaga recording stream
     //      (Engine::jam_writer, a wav::Writer, into `jam_ring_`) and posts Cmd::jam_start.
     //   2. The audio side writes every block into it. Enaga moves the ring to the card in its main
-    //      loop; a block the ring has no room for is dropped whole and counted (jam_lost_frames).
+    //      loop; when the ring is full, the frames of a block that do not fit are dropped and
+    //      counted (jam_lost_frames), and the ones that fit are kept.
     //   3. A stop (the user, a full card, kJamMaxBytes, the card going) posts Cmd::jam_stop. The
     //      audio side stops writing and bumps Status::jam_epoch; only after seeing that is the
     //      file closed, which writes what the ring still holds and then the header.
@@ -415,6 +419,40 @@ public:
 
     // A slot outside 0..15 reads as unknown.
     const KitSlot &kit_slot(int slot) const;
+
+    // --- your own sounds (core/usersounds.hpp) -----------------------------
+    //
+    // One machine's sixteen at a time, the machine of the track SOUNDS is open on:
+    // `<data folder>/SOUNDS/<MCH>.BIN`, shared by every project like the kit library. Each read
+    // and write is one small file, done in the pass that starts it, as a kit save is. A save, a
+    // rename or a delete changes the bank held here at once (the list shows it) and then writes
+    // the whole file; files::save goes through a .TMP, so a pulled card leaves the old file or
+    // the new. Never touched by a project save or load: projects open exactly as before.
+    //
+    // A file that cannot be read (damaged, or from a newer build) is never written over: the
+    // bank stays `failed` and saving into it is refused, so whatever is in it is not lost.
+    enum class SoundBankState : uint8_t { none, reading, ready, failed };
+
+    // Ask for `machine`'s bank. Nothing happens if it is held already, being read, or failed
+    // (until the card comes back); called on every frame SOUNDS draws, so it must be cheap.
+    void want_sound_bank(uint8_t machine);
+
+    // The state of `machine`'s bank: `none` when the bank held is another machine's.
+    SoundBankState sound_bank_state(uint8_t machine) const;
+    const UserSoundBank &sound_bank() const { return sound_bank_; }
+    // Why the last read or write failed, or nullptr.
+    const char *sound_bank_error() const { return sound_bank_error_; }
+
+    // Change the held bank and queue its write. False, nothing changed, when the bank held is not
+    // `machine`'s or not ready, with no usable card, or when core/usersounds.hpp refuses (a slot
+    // that does not exist, an empty one for rename or delete, a name it cannot hold).
+    bool request_sound_store(uint8_t machine, int slot, const char *name, const uint8_t *params,
+                             const UserSoundExtras &extras = UserSoundExtras{});
+    bool request_sound_rename(uint8_t machine, int slot, const char *name);
+    bool request_sound_delete(uint8_t machine, int slot);
+
+    // A write asked for and not yet done.
+    bool sound_write_pending() const { return sound_write_pending_; }
 
     // --- the card ---------------------------------------------------------
 
@@ -512,6 +550,10 @@ private:
     void step_load();
     void step_take_write();
     void step_kit_scan();
+    bool sound_bank_path(char *out, uint32_t max, uint8_t machine, bool folder_only) const;
+    void run_sound_read();
+    void run_sound_write();
+    bool sound_bank_editable(uint8_t machine) const;
     void run_kit_save();
     void run_kit_load();
     bool kit_path(char *out, uint32_t max, int slot, bool folder_only) const;
@@ -616,6 +658,14 @@ private:
     bool kit_scan_pending_ = false;
     KitSlot kit_slots_[kKitSlots] = {};
     Kit kit_scratch_;              // a scan reads each slot into this, never into the engine
+
+    // Your own sounds: the one bank held, whose machine, and what is asked of the card.
+    UserSoundBank sound_bank_;
+    uint8_t sound_bank_machine_ = 0;
+    SoundBankState sound_bank_state_ = SoundBankState::none;
+    bool sound_read_pending_ = false;
+    bool sound_write_pending_ = false;
+    const char *sound_bank_error_ = nullptr;
 
     bool perform_dirty_ = false;   // the scenes and macro setup, in PERFORM.BIN
     bool kit_dirty_ = false;

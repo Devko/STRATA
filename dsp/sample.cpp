@@ -621,7 +621,8 @@ void Sampler::run(Voice &v, float *out, int n) {
 
     // Control rate, once per voice per block, because the trig note and PIT both move the step.
     // The fixed-point step is built here and nothing in the loop divides.
-    const float step = clamp(rate_ratio_ * pitch_ratio_ * v.note_ratio, kStepMin, kStepMax);
+    const float step =
+        clamp(rate_ratio_ * pitch_ratio_ * v.note_ratio * pitch_mod_ratio_, kStepMin, kStepMax);
     const int32_t istep = int32_t(step);
     const float fraction = (step - float(istep)) * kFracScale;
     const uint32_t fstep = uint32_t(int32_t(clamp(fraction, 0.0f, kFracScale - 1.0f)));

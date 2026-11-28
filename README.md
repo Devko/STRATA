@@ -90,8 +90,9 @@ is pretty safe as long as the bootloader is left alone
 - **Performance:** fill, beat and note repeat, step stutter, mutes, scenes with an A/B morph,
   macros you learn by turning knobs, throws, seeded mutation you keep or revert, LOCK (store the
   moment, jump back in one tap), ENERGY (one knob that thins the beat to a breakdown or fills
-  it towards the peak, never touching the pattern), and a performance mixer on VALUE with fourteen effects, the
-  morph and a looper.
+  it towards the peak, never touching the pattern), TRANSPOSE (the melodic tracks into another
+  key from any screen), VariSpeed (tempo and pitch together, like a turntable), and a
+  performance mixer on VALUE with fourteen effects, the morph and a looper.
 - **Mixing:** a sidechain duck, delay, reverb and chorus sends (with LONG delay and HALL reverb
   modes for ambient), stereo spread or unison on the polyphonic machines, and a master with a DJ
   filter, kill EQ, compressor and limiter.
@@ -125,14 +126,13 @@ The full tour, with the factory kit and every effect, is in
 
 ## Status
 
-**[v0.5.0](https://github.com/Devko/STRATA/releases/tag/v0.5.0)** is the current
-release and the **release candidate for 1.0**, for **Enaga 0.4.0**: GEN and EVOLVE, chord
-recording, choke groups, arp depth and more since 0.4.0. Development continues on `main` before
-a stable 1.0 (ENERGY, JAM REC, a chorus, stereo width and triplet speeds so far; CHANGELOG.md, "Unreleased"), and
-[docs/PLAN.md](docs/PLAN.md) has the way to 1.0. Earlier releases have run on the unit: the default beat loads the
-CPU under 30%, and long, heavy play on an earlier build peaked at 84.3% with no dropouts. The
-features new in 0.5 are still being walked through on the hardware
-([unit checklist](docs/UNIT_CHECKLIST.md)).
+<!-- release-status: tools/publish_release.sh rewrites the next line -->
+**[v0.5.0](https://github.com/Devko/STRATA/releases/tag/v0.5.0)**, released 2026-11-27, is the current release, for **Enaga 0.4.0**.
+Development continues on `main` before a stable 1.0 ([CHANGELOG.md](CHANGELOG.md), "Unreleased",
+has what is new since the release), and [docs/PLAN.md](docs/PLAN.md) has the way to 1.0.
+Releases have run on the unit: the default beat loads the CPU under 30%, and long, heavy play on
+an earlier build peaked at 84.3% with no dropouts. The [unit checklist](docs/UNIT_CHECKLIST.md)
+records which features have been walked through on the hardware.
 [CHANGELOG.md](CHANGELOG.md) lists what changed in each release.
 
 ## Disclaimer

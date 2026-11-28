@@ -4,7 +4,7 @@
 #   PLAY                     -> `run int`: the factory beat runs
 #   EDIT, UP to track 8      -> the factory LOOP, a SAMPLE track with no file
 #   OK                       -> SAMPLES opens in /SAMPLES, the cursor on TONE.WAV
-#   push A                   -> `A AGAIN TO HEAR`, and nothing streams: there is no cue output,
+#   push A                   -> `A AGAIN: HEAR`, and nothing streams: there is no cue output,
 #                               so a single push must not put a file into the room mid-set
 #   push A, 0.38 s later     -> `aud play`: now it is heard
 #
@@ -99,9 +99,9 @@ check(not report.get("crash_reason"), "no crash", f'reason={report.get("crash_re
 check("strata ready" in log, "init() ran to completion")
 check("run int" in log, "PLAY started the beat (run int)", f"log={log}")
 check("scr SAMPLES" in log, "OK on the SAMPLE track opened the browser", f"log={log}")
-check(log.count("A AGAIN TO HEAR") == 1, "the first push only armed (A AGAIN TO HEAR, once)",
+check(log.count("A AGAIN: HEAR") == 1, "the first push only armed (A AGAIN: HEAR, once)",
       f"log={log}")
-armed = log.index("A AGAIN TO HEAR") if "A AGAIN TO HEAR" in log else -1
+armed = log.index("A AGAIN: HEAR") if "A AGAIN: HEAR" in log else -1
 check("aud play" in log, "the second push started the audition (aud play)", f"log={log}")
 if "aud play" in log and armed >= 0:
     check(log.index("aud play") > armed, "and not before the first push had armed", f"log={log}")

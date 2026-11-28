@@ -248,7 +248,18 @@
                           state == 0u ? (take_offer_ >= 0 ? "OK PUTS  CLR KEEPS" : "OK ARMS  CLR CANCELS")
                                       : "CLR CANCELS",
                           10);
-        paint::small_text(px, 0, 113, "LEFT RIGHT: WHERE TO", 8);
+        // JAM REC, FUNC + REC again here: how long it has run, at the right of the last line, and
+        // the key that stops it in place of the arrows' hint; JAM OFF, dim, when none runs.
+        if (storage_.jam_running()) {
+            paint::small_text(px, 0, 113, "FUNC+REC: STOP JAM", 10);
+            out = line;
+            append_clock(out, storage_.jam_seconds());
+            *out = 0;
+            paint::small_badge(px, 124 - paint::small_width(line), 113, line);
+        } else {
+            paint::small_text(px, 0, 113, "LEFT RIGHT: WHERE TO", 8);
+            paint::small_text(px, 125 - paint::small_width("JAM OFF"), 113, "JAM OFF", 6);
+        }
     }
 
     // --- SAMPLES -----------------------------------------------------------------------------
@@ -458,6 +469,12 @@
             draw_arps(canvas);
             return;
         }
+        if (name_entry_.active()) {
+            draw_name_entry(canvas);
+            return;
+        }
+        // The machine's own sounds, read from the card the first time the list shows them.
+        storage_.want_sound_bank(engine_.machine_id(selected_));
         uint8_t *px = canvas.data();
         const uint8_t machine = engine_.machine_id(selected_);
         char line[40];
@@ -471,31 +488,55 @@
         *out = 0;
         caption_right(px, line, 10);
         out = line;
-        append(out, "INTO T");
-        append_number(out, uint32_t(selected_) + 1);
-        append(out, " ");
-        append(out, machine_name(machine));
-        append(out, " ONLY");
+        if (sound_delete_armed_ >= 0) {
+            append(out, sound_delete_oks_ > 0 ? "OK AGAIN: DELETE" : "OK TWICE: DELETE");
+        } else if (storage_.sound_bank_state(machine) == Storage::SoundBankState::failed) {
+            append(out, "SOUND FILE: ");
+            append_shown(out, storage_.sound_bank_error() != nullptr ? storage_.sound_bank_error() : "BAD", 8);
+        } else {
+            append(out, "INTO T");
+            append_number(out, uint32_t(selected_) + 1);
+            append(out, " ");
+            append(out, machine_name(machine));
+            append(out, " ONLY");
+        }
         *out = 0;
         paint::small_text(px, 0, 18, line, 13);
 
         // The VAs' lists are longer than the screen: it scrolls to keep the cursor on it.
+        const uint8_t *now = engine_.params(selected_).v;
         const int first = sound_cursor_ >= kSoundRows ? sound_cursor_ - kSoundRows + 1 : 0;
         for (int row = first; row < rows && row < first + kSoundRows; row++) {
             out = line;
             const bool on = row == sound_cursor_;
             *out++ = on ? '>' : ' ';
-            if (row == 0) {
-                append(out, "AS WAS");
-            } else {
-                const SoundPreset *s = sound_preset(machine, row - 1);
-                append(out, s->name);
-                if (sound_preset_matches(machine, row - 1, engine_.params(selected_).v)) {
-                    int length = 0;
-                    while (s->name[length] != '\0') length++;
-                    for (int pad = kSoundNameChars - length; pad > 0; pad--) *out++ = ' ';
-                    append(out, "  NOW");
-                }
+            int index = 0;
+            const SoundRow kind = sound_row_kind(row, &index);
+            const char *name = "AS WAS";
+            bool matches = false;
+            int width = kSoundNameChars;
+            if (kind == SoundRow::paste) {
+                append(out, "PASTE T");
+                append_number(out, uint32_t(sound_clip_.track) + 1);
+                append(out, " ");
+                name = machine_name(sound_clip_.machine);
+            } else if (kind == SoundRow::factory) {
+                name = sound_preset(machine, index)->name;
+                matches = sound_preset_matches(machine, index, now);
+            } else if (kind == SoundRow::user) {
+                // Your own: a '+' in front, so they read apart from the factory's.
+                const UserSound &sound = storage_.sound_bank().slots[index];
+                *out++ = '+';
+                name = sound.name;
+                matches = user_sound_matches(machine, sound, now, user_sound_extras_of(engine_.project().kit.tracks[selected_]));
+                width = kUserSoundNameChars;
+            }
+            append(out, name);
+            if (matches) {
+                int length = 0;
+                while (name[length] != '\0') length++;
+                for (int pad = width - length; pad > 0; pad--) *out++ = ' ';
+                append(out, "  NOW");
             }
             *out = 0;
             list_row(canvas, 0, 26 + (row - first) * 8, line, on, 9);
@@ -503,9 +544,9 @@
         if (rows == 1) {
             canvas.text(0, 34, "NO SOUNDS HERE", 9);
         } else {
-            draw_sound_bars(canvas, machine, sound_cursor_ == 0 ? nullptr : sound_preset(machine, sound_cursor_ - 1));
+            draw_sound_bars(canvas, machine, sound_cursor_);
         }
-        paint::small_text(px, 0, 113, "OK LOAD  CLR BACK", 10);
+        paint::small_text(px, 0, 113, "OK LOAD  F+DOWN SAVE", 10);
     }
 
     // ARPS: the same rows over the factory arps (core/arppresets.hpp), and under them the arp
@@ -579,22 +620,44 @@
         paint::small_text(px, 0, 113, "OK LOAD  CLR BACK", 10);
     }
 
-    // The preset's knobs as bars, five pages of four; a page the machine does not read dotted.
-    // `preset` null: AS WAS, the sound the track had before the browser, drawn from the track.
-    void draw_sound_bars(enaga::Canvas &canvas, uint8_t machine, const SoundPreset *preset) {
+    // The row's knobs as bars, five pages of four; a page the machine does not read dotted.
+    // AS WAS: the sound the track had before the browser, drawn from the track. A factory sound,
+    // one of your own and the copied one draw alike, from their bytes.
+    void draw_sound_bars(enaga::Canvas &canvas, uint8_t machine, int row) {
         uint8_t *px = canvas.data();
         constexpr int kBottom = 104, kTall = 24;
         static const char *const kGroups[5] = {"SRC", "FLT", "AMP", "ASR", "OSC"};
         const int firsts[5] = {0, 4, 8, kSoundAsrFirst, kSoundOscFirst};
         const uint8_t *values[5] = {};
-        if (preset != nullptr) {
+        const uint8_t *now = engine_.params(selected_).v;
+        int index = 0;
+        const SoundRow kind = sound_row_kind(row, &index);
+        const char *title = "AS WAS";
+        bool playing = false;
+        if (kind == SoundRow::factory) {
+            const SoundPreset *preset = sound_preset(machine, index);
             values[0] = preset->src;
             values[1] = preset->fltr;
             values[2] = preset->amp;
             values[3] = preset->asr;
             values[4] = preset->osc;
+            title = preset->name;
+            playing = sound_preset_matches(machine, index, now);
+        } else if (kind == SoundRow::user || kind == SoundRow::paste) {
+            const uint8_t *bytes = kind == SoundRow::user ? storage_.sound_bank().slots[index].params
+                                                          : sound_clip_.params;
+            for (int g = 0; g < 5; g++) values[g] = bytes + firsts[g];
+            if (kind == SoundRow::user) {
+                title = storage_.sound_bank().slots[index].name;
+                playing = user_sound_matches(machine, storage_.sound_bank().slots[index], now,
+                                             user_sound_extras_of(engine_.project().kit.tracks[selected_]));
+            } else {
+                title = "PASTE";
+                // The copied sound draws in the machine it is for, which a paste switches to.
+                machine = sound_clip_.machine;
+            }
         }
-        const uint8_t *now = engine_.params(selected_).v;
+        const bool before = kind == SoundRow::as_was;
         paint::dotted_h(px, 0, 123, 74, 3, 2);
         for (int g = 0; g < 5; g++) {
             const int gx = g * 25;
@@ -608,16 +671,17 @@
                 const int current = now[firsts[g] + k];
                 const int value = values[g] != nullptr ? values[g][k] : current;
                 const int h = 1 + value * (kTall - 1) / 127;
-                canvas.rect(x, kBottom - h + 1, 4, h, preset == nullptr ? 8 : 13);
+                canvas.rect(x, kBottom - h + 1, 4, h, before ? 8 : 13);
                 const int t = kBottom - current * (kTall - 1) / 127;
                 if (current != value) canvas.rect(x, t, 4, 1, uint8_t(current > value ? 6 : 0));
             }
             paint::small_text(px, gx + 4, 106, kGroups[g], reads ? 8 : 3);
         }
-        paint::small_text(px, 0, 77, preset != nullptr ? preset->name : "AS WAS", 15);
-        const char *note = preset == nullptr ? "THE SOUND BEFORE"
-                           : sound_preset_matches(machine, sound_cursor_ - 1, engine_.params(selected_).v)
-                               ? "PLAYING NOW"
+        paint::small_text(px, 0, 77, title, 15);
+        const char *note = before    ? "THE SOUND BEFORE"
+                           : playing ? "PLAYING NOW"
+                           : kind == SoundRow::paste && sound_clip_.machine != engine_.machine_id(selected_)
+                               ? "SWITCHES MACHINE"
                                : "TICKS: THE TRACK NOW";
         paint::small_text(px, 125 - paint::small_width(note), 77, note, 7);
     }
@@ -760,13 +824,20 @@
                 append_number(out, uint32_t(entry.repeats));
                 *out = 0;
                 paint::small_text(px, x + 2, kLaneY + 11, name, here ? 13 : 8);
-                if (entry.mutes != 0) {
-                    out = name;
+                // The mute state it sets, and `+` when the section has fields of its own.
+                const SectionExtra &extra = project.chain_extra[i];
+                out = name;
+                if (extra.cap != 0) {
+                    *out++ = 'C';
+                } else if (entry.mutes != 0) {
                     *out++ = 'M';
                     append_number(out, uint32_t(entry.mutes));
-                    *out = 0;
-                    paint::small_text(px, x + 2, kLaneY + 19, name, here ? 13 : 8);
                 }
+                SectionExtra rest = extra;
+                rest.cap = 0;
+                if (!section_empty(rest)) *out++ = '+';
+                *out = 0;
+                if (name[0] != 0) paint::small_text(px, x + 2, kLaneY + 19, name, here ? 13 : 8);
             }
             x += w + 2;
         }
@@ -800,13 +871,19 @@
             }
         }
         paint::small_text(px, 54, 77, "MUTES", 6);
-        if (entry.mutes == 0) {
+        const SectionExtra &extra = project.chain_extra[chain_cursor_];
+        if (entry.mutes == 0 && extra.cap == 0) {
             paint::small_text(px, 54, 85, "AS THEY ARE", 9);
         } else {
-            const uint8_t mask = project.settings.mute_states[entry.mutes - 1];
+            const uint8_t mask = extra.cap != 0 ? extra.mask
+                                                : project.settings.mute_states[entry.mutes - 1];
             out = line;
-            *out++ = 'M';
-            append_number(out, uint32_t(entry.mutes));
+            if (extra.cap != 0) {
+                append(out, "CAP");
+            } else {
+                *out++ = 'M';
+                append_number(out, uint32_t(entry.mutes));
+            }
             *out = 0;
             paint::small_text(px, 78, 77, line, 13);
             for (int t = 0; t < kTracks; t++) {
@@ -819,8 +896,12 @@
             }
         }
 
+        // The section's own fields (app/ui_section.hpp), "S4 SNAP E+32 132BPM".
+        section_summary(extra, line);
+        if (line[0] != 0) paint::small_text(px, 0, 96, line, 12);
+
         paint::small_text(px, 0, 105, "OK ADD  CLR X2 REMOVE", 10);
-        paint::small_text(px, 0, 113, "A:REPEATS B:MUTES", 10);
+        paint::small_text(px, 0, 113, "A:REPEATS PUSH A:SECT", 10);
     }
 
     // The cursor entry's steps, read once when the cursor's pattern changes (a pattern is a few

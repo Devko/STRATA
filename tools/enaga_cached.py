@@ -35,6 +35,8 @@ import pickle
 import shutil
 import sys
 import tempfile
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -112,8 +114,96 @@ def _say(message):
         print(f"enaga_cached: {message}", file=sys.stderr)
 
 
+_HEADER_SUFFIXES = {".h", ".hpp", ".inc"}
+_header_digests = {}
+
+
+def _headers_digest(folder):
+    """Every header under `folder`, by name and bytes; once per folder per process."""
+    folder = Path(folder)
+    if folder not in _header_digests:
+        h = hashlib.sha256()
+        files = sorted(q for q in folder.rglob("*") if q.is_file() and q.suffix in _HEADER_SUFFIXES)
+        for q in files:
+            h.update(f"{q.relative_to(folder).as_posix()}\n".encode())
+            h.update(hashlib.sha256(q.read_bytes()).digest())
+        _header_digests[folder] = h.hexdigest()
+    return _header_digests[folder]
+
+
+def wrap_compile(build_app, paths):
+    """One object at a time, cached by its own inputs, so a change recompiles only what it touches.
+
+    build_app.build() compiles every source of the app, one after the other, on every call, and
+    the whole-app cache above misses on any change at all: a one-line edit cost the full serial
+    build. compile_source() is wrapped here to look each object up in <cache>/obj first, keyed by
+    the source's bytes, every header beside it and in Enaga's include/ (any header change
+    recompiles everything: coarse, never stale), the compiler that builds it and its flags with
+    the include path taken out (the objects carry no path: no -g, no __FILE__), so worktrees with
+    the same sources share objects. build() then compiles the misses side by side before Enaga's
+    own loop runs, which finds every object in the cache (see wrap_build_app).
+    """
+    if not all(hasattr(build_app, n) for n in ("compile_source", "RUNTIME", "CFLAGS", "CXXFLAGS")):
+        return None                                 # a build_app of another shape: whole builds only
+    real = build_app.compile_source
+    include = str(ENAGA / "include")
+
+    def key_of(src, ti):
+        h = hashlib.sha256(b"strata object cache v1\n")
+        if ti:
+            h.update(repr(build_app.TIFLAGS).encode())
+            _hash_tool(h, Path(paths.TI_CGT) / "bin" / "cl6x")
+            h.update(_headers_digest(Path(paths.TI_CGT) / "include").encode())
+        else:
+            flags = build_app.CFLAGS if src.suffix == ".c" else build_app.CXXFLAGS
+            h.update(repr([f.replace(include, "<enaga>/include") for f in map(str, flags)]).encode())
+            _hash_tool(h, build_app.GCC if src.suffix == ".c" else build_app.GXX)
+        h.update(f"{src.suffix} {src.name.endswith('.ti.c')}\n".encode())
+        h.update(hashlib.sha256(src.read_bytes()).digest())
+        h.update(_headers_digest(src.parent).encode())
+        h.update(_headers_digest(ENAGA / "include").encode())
+        return h.hexdigest()
+
+    def compile_source(src, out, name=None):
+        root = cache_root()
+        if root is None:
+            return real(src, out, name)
+        src, out = Path(src), Path(out)
+        obj = out / f"{name or src.name}.o"
+        ti = src.name.endswith(".ti.c") and paths.ti_present()
+        key = key_of(src, ti)
+        entry = root / "obj" / key[:2] / f"{key}.o"
+        if entry.exists():
+            out.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(entry, obj)
+            return obj
+        result = real(src, out, name)
+        entry.parent.mkdir(parents=True, exist_ok=True)
+        tmp = entry.with_name(f".{key}.{os.getpid()}.{threading.get_ident()}")
+        shutil.copyfile(obj, tmp)
+        os.replace(tmp, entry)
+        return result
+
+    build_app.compile_source = compile_source
+
+    def precompile(app_dir, out):
+        """Every object build() is about to ask for, compiled side by side (STRATA_BUILD_JOBS, by
+        default every core up to 8). Errors are raised as build() would raise them."""
+        app_dir, out = Path(app_dir).resolve(), Path(out).resolve()
+        work = [(src, None) for src in sorted(app_dir.glob("*.cpp")) + sorted(app_dir.glob("*.c"))]
+        work.append((build_app.RUNTIME / "runtime.cpp", "enaga.runtime.cpp"))
+        out.mkdir(parents=True, exist_ok=True)
+        jobs = int(os.environ.get("STRATA_BUILD_JOBS", "0")) or min(os.cpu_count() or 2, 8)
+        with ThreadPoolExecutor(max_workers=jobs) as pool:
+            for future in [pool.submit(compile_source, src, out, name) for src, name in work]:
+                future.result()
+
+    return precompile
+
+
 def wrap_build_app(build_app, paths):
     real = build_app.build
+    precompile = wrap_compile(build_app, paths) if os.environ.get("STRATA_OBJ_CACHE", "on") != "off" else None
 
     def build(app_dir, out, name=None, app_version=1):
         if cache_root() is None:
@@ -135,6 +225,8 @@ def wrap_build_app(build_app, paths):
             shutil.copyfile(entry / "app.elf", out / "app.elf")
             _say(f"app build cached ({key[:12]})")
             return {**meta, "package": (entry / "package.bin").read_bytes(), "elf": out / "app.elf"}
+        if precompile is not None:
+            precompile(app_dir, out)
         result = real(app_dir, out, name, app_version)
 
         def write(folder):
@@ -266,6 +358,105 @@ def wrap_blocks(emulate):
     emulate.Emulation.run = run
 
 
+def wrap_full_log(emulate):
+    """The report's "log" holds every line Enaga logged since boot, not only the newest 16.
+
+    Enaga keeps its last 32 lines in a ring (log_lines, log_count counts every line ever logged;
+    firmware/include/kernel.h), and emulate.py's report gives the newest 16. A scenario checking
+    for a line therefore failed whenever anything logged after it pushed it out: boot itself
+    logging two more lines (ENAGA 0.4.0, CACHE) broke eight scenarios at once (2026-11-28). This
+    reads the ring after every slice the emulator runs (1 M cycles from emulate.py's own run(),
+    under 3 ms), so a line is lost only if more than 32 are logged inside one slice; those are
+    counted in the report's "log_lost". Lines keep their order, and a scenario that checked the
+    last 16 still finds them at the end of the list.
+    """
+    E = getattr(emulate, "Emulation", None)
+    if E is None or not all(hasattr(E, n) for n in ("word", "log", "report")):
+        return                                      # an emulate.py of another shape
+    ring = getattr(emulate, "LOG_LINES", 32)
+    real_init, real_report = E.__init__, E.report
+
+    def collect(self):
+        count = self.word("log_count")
+        if count <= self._log_seen:
+            return
+        first = max(self._log_seen, count - ring)
+        self._log_lost += first - self._log_seen
+        raw = self.cpu.read(self.names["log_lines"], ring * 40)
+        for i in range(first, count):
+            at = (i % ring) * 40
+            self._log_all.append(raw[at:at + 40].split(b"\0")[0].decode("ascii", "replace"))
+        self._log_seen = count
+
+    def init(self, *a, **k):
+        real_init(self, *a, **k)
+        self._log_all, self._log_seen, self._log_lost = [], 0, 0
+        cpu_run = self.cpu.run
+
+        def run(cycles):
+            state = cpu_run(cycles)
+            collect(self)
+            return state
+
+        self.cpu.run = run
+
+    def log(self):
+        collect(self)
+        return list(self._log_all)
+
+    def report(self):
+        return {**real_report(self), "log_lost": self._log_lost}
+
+    E.__init__, E.log, E.report = init, log, report
+
+
+def wrap_turn(emulate):
+    """Encoder turns that never lose a detent.
+
+    emulate.py holds each of a detent's four pin phases for a fixed 3 ms. Enaga reads the pins
+    once per main-loop pass (firmware/hal/encoders.c: the first phase after rest sets the
+    direction, arriving at phase 0 counts), so a pass longer than 3 ms -- a busy screen in the
+    emulator -- skips a phase and the detent is lost (scenario_energy lost two of 32,
+    2026-11-28). Here each phase is held at least `phase_ms`, as before, and then until the
+    firmware's decoder has seen it (its last_phase), up to 100 ms a phase. Where the firmware has
+    no last_phase symbol it falls back to emulate.py's own turn.
+    """
+    if not hasattr(emulate, "turn"):
+        return
+    real_turn = emulate.turn
+    pins = emulate.ENCODER_PINS
+    ms = emulate.MS
+
+    def turn(emu, encoder, detents, phase_ms=3):
+        at = getattr(emu, "names", {}).get("last_phase")
+        if at is None:
+            return real_turn(emu, encoder, detents, phase_ms)
+        (ba, pa), (bb, pb) = pins[encoder]
+        sequence = (2, 0, 1, 3) if detents > 0 else (1, 0, 2, 3)
+        for _ in range(abs(detents)):
+            for phase in sequence:
+                emu.cpu.gpio_input(ba, pa, phase & 1)
+                emu.cpu.gpio_input(bb, pb, phase >> 1 & 1)
+                emu.run(phase_ms * ms)
+                waited = phase_ms
+                while emu.cpu.read(at + encoder, 1)[0] != phase and waited < 100:
+                    emu.run(ms)
+                    waited += 1
+
+    emulate.turn = turn
+
+
+def wrap_emulate(emulate, paths):
+    """Everything this file adds to Enaga's emulate module, for a script that drives the emulator
+    from Python (tools/emu_drive.py, tests/scenario_gen.sh): the cached firmware, the local decode
+    cache, compiled blocks, the full log and lossless turns. Call before making an Emulation."""
+    wrap_firmware(emulate.firmware_build, paths)
+    use_local_decode_cache()
+    wrap_blocks(emulate)
+    wrap_full_log(emulate)
+    wrap_turn(emulate)
+
+
 def main(argv):
     if len(argv) < 1 or argv[0] not in ("build_app", "emulate"):
         print(__doc__, file=sys.stderr)
@@ -278,9 +469,7 @@ def main(argv):
     module = build_app
     if tool == "emulate":
         module = importlib.import_module("emulate")
-        wrap_firmware(module.firmware_build, paths)
-        use_local_decode_cache()
-        wrap_blocks(module)
+        wrap_emulate(module, paths)
     sys.argv = [str(ENAGA / "tools" / f"{tool}.py"), *args]
     return module.main(args)
 

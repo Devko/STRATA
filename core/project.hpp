@@ -59,6 +59,11 @@ constexpr int kProjectPatterns = kBanks * kPatternsPerBank;   // 128
 // follow the LFO's in the same way, and in a section of their own again, and so do the four of
 // the VA machines' ASR page (attack, sustain, release, filter sustain; dsp/va.cpp) and the four
 // of their OSC page (wave, OSC 2, sub, drive).
+//
+// The WAVE machines' SCN page (scan mode, speed, end, curve; dsp/va.cpp) comes after a HOLE of
+// eight ids, 32-39, that no track parameter uses: a step's lock ids 32-36 were already the extra
+// notes of a chord (core/stepnotes.hpp) when SCN came, and a parameter's index is its lock id
+// everywhere. So kKitParams counts the hole, and `kit_param_real` says which indices are real.
 constexpr int kKitSoundParams = 16;
 constexpr int kKitLfoParams = 4;
 constexpr int kKitLfoEnd = kKitSoundParams + kKitLfoParams;
@@ -67,7 +72,28 @@ constexpr int kKitArpEnd = kKitLfoEnd + kKitArpParams;
 constexpr int kKitAsrParams = 4;
 constexpr int kKitAsrEnd = kKitArpEnd + kKitAsrParams;
 constexpr int kKitOscParams = 4;
-constexpr int kKitParams = kKitAsrEnd + kKitOscParams;
+constexpr int kKitOscEnd = kKitAsrEnd + kKitOscParams;
+constexpr int kKitScnFirst = 40;
+constexpr int kKitScnParams = 4;
+constexpr int kKitParams = kKitScnFirst + kKitScnParams;
+static_assert(kKitOscEnd == 32 && kKitScnFirst > kKitOscEnd, "the hole sits between OSC and SCN");
+
+// Whether `index` is a parameter at all: false in the hole and out of range.
+constexpr bool kit_param_real(int index) {
+    return (index >= 0 && index < kKitOscEnd) || (index >= kKitScnFirst && index < kKitParams);
+}
+// How many are: every index but the hole's.
+constexpr int kKitRealParams = kKitOscEnd + kKitScnParams;
+// A real index counted without the hole, 0 .. kKitRealParams - 1, for a list of them.
+constexpr int kit_real_index(int index) { return index < kKitScnFirst ? index : index - (kKitScnFirst - kKitOscEnd); }
+
+// SCN's MOD byte is a number like the LFO's WAV (format decision C): the scan mode, 0 OFF.
+constexpr int kKitScanModeIndex = kKitScnFirst + 0;
+constexpr int kKitScanModes = 10;                            // static_asserted in dsp/va.hpp
+constexpr uint8_t kKitScanModeMax = uint8_t(kKitScanModes - 1);
+// What a kit from before SCN loads as, and what a fresh track holds: no scan, SPD at 1 Hz, END
+// on the last frame, CRV straight.
+constexpr uint8_t kKitScnDefault[kKitScnParams] = {0, 28, 127, 64};
 
 // --- the LFO's WAV and DST bytes: numbers, not bands (format decision C, 2026-11-26) ----------
 //
@@ -84,11 +110,13 @@ constexpr uint8_t kKitLfoDestMax = uint8_t(kKitSoundParams);  // OFF, then the 1
 // The marker byte the layout sections hold: 1 = WAV and DST are numbers.
 constexpr uint8_t kLfoLayoutNumbers = 1;
 
-// The highest value a parameter byte may hold: 127 for all but WAV and DST. Knobs, locks,
-// random ranges and LIVE RND clamp to it, so a knob does not wind past the last shape.
+// The highest value a parameter byte may hold: 127 for all but WAV, DST and SCN's MOD. Knobs,
+// locks, random ranges and LIVE RND clamp to it, so a knob does not wind past the last shape.
 constexpr uint8_t kit_param_max(int index) {
-    return index == kKitLfoWaveIndex ? kKitLfoWaveMax
-                                     : (index == kKitLfoDestIndex ? kKitLfoDestMax : uint8_t(127));
+    return index == kKitLfoWaveIndex    ? kKitLfoWaveMax
+           : index == kKitLfoDestIndex  ? kKitLfoDestMax
+           : index == kKitScanModeIndex ? kKitScanModeMax
+                                        : uint8_t(127);
 }
 
 // A byte of the old band layout as the number it meant: WAV in six bands, DST in seventeen; any
@@ -223,6 +251,8 @@ constexpr bool machine_reads_asr_slot(uint8_t id, int slot) {
 constexpr bool machine_is_wave(uint8_t id) {
     return id == uint8_t(MachineId::wave_mono) || id == uint8_t(MachineId::wave_poly);
 }
+// The SCN page (the wavetable scan) is the WAVE pair's alone.
+constexpr bool machine_reads_scn(uint8_t id) { return machine_is_wave(id); }
 
 // FM4: four sine operators in one of eight algorithms (dsp/fm.hpp).
 constexpr bool machine_is_fm(uint8_t id) { return id == uint8_t(MachineId::fm); }
@@ -460,6 +490,48 @@ struct ChainEntry {
 // The highest `ChainEntry::mutes`: one per stored mute state.
 constexpr uint8_t kChainMutesMax = 8;
 
+// A chain entry's song-section fields (PROJECT.BIN section 10), beside `ChainEntry` rather than in
+// it so that section 2's layout, and every reader of it, stays as it was. Every field's 0 is
+// `--`, "leave it as it is", so a zeroed SectionExtra is an entry exactly as an older build
+// plays it, and that is what a file without section 10 reads as. Applied as the entry starts
+// (Engine::chain_entry_started), beside the mute recall; the hands take over at once and the
+// next entry applies its own fields again.
+//
+// `cap` and `ChainEntry::mutes` never both hold: CAP is an exact mute mask stored here, and an
+// entry with it keeps `mutes` at 0, so section 5 says `--` to a build that does not know CAP.
+struct SectionExtra {
+    uint8_t cap = 0;        // 1: `mask` is the entry's mute state (MUT CAP)
+    uint8_t mask = 0;       // bit t = track t muted
+    uint8_t scene = 0;      // SCN: 0 --, 1-16 that scene on morph side B
+    uint8_t morph = 0;      // MRP: kSectionMorph*
+    uint8_t energy = 0;     // NRG: 0 --, 1-129 = ENERGY -64 .. +64
+    uint8_t transpose = 0;  // TRN: 0 --, 1-25 = TRANSPOSE -12 .. +12 (byte 7 of the record,
+                            // which builds before TRN wrote 0 and ignore)
+    uint16_t bpm = 0;       // BPM: 0 --, else centi-BPM, kTempoCentiMin .. kTempoCentiMax
+};
+static_assert(sizeof(SectionExtra) == 8, "64 of them sit in the Project, beside the chain");
+
+constexpr uint8_t kSectionMorphNone = 0;
+constexpr uint8_t kSectionMorphSnap = 1;   // the morph jumps to B on the boundary
+constexpr uint8_t kSectionMorphRide = 2;   // it rides to B over the whole entry
+constexpr uint8_t kSectionMorphBack = 3;   // it rides back to A over the whole entry
+constexpr uint8_t kSectionMorphSnapA = 4;  // the morph jumps to A on the boundary
+constexpr uint8_t kSectionMorphMax = kSectionMorphSnapA;
+constexpr uint8_t kSectionScenesMax = 16;
+// NRG's byte for ENERGY 0, and its highest (+64).
+constexpr uint8_t kSectionEnergyZero = 65;
+constexpr uint8_t kSectionEnergyMax = 129;
+// TRN's byte for TRANSPOSE 0, and its highest (+12): the amount in the unit the FUNC menu's
+// TRANSPOSE row has, scale steps or semitones, as a LOCK holds it.
+constexpr uint8_t kSectionTransposeZero = 13;
+constexpr uint8_t kSectionTransposeMax = 25;
+
+// True when the entry sets nothing beyond what an older build plays.
+constexpr bool section_empty(const SectionExtra &e) {
+    return e.cap == 0 && e.scene == 0 && e.morph == 0 && e.energy == 0 && e.bpm == 0 &&
+           e.transpose == 0;
+}
+
 // --- the project ----------------------------------------------------------
 
 // The tempo's domain, in centi-BPM. Enaga's clock takes 20-300 BPM (docs/ENAGA_API.md), so a
@@ -497,6 +569,46 @@ constexpr uint8_t kEvolveKindDefault = 4;
 // The highest byte the kind may hold (Mutation::mix), and the highest period index.
 constexpr uint8_t kEvolveKindMax = 8;
 constexpr uint8_t kEvolvePeriodMax = 4;
+
+// --- the line input ---------------------------------------------------------
+//
+// The audio input as a mixer strip of its own (the jam review's idea 4): whatever is plugged into
+// INPUT, an outboard synth or drum machine, plays through STRATA's mix with a fader, pan, the
+// three sends, a duck depth and a tone knob, and so reaches the master effects, the looper,
+// REPEAT and JAM REC. A PROJECT setting, not a kit one, for MIDI OUT's reason: it is cabling,
+// and recalling a kit must not cut the synth on stage. PROJECT.BIN's optional section 9.
+//
+// One byte per field, in this order, which reaches the file: new fields go on the END.
+enum class InputField : uint8_t {
+    on = 0,     // 0 off (the strip costs nothing and the input is not heard), 1 on
+    level,      // the fader, 0-127; kInputLevelUnity is 0 dB
+    pan,        // 0-127, 64 centre, as a track's PAN
+    delay,      // send A, 0-127, post-fader
+    reverb,     // send B, 0-127, post-fader
+    chorus,     // send C, 0-127, post-fader
+    duck,       // how far the kit's duck takes it down, 0-100 percent as a track's DCK
+    tone,       // TON (D8): 64 flat, below a low-pass, above a high-pass
+    source,     // which jack: kInputSources' index
+    gain,       // the source's front-end level: 0 LOW, 1 NORMAL, 2 HIGH (enaga_input_level)
+    count
+};
+constexpr int kInputFields = int(InputField::count);
+constexpr uint8_t kInputLevelUnity = 100;
+// The sources, in the order SRC walks them: LINE (stereo), LINE L (mono), MIC, DYN MIC, HI-Z, USB.
+// STRATA's own numbering, so the file does not depend on Enaga's enum; app/ maps it.
+constexpr uint8_t kInputSources = 6;
+constexpr uint8_t kInputGains = 3;
+constexpr uint8_t kInputGainNormal = 1;
+
+// One field's byte, clamped to that field's domain; the reader and the engine both use it, so a
+// damaged file and a stray command land on the same legal value.
+constexpr uint8_t input_field_sanitized(int field, uint8_t byte) {
+    return field == int(InputField::on)       ? uint8_t(byte != 0 ? 1 : 0)
+           : field == int(InputField::duck)   ? uint8_t(byte > kDuckDepthMax ? kDuckDepthMax : byte)
+           : field == int(InputField::source) ? uint8_t(byte < kInputSources ? byte : 0)
+           : field == int(InputField::gain)   ? uint8_t(byte < kInputGains ? byte : kInputGainNormal)
+                                              : uint8_t(byte > 127 ? 127 : byte);
+}
 
 // Settings that belong to the project rather than to a pattern.
 struct ProjectSettings {
@@ -538,6 +650,13 @@ struct ProjectSettings {
     // kit because it is cabling -- which outboard synth listens where -- not a sound: recalling a
     // kit must not re-route the synths on stage.
     uint8_t midi_out[kTracks] = {};
+
+    // PROG CHG OUT: every change of the playing pattern sends a program change, 0-127 for
+    // A01-H16, on the user's MIDI CH (Enaga's setting) -- the same number a program change in
+    // queues, so a second STRATA or any sequencer that follows program changes changes with it.
+    // Off by default: a synth listening on that channel would otherwise change its sound.
+    // Cabling, so in the project with the channels above, saved on the end of their section.
+    bool program_out = false;
 
     // EVOLVE (core/evolve.hpp), saved so a set comes back evolving (Roland, 2026-11-27). Each
     // track's period as kEvolvePeriod's index (0 OFF, then 1, 2, 4 or 8 loops), and the mode,
@@ -587,12 +706,19 @@ struct ProjectSettings {
     // keeps their byte, after the master bytes, but writes it as 0 and ignores it on read
     // (Roland, 2026-11-22), so a project never opens with a band killed.
     uint8_t eq_kills = 0;
+
+    // The line input's strip (InputField order): off, the fader at 0 dB, centred, no sends, no
+    // duck, the tone flat, stereo LINE at NORMAL. Off by default, so a project from before it,
+    // and a new one, sound exactly as they did and the input is never heard by surprise.
+    uint8_t input[kInputFields] = {0, kInputLevelUnity, 64, 0, 0, 0, 0, 64, 0, kInputGainNormal};
 };
 
 struct Project {
     ProjectSettings settings;
     Kit kit;
     ChainEntry chain[kChainEntries];
+    // Each chain entry's section fields, index for index with `chain`.
+    SectionExtra chain_extra[kChainEntries];
     Pattern patterns[kBanks][kPatternsPerBank];
 
     // Which pattern is playing. The sequencer plays `live()`, in place.
@@ -661,8 +787,9 @@ constexpr uint16_t kSectionProjectLive = 4;
 // Song mode: the SONG switch and each chain entry's mute recall (`ChainEntry::mutes`). Optional
 // on read: an older file has a looping chain with no mute recalls, which is what zeroes mean.
 constexpr uint16_t kSectionProjectSong = 5;
-// Each track's MIDI OUT channel (core/midiout.hpp): eight bytes, 0 off or 1-16. Optional on read
-// like the ones above: an older file has every track's MIDI out off, which is what it played.
+// Each track's MIDI OUT channel (core/midiout.hpp): eight bytes, 0 off or 1-16, then PROG CHG OUT
+// (one byte, 1 on). Optional on read like the ones above: an older file has every track's MIDI out
+// off, which is what it played; a section of eight bytes is from before PROG CHG OUT, which is off.
 constexpr uint16_t kSectionProjectMidi = 6;
 // EVOLVE (core/evolve.hpp): each track's period and the shared mode, mutation and amount.
 // Optional on read like the ones above: an older file has every track's EVOLVE off, ORBIT,
@@ -672,6 +799,16 @@ constexpr uint16_t kSectionProjectEvolve = 7;
 // the ones above: an older file has every lane on its own part, which is how it played; an older
 // build ignores the section and plays the playing pattern whole.
 constexpr uint16_t kSectionProjectLaunch = 8;
+// The line input's strip (ProjectSettings::input): kInputFields bytes. Optional on read like the
+// ones above: an older file has the strip off, which is how it played; an older build ignores the
+// section and never hears the input. A shorter section is a file from before a field was added,
+// and the missing fields take their defaults.
+constexpr uint16_t kSectionProjectInput = 9;
+// The chain's song sections (SectionExtra): a layout byte (0), then 8 bytes for each of the 64
+// entries: CAP flag, mask, SCN, MRP, NRG, BPM (u16, little end first, as every u16 here),
+// reserved. Optional on read like the ones above: an older file has every field `--`, and an
+// older build ignores the section and plays pattern, repeats and mute recall.
+constexpr uint16_t kSectionProjectSections = 10;
 
 constexpr uint16_t kKitVersion = 1;
 constexpr uint16_t kSectionKitTracks = 1;
@@ -726,6 +863,10 @@ constexpr uint16_t kSectionKitChorus = 14;
 // The stereo widths, one byte per track (KitTrack::width). Optional on read: a KIT.BIN from before
 // them loads every track mono, which is how every track played. An older build ignores it.
 constexpr uint16_t kSectionKitWidth = 15;
+// The WAVE machines' SCN page, four bytes per track (kKitScnParams: MOD SPD END CRV). Optional on
+// read: a KIT.BIN from before it loads kKitScnDefault on every track, which scans nothing. An
+// older build ignores it.
+constexpr uint16_t kSectionKitScn = 16;
 
 constexpr uint16_t kBankVersion = 1;
 constexpr uint16_t kSectionBankPatterns = 1;

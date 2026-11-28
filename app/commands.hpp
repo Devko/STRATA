@@ -209,6 +209,11 @@ enum class Cmd : uint8_t {
     // The sidechain duck (core/project.hpp, KitDuck): a: DuckField, b: int8 delta; track is the
     // track whose depth moves for DuckField::depth. Kit bytes, so a kit save keeps them.
     set_duck,
+    // The line input's strip (core/project.hpp, ProjectSettings::input): a: InputField, b: an int8
+    // encoder delta onto the byte, clamped to the field's domain (input_field_sanitized); or
+    // c = 1: a push, which turns ON over, walks SRC and GAIN round by one, and is refused on
+    // the other fields. Decided on the audio side, as set_choke's step is. PROJECT.BIN bytes.
+    set_input,
 
     // --- performance, M5 ---------------------------------------------------
     //
@@ -306,9 +311,18 @@ enum class Cmd : uint8_t {
     // the chaining state that 1ST and the conditions read.
     restart,
 
-    // PROJECT's CHAIN page. step: the entry index, a: ChainEdit, b: bank, c: slot, d: repeats.
+    // PROJECT's CHAIN page. step: the entry index, a: ChainEdit, b: bank, c: slot, d: repeats,
+    // e: mute recall; the section edits use the bytes as ChainEdit says.
     // core/queue.hpp's chain_set / chain_insert / chain_remove, which keep the chain a prefix.
     chain_edit,
+
+    // ARR REC (core/arrrec.hpp), the FUNC menu's row under JAM REC. a: 1 on, 0 off. On keeps the
+    // chain for ARR UNDO, empties it and stops following it; from the next pass (or the next
+    // PLAY) every pass of the jam is written into it. Off, STOP and a full chain end the take.
+    // Status::arr_event says what happened.
+    arr_rec,
+    // ARR UNDO: swap the chain and the one the last take replaced (one level, both ways).
+    arr_undo,
 
     // The pattern's master length in steps, 1-64: what a queued change and a chain wait for.
     // a: length; or c = 1: b is an int8 delta.
@@ -339,12 +353,33 @@ enum class Cmd : uint8_t {
     // the channel they were sent on.
     set_midi_out,
 
+    // PROG CHG OUT (core/project.hpp, `program_out`): a: 1 on, 0 off. Every change of the playing
+    // pattern then sends its number, 0-127 for A01-H16, as a program change on the user's MIDI CH.
+    set_program_out,
+    // The user's MIDI CH (Enaga's setting, 0-15), which only the main context reads: posted at
+    // start and whenever it changes. a: the channel. Live state, not saved.
+    set_midi_channel,
+    // An outside clock's song position pointer moved the clock (ENAGA_TRANSPORT_LOCATE under MIDI
+    // clock, only while stopped). u: the position in ticks. The pattern, or the chain and its
+    // entry, are put where that position falls, so the CONTINUE that follows plays from there.
+    locate,
+
     // A factory sound (core/sounds.hpp) into one track: the SOUNDS list (OK from EDIT or MACHINE).
     // track, a: the MachineId it was picked for, b: the preset's index -- refused if the track
     // hosts another machine by the time it lands. b = kSoundPresetKeep remembers the track's
     // sound as it is (the list opening); b = kSoundPresetBack puts that back (its AS WAS row).
     // Only the bytes a preset writes are touched either way, so the mix stays the user's.
     sound_preset,
+
+    // A saved sound (core/usersounds.hpp) or a copied one into one track: eight parameter bytes
+    // a command, from parameter `step`: b c d e, then u's four bytes low first. track, a: the
+    // MachineId the bytes are for -- refused if the track hosts another machine by the time it
+    // lands. Every parameter a sound owns (user_sound_owns: all but the hole) is written, the mix
+    // included. A whole sound is (kKitParams + 7) / 8 of these, then its LFO and ARP kit settings
+    // by their own commands, posted together, so they land in one block. AS WAS (sound_preset
+    // with kSoundPresetBack) then puts back everything that was there: the machine when a paste
+    // switched it, every parameter, and the kit settings.
+    sound_bytes,
 
     // A factory arp (core/arppresets.hpp) into one track: the ARPS list (OK on the ARP page).
     // track, b: the preset's index, or kSoundPresetKeep / kSoundPresetBack as for sound_preset.
@@ -397,6 +432,16 @@ enum class Cmd : uint8_t {
     // absolute (the UI keeps the position, as it does REL ALL's). Performance, not edits: no
     // file, no undo; a LOCK holds it.
     set_energy,
+    // TRANSPOSE (core/transpose.hpp), FUNC + the screen keys on every screen. a: the steps as an
+    // int8, -12 .. 12, absolute (the UI keeps it, as it does ENERGY); b: 1 semitones, 0 scale
+    // steps (the FUNC menu's row). The melodic tracks' notes, after the scale fold. Performance,
+    // not an edit: no file, no undo; a LOCK holds the amount.
+    set_transpose,
+    // VariSpeed (core/varispeed.hpp), FUNC + turn VALUE. a: the amount as an int8, tenths of a
+    // semitone, -120 .. 120, absolute (the UI keeps it, with the clock it sets). The pitch of
+    // every machine and the delay's beat; Enaga's tempo is app/'s to set. Performance, not an
+    // edit: no file, no undo, not in a LOCK.
+    set_varispeed,
 
     // Sample audition (dsp/audition.hpp), push A in SAMPLES. `audition_start` is posted by the
     // card side once the file's stream is open and filled; what to play is in
@@ -406,7 +451,7 @@ enum class Cmd : uint8_t {
     audition_start,
     audition_stop,
 
-    // JAM REC (app/storage.hpp, "jam recording"), the FUNC menu's last row: the finished master
+    // JAM REC (app/storage.hpp, "jam recording"), the FUNC menu's second row: the finished master
     // to /RECORD as one long WAV through an Enaga recording stream. `jam_start` is posted by the
     // card side once Engine::jam_writer() is created; from the next block the audio side writes
     // every block into it. `jam_stop` ends that, and the audio side bumps Status::jam_epoch once
@@ -446,8 +491,32 @@ enum class DuckField : uint8_t { depth, source, attack, hold, release, count };
 // bank by bank), its repeat count (1-16) or its mute recall (0 none, 1-8) by the int8 in `b`,
 // so knob clicks applied a block late are not lost. `song` sets song mode, b = 0 or 1, and
 // ignores the entry.
+// What ARR REC tells the UI (Status::arr_last; Status::arr_arg is the entries written).
+enum class ArrEvent : uint8_t {
+    started = 0,   // a take is on: `ARR REC ON`, or `ARR: PRESS PLAY` with the transport stopped
+    ended,         // off, STOP or a chain edit that started the chain: `ARR 23 SECTIONS`
+    full,          // a 65th entry was needed: `ARR FULL 64 SECTIONS`
+    empty,         // the take wrote nothing and the old chain is back: `ARR NOTHING KEPT`
+    undone,        // ARR UNDO swapped in the chain from before the take: `ARR UNDONE`
+    redone,        // and back again: `ARR REDONE`
+    no_undo,       // ARR UNDO with nothing to swap, or during a take: `NO ARR TO UNDO`
+    launch_kept,   // a pass with a borrowed lane was captured; arg = bank * 16 + slot: `LAUNCH IN A05`
+    launch_lost,   // ...and could not be (no free slot, too many locks): `LAUNCH NOT KEPT`
+};
+
 enum class ChainEdit : uint8_t {
-    set = 0, insert, remove, pattern_delta, repeats_delta, mutes_delta, song
+    set = 0, insert, remove, pattern_delta, repeats_delta, mutes_delta, song,
+    // Song sections (core/project.hpp, SectionExtra) on entry `step`:
+    //   section: the fields whole. b CAP flag, c mask, d SCN, e MRP, u: NRG in bits 0-7,
+    //            BPM (centi) in bits 8-23 and TRN in bits 24-31. Refused whole when a field is
+    //            out of range.
+    //   copy:    a copy of entry `step`, section fields and all, inserted after it (OK).
+    //   fill:    the fields from what plays now: the mutes as CAP, side B's scene, SNAP or SNAP A
+    //            to the morph's nearer side, ENERGY, TRANSPOSE and the tempo (hold OK on the
+    //            section view).
+    //   section_delta: b a SectionField, c its turn as an int8 (core/queue.hpp, section_step).
+    //   section_clear: b a SectionField, back to `--` (a knob's push).
+    section, copy, fill, section_delta, section_clear
 };
 
 // How a recorded hit meets the step it lands on (Cmd::record_hit's `d`). The UI decides, because
@@ -762,6 +831,42 @@ struct Status {
     // for the change and stops the transport, which only it can do (<enaga/clock.hpp>).
     std::atomic<uint8_t> song_end{0};
 
+    // Song sections (core/project.hpp, SectionExtra). `section_event` is bumped each time a chain
+    // entry starts and applies fields of its own, so the UI takes the morph and ENERGY back from
+    // the engine, as after a LOCK jump. `section_tempo` / `tempo_due`: the entry's BPM, in
+    // centi-BPM, and a bump that says it is due. Only the main context may set Enaga's clock
+    // (<enaga/clock.hpp>), so the audio side asks and the UI sets it on its next pass, or says
+    // it was refused under an outside clock. `morph_riding` is 1 while a section's MRP RIDE or
+    // BACK moves the morph, so the UI follows the engine's position rather than its own copy.
+    std::atomic<uint8_t> section_event{0};
+    std::atomic<uint16_t> section_tempo{0};
+    std::atomic<uint8_t> tempo_due{0};
+    std::atomic<uint8_t> morph_riding{0};
+    // Bumped as the last thing Cmd::project_loaded does: the main context takes the loaded
+    // project's tempo on the change, and puts its copies of the live moves and VariSpeed to rest
+    // as the engine did. A counter rather than a comparison with the engine's copy
+    // of the tempo, which lags every tempo the UI posts by a block and read as a change back.
+    std::atomic<uint8_t> project_loads{0};
+
+    // ARR REC (core/arrrec.hpp). `arr_on`: 1 while a take is on (armed or recording);
+    // `arr_written`: the entries it has written so far. `arr_event` is bumped for each thing the
+    // UI says, `arr_last` an ArrEvent and `arr_arg` its count of entries. `arr_undo_ready`: 1
+    // while ARR UNDO has a chain to swap in.
+    std::atomic<uint8_t> arr_on{0};
+    std::atomic<uint8_t> arr_written{0};
+    // Bumped for each pass a take writes into the chain (a repeat or a new entry), so the UI
+    // marks PROJECT.BIN dirty: no command did it.
+    std::atomic<uint8_t> arr_passes{0};
+    std::atomic<uint8_t> arr_undo_ready{0};
+    std::atomic<uint8_t> arr_event{0};
+    std::atomic<uint8_t> arr_last{0};
+    std::atomic<uint8_t> arr_arg{0};
+    // Bumped for each pattern a take captures (Track Launch, core/arrrec.hpp), with the banks
+    // captured into since the take began in `arr_capture_banks` (bit b = bank b), written
+    // first: the UI marks those banks for the next save, since no command wrote them.
+    std::atomic<uint8_t> arr_captures{0};
+    std::atomic<uint8_t> arr_capture_banks{0};
+
     // Track Launch. Bumped by the audio side for each thing the UI says: `launch_last` is a
     // LaunchEvent, `launch_arg` its track or the slot CAPTURE wrote.
     std::atomic<uint8_t> launch_event{0};
@@ -779,6 +884,35 @@ struct Status {
         launch_arg.store(arg, std::memory_order_relaxed);
         launch_event.store(uint8_t(launch_event.load(std::memory_order_relaxed) + 1),
                            std::memory_order_release);
+    }
+
+    // Audio context only, one writer: the tempo first, so a reader that sees the bump (with
+    // acquire) sees the tempo it is for.
+    void bump_tempo_due(uint16_t centi) {
+        section_tempo.store(centi, std::memory_order_relaxed);
+        tempo_due.store(uint8_t(tempo_due.load(std::memory_order_relaxed) + 1),
+                        std::memory_order_release);
+    }
+
+    // Audio context only, one writer: what happened first, so a reader that sees the bump (with
+    // acquire) sees what it is for.
+    void bump_arr_event(uint8_t last, uint8_t arg) {
+        arr_last.store(last, std::memory_order_relaxed);
+        arr_arg.store(arg, std::memory_order_relaxed);
+        arr_event.store(uint8_t(arr_event.load(std::memory_order_relaxed) + 1),
+                        std::memory_order_release);
+    }
+
+    // Audio context only, one writer, as bump_song_end.
+    void bump_section_event() {
+        section_event.store(uint8_t(section_event.load(std::memory_order_relaxed) + 1),
+                            std::memory_order_release);
+    }
+
+    // Audio context only, one writer, as bump_song_end.
+    void bump_project_loads() {
+        project_loads.store(uint8_t(project_loads.load(std::memory_order_relaxed) + 1),
+                            std::memory_order_release);
     }
 
     // Audio context only, one writer, as bump_triggered.
