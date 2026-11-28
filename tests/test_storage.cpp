@@ -5112,7 +5112,7 @@ TEST(storage_a_jam_records_the_master_block_for_block_into_a_24_bit_wav) {
     CHECK(!engine().jam_attached());
     CHECK_EQ(host.streams_open(), 0);
     const char *message = storage().take_jam_message();
-    CHECK(message != nullptr && std::strncmp(message, "SAVED JAM_", 10) == 0);
+    CHECK(message != nullptr && std::strncmp(message, "SAVED JAM ", 10) == 0);
     CHECK(storage().take_jam_message() == nullptr);   // once
 
     // The file: a WAV header with the length, 48 kHz stereo 24-bit, and the samples as heard.

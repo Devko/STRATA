@@ -2884,8 +2884,11 @@ void Storage::close_jam() {
         append_text(out, enaga::files::error_name(closed), end);
     } else {
         append_text(out, "SAVED ", end);
-        // The name without its .WAV: the toast has 21 characters.
-        for (const char *c = jam_name_; *c != '\0' && *c != '.' && out < end; c++) *out++ = *c;
+        // The name without its .WAV (the toast has 21 characters), and with a space for the _
+        // the screen's font does not have: SAVED JAM 3.
+        for (const char *c = jam_name_; *c != '\0' && *c != '.' && out < end; c++) {
+            *out++ = *c == '_' ? ' ' : *c;
+        }
     }
     *out = '\0';
     jam_message_ = jam_text_;

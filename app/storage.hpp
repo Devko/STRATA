@@ -357,7 +357,7 @@ public:
     uint32_t jam_lost_frames() const;
     // The file's name (JAM_3.WAV), the running jam's or the last one's; "" before the first.
     const char *jam_name() const { return jam_name_; }
-    // What became of the last start or stop (SAVED JAM_3, CARD FULL ...), once: reads and clears.
+    // What became of the last start or stop (SAVED JAM 3, CARD FULL ...), once: reads and clears.
     const char *take_jam_message() {
         const char *m = jam_message_;
         jam_message_ = nullptr;

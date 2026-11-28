@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # JAM REC in the emulator: PLAY starts the default beat, the FUNC menu's last row (one UP from
-# SAVE) starts a jam (`JAM REC JAM_<n>` in the log), the beat records for about four seconds
+# SAVE) starts a jam (`JAM REC JAM <n>` in the log), the beat records for about four seconds
 # through Enaga's real recording stream, and the same row stops it: `JAM STOPPING`, then
-# `SAVED JAM_<n>` once the file is closed with its header. No `JAM: CARD TOO SLOW` on the way,
+# `SAVED JAM <n>` once the file is closed with its header. No `JAM: CARD TOO SLOW` on the way,
 # and the load with the jam's 24-bit conversion in audio() is inside the target.
 #
 # That the file holds the master sample for sample, the card filling, the 4-hour limit, a pulled
@@ -91,9 +91,9 @@ def first(prefix):
         if line.startswith(prefix):
             return i
     return -1
-check(first("JAM REC JAM_") >= 0, "JAM REC started a jam", f"log={log}")
-check(first("JAM STOPPING") > first("JAM REC JAM_"), "the same row stopped it", f"log={log}")
-check(first("SAVED JAM_") > first("JAM STOPPING"), "the file closed cleanly", f"log={log}")
+check(first("JAM REC JAM ") >= 0, "JAM REC started a jam", f"log={log}")
+check(first("JAM STOPPING") > first("JAM REC JAM "), "the same row stopped it", f"log={log}")
+check(first("SAVED JAM ") > first("JAM STOPPING"), "the file closed cleanly", f"log={log}")
 check(first("JAM:") < 0, "the card kept up and nothing failed", f"log={log}")
 check(first("CARD") < 0, "no card trouble", f"log={log}")
 

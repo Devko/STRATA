@@ -151,7 +151,7 @@
         char *out = notice_buffer_;
         append(out, "JAM REC ");
         const char *name = storage_.jam_name();
-        while (*name != '\0' && *name != '.') *out++ = *name++;
+        for (; *name != '\0' && *name != '.'; name++) *out++ = *name == '_' ? ' ' : *name;   // no _ in the font
         *out = 0;
         notice_logged(notice_buffer_);
     }

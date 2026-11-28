@@ -1673,9 +1673,9 @@ muted track bounces as silence, so unmute it first.
 ### Recording the whole jam: JAM REC
 
 RESAMPLE keeps 30 seconds. To keep a whole set, use **JAM REC**, the FUNC menu's last row:
-FUNC+HOME, UP, OK. The menu closes with `JAM REC JAM_3`, a dot blinks in the top bar before the
+FUNC+HOME, UP, OK. The menu closes with `JAM REC JAM 3`, a dot blinks in the top bar before the
 load, and everything that comes out of STRATA goes to `/RECORD/JAM_<n>.WAV` until you stop it:
-FUNC+HOME, UP, OK again (`JAM STOPPING`, then `SAVED JAM_3`). The row shows how long it has run,
+FUNC+HOME, UP, OK again (`JAM STOPPING`, then `SAVED JAM 3`). The row shows how long it has run,
 `4:07` or `1:02:33`.
 
 It records what RESAMPLE's MASTER take hears: every track, the sends, the master effects,

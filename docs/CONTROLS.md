@@ -165,7 +165,7 @@ The cursor starts on SAVE every time, so **FUNC + HOME, OK saves**, and the list
 | FREEZE | freeze the selected track (its loop from the next bar line), or unfreeze it | `T3 1 BAR` (1 2 4 8), `T3 WAIT` / `REC` while recording, `T3 ON` frozen |
 | LOOP LEN | | the performance mixer's looper: `4 BAR` (1 2 4 8), what push VALUE + STEP 16 records |
 | LOAD DEMO | OK twice within 2 s: the factory demo project (the boot beat), under a new name | |
-| JAM REC | starts recording the finished master to `/RECORD/JAM_<n>.WAV` and closes the menu (`JAM REC JAM_3`); OK again stops it (`JAM STOPPING`, then `SAVED JAM_3` once the file is closed). The last row: FUNC + HOME, UP, OK | `OFF`, or how long it has run, `4:07`, `1:02:33` |
+| JAM REC | starts recording the finished master to `/RECORD/JAM_<n>.WAV` and closes the menu (`JAM REC JAM 3`); OK again stops it (`JAM STOPPING`, then `SAVED JAM 3` once the file is closed). The last row: FUNC + HOME, UP, OK | `OFF`, or how long it has run, `4:07`, `1:02:33` |
 
 Moved here from: FUNC + PROJECT twice (save), PROJECT's FUNC + UP/DOWN/LEFT/RIGHT (chain,
 sample reload, reload, new), PROJECTS' FUNC + DOWN (save as, still there too), CHAIN's FUNC +

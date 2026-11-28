@@ -12135,7 +12135,8 @@ TEST(ui_jam_rec_starts_and_stops_from_the_menu_and_shows_it_is_running) {
     CHECK(screen_has(app, "OFF"));
     key(ENAGA_KEY_OK);
     CHECK_EQ(UiProbe::mode(app), int(Mode::edit));      // closed, back over EDIT
-    CHECK(std::strncmp(UiProbe::notice(app), "JAM REC JAM_", 12) == 0);
+    CHECK(std::strncmp(UiProbe::notice(app), "JAM REC JAM ", 12) == 0);
+    check_layout(app, "JAM REC started");
     CHECK(app_storage().jam_recording());
     pump(2);
     CHECK(app_engine().jam_attached());
@@ -12160,9 +12161,10 @@ TEST(ui_jam_rec_starts_and_stops_from_the_menu_and_shows_it_is_running) {
     bool saved = false;
     for (int i = 0; i < 20 && !saved; i++) {
         pump();
-        saved = std::strncmp(UiProbe::notice(app), "SAVED JAM_", 10) == 0;
+        saved = std::strncmp(UiProbe::notice(app), "SAVED JAM ", 10) == 0;
     }
     CHECK(saved);
+    check_layout(app, "JAM REC saved");
     CHECK(!app_storage().jam_running());
     CHECK(screen_has(app, "OFF"));
     char path[64];

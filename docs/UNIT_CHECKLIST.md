@@ -803,13 +803,13 @@ to reach `GUARD4` here at a 40-60% top line.
 
 **W61. JAM REC, the whole jam to the card (6 min).** Beat playing, A01, a card with a few GB
 free.
-- FUNC+HOME, UP: `JAM REC` with `OFF`. OK: the menu closes, `JAM REC JAM_n`, and a dot blinks
+- FUNC+HOME, UP: `JAM REC` with `OFF`. OK: the menu closes, `JAM REC JAM n`, and a dot blinks
   in the top bar before the load. The top line reads `____ %` (compare with the beat alone,
   `____ %`). `____`
 - Play for three minutes: change patterns, throw a scene, open a sample and audition it (push A
   in SAMPLES), switch CLICK on for a bar. FUNC+HOME, UP: the row counts, `3:0x`. No
   `JAM: CARD TOO SLOW` on the way. `____`
-- OK: `JAM STOPPING`, then `SAVED JAM_n` within a second. On the PC, `/RECORD/JAM_n.WAV` opens
+- OK: `JAM STOPPING`, then `SAVED JAM n` within a second. On the PC, `/RECORD/JAM_n.WAV` opens
   as 48 kHz 24-bit stereo of about 3 minutes, sounds as heard, and holds no click and no
   audition. `____`
 - Start another, let it run 30 s with four streamed samples playing if you have them, then
