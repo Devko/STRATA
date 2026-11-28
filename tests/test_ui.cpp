@@ -12410,6 +12410,34 @@ TEST(ui_a_knob_still_turning_keeps_its_layer_across_func) {
     CHECK_EQ(int(engine.macro_position(2)), int(macro_c));
 }
 
+// A, B and D take the same path as C: FUNC let go mid-turn, the last click still reaches REL ALL,
+// LEN ALL and LIVE RND, and the macro under the knob never moves.
+TEST(ui_a_b_and_d_still_turning_keep_their_layer_across_func) {
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+    shift_key(ENAGA_KEY_F7);
+    pump(1600);
+    for (int knob : {0, 1, 3}) {
+        const uint8_t macro = engine.macro_position(knob);
+        app.on_key(ENAGA_KEY_F1, true);
+        app.on_encoder(knob, -1);
+        pump(30);
+        app.on_key(ENAGA_KEY_F1, false);
+        pump(30);
+        app.on_encoder(knob, knob == 3 ? +2 : -1);            // still turning: the FUNC layer
+        pump(2);
+        CHECK_EQ(int(engine.macro_position(knob)), int(macro));
+        if (knob == 0) CHECK_EQ(int(engine.rel_all()), -4);
+        if (knob == 1) CHECK(engine.len_all() < 0);
+        if (knob == 3) CHECK(engine.live_rnd_unit() != kLiveRndOff);
+        pump(300);                                            // rested: the macro again
+        app.on_encoder(knob, +1);
+        pump(2);
+        CHECK_EQ(int(engine.macro_position(knob)), int(macro) + 2);
+        pump(300);
+    }
+}
+
 // ENERGY is in a LOCK: a jump puts it back and the UI's knob follows.
 TEST(ui_a_lock_jump_puts_energy_back_and_the_knob_follows) {
     Strata &app = fresh();
