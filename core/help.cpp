@@ -450,6 +450,20 @@ constexpr Text kMenu = {"FUNC MENU:", {
     "FUNC+REC TWICE  JAM",
 }};
 
+// ARR REC and ARR UNDO, the FUNC menu's arrangement rows (core/arrrec.hpp).
+constexpr Text kArrRec = {"ARR REC:", {
+    "THE ROW UNDER JAM REC",
+    "ON: THE JAM GOES INTO",
+    "THE CHAIN A PASS AT",
+    "A TIME OLD CHAIN KEPT",
+    "SAME AGAIN ONE MORE X",
+    "CHANGED  A NEW ENTRY",
+    "X16 OR 64 ENTRIES MAX",
+    "OFF OR STOP ENDS IT",
+    "ARR UNDO  SWAP BACK",
+    "STRIP: ARR AND COUNT",
+}};
+
 // The MIXER's pages, in app/app.hpp's kMixerPages order (its static_assert holds the count).
 constexpr Text kMixer[kHelpMixerPages] = {
     {"MIXER TRK 1-4:", {"A-D  TRACK 1-4 LEVEL", "PUSH  CHOKE GROUP", "OFF 1-4: A NOTE CUTS",
@@ -760,7 +774,7 @@ bool own_page(const HelpPlace &place, int page, char title[kHelpChars + 1],
         case HelpScreen::samples:   list[listed++] = &kSamples; break;
         case HelpScreen::sounds:    list[listed++] = &kSounds; break;
         case HelpScreen::resample:  list[listed++] = &kResample; break;
-        case HelpScreen::menu:      list[listed++] = &kMenu; break;
+        case HelpScreen::menu:      list[listed++] = &kMenu; list[listed++] = &kArrRec; break;
         case HelpScreen::count:     break;
     }
 

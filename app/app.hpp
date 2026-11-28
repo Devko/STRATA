@@ -822,6 +822,9 @@ private:
     uint8_t section_event_seen_ = 0;
     uint8_t tempo_due_seen_ = 0;
     bool bpm_skip_said_ = false;
+    // ARR REC: Status::arr_event and Status::arr_passes as last acted on.
+    uint8_t arr_event_seen_ = 0;
+    uint8_t arr_passes_seen_ = 0;
     uint32_t stream_late_said_ms_ = 0;
 
     // The card side: projects, autosave and the sample loader, all in this context. It owns the

@@ -406,10 +406,10 @@ void open_keys() {
 }
 
 // The FUNC menu's rows, in order (app/ui_perfmix.hpp, MenuItem).
-enum MenuRow : int { kMenuSave, kMenuJam, kMenuClick, kMenuCountIn, kMenuRecMode, kMenuQuantize,
-                     kMenuAutofill, kMenuGlide, kMenuLoopLen, kMenuChain, kMenuSong, kMenuSaveAs,
-                     kMenuOpen, kMenuKits, kMenuNew, kMenuReload, kMenuClear, kMenuDemo,
-                     kMenuRowCount };
+enum MenuRow : int { kMenuSave, kMenuJam, kMenuArr, kMenuClick, kMenuCountIn, kMenuRecMode,
+                     kMenuQuantize, kMenuAutofill, kMenuGlide, kMenuLoopLen, kMenuChain, kMenuSong,
+                     kMenuArrUndo, kMenuSaveAs, kMenuOpen, kMenuKits, kMenuNew, kMenuReload,
+                     kMenuClear, kMenuDemo, kMenuRowCount };
 
 // GRID's track menu's rows, in order (app/ui_trackmenu.hpp, TrackRow).
 enum TrackMenuRow : int { kTrackGenerate, kTrackDensity, kTrackRange, kTrackLeap, kTrackWhat,
@@ -13263,6 +13263,99 @@ TEST(ui_jam_rec_starts_and_stops_from_the_menu_and_shows_it_is_running) {
     }
     CHECK_EQ(lit, 0);                                   // no dot once it has stopped
     host.remove_file(path);
+}
+
+// ARR REC (core/arrrec.hpp): the FUNC menu's row under JAM REC. OK arms a take and closes the
+// menu; PLAY starts it; each pass is written into the chain, marked for the next save, and
+// counted in the strip and on the row; the REC key blinks; OK again ends it and says how many
+// sections it wrote. ARR UNDO, a row under CHAIN END, swaps the chain from before back in.
+TEST(ui_arr_rec_records_the_jam_into_the_chain_from_the_menu) {
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    key(ENAGA_KEY_F4);                                  // GRID
+    save_and_clean();
+    const int chain_before = chain_length(app_engine().project());
+    const uint32_t pass = uint32_t(master_loop_ticks(app_engine().project().live()));
+
+    shift_key(ENAGA_KEY_F4);
+    key(ENAGA_KEY_DOWN);
+    key(ENAGA_KEY_DOWN);                                // the third row, under JAM REC
+    CHECK_EQ(UiProbe::menu_cursor(app), int(kMenuArr));
+    CHECK(screen_has(app, "ARR REC"));
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::grid));      // closed, the music back on the screen
+    CHECK_EQ(UiProbe::notice(app), "ARR: PRESS PLAY");
+    CHECK_EQ(int(app_engine().status().arr_on.load()), 1);
+    check_layout(app, "ARR REC armed");
+    char strip[64];
+    CHECK(UiProbe::live_strip(app, strip));
+    CHECK(std::strncmp(strip, "ARR", 3) == 0);
+
+    // PLAY, then two passes of the pattern: one entry, X2, and the project needs a save.
+    host.set_running(true);
+    for (uint32_t t = 0; t <= 2 * pass; t += pass / 4) {
+        host.deliver_tick(t, 0);
+        pump();
+    }
+    CHECK_EQ(chain_length(app_engine().project()), 1);
+    CHECK_EQ(int(app_engine().project().chain[0].repeats), 2);
+    CHECK(app_storage().dirty());
+    CHECK(UiProbe::live_strip(app, strip));
+    CHECK(std::strncmp(strip, "ARR1", 4) == 0);
+
+    // The REC key: dim red for 600 ms of each second while the take is on.
+    int lit = 0;
+    for (int i = 0; i < 1000; i++) {
+        pump();
+        lit += UiProbe::key_red(app, ENAGA_KEY_F2) == 4 ? 1 : 0;
+    }
+    CHECK(lit >= 595 && lit <= 605);
+
+    // The row says it is on and how far it has got; OK there ends the take.
+    menu_to(kMenuArr);
+    CHECK(screen_has(app, "ON 1"));
+    check_layout(app, "ARR REC row on");
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK_EQ(UiProbe::notice(app), "ARR 1 SECTION");
+    CHECK_EQ(int(app_engine().status().arr_on.load()), 0);
+    CHECK(screen_has(app, "OFF"));
+    pump(2);
+    CHECK_EQ(int(UiProbe::key_red(app, ENAGA_KEY_F2)), 0);
+
+    // ARR UNDO: the chain from before, and again the take.
+    menu_to(kMenuArrUndo);
+    CHECK(screen_has(app, "ARR UNDO"));
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK_EQ(UiProbe::notice(app), "ARR UNDONE");
+    CHECK_EQ(chain_length(app_engine().project()), chain_before);
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK_EQ(UiProbe::notice(app), "ARR REDONE");
+    CHECK_EQ(chain_length(app_engine().project()), 1);
+    key(ENAGA_KEY_CLR);
+    host.set_running(false);
+    pump(2);
+}
+
+// A take turned on and off again before a pass was kept costs nothing: the old chain is back,
+// and there is nothing for ARR UNDO to swap.
+TEST(ui_arr_rec_on_and_off_at_once_keeps_the_chain) {
+    Strata &app = fresh();
+    menu_to(kMenuArr);
+    key(ENAGA_KEY_OK);
+    pump(2);
+    menu_to(kMenuArr);
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK_EQ(UiProbe::notice(app), "ARR NOTHING KEPT");
+    menu_to(kMenuArrUndo);
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK_EQ(UiProbe::notice(app), "NO ARR TO UNDO");
+    key(ENAGA_KEY_CLR);
 }
 
 // JAM REC on FUNC + REC twice (usability review, 2026-11-28): the first press is RESAMPLE, the
