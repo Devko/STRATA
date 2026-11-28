@@ -306,8 +306,8 @@ container none of that applies.
 by Windows git, because several threads share `D:\DEV\STRATA` and none may switch its branch.
 `tools/wt.sh new <name> [<branch>]` (from WSL) makes one with Enaga checked out, and inside it
 `tools/env.sh` defaults `ENAGA_BUILD` to `$HOME/strata-build-<name>`. WSL's git cannot read such
-a worktree, so `tools/env.sh` sets `STRATA_GIT` / `STRATA_GH` to Windows' `git.exe` / `gh.exe` there (WSL runs
-them), and `tools/enaga_check.sh` and `tools/publish_release.sh` use those; gh and the GitHub
+a worktree, so `tools/env.sh` sets `STRATA_GIT` / `STRATA_GH` to Windows' `git.exe` / `gh.exe`
+there (WSL runs them), and `tools/enaga_check.sh` and `tools/publish_release.sh` use those; gh and the GitHub
 credentials exist only on Windows anyway. The emulator clone is untracked and lives in the main
 checkout only: `tools/env.sh` finds it from a worktree, and `tools/scenarios.sh` refuses to run
 without one rather than report every scenario's SKIP as a pass.
