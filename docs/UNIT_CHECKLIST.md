@@ -578,7 +578,10 @@ hit, a 44.1 kHz loop and a long stem (a minute or more). Beat stopped, A01.
   Push A: `STOPPED`, a short fade. `____`
 - The long stem, push A: how long before it sounds? `________` (it should be as quick as the
   hit). Let it run 20 s: no dropouts, `HEARING 20/..S`. `____`
-- PLAY the beat, and hear files over it: the audition sits about 6 dB under full scale, not
+- PLAY the beat, push A once on a file: `A AGAIN TO HEAR` and nothing is heard. Wait 3 s,
+  push A once: the same toast again. Push A twice quickly: now it plays. While it plays, DOWN
+  hears the next file without asking again. STOP the beat: one push hears a file again. `____`
+- With the beat playing and a file heard, the audition sits about 6 dB under full scale, not
   through the master effects or beat repeat. Too loud or too quiet against A01? `________`
 - While one plays: OK loads it into track 8 (`LOADING`) and the audition stops; CLR, a folder,
   or HOME stop it too. FUNC + push A is still the kill EQ. `____`

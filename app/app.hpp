@@ -913,6 +913,10 @@ private:
     char sample_seek_name_[SampleList::kEntryNameBytes] = {};
     Mode samples_return_ = Mode::edit;          // where CLR at the top goes back to
     int audition_row_ = -1;                     // SAMPLES: the entry being heard (push A), or -1
+    // SAMPLES with the transport running: push A once on this entry; the second within
+    // kSaveArmMs hears it.
+    int audition_armed_ = -1;
+    uint32_t audition_armed_at_ms_ = 0;
     bool audition_sounding_seen_ = false;       // Storage::audition_sounding() as update() saw it
     int sound_cursor_ = 0;                      // SOUNDS: 0 is AS WAS, then the presets
     int sound_track_ = -1;                      // the track whose sound the engine remembers
