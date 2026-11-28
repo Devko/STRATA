@@ -9,7 +9,7 @@
 #                               to ride, but the ride code runs on the C674x)
 #   push VALUE + STEP 10     -> "FX OFF: VALUE TEMPO", now on the RELEASE (a held STEP is the
 #                               momentary push)
-#   FUNC + HOME, UP x5       -> the FUNC menu, round from SAVE to FX GLIDE (above FREEZE)
+#   FUNC + HOME, DOWN x7     -> the FUNC menu, from SAVE to FX GLIDE (under AUTO-FILL)
 #   RIGHT                    -> "FX GLIDE 1 BAR", and the menu drawn with the new row
 #   CLR                      -> back
 #
@@ -18,7 +18,7 @@
 # tests/test_ui.cpp's, tests/test_perffx.cpp's and tests/test_lockstore.cpp's.
 #
 # Keys (third_party/enaga/include/enaga/abi.h): F5 = 22, PUSH VALUE = 4, STEP n = 31 + n,
-# F1 = 19, F4 = 27, UP = 17, RIGHT = 18, CLR = 30. A chord is the first key pressed and the
+# F1 = 19, F4 = 27, DOWN = 25, RIGHT = 18, CLR = 30. A chord is the first key pressed and the
 # second 5 M cycles later (tests/scenario_m6.sh). The first press must come LATE
 # (tests/scenario_m1.sh).
 set -euo pipefail
@@ -55,8 +55,8 @@ python3 -B tools/enaga_cached.py emulate "$STAGE" --cycles "$CYCLES" \
     --key 4@460000000 --key 41@465000000 \
     --key 4@540000000 --key 41@545000000 \
     --key 19@620000000 --key 27@625000000 \
-    --key 17@650000000 --key 17@680000000 --key 17@720000000 --key 17@760000000 \
-    --key 17@800000000 \
+    --key 25@650000000 --key 25@680000000 --key 25@710000000 --key 25@740000000 \
+    --key 25@770000000 --key 25@800000000 --key 25@830000000 \
     --key 18@860000000 \
     --key 30@920000000 \
     > "$LOG" 2>&1 || {

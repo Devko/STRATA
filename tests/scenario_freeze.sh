@@ -1,19 +1,22 @@
 #!/usr/bin/env bash
-# Freeze (FUNC menu FREEZE, dsp/frozen.hpp) in the emulator, on the factory beat while it plays:
+# Freeze (GRID's track menu FREEZE, dsp/frozen.hpp) in the emulator, on the factory beat while it
+# plays:
 #
 #   PLAY, DOWN x6                          -> track 7 selected (the CHORD, VA POLY: the dearest)
-#   FUNC + HOME, UP, UP, UP, OK            -> FREEZE is third from the bottom, above LOOP LEN and LOAD DEMO
-#                                             (#116): 1 bar armed
+#   hold OK, UP, UP, OK                    -> the track menu, round from GENERATE past RELOAD
+#                                             SAMPLE to FREEZE: 1 bar armed (the menu stays open)
 #   ...one bar later                       -> `frz 64`: track 7 plays its loop from RAM
 #
+# The menu opens on OK held 500 ms, longer than emulate.py's --key holds, so this drives the
+# emulator through tools/emu_drive.py and collects the whole log as it goes.
 # The emulator cannot read engine memory, so this reads the app's `frz <mask>` log line
 # (app/app.hpp, update()). For the load it reads the app's `ld <avg> <max>` lines: four bars,
-# one line each, logged only after a track freezes or comes back, from the second whole bar on
-# (Enaga's log ring keeps sixteen lines and the other scenarios check early ones). Four bars are
+# one line each, logged only after a track freezes or comes back, from the second whole bar on.
+# Four bars are
 # one pass of A05, so the frozen and the live run cover the same four chords. The emulator's report has only the
 # peak since boot (an earlier version read a last-block figure it does not have: 0.00%).
 #
-# --baseline does the same freeze and then UNFREEZES the track (the same menu keys again), so its
+# --baseline does the same freeze and then UNFREEZES the track (OK on the same row again), so its
 # windows are track 7 live in the same pattern; compare the two runs. The number that counts is
 # still the unit's LOAD (UNIT_CHECKLIST, 13n).
 #
@@ -21,8 +24,6 @@
 # voices all the time) rather than A01's two stabs: the case freezing is for. The freeze is
 # armed later there, after A05 has taken over at the end of A01's pass.
 #
-# Keys (third_party/enaga/include/enaga/abi.h): F1 = 19, F4 = 27, F5 = 22, OK = 23, UP = 17,
-# DOWN = 25, F3 = 20, STEP 5 = 36. A chord is FUNC pressed and the second key 5 M cycles later (tests/scenario_m6.sh).
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -54,81 +55,53 @@ STAGE="$ENAGA_BUILD/stage/STRATA"
 mkdir -p "$ENAGA_BUILD"
 LOG="$ENAGA_BUILD/scenario_freeze.log"
 
-KEYS=(--key 22@300000000
-      --key 25@360000000 --key 25@420000000 --key 25@480000000
-      --key 25@540000000 --key 25@600000000 --key 25@660000000)
-# The take starts on the next bar line and records one bar (about 690 M cycles each at 130 BPM),
-# so the track is frozen well before UNF; an OK before then would cancel the take instead.
-ARM=840000000
-UNF=2800000000
-if [ "$PAD" -eq 1 ]; then
-    KEYS+=(--key 20@700000000 --key 36@740000000)
-    ARM=1200000000
-    UNF=3400000000
-fi
-menu_ok() {   # FUNC + HOME opens the menu on its first row, UP wraps to JAM REC (the last row),
-              # then LOAD DEMO, LOOP LEN, FREEZE; OK at $1. Each key is released 20 M after it.
-    KEYS+=(--key 19@$(($1 - 150000000)) --key 27@$(($1 - 145000000))
-           --key 17@$(($1 - 115000000)) --key 17@$(($1 - 85000000)) --key 17@$(($1 - 55000000))
-           --key 17@$(($1 - 25000000))
-           --key 23@$1)
-}
-menu_ok "$ARM"
-if [ "$BASELINE" -eq 1 ]; then
-    menu_ok "$UNF"
-fi
-
-echo "running the emulator for $CYCLES cycles: PLAY$([ "$PAD" -eq 1 ] && echo ', A05 PAD'), track 7, FUNC menu FREEZE$([ "$BASELINE" -eq 1 ] && echo ', then unfreeze') ..."
-python3 -B tools/enaga_cached.py emulate "$STAGE" --cycles "$CYCLES" "${KEYS[@]}" \
-    > "$LOG" 2>&1 || {
-    echo "FAIL: emulate.py exited non-zero" >&2
-    tail -30 "$LOG" >&2
-    exit 1
-}
-
+echo "running the emulator for $CYCLES cycles: PLAY$([ "$PAD" -eq 1 ] && echo ', A05 PAD'), track 7, track menu FREEZE$([ "$BASELINE" -eq 1 ] && echo ', then unfreeze') ..."
 rc=0
-python3 - "$LOG" "$BASELINE" "$PAD" <<'PY' || rc=$?
-import json, re, sys
+python3 -B - "$STAGE" "$CYCLES" "$BASELINE" "$PAD" > "$LOG" 2>&1 <<'PY' || rc=$?
+import re, sys
+sys.path.insert(0, "tools")
+from emu_drive import Drive, M, PLAY, OK, UP, DOWN, F3, step_key  # noqa: E402
 
-CYCLES_PER_BLOCK = 496_000
-baseline = sys.argv[2] == "1"
-pad = sys.argv[3] == "1"
+cycles = int(sys.argv[2])
+baseline = sys.argv[3] == "1"
+pad = sys.argv[4] == "1"
+# The take starts on the next bar line and records one bar (about 690 M cycles each at 130 BPM),
+# so the track is frozen well before UNF; an OK before then would cancel the take instead. ARM
+# is the earliest OK: opening the menu takes about 260 M cycles of the hold.
+arm, unf = (1200 * M, 3400 * M) if pad else (840 * M, 2800 * M)
 
-text = open(sys.argv[1]).read()
-match = re.search(r'^\{.*?^\}', text, re.S | re.M)
-if not match:
-    print("  FAIL  no JSON report in the emulator output")
-    sys.exit(1)
-report = json.loads(match.group(0))
+d = Drive(sys.argv[1])
+d.go_to(300 * M)
+d.tap(PLAY)
+for _ in range(6):                   # track 7
+    d.tap(DOWN)
+    d.go(34 * M)
+if pad:                              # queue A05 PAD
+    d.go_to(700 * M)
+    d.tap(F3)
+    d.go(14 * M)
+    d.tap(step_key(5))
+d.track_menu()
+d.check(d.index("TRACK T7") >= 0, "a held OK in GRID opened the track menu on T7",
+        f"log={d.log[-12:]}")
+d.tap(UP)
+d.tap(UP)
+d.go_to(arm)
+d.tap(OK)
+if baseline:
+    d.go_to(unf)
+    d.tap(OK)
+d.go_to(cycles)
 
-failures = []
-
-def check(ok, label, detail=""):
-    print(f"  {'ok  ' if ok else 'FAIL'} {label}{'  ' + detail if detail else ''}")
-    if not ok:
-        failures.append(label)
-
-log = report.get("log", [])
-
-check(report.get("app_status") == "APP RUNNING", "app is running",
-      f'status={report.get("app_status")!r}')
-check(not report.get("crash_reason"), "no crash", f'reason={report.get("crash_reason")!r}')
+log = d.log
 frozen = [line for line in log if line.startswith("frz ")]
 if baseline:
-    # `frz 64` itself may have scrolled out of the ring by now; `frz 0` is only logged after it.
-    check(frozen[-1:] == ["frz 0"], "track 7 froze and came back (frz 0)", f"log={log}")
+    d.check("frz 64" in frozen and frozen[-1:] == ["frz 0"], "track 7 froze and came back",
+            f"frz={frozen}")
 else:
-    check("frz 64" in frozen, "track 7 froze (frz 64)", f"log={log}")
-    check(frozen and frozen[-1] == "frz 64", "and stayed frozen", f"last={frozen[-1:]}")
-
-blocks = report.get("audio_blocks", 0)
-check(blocks > 1000, "audio ran throughout", f"blocks={blocks}")
-check(report.get("audio_overruns", -1) == 0, "no audio overruns",
-      f'overruns={report.get("audio_overruns")}')
-
-peak = report.get("audio_cycles_peak", 0)
-percent = 100.0 * peak / CYCLES_PER_BLOCK
-check(percent < 60.0, "load is inside the target", f"{percent:.2f}% peak since boot")
+    d.check("frz 64" in frozen, "track 7 froze (frz 64)", f"log={log[-16:]}")
+    d.check(bool(frozen) and frozen[-1] == "frz 64", "and stayed frozen", f"last={frozen[-1:]}")
+d.common_checks(min_blocks=1000, sounding=False)
 
 # `ld <avg> <max>` lines (app/app.hpp): one a bar, four after each freeze or unfreeze. The ones
 # that count follow the last `frz` line: frozen, or live again (--baseline).
@@ -141,8 +114,8 @@ for line in log:
     if m:
         windows.append((float(m.group(1)), float(m.group(2))))
 windows = windows[-4:]
-check(seen and len(windows) == 4, "four bars of load after the last frz",
-      f"ld lines={len(windows)}")
+d.check(seen and len(windows) == 4, "four bars of load after the last frz",
+        f"ld lines={len(windows)}")
 
 print()
 if windows:
@@ -152,9 +125,10 @@ if windows:
     print(f"{label}: avg {avg:.2f}%  max {top:.1f}%  over {len(windows)} bars (avg/max %):")
     print("  " + "  ".join(f"{a:.1f}/{m:.1f}" for a, m in windows))
 print("note: compare with the same keys and --baseline; record both in docs/BUDGET.md, Freeze.")
-
-sys.exit(1 if failures else 0)
+sys.exit(d.finish())
 PY
+
+grep -v "^log:" "$LOG" || true
 
 echo
 if [ "$rc" -ne 0 ]; then

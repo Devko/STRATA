@@ -151,7 +151,8 @@ No caption repeats the screen's name: the tab says it, and so does the toast on 
 The track menu (hold OK in GRID, #195, `app/ui_trackmenu.hpp`) is MENU's kind of list: rows
 from y 20, 9 px apart, each row's name at the left and its value right-aligned before the
 meter, the cursor's row lit and kept in the middle while the list scrolls; 105 the selected
-track and `OK: RUN  CLR: BACK`, 113 `LEFT/RIGHT: CHANGE`.
+track and `OK: RUN  CLR: BACK`, 113 `LEFT/RIGHT: CHANGE`. Fifteen rows: GENERATE to HOME, then the
+track's SPEED, PLAY, FREEZE (`1 BAR`, `WAIT`, `REC`, `ON`) and RELOAD SAMPLE.
 
 MENU, SETUP and PROJECTS have no caption that names them: MENU's rows start at y 20 (nine of
 them), SETUP's caption is the device and `DRW` (Enaga's font, which the input audit masks as a

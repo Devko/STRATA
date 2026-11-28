@@ -38,7 +38,7 @@ pads and the performance mixer.
 | --- | --- | --- |
 | GRID | HOME (from anywhere) | All 8 tracks; STEP keys edit the selected track |
 | KEYS | HOME twice quickly (double-tap) | The pads are a piano (lower white, upper black keys), the STEP keys steps, on the selected track |
-| FUNC menu | FUNC+HOME ("system") | Save, save as, open, new, reload, clear pattern, kits, sample reload, track speed, track play, chain, song, auto-fill, quantize, REC MODE, click, count-in, FX glide, freeze, loop length, load demo |
+| FUNC menu | FUNC+HOME ("system") | The project-wide rows: save, JAM REC, click, count-in, REC MODE, quantize, auto-fill, FX glide, loop length, chain, song, save as, open, kits, new, reload, clear pattern, load demo |
 | EDIT | EDIT | The selected track's sound: pages SRC, FLTR, AMP, FX, LFO, ARP, and on the VA, WAVE, FM4 and GRAIN machines ENV and OSC |
 | MACHINE | FUNC+EDIT | Pick the machine on each track, and its MIDI OUT channel |
 | KIT | FUNC+EDIT twice, or the menu's KITS | Save and recall whole kits: 16 slots on the card, shared by all projects |
@@ -46,7 +46,7 @@ pads and the performance mixer.
 | SOUNDS | OK in EDIT or MACHINE on a drum, VA, WAVE or FM4 track; OK in EDIT on a GRN track | Load a factory sound into that track only; AS WAS puts yours back |
 | MIXER | MIXER | Levels, the sidechain duck, stereo width, delay, reverb, routing, chorus, master, kill EQ |
 | PERFORM | FUNC+MIXER | Scenes, morph, macros, mutation |
-| Track menu | **Hold OK** in GRID or KEYS (a tap says `HOLD OK: TRACK MENU`) | GENERATE a drum or melodic part (DENSITY, RANGE, LEAP, WHAT); EVOLVE every 1-8 loops (mutation MIX: a different one each turn), ORBIT or DRIFT, KEEP or HOME; saved with the project |
+| Track menu | **Hold OK** in GRID or KEYS (a tap says `HOLD OK: TRACK MENU`) | The selected track's rows: GENERATE a drum or melodic part (DENSITY, RANGE, LEAP, WHAT); EVOLVE every 1-8 loops (mutation MIX: a different one each turn), ORBIT or DRIFT, KEEP or HOME, saved with the project; SPEED, PLAY, FREEZE, RELOAD SAMPLE |
 | PROJECT | PROJECT | Banks and patterns, key and scale, the card. On the slots: **hold OK** for the pattern menu (COPY, PASTE, CLEAR, DOUBLE; OK runs, PASTE/CLEAR/DOUBLE twice). Shortcuts: FUNC+UP copies, FUNC+DOWN twice pastes, FUNC+LEFT twice clears |
 | CHAIN | PROJECT, then screen key RIGHT | The pattern chain as a list |
 | PATTERN | PROJECT, screen key RIGHT twice | Master length (LEN), swing (SWG), FEEL and each track's own swing of the playing pattern |
@@ -197,15 +197,20 @@ Page 1 NOTE VEL LEN MICR, page 2 PROB COND RTCH RAMP, page 3 ACNT SLID CHRD.
 bank. On the slots a tap on OK queues the one under the cursor and a hold (0.5 s) opens the
 pattern menu: COPY, PASTE, CLEAR, DOUBLE (doubles every track up to 64 steps, copying the steps).
 The screen keys walk the pages PROJECT, CHAIN, PATTERN, SETUP, PROJECTS; CLR on any of
-them goes back to the slots. In SETUP, A sets the record quantize. Chain on/off, the sample
-reload, RELOAD PROJECT, NEW PROJECT and LOAD DEMO are in the FUNC menu (FUNC+HOME); the last
+them goes back to the slots. In SETUP, A sets the record quantize. Chain on/off,
+RELOAD PROJECT, NEW PROJECT and LOAD DEMO are in the FUNC menu (FUNC+HOME), the sample reload in
+the track menu (hold OK in GRID); the last
 three throw away unsaved work, so each needs OK twice within 2 s (OK AGAIN TO RELOAD, OK AGAIN
 FOR NEW, OK AGAIN FOR DEMO). NEW is empty; LOAD DEMO is the factory demo a first start plays.
-**FUNC menu (FUNC+HOME):** SAVE, SAVE AS, OPEN PROJECT, NEW PROJECT, RELOAD PROJECT, CLEAR
-PATTERN, KITS, RELOAD SAMPLE, TRACK SPEED, TRACK PLAY, CHAIN, CHAIN END, AUTO-FILL, QUANTIZE, REC MODE, CLICK, COUNT-IN, FX GLIDE, FREEZE, LOOP
-LEN, LOAD DEMO, JAM REC. It always opens on SAVE, and the list wraps: UP once is JAM REC, twice LOAD DEMO, three times LOOP LEN, four times FREEZE, five times FX GLIDE. UP/DOWN or A
+**FUNC menu (FUNC+HOME):** SAVE, JAM REC, CLICK, COUNT-IN, REC MODE, QUANTIZE, AUTO-FILL, FX
+GLIDE, LOOP LEN, CHAIN, CHAIN END, SAVE AS, OPEN PROJECT, KITS, NEW PROJECT, RELOAD PROJECT, CLEAR
+PATTERN, LOAD DEMO. It always opens on SAVE: DOWN once is JAM REC, twice CLICK; the list wraps, so
+UP once is LOAD DEMO, twice CLEAR PATTERN. UP/DOWN or A
 scroll, OK runs the row (NEW, RELOAD, CLEAR PATTERN and LOAD DEMO need OK twice), LEFT/RIGHT or B change a
-setting row (OK steps it too), CLR or FUNC+HOME close it. FREEZE: the selected track plays a 1-8
+setting row (OK steps it too), CLR or FUNC+HOME close it. **Track menu (hold OK in GRID):**
+GENERATE, DENSITY, RANGE, LEAP, WHAT, EVOLVE, MODE, MUTATION, AMOUNT, KEEP, HOME, SPEED, PLAY,
+FREEZE, RELOAD SAMPLE, for the selected track (a lower pad picks another with it open); it keeps
+its row, and from GENERATE UP once is RELOAD SAMPLE, twice FREEZE. FREEZE: the track plays a 1-8
 bar loop of itself from RAM and stops computing; OK again unfreezes. CLICK: a click on every beat (ON/OFF). COUNT-IN: OFF, 1 BAR, 2 BAR clicked
 before a PLAY from stop with REC on (`COUNT-IN 4` .. `1`); internal clock only; neither saved.
 JAM REC: OK records the finished master to `/RECORD/JAM_<n>.WAV` (24-bit, about 1 GB an hour,

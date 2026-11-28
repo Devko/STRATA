@@ -747,7 +747,7 @@ private:
     uint8_t perform_held_ = 0;                  // upper pads down, bit = pad id / 2
     int mutate_track_ = 0;                      // the track the last MUTATE went to
     uint8_t mutate_unchanged_seen_ = 0;         // Status::mutate_unchanged as last noticed
-    int freeze_bars_index_ = 0;                 // FUNC menu FREEZE's length, into kTakeBars
+    int freeze_bars_index_ = 0;                 // the track menu FREEZE's length, into kTakeBars
     int loop_bars_index_ = 2;                   // FUNC menu LOOP LEN, into kTakeBars: 4 bars
     // The performance mixer (core/perffx.hpp): the slot VALUE turns, the effect that is up and
     // its amount, the looper's mix, and the STEP keys a pick took (their releases are its too).

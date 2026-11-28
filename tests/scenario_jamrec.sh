@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# JAM REC in the emulator: PLAY starts the default beat, the FUNC menu's last row (one UP from
-# SAVE) starts a jam (`JAM REC JAM <n>` in the log), the beat records for about four seconds
+# JAM REC in the emulator: PLAY starts the default beat, the FUNC menu's second row (one DOWN
+# from SAVE) starts a jam (`JAM REC JAM <n>` in the log), the beat records for about four seconds
 # through Enaga's real recording stream, and the same row stops it: `JAM STOPPING`, then
 # `SAVED JAM <n>` once the file is closed with its header. No `JAM: CARD TOO SLOW` on the way,
 # and the load with the jam's 24-bit conversion in audio() is inside the target.
@@ -10,7 +10,7 @@
 # hand the file back. What only it shows is that Enaga's stream_create, the writes from audio()
 # and the close work on the C674x and what they cost.
 #
-# Keys (third_party/enaga/include/enaga/abi.h): F1 = 19, F4 = 27 (FUNC + HOME: the menu), UP = 17,
+# Keys (third_party/enaga/include/enaga/abi.h): F1 = 19, F4 = 27 (FUNC + HOME: the menu), DOWN = 25,
 # OK = 23, F5 = 22 (PLAY). A chord is the first key pressed and the second 5 M cycles later. The
 # first press must come LATE (tests/scenario_m1.sh).
 set -euo pipefail
@@ -44,8 +44,8 @@ LOG="$ENAGA_BUILD/scenario_jamrec.log"
 echo "running the emulator for $CYCLES cycles: PLAY, JAM REC on, four seconds, JAM REC off ..."
 python3 -B tools/enaga_cached.py emulate "$STAGE" --cycles "$CYCLES" \
     --key 22@300000000 \
-    --key 19@400000000 --key 27@405000000 --key 17@460000000 --key 23@520000000 \
-    --key 19@2000000000 --key 27@2005000000 --key 17@2060000000 --key 23@2120000000 \
+    --key 19@400000000 --key 27@405000000 --key 25@460000000 --key 23@520000000 \
+    --key 19@2000000000 --key 27@2005000000 --key 25@2060000000 --key 23@2120000000 \
     > "$LOG" 2>&1 || {
     echo "FAIL: emulate.py exited non-zero" >&2
     tail -30 "$LOG" >&2

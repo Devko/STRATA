@@ -62,7 +62,8 @@ UNIT_CHECKLIST.md's ~550 boxes, 4 are ticked.
 | --- | --- | --- | --- |
 | Controls concept from the panel: one job per button group ([CONTROLS.md](CONTROLS.md)) | v0.1.0 | ◐ (2, 5) | |
 | FUNC + function key = its printed second label (sampling, pool, system, ◀◀, ▶▶, fx, rec src) | v0.1.0 | ◐ (2) | |
-| FUNC menu (FUNC+HOME): save, save as, open, new, reload, kits, sample reload, track speed, chain, song/loop, auto-fill, quantize, REC MODE; freeze (#109), loop length (#116), load demo (#140), track play (#148), FX glide (#149) | v0.1.0 | ◐ (14, W12, W13, W20c) | |
+| FUNC menu (FUNC+HOME): save, save as, open, new, reload, kits, chain, song/loop, auto-fill, quantize, REC MODE; loop length (#116), load demo (#140), FX glide (#149) | v0.1.0 | ◐ (14, W12, W13, W20c) | |
+| **Slimmer FUNC menu**: project-wide rows only, live toggles first and file actions last; the selected track's SPEED, PLAY, FREEZE and RELOAD SAMPLE moved to GRID's track menu (hold OK) | Unreleased | ○ (W66) | Usability review finding 2 |
 | NEW PROJECT is empty (factory sounds and mixer, pans centred, no steps, scenes or macros); LOAD DEMO loads the factory demo | #140 | ○ (W12) | |
 | **CLEAR PATTERN** in the FUNC menu: every track in one press, OK twice, one undo | #86 | ○ (W16) | Keeps sounds, lengths, speeds and swing |
 | **Help for the screen that is up**: its knobs in words and its gestures, every screen and EDIT/MIXER page, then five shared pages (FUNC + key, FUNC + knob or pad, upper pads, the performance mixer); screen keys turn its pages while FUNC is held; a quick FUNC tap says `HOLD FUNC: HELP`, an OK tap in GRID `HOLD OK: TRACK MENU` | #107, WIP | ○ (W19, W52) | Text only; it says what the build does, so a changed gesture changes `core/help.cpp` too |
@@ -108,12 +109,12 @@ FM4 and GRAIN machines.
 | Feature | Since | Unit | Known limits / notes |
 | --- | --- | --- | --- |
 | Up to 64 steps a track, per-track length and speed (2x ... 1/8): polymeter | v0.1.0 | ○ (M3) | |
-| **Speed 3/2: 16th-note triplets** (16 ticks a step, 24 to the bar) in TRACK SPEED, between 2 and 1 | #213 | ○ (W57) | Older builds play a 3/2 track at 1x. The arp, rolls and REPEAT had 1/16T already |
+| **Speed 3/2: 16th-note triplets** (16 ticks a step, 24 to the bar) in the track menu's SPEED, between 2 and 1 | #213 | ○ (W57) | Older builds play a 3/2 track at 1x. The arp, rolls and REPEAT had 1/16T already |
 | **Track Launch**: each track can play the same track's part of another pattern (LAUNCH, PROJECT twice), queued on the boundary; read only until CAPTURE; PIN; saved in the project | Unreleased | ○ (W64) | Not in the chain. CAPTURE is not undoable. The emulator cannot press pads, so the held-pad launch is host-tested only |
 | Steps, trigless steps (FUNC + tap), STEP LED colours | v0.1.0 | ◐ | |
 | Step page: NOTE, VEL, LEN, MICR (±11 ticks), PROB, COND, RTCH 1-8, RAMP, ACNT, SLID, CHRD | v0.1.0 | ○ (6) | LEN is the note length on VA POLY, on VA MONO once SUS is up, and for MIDI out; ignored by drums, SAMPLE and GRAIN |
 | Trig conditions: a:b, FILL, PRE, NEI, 1ST and their NOTs; seeded | v0.1.0 | ○ (M3) | |
-| **Play modes per track**: FWD, REV, PING, RND1-RND16 (FUNC menu TRACK PLAY); seeded, the pattern untouched | #148 | ○ (W13) | Live on PERFORM too: LIVE RND, below |
+| **Play modes per track**: FWD, REV, PING, RND1-RND16 (the track menu's PLAY, hold OK in GRID); seeded, the pattern untouched | #148 | ○ (W13) | Live on PERFORM too: LIVE RND, below |
 | Parameter locks: 8 a step, 1,024 a pattern; push the knob to remove one | v0.1.0 | ○ (6) | `FULL n` when the pool is full (never reached on the unit) |
 | **Random lock ranges** (hold STEP + FUNC + turn): each pass a new value within the range, drawn from the pattern's seed | #167 | ○ (W37) | Takes one of the step's 8 lock slots |
 | **Parameter slide** (hold STEP + FUNC + push): a lock glides to the next step that plays, in play order | #167 | ○ (W37) | Ignores the target step's condition and probability, swing and micro-timing; not on a step stutter |
@@ -177,7 +178,7 @@ FM4 and GRAIN machines.
 | --- | --- | --- | --- |
 | Insert chain per track: drive, filter (LP/BP/HP 12/24), lo-fi, amp, duck, pan, level | v0.1.0 | ◐ (W54) | Off stages cost nothing. A DC blocker follows the drive since #191 |
 | **Sidechain duck**, editable: depth per track, source track, attack/hold/release | v0.1.0, editable since #89 | ○ (13l) | MIXER pages DCK 1-4, DCK 5-8, DUCK. Saved in the kit (KIT.BIN section 6; older kits open with the v0.1.0 duck: track 1, 35%, 3/40/120 ms). Not p-lockable, not in scenes or macros: a lock slot would change the pattern and scene file layouts |
-| **JAM REC**: the whole jam to `/RECORD/JAM_<n>.WAV`, FUNC+REC twice (RESAMPLE, then again) or the FUNC menu's last row; a REC dot in the top bar and a dim red blink on REC | #226, this PR | ○ (W63, W65) | The finished master (as RESAMPLE's MASTER take), never the click or the audition. 48 kHz 24-bit stereo through an Enaga recording stream, 1 MiB ring; stops cleanly on a full card, at 3 h 51 min, at shutdown; a pulled card leaves the file without its header. Card speed beside four sample streams unmeasured |
+| **JAM REC**: the whole jam to `/RECORD/JAM_<n>.WAV`, FUNC+REC twice (RESAMPLE, then again) or the FUNC menu's second row; a REC dot in the top bar and a dim red blink on REC | #226, this PR | ○ (W63, W65) | The finished master (as RESAMPLE's MASTER take), never the click or the audition. 48 kHz 24-bit stereo through an Enaga recording stream, 1 MiB ring; stops cleanly on a full card, at 3 h 51 min, at shutdown; a pulled card leaves the file without its header. Card speed beside four sample streams unmeasured |
 | **CLICK and COUNT-IN**: a metronome, and 1 or 2 bars clicked before a PLAY with REC on (CyDrums S6) | #182 | ○ (W47) | FUNC menu rows. STRATA's own click (Enaga has none), 1 kHz / 1.6 kHz on a bar, after RESAMPLE's tap, so never recorded. A count-in starts the clock at once and holds the sequencer, rolls, stutter and arps for its bars. Internal clock only. Not saved |
 | **Choke groups** 1-4 for any track: a note cuts the other tracks of its group (CyDrums S4) | #181 | ○ (W46) | Push A-D on MIXER's TRK pages; `C1`-`C4` on the strip. A 64-frame fade on the track's output, then its voices are cut. Two notes of a group on the same frame both sound (a block renders whole). Saved in the kit (KIT.BIN section 11; older kits have no groups) |
 | Send A: tempo-synced ping-pong delay | v0.1.0 | ◐ (13c / U4) | |
@@ -205,7 +206,7 @@ FM4 and GRAIN machines.
 | Resample the master, 1-8 bars, to a file or straight onto a track | v0.1.0 | ○ ("Resampling") | Takes ≤ 30 s |
 | Bounce: resample ONE track alone (B = `TRK 1`-`TRK 8`), mono, before its duck, fader, pan and sends | #109 | ○ (13m) | No emulator scenario: B is an encoder, the emulator presses keys only |
 | **Bounce to track**: a take to FILE is offered to a SAMPLE or GRAIN track (`PUT ON TRK 3 GRN`), one OK puts it there | #153 | ○ (13m) | `scenario_bounce` runs a take through Enaga's real file layer. Takes failed `DENIED` on the unit before #153 (Storage made `/RECORD`) |
-| **Freeze**: FUNC menu FREEZE, a track plays a 1-8 bar loop of its machine from RAM; chain, mix and sends stay live; instant unfreeze | #109 | ○ (13n), E (scenario_freeze.sh) | Not saved: a reload, NEW or kit recall unfreezes. Measured (cl6x): A05 held pad 20.3% to 10.1% average; A01 peaks 7 points lower |
+| **Freeze**: the track menu's FREEZE (hold OK in GRID), a track plays a 1-8 bar loop of its machine from RAM; chain, mix and sends stay live; instant unfreeze | #109 | ○ (13n), E (scenario_freeze.sh) | Not saved: a reload, NEW or kit recall unfreezes. Measured (cl6x): A05 held pad 20.3% to 10.1% average; A01 peaks 7 points lower |
 | Sample from the input: LINE, LINE L, MIC, DYN MIC, HI-Z, with level and meter | v0.1.0 | ○ (8c) | No monitoring through STRATA; MIC needs headphones in |
 
 ## MIDI and sync

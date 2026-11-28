@@ -1278,7 +1278,7 @@
         post(Cmd::set_track_speed, uint8_t(selected_), 0, uint8_t(kSpeedDisplayOrder[index]));
         end_gesture();
         echo(Echo::layout);                    // as the length: GRID was the only screen with it
-        // Logged, one line a press, as TRACK PLAY's: the emulator cannot read the screen
+        // Logged, one line a press, as PLAY's: the emulator cannot read the screen
         // (tests/scenario_triplets.sh). "T1 SPEED 3/2".
         char line[20];
         char *out = line;

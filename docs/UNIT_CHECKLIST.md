@@ -239,10 +239,10 @@ quickly: `KEYS`, on track 7.
   PLAY: the snare stays muted. FUNC + pad 2 again.
 - **NEW is empty, LOAD DEMO.** FUNC+HOME, NEW PROJECT, OK, OK: GRID shows no steps, every pad
   still plays its sound, centred (headphones: kick, hats and perc all in the middle).
-  FUNC+HOME, UP, UP (`LOAD DEMO`), OK, OK: `DEMO PROJECT`, and the demo beat is back.
+  FUNC+HOME, UP (`LOAD DEMO`, the last row), OK, OK: `DEMO PROJECT`, and the demo beat is back.
 
 **W13. Play modes (#148, 3 min).** PLAY A01, lower pad 3 (hats).
-- FUNC+HOME, DOWN to `TRACK PLAY` (under TRACK SPEED): `T3 FWD`. RIGHT: `T3 PLAY REV`, the hats
+- GRID, hold OK (the track menu), UP to `PLAY` (under SPEED): `FWD`. RIGHT: `T3 PLAY REV`, the hats
   run backwards and the STEP light walks right to left. RIGHT: PING (forward one bar, back the
   next). RIGHT to `RND1`: the hats scramble but stay on the grid and in the swing; `RND4` (two
   more): whole beats swap places.
@@ -266,14 +266,14 @@ beat playing.
   sound is back. Does editing feel normal? `____`
 
 **W16. CLEAR PATTERN (#86, 1 min).** Beat playing.
-- FUNC+HOME, DOWN to CLEAR PATTERN, OK: `OK AGAIN TO CLEAR`, nothing changes.
+- FUNC+HOME, UP, UP (CLEAR PATTERN), OK: `OK AGAIN TO CLEAR`, nothing changes.
 - OK again: `CLEARED FUNC+CLR UNDO`, the menu closes, every track silent, GRID empty.
 - FUNC+CLR: the whole beat is back at once.
 - One OK, wait 3 s, OK: it only asks again.
 
 **W17. Projects: save as, rename, delete (#91, 5 min).**
-- Before saving, two things to find again: MIXER DCK 5-8, T6 to `80%`; FUNC+HOME, TRACK PLAY on
-  track 3 to `REV`.
+- Before saving, two things to find again: MIXER DCK 5-8, T6 to `80%`; the track menu's PLAY on
+  track 3 to `REV` (GRID, hold OK).
 - FUNC+HOME, SAVE AS, name `TEST` (A and VALUE), OK: `SAVING`, then `NOW TEST`.
 - PROJECT, screen key RIGHT four times (PROJECTS). Bottom hint `PUSH B REN  C DELETE`.
 - Cursor on `TEST`, push B: `RENAME`, `FROM TEST`. Make it `TEST2`, OK: `RENAMING`, the list
@@ -769,7 +769,7 @@ to reach `GUARD4` here at a 40-60% top line.
   when MAX nears 90%, and it counts down within a few seconds once you mute those tracks. `____`
 
 **W57. Triplet speed (2 min).** Beat playing, A01, GRID, track 3 (the closed hat) selected.
-- FUNC + HOME, TRACK SPEED, LEFT once: `T3 LEN 16 X3/2`. The hat runs faster than the kick, a
+- Hold OK (the track menu), SPEED, LEFT once: `T3 LEN 16 X3/2`. The hat runs faster than the kick, a
   little off the bar. FUNC + pad-row keys to LEN 24: now it comes round on every bar, in
   triplets against the straight kick. `____`
 - LEFT again is 2, RIGHT twice is 1; CLR undoes one step at a time. Save, open: 3/2 is kept. `____`
@@ -841,11 +841,11 @@ with "Include starter and demo files" ticked, copied onto the card.
 
 **W63. JAM REC, the whole jam to the card (6 min).** Beat playing, A01, a card with a few GB
 free.
-- FUNC+HOME, UP: `JAM REC` with `OFF`. OK: the menu closes, `JAM REC JAM n`, and a dot blinks
+- FUNC+HOME, DOWN: `JAM REC` with `OFF`. OK: the menu closes, `JAM REC JAM n`, and a dot blinks
   in the top bar before the load. The top line reads `____ %` (compare with the beat alone,
   `____ %`). `____`
 - Play for three minutes: change patterns, throw a scene, open a sample and audition it (push A
-  in SAMPLES), switch CLICK on for a bar. FUNC+HOME, UP: the row counts, `3:0x`. No
+  in SAMPLES), switch CLICK on for a bar. FUNC+HOME, DOWN: the row counts, `3:0x`. No
   `JAM: CARD TOO SLOW` on the way. `____`
 - OK: `JAM STOPPING`, then `SAVED JAM n` within a second. On the PC, `/RECORD/JAM_n.WAV` opens
   as 48 kHz 24-bit stereo of about 3 minutes, sounds as heard, and holds no click and no
@@ -878,6 +878,18 @@ Beat playing, A01, a card with some space.
   `JAM REC JAM n`, the REC key blinks a dim red with the top bar's dot, and the last line reads
   `FUNC+REC: STOP JAM` with the time counting. FUNC+REC again: `JAM STOPPING`, `SAVED JAM n`,
   REC dark. `____`
+
+**W66. The slimmer FUNC menu and the track menu's new rows (4 min).** Beat playing, A01.
+- FUNC+HOME: SAVE, then JAM REC, CLICK, COUNT-IN, REC MODE, QUANTIZE, AUTO-FILL, FX GLIDE,
+  LOOP LEN, CHAIN, CHAIN END, then the file rows down to LOAD DEMO (UP once from SAVE). No
+  TRACK SPEED, TRACK PLAY, FREEZE or RELOAD SAMPLE. CLR.
+- GRID, lower pad 3, hold OK: the track menu on `T3`. UP from GENERATE: RELOAD SAMPLE, FREEZE,
+  PLAY, SPEED. On SPEED, LEFT: `T3 LEN 16 X3/2`, the hats in triplets; RIGHT back to `X1`.
+- Lower pad 8 (the SAMPLE loop) with the menu open, RELOAD SAMPLE, OK: `LOADING`, the loop keeps
+  playing and comes back from the card. On lower pad 1 (the kick): `NO SAMPLE`.
+- Lower pad 7, FREEZE, OK: `FREEZE ARMED`, the row walks `WAIT`, `REC`, `ON` without leaving the
+  menu; OK again: `UNFROZEN`. EDIT on a frozen track says `FROZEN: TRACK MENU`. Easier to reach
+  than before? `____`
 
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
@@ -1228,7 +1240,7 @@ invisible on the grid, and the screen said only `VELOCITY` for a second and a ha
 - [ ] PERFORM, DOWN to `ROT RIGHT` (a change you can see on the grid), back to GRID, MUTATE: the
       track's trigs move one step right. CLR: back.
 - [ ] Track 8 cleared (CLR with nothing held), MUTATE: `T8 NOTHING TO MUTATE`, the pad stays dim.
-- [ ] EDIT, FUNC+octave RIGHT: `T2 LEN ..` on the second line; FUNC menu, TRACK SPEED, RIGHT: the speed.
+- [ ] EDIT, FUNC+octave RIGHT: `T2 LEN ..` on the second line; GRID's track menu (hold OK), SPEED, RIGHT: the speed.
 - [ ] KEYS, turn A: `T2` and the knob's name and value. PERFORM, turn B: `MACRO B` and its value.
 - [ ] FUNC+lower pad 3: `T3 MUTE AT BAR`. CHAIN, pad-row RIGHT (octave): `BANK B`. STOP twice while
       stopped: `STOP`, then `TAILS CUT`.
@@ -1291,7 +1303,7 @@ Roland's OK). It used to be 30 s of 48 kHz frames, which refused the 30 s file `
 
 - [ ] Power off. Copy `unit-test/STRATA_1.WAV` from the project files over `/RECORD/STRATA_1.WAV`
       on the card (rename it if 8b showed another number). Card back, power on, start STRATA.
-- [ ] It loads once as the project opens. Then track 8 selected, FUNC+HOME, RELOAD SAMPLE, OK
+- [ ] It loads once as the project opens. Then track 8 selected in GRID, hold OK, RELOAD SAMPLE, OK
       (reload the track's sample) to time it: from `LOADING` until
       the SMP line shows `O` for track 8: `________ s`
 - [ ] While it loads (`RESAMPLING`), the screen keeps drawing and the keys answer. Stalls? `________`
@@ -1584,22 +1596,22 @@ New: RESAMPLE's B goes past the inputs to `TRK 1`-`TRK 8`, a take of that track 
 
 ## 13n. Freeze (6 min)
 
-New: the FUNC menu's last row, FREEZE. Play A01 with the CHORD track's chord on MIN11 (six
+New: FREEZE, in GRID's track menu (hold OK). Play A01 with the CHORD track's chord on MIN11 (six
 voices) so there is something worth freezing. Note LOAD and MAX first: LOAD `____` MAX `____`.
 
-- [ ] Select track 7 (GRID, DOWN). FUNC+HOME, UP: `FREEZE  T7 1 BAR`. B: 2, 4, 8, 1. OK:
-      `FREEZE ARMED`, the menu closes. On the next bar line the row (FUNC+HOME, UP) reads `T7 REC`,
-      a bar later `FROZEN` on the screen and the row reads `T7 ON`.
+- [ ] Select track 7 (GRID, DOWN). Hold OK, UP, UP: `FREEZE  1 BAR`. B: 2, 4, 8, 1. OK:
+      `FREEZE ARMED`, the menu stays and the row reads `WAIT`. On the next bar line it reads
+      `REC`, a bar later `ON`; CLR, and the screen has said `FROZEN`.
 - [ ] The chord sounds the same as before, in time, with no click at the loop point. LOAD with
       it frozen `____`, MAX after PLAY `____` (expect several points lower: the six voices stop).
 - [ ] Track 7's filter (FLTR CUT), its fader, pan and send still change the sound. Its SRC knobs
-      and new steps do nothing, and EDIT says `FROZEN: FUNC+HOME`.
+      and new steps do nothing, and EDIT says `FROZEN: TRACK MENU`.
 - [ ] Change the tempo by 10 BPM: the loop jumps back into time on the next bar line (a small
       jump each bar while the tempo is off). Back to 142.
 - [ ] STOP: track 7 fades out with the rest. PLAY: it comes back in time from bar 1.
 - [ ] Freeze a track for 4 or 8 bars, let it play past bar 5, STOP, PLAY: in time from the first
       bar, not several bars later (fixed 2026-11-23, after #109).
-- [ ] FUNC+HOME, UP, OK: `UNFROZEN`, the live chord is back on the next step, LOAD goes back up.
+- [ ] GRID, hold OK (the menu kept its row on FREEZE), OK: `UNFROZEN`, the live chord is back on the next step, LOAD goes back up.
 - [ ] Freeze track 8 (the SAMPLE loop) and then unfreeze it: its sample is still there
       straight away (no reload).
 - [ ] Freeze a track, then RELOAD PROJECT: it comes back live.
@@ -1617,7 +1629,7 @@ New 2026-11-23 (docs/CONTROLS.md, "The performance mixer"). Play A01.
       Push VALUE + the lit STEP: `FX OFF: VALUE TEMPO`, and VALUE is the tempo again.
 - [ ] Push VALUE + LEFT/RIGHT: the slot walks round the sixteen and keeps the amount.
 - [ ] MUTE MODE on (upper pad 3): push VALUE + STEP 1 still says `STORED 1`. MUTE MODE off.
-- [ ] FUNC+HOME, LOOP LEN (last row): `4 BAR`; RIGHT: `8 BAR`. Push VALUE + STEP 16: it records
+- [ ] FUNC+HOME, LOOP LEN: `4 BAR`; RIGHT: `8 BAR`. Push VALUE + STEP 16: it records
       8 bars from the next bar line (STEP 16 blinks red armed, steady red recording, green after).
       VALUE up: the loop alone, in time; leave it a minute: still in time.
 - [ ] Push VALUE + CLR once (`FX OFF`: the loop is kept at mix 0), turn VALUE: the tempo moves.
@@ -1628,7 +1640,7 @@ New 2026-11-23 (docs/CONTROLS.md, "The performance mixer"). Play A01.
       `LOOP OFF: VALUE TEMPO`, the live beat comes back at once, VALUE turns the tempo. VALUE +
       STEP 16: the loop is picked again (`LOOP MIX 0`), turn VALUE up and it is back in time.
       Push VALUE + STEP 16 during `LOOP 4 BAR: NEXT BAR`: `LOOP CANCELLED`, STEP 16 dark.
-- [ ] While the loop is held, FUNC+REC then OK: `LOOP HOLDS BUFFER`; FUNC menu FREEZE, OK: the
+- [ ] While the loop is held, FUNC+REC then OK: `LOOP HOLDS BUFFER`; the track menu's FREEZE, OK: the
       same. Push VALUE + CLR twice: `LOOP CLEARED`, and RESAMPLE works again.
 - [ ] **U11.** A01 with 15 BUILD at 127 and a playing loop at mix 64, STOP then PLAY, 60 s:
       MAX `________ %` (against U1's). And 9 BASS KILL at 127 with the loop: MAX `________ %`.
@@ -2079,7 +2091,7 @@ the command ring and the undo stack are known to work before you touch the hardw
 
 **Polymeter**
 
-- [ ] FUNC + pad-row keys set the selected track's length, the FUNC menu's TRACK SPEED its speed; both show
+- [ ] FUNC + pad-row keys set the selected track's length, the track menu's SPEED its speed; both show
       on the grid line as `L nn` and `X n`. Set track 2 to 15 steps against track 1's 16 and
       listen for the phase walking — that is the feature working.
 - [ ] A track at 2x with micro-timing at the extremes still fires every step exactly once per
@@ -2878,7 +2890,7 @@ below (`tests/test_ui.cpp`, "the arrow keys"); what it cannot tell is whether it
       `FUNC+EDIT: MACHINE`.
 - [ ] RESAMPLE: UP and DOWN pick the length, LEFT and RIGHT where the take goes.
 - [ ] PROJECT: the arrows move a frame over the 16 slots and OK queues the framed one; a STEP key
-      queues and moves the frame there. The FUNC menu toggles the chain and reloads the sample.
+      queues and moves the frame there. The FUNC menu toggles the chain; the track menu reloads the sample.
       On SETUP, CLR goes back.
 - [ ] Notices (an octave, a scene captured, `OK AGAIN TO RELOAD`) appear on the second line in
       every mode, not only in GRID.
