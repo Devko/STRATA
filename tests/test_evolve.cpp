@@ -195,3 +195,80 @@ TEST(evolve_orbit_chord_never_drifts) {
         CHECK_EQ(int(extras[0]) - 70, int(g_p.tracks[4].steps[2].note) - 50);
     }
 }
+
+// HOME takes in every edit made since the last turn -- step 0's and a chord's first extra too --
+// and puts back what the turns changed; with nothing changed it reports nothing.
+TEST(evolve_home_takes_edits_on_every_step_and_extra) {
+    setup(0);
+    g_p.scale = 0;
+    CHECK(step_add_note(g_p, 0, 4, 66) == NoteAdd::added);
+    evolve_set(g_e, g_p, 0, 1);
+    CHECK(!evolve_home(g_e, g_p, 0));        // nothing has turned yet
+    CHECK(!g_e.on());
+    evolve_set(g_e, g_p, 0, 1);
+    for (int pass = 1; pass <= 4; pass++) {
+        evolve_pass(g_e, g_p, 0, EvolveMode::drift, Mutation::velocity, 100, uint32_t(pass));
+    }
+    g_p.tracks[0].steps[0].note = 40;
+    CHECK(pattern_set_lock(g_p, 0, 4, kLockNoteFirst, 62));
+    CHECK(evolve_home(g_e, g_p, 0));
+    CHECK_EQ(int(g_p.tracks[0].steps[0].note), 40);
+    uint8_t extras[kStepExtraNotes];
+    CHECK_EQ(step_extra_notes(g_p, 0, 4, extras), 1);
+    CHECK_EQ(int(extras[0]), 62);
+    // The steps not edited go back; an edited step is kept whole, as it was when edited.
+    for (int i = 2; i < 16; i += 2) {
+        if (i != 4) CHECK_EQ(int(g_p.tracks[0].steps[i].velocity), 100);
+    }
+}
+
+TEST(evolve_home_brings_back_every_note_of_a_chord) {
+    setup(4);
+    g_p.scale = 0;
+    CHECK(step_add_note(g_p, 4, 2, 70) == NoteAdd::added);
+    CHECK(step_add_note(g_p, 4, 2, 74) == NoteAdd::added);
+    evolve_set(g_e, g_p, 4, 1);
+    for (int pass = 1; pass <= 8; pass++) {
+        evolve_pass(g_e, g_p, 4, EvolveMode::drift, Mutation::notes, 100, uint32_t(pass));
+    }
+    evolve_home(g_e, g_p, 4);
+    uint8_t extras[kStepExtraNotes];
+    CHECK_EQ(step_extra_notes(g_p, 4, 2, extras), 2);
+    CHECK_EQ(int(extras[0]), 70);
+    CHECK_EQ(int(extras[1]), 74);
+}
+
+TEST(evolve_edges_tracks_periods_and_the_pass_count) {
+    setup(0);
+    // Track 0 is a track; kTracks is not.
+    evolve_set(g_e, g_p, kTracks, 2);
+    CHECK(!g_e.on());
+    evolve_set(g_e, g_p, 0, 99);
+    CHECK_EQ(int(g_e.period), kEvolvePeriods - 1);
+    evolve_set(g_e, g_p, 0, kEvolvePeriods - 1);
+    CHECK_EQ(int(g_e.period), kEvolvePeriods - 1);
+    CHECK(!evolve_pass(g_e, g_p, kTracks, EvolveMode::drift, Mutation::velocity, 100, 1));
+    CHECK(!evolve_turn(g_e, g_p, kTracks, EvolveMode::drift, Mutation::velocity, 100, 1));
+    CHECK(!evolve_home(g_e, g_p, kTracks));
+    CHECK(g_e.on());
+    // The count saturates rather than wrapping round to a fresh period.
+    for (int i = 0; i < 300; i++) evolve_count(g_e);
+    CHECK_EQ(int(g_e.passes), 255);
+    CHECK(evolve_due(g_e));
+    // A turn starts the count again: at 2 LOOPS the next is due one pass later, not at once.
+    evolve_set(g_e, g_p, 0, 2);
+    CHECK(evolve_turn(g_e, g_p, 0, EvolveMode::drift, Mutation::velocity, 100, 3));
+    CHECK(!evolve_due(g_e));
+    CHECK(!evolve_pass(g_e, g_p, 0, EvolveMode::drift, Mutation::velocity, 100, 4));
+    CHECK(evolve_pass(g_e, g_p, 0, EvolveMode::drift, Mutation::velocity, 100, 5));
+    // A turn that changes nothing says so.
+    CHECK(!evolve_turn(g_e, g_p, 0, EvolveMode::drift, Mutation::velocity, 0, 6));
+    // KEEP forgets the count; off, nothing counts and nothing turns.
+    evolve_count(g_e);
+    CHECK_EQ(int(g_e.passes), 1);
+    evolve_keep(g_e);
+    CHECK_EQ(int(g_e.passes), 0);
+    evolve_count(g_e);
+    CHECK_EQ(int(g_e.passes), 0);
+    CHECK(!evolve_turn(g_e, g_p, 0, EvolveMode::drift, Mutation::velocity, 100, 7));
+}

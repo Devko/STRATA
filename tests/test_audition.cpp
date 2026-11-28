@@ -214,3 +214,144 @@ TEST(audition_stopped_while_waiting_for_the_card_ends_at_once) {
     CHECK(g_aud.take_finished());
     CHECK(silent());
 }
+
+namespace {
+
+// A file whose frames no cubic passes through: each side its own curve, so an interpolation
+// that reads the wrong tap, the wrong side, or weighs a tap wrongly shows.
+int16_t curve(uint32_t f, int ch) {
+    const double x = double(f);
+    return int16_t(ch == 0 ? 9000.0 * std::sin(x * 0.37) + 3000.0 * std::sin(x * 1.9)
+                           : 7000.0 * std::cos(x * 0.21) - 2500.0 * std::sin(x * 2.6));
+}
+
+// Feeds file frames up to (not including) `upto`, as far as the fifo has room.
+void feed_curve_to(uint32_t upto, int channels) {
+    StreamFifo &fifo = g_aud.fifo();
+    while (fifo.next_frame() < upto) {
+        uint32_t room = 0;
+        int16_t *span = fifo.write_span(&room);
+        if (room == 0) break;
+        const uint32_t want = upto - fifo.next_frame();
+        const uint32_t n = want < room ? want : room;
+        for (uint32_t i = 0; i < n; i++) {
+            for (int c = 0; c < channels; c++) {
+                span[uint32_t(channels) * i + uint32_t(c)] = curve(fifo.next_frame() + i, c);
+            }
+        }
+        fifo.commit(n);
+    }
+}
+
+// Catmull-Rom in double, on the taps p-1, p, p+1, p+2, each held inside the file.
+double catmull(uint32_t p, uint32_t last, double t, int ch) {
+    const double x0 = curve(p > 0 ? p - 1 : 0, ch), x1 = curve(p, ch);
+    const double x2 = curve(p < last ? p + 1 : last, ch);
+    const double x3 = curve(p + 2 < last ? p + 2 : last, ch);
+    const double c1 = 0.5 * (x2 - x0);
+    const double c2 = x0 - 2.5 * x1 + 2.0 * x2 - 0.5 * x3;
+    const double c3 = 0.5 * (x3 - x0) + 1.5 * (x1 - x2);
+    return ((c3 * t + c2) * t + c1) * t + x1;
+}
+
+// Plays a file of `channels` at `rate`, sample by sample against a Catmull-Rom worked out here,
+// over a pattern already in the output (the audition adds), with the card delivering exactly what
+// each block needs: one frame short holds the block (nothing added, late, the place kept), and
+// that frame arriving plays it. Through the file's end, where the taps are held at the last frame.
+void play_against_catmull(int channels, uint32_t rate) {
+    const uint32_t total = 700;
+    const uint32_t last = total - 1;
+    const uint32_t step = Audition::step_for(rate, 48000);
+    CHECK(g_aud.start(total, channels, step));
+    uint32_t pos = 0, frac = 0;
+    int wrong = 0, blocks = 0, late_wrong = 0;
+    const auto under = [](int k) { return 0.01f * float(k % 13) - 0.06f; };
+    const auto fill = [&]() {
+        for (int k = 0; k < 128; k++) g_out[k] = under(k);
+    };
+    while (g_aud.playing() && blocks < 40) {
+        // The furthest tap this block reads: x3 of its last sample, inside the file.
+        uint32_t p = pos, f = frac, far = 0;
+        for (int i = 0; i < 64 && p < total; i++) {
+            const uint32_t c = p + 2 < last ? p + 2 : last;
+            far = c > far ? c : far;
+            f += step & 0xFFFFFFu;
+            p += (step >> 24) + (f >> 24);
+            f &= 0xFFFFFFu;
+        }
+        if (far > 0 && g_aud.fifo().next_frame() < far) {
+            feed_curve_to(far, channels);               // one frame short
+            const uint32_t late = g_aud.late();
+            fill();
+            g_aud.render_add(g_out, 64);
+            bool untouched = true;
+            for (int k = 0; k < 128; k++) untouched = untouched && g_out[k] == under(k);
+            late_wrong += (g_aud.late() == late + 1 && untouched && g_aud.position() == pos) ? 0 : 1;
+        }
+        feed_curve_to(far + 1, channels);
+        fill();
+        g_aud.render_add(g_out, 64);
+        for (int i = 0; i < 64 && pos < total; i++) {
+            const double t = double(frac) / 16777216.0;
+            for (int ch = 0; ch < 2; ch++) {
+                const double want = under(2 * i + ch) +
+                                    catmull(pos, last, t, channels == 2 ? ch : 0) *
+                                        (Audition::kGain / 32768.0);
+                wrong += std::fabs(double(g_out[2 * i + ch]) - want) > 2e-6 ? 1 : 0;
+            }
+            frac += step & 0xFFFFFFu;
+            pos += (step >> 24) + (frac >> 24);
+            frac &= 0xFFFFFFu;
+        }
+        blocks++;
+    }
+    CHECK_EQ(wrong, 0);
+    CHECK_EQ(late_wrong, 0);
+    CHECK(!g_aud.playing());
+    CHECK(g_aud.take_finished());
+    // Finished, more blocks add nothing and do not finish it again.
+    clear_out();
+    g_aud.render_add(g_out, 64);
+    CHECK(silent());
+    CHECK(!g_aud.take_finished());
+}
+
+}  // namespace
+
+// Below, at and above one file frame an output frame, stereo and mono.
+TEST(audition_reads_every_sample_by_catmull_rom_from_exactly_the_frames_it_needs) {
+    play_against_catmull(2, 44100);
+    play_against_catmull(1, 44100);
+    play_against_catmull(2, 88200);
+    play_against_catmull(1, 96000);
+    play_against_catmull(2, 32000);
+}
+
+TEST(audition_a_new_start_forgets_the_last_one) {
+    // A stop not yet rendered, then a new start: the new one plays, it does not fade.
+    CHECK(g_aud.start(1000, 1, Audition::kStepOne));
+    g_aud.stop();
+    CHECK(g_aud.start(1000, 1, Audition::kStepOne));
+    feed(1000, 1);
+    clear_out();
+    g_aud.render_add(g_out, 64);
+    CHECK(g_aud.playing());
+    CHECK(std::fabs(g_out[2 * 10] - float(value(10, 0)) * kOne) < 1e-7f);
+    // Played to its end without taking the flag, then started again: the old end is not news.
+    CHECK(g_aud.start(64, 1, Audition::kStepOne));
+    feed(64, 1);
+    g_aud.render_add(g_out, 64);
+    CHECK(!g_aud.playing());
+    CHECK(g_aud.start(1000, 1, Audition::kStepOne));
+    CHECK(!g_aud.take_finished());
+    // A refused start leaves it stopped, even over one that was playing.
+    CHECK(!g_aud.start(1000, 5, Audition::kStepOne));
+    CHECK(!g_aud.playing());
+}
+
+TEST(audition_takes_the_edges_of_its_ranges) {
+    CHECK(Audition::step_for(Audition::kMinRate, 48000) != 0u);
+    CHECK(Audition::step_for(Audition::kMaxRate, 48000) == 2u * Audition::kStepOne);
+    CHECK(g_aud.start(100, 2, 4u * Audition::kStepOne));     // a step of exactly 4
+    CHECK(!g_aud.start(100, 2, 4u * Audition::kStepOne + 1u));
+}

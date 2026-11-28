@@ -21,6 +21,14 @@ TEST(mid_slot_names_say_the_cc_each_slot_sends) {
     }
 }
 
+TEST(mid_names_no_slot_outside_the_page) {
+    MidiMachine m;
+    const char *below = m.param_name(-1);
+    const char *above = m.param_name(kParams);
+    CHECK(below[0] == '-' && below[1] == '-' && below[2] == '-' && below[3] == 0);
+    CHECK(above[0] == '-' && above[1] == '-' && above[2] == '-' && above[3] == 0);
+}
+
 TEST(mid_sends_the_gm2_sound_controllers_on_src_and_amp_only) {
     const uint8_t expected[kParams] = {74, 71, 73, 72, 0, 0, 0, 0, 70, 75, 76, 77, 0, 0, 0, 0};
     for (int i = 0; i < kParams; i++) CHECK_EQ(int(MidiMachine::cc_for(i)), int(expected[i]));

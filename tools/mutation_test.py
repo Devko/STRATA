@@ -26,13 +26,17 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 OUT = os.path.join(ROOT, "build", "host")
 WORK = os.path.join(ROOT, "build", "mutation")
 CXXFLAGS = ["-std=c++20", "-fno-exceptions", "-fno-rtti", "-Wall", "-Wextra", "-Werror", "-O1"]
-TIMEOUT = 60  # seconds; the suite takes about 5, so a mutant past this has made a loop endless
+# Seconds before a mutant counts as killed by an endless loop. main() raises it to three times
+# the baseline run, measured with every worker busy: the suite grew from 5 s to over 40, and a
+# fixed 60 s would have counted slow survivors as killed.
+TIMEOUT = 60
 
 
 def mask(line):
@@ -180,7 +184,7 @@ def setup_worker(i, rel_files):
     return {"dir": wdir, "inc": inc, "objs": objs, "base": base}
 
 
-def run_mutant(w, rel, no, new_line, all_files):
+def run_mutant(w, rel, no, new_line, all_files, names=None):
     path = os.path.join(w["dir"], rel)
     orig = open(os.path.join(ROOT, rel)).read().split("\n")
     lines = list(orig)
@@ -198,7 +202,8 @@ def run_mutant(w, rel, no, new_line, all_files):
         if r.returncode != 0:
             return "invalid"
         try:
-            r = subprocess.run([exe], capture_output=True, timeout=TIMEOUT, cwd=w["dir"])
+            cmd = [exe] + (["--names", names] if names else [])
+            r = subprocess.run(cmd, capture_output=True, timeout=TIMEOUT, cwd=w["dir"])
         except subprocess.TimeoutExpired:
             return "killed"  # timeout
         return "survived" if r.returncode == 0 else "killed"
@@ -212,6 +217,9 @@ def main():
     ap.add_argument("-j", type=int, default=os.cpu_count() or 2)
     ap.add_argument("--lines", default="1-999999")
     ap.add_argument("--json")
+    ap.add_argument("--skip-test", action="append", default=[],
+                    help="leave this test out (repeatable); the rest run in registration order")
+    ap.add_argument("--rerun", help="a --json file from an earlier run: run only its survivors")
     a = ap.parse_args()
     lo, hi = (int(x) for x in a.lines.split("-"))
     rel_files = [os.path.relpath(os.path.abspath(f), ROOT) for f in a.files]
@@ -223,16 +231,42 @@ def main():
     for f in rel_files:
         for no, desc, new in mutants_for(os.path.join(ROOT, f), lo, hi):
             jobs.append((f, no, desc, new))
+    if a.rerun:
+        # Only the earlier survivors. Valid while the files under test are unchanged: a mutant
+        # the old suite killed is still killed by a suite that only grew.
+        with open(a.rerun) as fh:
+            keep = {(r["file"], r["line"], r["mutant"]) for r in json.load(fh)
+                    if r["result"] == "survived"}
+        jobs = [j for j in jobs if (j[0], j[1], j[3]) in keep]
     print("%d mutants over %s, %d workers" % (len(jobs), ", ".join(rel_files), a.j), flush=True)
 
+    global TIMEOUT
     workers = [setup_worker(i, rel_files) for i in range(a.j)]
+    names = None
+    if a.skip_test:
+        listed = subprocess.run([os.path.join(OUT, "strata-tests"), "--list"],
+                                capture_output=True, text=True, check=True).stdout.split()
+        missing = [t for t in a.skip_test if t not in listed]
+        if missing:
+            sys.exit("no test named " + ", ".join(missing))
+        names = os.path.join(WORK, "names.txt")
+        with open(names, "w") as fh:
+            fh.write("\n".join(t for t in listed if t not in a.skip_test) + "\n")
+        print("leaving out: " + ", ".join(a.skip_test), flush=True)
     # The baseline: every file unmutated must pass in this harness, or every mutant would count
-    # as killed. It has happened -- a test that depended on link order.
+    # as killed. It has happened -- a test that depended on link order. It runs on every worker
+    # at once, so that the timeout is measured under the run's own load.
     first = rel_files[0]
     keep = open(os.path.join(ROOT, first)).read().split("\n")[0]
-    if run_mutant(workers[0], first, 1, keep, rel_files) != "survived":
+    TIMEOUT = 3600
+    t0 = time.monotonic()
+    with ThreadPoolExecutor(max_workers=a.j) as ex:
+        base = list(ex.map(lambda w: run_mutant(w, first, 1, keep, rel_files, names), workers))
+    took = time.monotonic() - t0
+    if any(r != "survived" for r in base):
         sys.exit("the unmutated suite fails in the mutation harness; fix that first")
-    print("baseline passes", flush=True)
+    TIMEOUT = max(60, int(3 * took))
+    print("baseline passes in %.0f s; timeout %d s" % (took, TIMEOUT), flush=True)
     free = list(range(a.j))
     import threading
     lock = threading.Lock()
@@ -242,7 +276,7 @@ def main():
         with lock:
             wi = free.pop()
         try:
-            res = run_mutant(workers[wi], job[0], job[1], job[3], rel_files)
+            res = run_mutant(workers[wi], job[0], job[1], job[3], rel_files, names)
         finally:
             with lock:
                 free.append(wi)

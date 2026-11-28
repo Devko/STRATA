@@ -8,6 +8,8 @@
 #include "scale.hpp"
 #include "stepnotes.hpp"
 
+#include <cstdio>
+#include <cstdlib>
 #include <initializer_list>
 
 namespace {
@@ -244,4 +246,122 @@ TEST(gen_refuses_a_track_that_does_not_exist) {
     fresh(g_a, 16, 0, Scale::minor);
     CHECK(!generate_track(g_a, -1, true, GenSettings{}, 1));
     CHECK(!generate_track(g_a, kTracks, true, GenSettings{}, 1));
+}
+
+namespace {
+
+uint32_t track_sum(const Pattern &p, int track) {
+    uint32_t h = 2166136261u;
+    const TrackPattern &t = p.tracks[track];
+    for (int i = 0; i < kStepsPerTrack; i++) {
+        const Step &s = t.steps[i];
+        for (uint8_t b : {s.flags, s.note, s.velocity, s.length}) h = (h ^ b) * 16777619u;
+    }
+    return h;
+}
+
+struct GenCase {
+    bool melodic;
+    int length, root;
+    Scale scale;
+    int density, range, leap, what;
+    uint32_t variant;
+    int seed_step;  // a trig to inherit from before generating, or -1
+    int seed_note;
+};
+
+constexpr GenCase kGenCases[] = {
+    {false, 16, 0, Scale::minor, 60, 1, 0, 0, 1, -1, 0},
+    {false, 32, 0, Scale::minor, 95, 1, 0, 1, 2, 4, 70},
+    {false, 64, 0, Scale::minor, 20, 1, 0, 0, 3, -1, 0},
+    {true, 16, 0, Scale::minor, 60, 2, 40, 0, 7, -1, 0},
+    {true, 64, 5, Scale::major, 80, 1, 90, 0, 9, 4, 70},
+    {true, 64, 9, Scale::minor, 70, 3, 100, 2, 11, 4, 70},
+    {true, 32, 2, Scale::chromatic, 100, 2, 10, 0, 13, -1, 0},
+    {true, 48, 11, Scale::major, 50, 2, 60, 0, 0xFFFFFFFFu, 4, 70},
+    {true, 64, 3, Scale::minor, 90, 3, 50, 0, 17, 0, 2},        // the lowest root, from step 0
+    {true, 64, 10, Scale::major, 90, 3, 50, 0, 19, 4, 125},     // the walk held under 127
+    {false, 1, 0, Scale::minor, 100, 1, 0, 0, 23, -1, 0},       // a one-step part
+};
+
+void run_case(Pattern &p, const GenCase &c) {
+    fresh(p, c.length, c.root, c.scale);
+    if (c.seed_step >= 0) {
+        Step &s = p.tracks[3].steps[c.seed_step];
+        s.flags = kStepTrig;
+        s.note = uint8_t(c.seed_note);
+        s.length = 9;
+        s.velocity = 33;
+        // A trigless lock step keeps its own note and gate if it gains a hit.
+        for (int i = 1; i < c.length; i += 3) {
+            if (i == c.seed_step) continue;
+            Step &t = p.tracks[3].steps[i];
+            t.flags = kStepTrigless;
+            t.note = 40;
+            t.length = 3;
+        }
+    }
+    generate_track(p, 3, c.melodic, GenSettings::make(c.density, c.range, c.leap, c.what), c.variant);
+}
+
+}  // namespace
+
+// GEN's draws are pinned, step by step: the same seed, settings and press give the same part in
+// every build. A deliberate change to GENERATE updates these sums (STRATA_GOLDEN=print lists them).
+TEST(gen_parts_are_the_same_in_every_build) {
+    static const uint32_t kSums[] = {0xA4114282u, 0x0BF2DA14u, 0xFE2D9C63u, 0xEF86882Au,
+                                     0xF60E4FEAu, 0x9EC2DEAAu, 0x0BFB6D7Fu, 0x9224E267u,
+                                     0x0CE1DB01u, 0x550485FEu, 0xBABBD51Du};
+    int k = 0;
+    for (const GenCase &c : kGenCases) {
+        run_case(g_a, c);
+        const uint32_t sum = track_sum(g_a, 3);
+        if (std::getenv("STRATA_GOLDEN") != nullptr) std::printf("    gen case %d: 0x%08Xu\n", k, unsigned(sum));
+        CHECK_EQ(sum, kSums[k]);
+        k++;
+    }
+}
+
+// The answer says whether anything changed: the same press again changes nothing, and a press
+// that only puts back a trig, a gate or a slide says it did.
+TEST(gen_reports_exactly_whether_it_changed_the_part) {
+    const GenSettings drums = GenSettings::make(60, 1, 0, 1);    // RHYTHM
+    fresh(g_a, 16, 0, Scale::minor);
+    CHECK(generate_track(g_a, 1, false, drums, 5));
+    CHECK(!generate_track(g_a, 1, false, drums, 5));
+    int hit = 0;
+    while ((g_a.tracks[1].steps[hit].flags & kStepTrig) == 0) hit++;
+    g_a.tracks[1].steps[hit].flags = 0;
+    CHECK(generate_track(g_a, 1, false, drums, 5));
+    CHECK((g_a.tracks[1].steps[hit].flags & kStepTrig) != 0);
+
+    const GenSettings line = GenSettings::make(70, 2, 100, 0);
+    fresh(g_a, 64, 0, Scale::minor);
+    CHECK(generate_track(g_a, 2, true, line, 3));
+    CHECK(!generate_track(g_a, 2, true, line, 3));
+    hit = 0;
+    while ((g_a.tracks[2].steps[hit].flags & kStepTrig) == 0) hit++;
+    // Only a velocity, or only a note, put back: still a change.
+    g_a.tracks[2].steps[hit].velocity = uint8_t(g_a.tracks[2].steps[hit].velocity ^ 1);
+    CHECK(generate_track(g_a, 2, true, line, 3));
+    CHECK(!generate_track(g_a, 2, true, line, 3));
+    g_a.tracks[2].steps[hit].note = uint8_t(g_a.tracks[2].steps[hit].note + 1);
+    CHECK(generate_track(g_a, 2, true, line, 3));
+    CHECK(!generate_track(g_a, 2, true, line, 3));
+    const uint8_t gate = g_a.tracks[2].steps[hit].length;
+    g_a.tracks[2].steps[hit].length = uint8_t(gate + 1);
+    CHECK(generate_track(g_a, 2, true, line, 3));
+    CHECK_EQ(int(g_a.tracks[2].steps[hit].length), int(gate));
+    int slid = 0;
+    while (slid < 64 && (g_a.tracks[2].steps[slid].flags & kStepSlide) == 0) slid++;
+    CHECK(slid < 64);
+    g_a.tracks[2].steps[slid].flags = uint8_t(g_a.tracks[2].steps[slid].flags & ~kStepSlide);
+    CHECK(generate_track(g_a, 2, true, line, 3));
+    CHECK((g_a.tracks[2].steps[slid].flags & kStepSlide) != 0);
+}
+
+TEST(gen_settings_edges) {
+    CHECK_EQ(int(GenSettings::make(0, 1, 0, 0).density), 0);
+    CHECK(GenSettings::make(50, 1, 0, int(GenWhat::count)).what == GenWhat::both);
+    CHECK(GenSettings::make(50, 1, 0, int(GenWhat::count) - 1).what == GenWhat(int(GenWhat::count) - 1));
 }

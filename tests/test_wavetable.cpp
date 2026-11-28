@@ -284,6 +284,94 @@ TEST(wavetable_slots_keep_wanted_tables_and_reuse_the_least_recently_wanted) {
     CHECK(!none.ready());
 }
 
+// The slot choices exactly: a free slot is the lowest one free; with none free, the slot whose
+// table was wanted least recently (and is not wanted now) is taken out, waits two audio blocks
+// counted from when it was taken out, and is then the one written.
+TEST(wavetable_slot_choice_follows_when_each_table_was_last_wanted) {
+    static WaveLibrary lib;
+    CHECK(lib.reserve(3));
+    for (int i = 0; i < 5; i++) lib.audio_block();   // the block count is not zero
+    lib.want(0x7u);
+    settle(lib);
+    CHECK_EQ(lib.slot_of(0), 0);
+    CHECK_EQ(lib.slot_of(1), 1);
+    CHECK_EQ(lib.slot_of(2), 2);
+    CHECK_EQ(lib.last_built(), 2);
+    // 1 goes unwanted first, then 0: 1 was wanted less recently, so its slot goes.
+    lib.want((1u << 0) | (1u << 2));
+    for (int i = 0; i < 3; i++) CHECK(!lib.step());
+    lib.want(1u << 2);
+    for (int i = 0; i < 3; i++) CHECK(!lib.step());
+    lib.want((1u << 2) | (1u << 5));
+    CHECK(!lib.step());
+    CHECK(!lib.resident(1) && lib.resident(0) && lib.resident(2));
+    CHECK(!lib.step());
+    lib.audio_block();
+    CHECK(!lib.step());                // one block is not enough
+    CHECK(!lib.resident(5));
+    lib.audio_block();
+    settle(lib);
+    CHECK_EQ(lib.slot_of(5), 1);
+    CHECK_EQ(lib.last_built(), 5);
+    CHECK_EQ(lib.builds(), 4);
+    // Now 0 has gone longest unwanted, before 2: slot 0 goes, and 5 (wanted) is never touched.
+    lib.want(1u << 5);
+    for (int i = 0; i < 3; i++) CHECK(!lib.step());
+    lib.want((1u << 5) | (1u << 7));
+    CHECK(!lib.step());
+    CHECK(!lib.resident(0) && lib.resident(2) && lib.resident(5));
+    lib.audio_block();
+    lib.audio_block();
+    settle(lib);
+    CHECK_EQ(lib.slot_of(7), 0);
+    CHECK_EQ(lib.slot_of(5), 1);
+    CHECK_EQ(lib.slot_of(2), 2);
+    CHECK_EQ(lib.last_built(), 7);
+}
+
+TEST(wavetable_reserve_clamps_its_slots_and_happens_once) {
+    static WaveLibrary one, all;
+    CHECK(one.reserve(0));
+    CHECK_EQ(one.slots(), 1);
+    CHECK(one.reserve(3));             // already reserved: kept as it is
+    CHECK_EQ(one.slots(), 1);
+    one.want(1u << 4);
+    settle(one);
+    CHECK(one.resident(4));
+    CHECK_EQ(one.slot_of(4), 0);
+    CHECK(all.reserve(kWaveTables + 9));
+    CHECK_EQ(all.slots(), kWaveTables);
+}
+
+// Stale bytes from the audio side are clamped into the slots, and a table not built reads the
+// silent frame at the asked level.
+TEST(wavetable_reads_clamp_every_argument) {
+    const WaveLibrary &lib = library();
+    const int last = lib.slots() - 1;
+    CHECK(lib.frame_at(-1, 3, 2) == lib.frame_at(0, 3, 2));
+    CHECK(lib.frame_at(last + 1, 3, 2) == lib.frame_at(last, 3, 2));
+    CHECK(lib.frame_at(1, -1, 2) == lib.frame_at(1, 0, 2));
+    CHECK(lib.frame_at(1, kWaveFrames, 2) == lib.frame_at(1, kWaveFrames - 1, 2));
+    CHECK(lib.frame_at(1, 3, -1) == lib.frame_at(1, 3, 0));
+    CHECK(lib.frame_at(1, 3, kWaveMipLevels) == lib.frame_at(1, 3, kWaveMipLevels - 1));
+    CHECK(lib.scale_at(-1, 3) == lib.scale_at(0, 3));
+    CHECK(lib.scale_at(WaveLibrary::kMaxSlots, 3) == lib.scale_at(WaveLibrary::kMaxSlots - 1, 3));
+    CHECK(lib.scale_at(1, -1) == lib.scale_at(1, 0));
+    CHECK(lib.scale_at(1, kWaveFrames) == lib.scale_at(1, kWaveFrames - 1));
+    static WaveLibrary empty;
+    CHECK(empty.reserve(1));
+    const int16_t *silent = empty.frame(6, 0, 0);
+    for (int k = 0; k < kWaveMipLevels; k++) CHECK(empty.frame(6, 2, k) == silent + kWaveMipOffsets.at[k]);
+    CHECK(empty.frame(6, 2, -1) == silent);
+    CHECK(empty.frame(6, 2, kWaveMipLevels) == silent + kWaveMipOffsets.at[kWaveMipLevels - 1]);
+    for (int i = 0; i < kWaveFrameStride; i++) CHECK_EQ(int(silent[i]), 0);
+    CHECK(std::string_view(WaveLibrary::long_name(0)) != "---");
+    CHECK(std::string_view(WaveLibrary::short_name(0)) != "---");
+    CHECK(std::string_view(WaveLibrary::long_name(-1)) == "---");
+    CHECK(std::string_view(WaveLibrary::long_name(kWaveTables)) == "---");
+    CHECK(std::string_view(WaveLibrary::short_name(-1)) == "---");
+}
+
 TEST(wave_the_mip_offset_table_is_the_layout) {
     // frame_at() reads kWaveMipOffsets (worked out at compile time) instead of calling the
     // recursion at run time: the two must agree at every level, and the levels must not overlap.

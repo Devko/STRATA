@@ -158,3 +158,33 @@ TEST(tuning_steps_clamp_and_zero_is_no_move) {
     CHECK_EQ(int(tune_step(id(MachineId::va_mono), 64, +12)), 96);
     CHECK_EQ(int(tune_step(id(MachineId::va_mono), 64, -24)), 0);
 }
+
+// From every byte, not only the ones a walk lands on: a click always moves. And a text with a
+// mark keeps it when the buffer has exactly the room for it.
+TEST(tuning_a_click_from_any_byte_moves_and_a_mark_that_fits_stays) {
+    for (int m = 0; m < kMachines; m++) {
+        if (tune_param(uint8_t(m)) < 0) continue;
+        for (int v = 0; v <= 127; v++) {
+            if (v < 127) CHECK(tune_step(uint8_t(m), uint8_t(v), +1) > v);
+            if (v > 0) CHECK(tune_step(uint8_t(m), uint8_t(v), -1) < v);
+        }
+    }
+    int marked = 0;
+    for (int m = 0; m < kMachines; m++) {
+        for (int v = 0; v <= 127; v++) {
+            char full[kTuneTextMax];
+            tune_text(uint8_t(m), uint8_t(v), full, kTuneTextMax);
+            const int n = int(std::strlen(full));
+            const char last = full[n - 1];
+            if (last != '+' && last != '-') continue;
+            char exact[kTuneTextMax];
+            tune_text(uint8_t(m), uint8_t(v), exact, n + 1);
+            CHECK(std::strcmp(exact, full) == 0);
+            marked++;
+        }
+    }
+    CHECK(marked > 0);
+    char one[2] = {'x', 'x'};
+    tune_text(id(MachineId::va_mono), 64, one, 1);
+    CHECK_EQ(one[0], '\0');
+}

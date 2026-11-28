@@ -11,6 +11,8 @@
 #include "stepnotes.hpp"
 #include "track.hpp"
 
+#include <cstring>
+
 using namespace strata;
 
 namespace {
@@ -135,4 +137,45 @@ TEST(stepnotes_a_transpose_moves_the_whole_chord) {
     CHECK_EQ(step_extra_notes(p, 6, 3, extras), 2);
     CHECK_EQ(int(extras[0]), 69);
     CHECK_EQ(int(extras[1]), 72);
+}
+
+// The first track and the first step are ones; a merge into an empty list, into a list whose
+// next byte happens to equal the note, and into a full list keep to their counts and `max`.
+TEST(stepnotes_edges_first_step_and_merge_counts) {
+    Pattern &p = blank();
+    p.tracks[0].steps[0].note = 48;
+    CHECK(step_has_note(p, 0, 0, 48));
+    CHECK(step_add_note(p, 0, 0, 52) == NoteAdd::added);
+    CHECK(step_has_note(p, 0, 0, 52));
+    CHECK(!step_has_note(p, kTracks, 0, 48));
+    CHECK(step_add_note(p, kTracks, 0, 52) == NoteAdd::full);
+    CHECK_EQ(step_extra_notes(p, 0, 0, nullptr), 0);
+
+    const uint8_t one[1] = {60};
+    uint8_t notes[8];
+    std::memset(notes, 0xEE, sizeof notes);
+    CHECK_EQ(notes_merge(notes, 0, one, 1, 0, 0, false, 4), 1);
+    CHECK_EQ(int(notes[0]), 60);
+    CHECK_EQ(notes_merge(nullptr, 0, one, 1, 0, 0, false, 4), 0);
+    CHECK_EQ(notes_merge(notes, 0, one, 1, 0, 0, false, 0), 0);
+    std::memset(notes, 0xEE, sizeof notes);
+    CHECK_EQ(notes_merge(notes, 0, one, 1, 0, 0, false, 1), 1);
+    CHECK_EQ(int(notes[0]), 60);
+    // A stale 67 just past the list is not a note it has.
+    const uint8_t sixty_seven[1] = {67};
+    notes[0] = 60;
+    notes[1] = 64;
+    notes[2] = 67;
+    CHECK_EQ(notes_merge(notes, 2, sixty_seven, 1, 0, 0, false, 4), 3);
+    // Full at max 3: the highest falls off, and nothing is written past max.
+    std::memset(notes, 0xEE, sizeof notes);
+    notes[0] = 60;
+    notes[1] = 64;
+    notes[2] = 67;
+    const uint8_t sixty_two[1] = {62};
+    CHECK_EQ(notes_merge(notes, 3, sixty_two, 1, 0, 0, false, 3), 3);
+    CHECK_EQ(int(notes[0]), 60);
+    CHECK_EQ(int(notes[1]), 62);
+    CHECK_EQ(int(notes[2]), 64);
+    CHECK_EQ(int(notes[3]), 0xEE);
 }

@@ -184,6 +184,10 @@ the project file format or the controls.
 
 ### Fixed
 
+- **WAVE keeps the tables it played last.** With every wavetable slot taken, a new table takes
+  the slot of the one wanted least recently, which waits two audio blocks before it is written.
+  While it waited, STRATA went on taking out every other table not playing, so turning back to
+  a table played a moment ago built it again, its first notes sub only. It takes out one.
 - **FUNC + both screen keys** go to TRANSPOSE 0 without a step sounding first: a press waits
   40 ms for the other key before it moves anything.
 - **ARR REC never captures into a slot a queue is about to land on**, so an empty pattern you

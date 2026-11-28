@@ -1139,6 +1139,11 @@ A01 at 130.0, no chain.
 - A launched lane on GRID: FUNC + UP (copy) says `COPIED`, not `READ ONLY`; paste on another
   track: that track plays the borrowed part. `____`
 
+**W83. WAVE keeps the tables it played last (2 min).** Beat playing, A01.
+- Lower pad 6, FUNC+EDIT, DOWN three times: `WMN`. EDIT, SRC: turn A slowly through all 16
+  tables, a few notes on each, then back two tables. The table played a moment ago sounds on
+  its first note, not sub only for a moment while it is built again. `____`
+
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
 

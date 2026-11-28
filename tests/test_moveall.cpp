@@ -76,3 +76,14 @@ TEST(release_params_are_dec_and_where_the_machine_reads_asr_rel) {
     CHECK_EQ(machine_release_params(uint8_t(MachineId::grain), params), 2);
     CHECK_EQ(int(params[0]), 10);
 }
+
+// One step each side of rest: REL ALL and LEN ALL already move there, and a turn from just off
+// zero still lands on the detent.
+TEST(all_amounts_one_off_rest_already_move) {
+    CHECK_EQ(int(rel_all_byte(60, 1)), 61);
+    CHECK_EQ(int(rel_all_byte(60, -1)), 59);
+    CHECK(len_all_frames(48000, 1) > 48000u);
+    CHECK(len_all_frames(48000, -1) < 48000u);
+    CHECK_EQ(int(all_turn(1, -1)), 0);
+    CHECK_EQ(int(all_turn(-1, 1)), 0);
+}

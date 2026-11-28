@@ -339,3 +339,88 @@ TEST(midiout_every_pitch_balances_over_a_long_random_run) {
         for (int n = 60; n < 66; n++) CHECK_EQ(g_sink.balance(uint8_t(c), uint8_t(n)), 0);
     }
 }
+
+// A full table cuts exactly the note nearest its end -- slot 0's when it is, the first of a tie --
+// and a free slot, even the first, is taken before anything is cut.
+TEST(midiout_full_table_cuts_exactly_the_nearest_end_and_a_free_slot_cuts_nothing) {
+    fresh();
+    // Slot i holds note i with a gate of 1000 + i: slot 0 is nearest its end.
+    for (int i = 0; i < MidiOut::kSlots; i++) {
+        CHECK(g_out.note_on(g_sink, 0, 1, uint8_t(i), 100, 0, uint32_t(1000 + i)));
+    }
+    CHECK_EQ(g_sink.count, MidiOut::kSlots);             // filling it cut nothing, slot 0 too
+    const int before = g_sink.count;
+    CHECK(g_out.note_on(g_sink, 0, 1, 100, 100, 0, 5000));
+    CHECK_EQ(g_sink.count, before + 2);
+    CHECK(g_sink.is(before, 0x80, 0, 0));                // note 0 cut, nothing else
+    CHECK(g_sink.is(before + 1, 0x90, 100, 100));
+    CHECK_EQ(g_sink.balance(1, 1), 1);
+    // Note 1 (slot 1) ends on its own: its slot is the free one, so nothing is cut.
+    g_out.release(g_sink, 0, 1);
+    const int after = g_sink.count;
+    CHECK(g_out.note_on(g_sink, 0, 1, 101, 100, 0, 5000));
+    CHECK_EQ(g_sink.count, after + 1);
+    CHECK_EQ(g_out.sounding(), MidiOut::kSlots);
+    // A tie for nearest: the first of them goes.
+    fresh();
+    for (int i = 0; i < MidiOut::kSlots; i++) {
+        CHECK(g_out.note_on(g_sink, 0, 1, uint8_t(i), 100, 0, i < 2 ? 500u : 900u));
+    }
+    const int tied = g_sink.count;
+    CHECK(g_out.note_on(g_sink, 0, 1, 100, 100, 0, 900));
+    CHECK(g_sink.is(tied, 0x80, 0, 0));
+    CHECK_EQ(g_sink.balance(1, 1), 1);
+    // Slot 0 empty, the rest full: slot 0 is taken, nothing is cut.
+    fresh();
+    for (int i = 0; i < MidiOut::kSlots; i++) {
+        CHECK(g_out.note_on(g_sink, 0, 1, uint8_t(i), 100, 0, 900));
+    }
+    g_out.release(g_sink, 0, 0);
+    const int one_free = g_sink.count;
+    CHECK(g_out.note_on(g_sink, 0, 1, 100, 100, 0, 900));
+    CHECK_EQ(g_sink.count, one_free + 1);
+}
+
+TEST(midiout_a_cut_the_queue_refuses_takes_no_slot) {
+    fresh();
+    for (int i = 0; i < MidiOut::kSlots; i++) {
+        CHECK(g_out.note_on(g_sink, 0, 1, uint8_t(i), 100, 0, uint32_t(1000 + i)));
+    }
+    g_sink.full = true;
+    CHECK(!g_out.note_on(g_sink, 0, 1, 100, 100, 0, 900));   // the cut's note-off is waiting
+    CHECK_EQ(g_out.waiting(), 1);
+    // Every note ending and none sent: nothing to cut, so no room.
+    g_out.release_all(g_sink);
+    CHECK_EQ(g_out.waiting(), MidiOut::kSlots);
+    CHECK(!g_out.note_on(g_sink, 0, 1, 101, 100, 0, 900));
+    CHECK_EQ(g_out.waiting(), MidiOut::kSlots);
+    g_sink.full = false;
+    run(1);
+    CHECK_EQ(g_out.sounding(), 0);
+    for (int i = 0; i < MidiOut::kSlots; i++) CHECK_EQ(g_sink.balance(1, uint8_t(i)), 0);
+}
+
+// The note and velocity bytes are masked to seven bits on the way in, a velocity of 0 (or 128)
+// sounds at 1, a release finds the masked note, and the last track number is a track.
+TEST(midiout_bytes_are_masked_and_a_gate_ends_on_its_frame) {
+    fresh();
+    CHECK(g_out.note_on(g_sink, 255, 2, 0x80 | 60, 0x80, 0, kMidiHeld));
+    CHECK(g_sink.is(0, 0x91, 60, 1));
+    g_out.release(g_sink, 255, 60);
+    CHECK(g_sink.is(1, 0x81, 60, 0));
+    CHECK(g_out.note_on(g_sink, 3, 2, 62, 90, 0, kMidiHeld));
+    g_out.release(g_sink, 3, 0x80 | 62);
+    CHECK(g_sink.is(3, 0x81, 62, 0));
+    CHECK_EQ(g_out.sounding(), 0);
+    // A gate of 128 frames from frame 0, in 64-frame blocks: still sounding at the start of
+    // the second block, ended at the start of the third.
+    fresh();
+    g_out.begin_block(g_sink, 64);
+    CHECK(g_out.note_on(g_sink, 0, 1, 50, 100, 0, 128));
+    g_out.end_block(64);
+    g_out.begin_block(g_sink, 64);
+    CHECK_EQ(g_out.sounding(), 1);
+    g_out.end_block(64);
+    g_out.begin_block(g_sink, 64);
+    CHECK_EQ(g_out.sounding(), 0);
+}

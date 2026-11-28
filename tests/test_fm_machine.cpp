@@ -309,3 +309,39 @@ TEST(fm_machine_epiano_strikes_bright_and_mellows) {
     CHECK(strike > 8.0 * ring);
     CHECK(strike > 0.01);
 }
+
+TEST(fm_machine_unison_puts_the_sharp_voice_on_the_right) {
+    FmPoly &fm = fresh(patch());
+    fm.set_width(127);
+    fm.trigger(hit(60));
+    render(fm, patch(), g_out, kBlk);
+    CHECK(fm.voice_pan(0) < 0.0f && fm.voice_pan(1) > 0.0f);
+    CHECK(std::fabs(fm.voice(1).pitch() - fm.voice(0).pitch() - 0.40f) < 1e-4f);
+    fm.set_width(0);
+    CHECK_EQ(fm.param_name(kParams), "---");
+    CHECK_EQ(fm.param_name(-1), "---");
+}
+
+// Triggered before any prepare(), FM4 plays the patch init() promises: every byte at 64, the ASR
+// page at 0, and the OSC page at rest (no detune, no keytrack, carrier 1; fine at its centre).
+TEST(fm_machine_plays_its_rest_patch_before_the_first_prepare) {
+    static float before[kLen / 4], after[kLen / 4];
+    TrackParams rest{};
+    for (int i = 0; i < kTrackParams; i++) rest.set(i, 64);
+    for (int i = 0; i < kAsrParams; i++) rest.set(kAsrFirst + i, 0);
+    rest.set(kOscFirst + 0, 0);
+    rest.set(kOscFirst + 2, 0);
+    rest.set(kOscFirst + 3, 0);
+    for (int pass = 0; pass < 2; pass++) {
+        g_fm.init(kRate);
+        if (pass == 1) g_fm.prepare(rest);
+        g_fm.trigger(hit(64));
+        float *out = pass == 0 ? before : after;
+        for (int i = 0; i < kLen / 4; i++) out[i] = 0.0f;
+        for (int b = 0; b + kBlk <= kLen / 4; b += kBlk) g_fm.render_add(out + b, kBlk);
+    }
+    int wrong = 0;
+    for (int i = 0; i < kLen / 4; i++) wrong += before[i] == after[i] ? 0 : 1;
+    CHECK_EQ(wrong, 0);
+    CHECK(rms(after, kLen / 4) > 0.01);
+}
