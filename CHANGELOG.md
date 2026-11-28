@@ -16,6 +16,13 @@ the project file format or the controls.
   too. RESAMPLE, freeze and the looper still work meanwhile. Every FUNC menu row counted
   upwards from SAVE is one further on (LOAD DEMO is UP twice now). New emulator scenario
   `jamrec`.
+- **ENERGY, one knob from breakdown to peak.** In PERFORM, FUNC + turn C (-64 .. +64, rest at 0
+  with a detent). Down, every track drops its weakest hits first, in an order: hats at once, then
+  percussion, snare and samples, the lines, the pads (which keep their strongest hits), and the
+  kick last. Up, empty off-beats get quiet ghosts with the sound of the hit before them (hats most,
+  the kick only near the top, pads never) and probabilities lift towards 100. Each position plays
+  the same groove every bar; the pattern is never written, and a LOCK holds it. New emulator
+  scenario `energy`.
 - **Starter content in the card builder.** strata.einblick.dev can now put something to play on
   the card with STRATA: ten starter projects to open and jam on (TECHNO, DEEP, DUB, DRIFT,
   ELECTRO, NIGHT, BREAKS, STEEL, SMASH, CHAOS; for 0.5.0 and newer), a sample pack of 105
@@ -58,6 +65,10 @@ the project file format or the controls.
 
 ### Changed
 
+- **Sample audition with the beat playing takes two pushes.** In SAMPLES, push A while the
+  transport runs only says `A AGAIN TO HEAR`; a second push on the same file within 2 s plays
+  it. The SmplTrek has no cue output, so the audition goes out with the beat, and one bump of
+  the knob in a set should not put a file into the room. Stopped, one push hears it as before.
 - **The clap sounds like a clap.** Its noise moved from 5-10 kHz down to about 2-3 kHz, and each
   of its bursts now rings until the next one strikes instead of dying after a third of the gap,
   so the flutter is as loud as the tail rather than 10-18 dB under it. The factory kit's CLAP and

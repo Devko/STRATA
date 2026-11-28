@@ -5,7 +5,7 @@ Enaga's tools are **Linux-only**; on Windows, use WSL. No sudo and no cmake are 
 ```sh
 git clone --recurse-submodules https://github.com/Devko/STRATA
 cd STRATA
-git clone --depth 1 https://github.com/seawaffle/smpltrek-re third_party/smpltrek-re
+tools/fetch_emulator.sh      # the emulator, at the commit tools/env.sh pins
 
 tools/build_toolchain.sh     # once, ~30 min: builds tic6x-elf GCC into ~/strata-toolchain
 tools/build.sh               # -> build/APP.ENA
@@ -32,8 +32,11 @@ tools/render.sh              # render the output to a WAV offline
 ## Checks
 
 [CI](../.github/workflows/ci.yml) runs on every pull request: the host suite with GCC and again
-under AddressSanitizer and UBSan, the layout check over every screen, `tools/audit_commands.sh`
-and `tools/enaga_check.sh`. `tools/ci_local.sh` runs the same lanes locally (`--scenarios` adds
+under AddressSanitizer and UBSan, the layout check over every screen, the screenshots, and the
+repo checks: `tools/audit_commands.sh` (every command posted and handled), `tools/check_rules.sh`
+(CLAUDE.md's source rules), `tools/enaga_check.sh` (the Enaga pin), `tools/check_scripts.sh`
+(every script parses), the tests of the release packaging and the Enaga build cache, and the card
+builder's tests in `web/`. A docs-only change skips the test jobs. `tools/ci_local.sh` runs the same lanes locally (`--scenarios` adds
 the emulator scenarios).
 
 The device build, the emulator scenarios (`tools/scenarios.sh`) and the load figures need the

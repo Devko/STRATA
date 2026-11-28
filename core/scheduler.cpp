@@ -48,6 +48,7 @@
 #include "scheduler.hpp"
 
 #include "clamp.hpp"
+#include "energy.hpp"
 #include "liverand.hpp"
 #include "project.hpp"    // kit_param_max
 
@@ -424,7 +425,40 @@ int Scheduler::tick(uint32_t tick_number, uint32_t frame, const Pattern &pattern
             const Step &step = source.steps[firing.step];
             const bool has_trig = (step.flags & kStepTrig) != 0;
             const bool has_trigless = (step.flags & kStepTrigless) != 0;
-            if (!has_trig && !has_trigless) continue;
+            if (!has_trig && !has_trigless) {
+                // ENERGY above rest: an empty step may get a ghost (core/energy.hpp). Nothing
+                // here enters the PRE/NEI chain, so the programmed part resolves as it would.
+                if (perform.energy > 0 && written < limit) {
+                    uint8_t velocity = 0;
+                    const EnergyTier tier = EnergyTier(perform.energy_tier[t]);
+                    if (!energy_ghost(perform.energy, tier, pattern_seed_, t, firing.step,
+                                      velocity)) {
+                        continue;
+                    }
+                    const int from =
+                        energy_source_step(source, int(state.timing.length), firing.step);
+                    if (from < 0) continue;    // a track that plays nothing stays silent
+                    const Step &borrowed = source.steps[from];
+                    StepEvent &event = out[written++];
+                    event.track = uint8_t(t);
+                    event.step = uint8_t(from);    // its locks and chord: the same sound
+                    event.note = uint8_t(borrowed.note & 0x7Fu);
+                    event.velocity = velocity;
+                    event.length_index = borrowed.length;
+                    event.accent = false;
+                    event.slide = false;
+                    event.trigless = false;
+                    event.frame = frame;
+                    event.ratchet_index = 0;
+                    event.ratchet_count = 1;
+                    event.span_ticks = 0;
+                    event.loop = firing.loop;
+                    event.glide_step = 0;
+                    event.glide_loop = 0;
+                    event.glide_frames = 0;
+                }
+                continue;
+            }
 
             // 2. condition. Its result is what PRE and NEI chain off, so it is stored whether
             // or not the probability roll below then silences the step.
@@ -441,16 +475,26 @@ int Scheduler::tick(uint32_t tick_number, uint32_t frame, const Pattern &pattern
             if (!passed) continue;
 
             // 3. probability. 0 and 100 are decided without a draw, so the two boundaries
-            // cannot depend on the hash at all.
-            if (step.probability == 0) continue;
-            if (step.probability < 100 &&
+            // cannot depend on the hash at all. ENERGY above rest lifts it towards 100.
+            const uint8_t probability = energy_probability(step.probability, perform.energy);
+            if (probability == 0) continue;
+            if (probability < 100 &&
                 probability_roll(pattern_seed_, t, firing.step, firing.loop) >=
-                    uint32_t(step.probability)) {
+                    uint32_t(probability)) {
                 continue;
             }
 
             const uint8_t note = uint8_t(step.note & 0x7Fu);
             const bool accent = (step.flags & kStepAccent) != 0;
+
+            // 3b. ENERGY below rest thins the trigs, weakest first, after the chain and the roll
+            // so a thinned hit counts as a pass for PRE as a failed roll does. A trigless step
+            // is never thinned: its locks are a sweep someone programmed.
+            if (has_trig && perform.energy < 0 &&
+                !energy_keeps(perform.energy, EnergyTier(perform.energy_tier[t]), pattern_seed_,
+                              t, firing.step, accent)) {
+                continue;
+            }
             const bool slide = (step.flags & kStepSlide) != 0;
 
             // Parameter slide: where the slid locks glide to, read only when one slides.

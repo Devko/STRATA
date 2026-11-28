@@ -177,8 +177,18 @@
             return;
         }
 
+        // FUNC + turn C in PERFORM: ENERGY (core/energy.hpp), from a sparse breakdown at -64 to
+        // the peak at +64. 0 is a detent and rest: the programmed part to the bit. Before the
+        // macros, which FUNC + turn only duplicated.
+        if (mode_ == Mode::perform && shift_ && encoder == 2) {
+            energy_ = energy_turn(energy_, delta);
+            post(Cmd::set_energy, 0, 0, uint8_t(energy_));
+            energy_notice();
+            return;
+        }
+
         // FUNC + turn D in PERFORM: LIVE RND (core/liverand.hpp), the unit for every armed track,
-        // OFF 1 2 4 8 16 and stopping at both ends. C with FUNC is still its macro.
+        // OFF 1 2 4 8 16 and stopping at both ends.
         if (mode_ == Mode::perform && shift_ && encoder == 3) {
             rnd_unit_ = live_rnd_turn(rnd_unit_, delta);
             post(Cmd::set_live_rnd, 0, 0, rnd_unit_, rnd_armed_);

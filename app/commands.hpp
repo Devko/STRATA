@@ -383,6 +383,10 @@ enum class Cmd : uint8_t {
     // absolute; the UI keeps them, as it does REL ALL. Performance, not edits: no file, no undo;
     // a LOCK holds both.
     set_live_rnd,
+    // ENERGY (core/energy.hpp), PERFORM's FUNC + turn C. a: the amount as an int8, -64 .. 64,
+    // absolute (the UI keeps the position, as it does REL ALL's). Performance, not edits: no
+    // file, no undo; a LOCK holds it.
+    set_energy,
 
     // Sample audition (dsp/audition.hpp), push A in SAMPLES. `audition_start` is posted by the
     // card side once the file's stream is open and filled; what to play is in

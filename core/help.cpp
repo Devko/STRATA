@@ -270,14 +270,14 @@ constexpr Text kPerform2 = {"PERFORM MORE:", {
 constexpr Text kPerform3 = {"PERFORM LIVE:", {
     "FUNC+A     REL ALL",
     "FUNC+B     LEN ALL",
+    "FUNC+C     ENERGY",
+    "  - THINS  + FILLS",
     "FUNC+D     LIVE RND",
     "  OFF 1 2 4 8 16",
     "FUNC+PUSH D  TRACK",
     "  IN OR OUT OF RND",
-    "OFF  BACK TO THE GRID",
     "PATTERN NOT CHANGED",
-    "LOCK HOLDS ALL THREE",
-    nullptr,
+    "LOCK HOLDS THEM ALL",
 }};
 
 constexpr Text kProject = {"PROJECT:", {
