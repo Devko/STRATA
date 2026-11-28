@@ -80,10 +80,11 @@ they are saved in file format C, and 0.4.0 reads their LFOs wrong. The pack is p
 - `content/starter/projects/<NAME>/` holds each project's files as STRATA saves them, and
   `content/starter/projects.json` the line the page shows for it. `tests/test_starter.cpp` opens
   every folder there through `app/storage.cpp` on each CI run, so a format change that would stop
-  them opening fails there first. They were made by the showcase
-  generators (the nine from 2026-11-27 by `tools/showcases/`), then opened and saved again through the app's real Storage by
-  `build/host/strata-starter resave SRC NAME OUT` (`make -C host starter`, `host/starter.cpp`).
-  Opened with v0.5.0's own code, the re-saved files read exactly what the originals do.
+  them opening fails there first. `tools/showcases/build.sh --starter` writes the nine
+  showcases there from their generators. TECHNO, which has no generator in the repository, was
+  opened and saved again through the app's real Storage by `build/host/strata-starter resave SRC
+  NAME OUT` (`make -C host starter`, `host/starter.cpp`), which brings any older project file up
+  to what this build writes; v0.5.0's own code reads the re-saved file exactly as the original.
 - The sample pack is rendered by `build/host/strata-starter samples DIR`: every factory sound of
   KICK, SNARE, HAT, PERC, VA MONO, WAVE MONO, VA POLY, WAVE POLY and FM4 through the real engine,
   dry, 48 kHz 16-bit mono, normalised to -1 dBFS, at most 3 s. Melodic files carry their note in
