@@ -549,7 +549,15 @@
             perf_notice(perf_picked_, false, 0);
             return;
         }
-        if (shift_) return;
+        if (shift_) {
+            // FUNC + tap with nothing to cut: VariSpeed snaps back to the project's tempo and
+            // pitch (core/varispeed.hpp). Nothing at rest, so a stray tap says nothing.
+            if (vari_ != 0) {
+                vari_apply(0);
+                vari_notice();
+            }
+            return;
+        }
         if (mode_ == Mode::perform || perf_picked_ == PerfFx::morph) {
             morph_set(0);
             notice("MORPH 0");

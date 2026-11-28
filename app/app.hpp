@@ -36,6 +36,7 @@
 #include "engine.hpp"
 #include "help.hpp"         // the FUNC help's pages, one set per screen
 #include "energy.hpp"       // ENERGY: FUNC + C in PERFORM
+#include "varispeed.hpp"    // VariSpeed: FUNC + VALUE, tempo and pitch together
 #include "liverand.hpp"     // LIVE RND: FUNC + D in PERFORM
 #include "paint.hpp"        // the drawing kit: lines, arcs, the small font, afterglow
 #include "spectrum.hpp"     // the output's spectrum for MIXER's master pages
@@ -650,6 +651,75 @@ private:
         post_command(command);
     }
 
+    // --- VariSpeed (core/varispeed.hpp) ------------------------------------
+    //
+    // Enaga's tempo is the project's times VariSpeed's ratio. Every place that sets the clock
+    // from the project's tempo goes through here, so the clock and the pitch never part: VALUE's
+    // turn, a loaded project's tempo, and VariSpeed itself. False when Enaga refuses (an outside
+    // clock), as enaga::clock::set_tempo.
+    bool set_clock_tempo(uint32_t project_centi) {
+        // A faster project tempo can take the moved one past 300 BPM (or a slower one under
+        // 20): VariSpeed comes back towards 0 until it fits, rather than the clock clamping and
+        // the pitch going on alone.
+        const int8_t fitted = vari_fit(vari_, project_centi, kTempoCentiMin, kTempoCentiMax);
+        if (fitted != vari_) {
+            vari_ = fitted;
+            post(Cmd::set_varispeed, 0, 0, uint8_t(vari_));
+        }
+        const float bpm = float(project_centi) * 0.01f * vari_ratio(vari_);
+        return enaga::clock::set_tempo(bpm);
+    }
+
+    // VariSpeed to `tenths`: the clock first, then the machines' pitch and the delay's beat. The
+    // project's tempo is left alone, so a save stores the tempo the song was written at.
+    void vari_apply(int8_t tenths) {
+        vari_ = tenths;
+        clock_refused_ = !set_clock_tempo(adopted_tempo_centi_);
+        post(Cmd::set_varispeed, 0, 0, uint8_t(vari_));
+    }
+
+    // FUNC + turn VALUE: one tenth of a semitone a click, 0 a detent, held where the tempo still
+    // fits Enaga's 20-300 BPM. Refused under an outside clock, like VALUE's tempo.
+    void vari_turn_by(int delta) {
+        if (enaga::clock::source() != ENAGA_CLOCK_INTERNAL) {
+            clock_refused_ = true;
+            notice("EXT CLOCK");
+            return;
+        }
+        vari_apply(vari_fit(vari_turn(vari_, delta), adopted_tempo_centi_, kTempoCentiMin,
+                            kTempoCentiMax));
+        vari_notice();
+    }
+
+    // The clock source changed (the user's CLOCK SRC). VariSpeed is internal clock only: under
+    // MIDI or SYNC the tempo is not ours, so the pitch drops back with it rather than staying
+    // moved against a tempo that is not; back on INTERNAL the clock takes the project's tempo
+    // again, since Enaga kept the one VariSpeed last set.
+    void vari_follow_source(int source) {
+        if (source == ENAGA_CLOCK_INTERNAL) {
+            clock_refused_ = !set_clock_tempo(adopted_tempo_centi_);
+            return;
+        }
+        if (vari_ == 0) return;
+        vari_ = 0;
+        post(Cmd::set_varispeed, 0, 0, 0);
+        notice_logged("VARISPEED 0 EXT CLOCK");
+    }
+
+    // `VARISPEED +1.2 138.3`: the amount in semitones and the tempo it runs at. Logged, so a
+    // scenario can follow it.
+    void vari_notice() {
+        char *out = notice_buffer_;
+        append(out, "VARISPEED ");
+        char amount[kVariTextMax];
+        vari_text(vari_, amount, kVariTextMax);
+        append(out, amount);
+        *out++ = ' ';
+        append_tenths(out, vari_tempo_tenths((uint32_t(adopted_tempo_centi_) + 5u) / 10u, vari_));
+        *out = 0;
+        notice_logged(notice_buffer_);
+    }
+
     // An encoder delta, as a signed byte. The audio side applies it to the authoritative step,
     // which is why these carry a delta and not a value (app/commands.hpp explains the choice).
     void post_delta(Cmd cmd, int track, int step, uint8_t a, int delta) {
@@ -854,6 +924,8 @@ private:
     // ENERGY (core/energy.hpp): where FUNC + C left it, posted absolute like REL ALL and read
     // back from the engine after a LOCK jump.
     int8_t energy_ = 0;
+    // VariSpeed (core/varispeed.hpp): tenths of a semitone, 0 rest. Not in a LOCK, not saved.
+    int8_t vari_ = 0;
     uint16_t morph_ = 0;
     bool repeat_held_ = false;
     RepeatLength repeat_length_ = RepeatLength::sixteenth;
