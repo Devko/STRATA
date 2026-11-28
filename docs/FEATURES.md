@@ -155,7 +155,7 @@ FM4 and GRAIN machines.
 | **LOCK** (FUNC + MUTATE: hold stores, tap jumps, tap again swaps back), one per pattern, RAM only | #149 | ○ (W20c) | Not saved; the kit is shared, so a jump brings that lock's sound to every pattern |
 | **REL ALL / LEN ALL**: every track's release (FUNC + A) and every note's length (FUNC + B) in PERFORM | #152 | ○ (W29) | Live only; LEN ALL leaves gateless notes (drums, arp) alone |
 | **LIVE RND**: FUNC + turn D in PERFORM shuffles every armed track in blocks of 1-16 steps, FUNC + push D arms the selected track; OFF is the grid at once | #166 | ○ (W36) | Live only, in a LOCK; the pattern is never written |
-| **ENERGY**: FUNC + turn C in PERFORM thins every track in tier order down to a breakdown, or adds ghosts and lifts probabilities up to the peak | Unreleased | ○ (W62) | Live only, in a LOCK; the pattern is never written |
+| **ENERGY**: FUNC + turn C in PERFORM thins every track in tier order down to a breakdown, or adds ghosts and lifts probabilities up to the peak | #224 | ○ (W62) | Live only, in a LOCK; the pattern is never written |
 | Pad pressure bends macro A | v0.1.0 | ○ ("Pad feel") | |
 | THROW to delay or reverb | v0.1.0 | ◐ | |
 | MUTATE (rotate, density, velocity, micro, chance, notes), OK keeps, CLR reverts | v0.1.0 | ○ (10) | |

@@ -88,6 +88,9 @@ any machine. The factory kit:
   demo project) and stored mute states
 - Beat repeat, note repeat, **step stutter** (hold REPEAT and a STEP), delay and reverb throws,
   kill-EQ switches, and seeded mutation you keep or revert
+- **ENERGY:** one knob from a breakdown to the peak: turned down, every track drops its weakest
+  hits, hats first and kick last; turned up, quiet ghosts fill the empty off-beats. The pattern
+  itself never changes
 - **LOCK:** store the live set of a pattern, change everything, and jump back in one tap; tap
   again to swap back
 - **Freeze** a track to a loop in memory to save CPU, **resample** the master or an input, or

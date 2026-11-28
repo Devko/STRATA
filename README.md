@@ -89,7 +89,8 @@ is pretty safe as long as the bootloader is left alone
 - **KEYS:** both lower pad rows become a pressure-sensitive keyboard with the pattern's scale lit.
 - **Performance:** fill, beat and note repeat, step stutter, mutes, scenes with an A/B morph,
   macros you learn by turning knobs, throws, seeded mutation you keep or revert, LOCK (store the
-  moment, jump back in one tap), and a performance mixer on VALUE with fourteen effects, the
+  moment, jump back in one tap), ENERGY (one knob that thins the beat to a breakdown or fills
+  it towards the peak, never touching the pattern), and a performance mixer on VALUE with fourteen effects, the
   morph and a looper.
 - **Mixing:** a sidechain duck, delay, reverb and chorus sends (with LONG delay and HALL reverb
   modes for ambient), stereo spread or unison on the polyphonic machines, and a master with a DJ
@@ -127,7 +128,7 @@ The full tour, with the factory kit and every effect, is in
 **[v0.5.0](https://github.com/Devko/STRATA/releases/tag/v0.5.0)** is the current
 release and the **release candidate for 1.0**, for **Enaga 0.4.0**: GEN and EVOLVE, chord
 recording, choke groups, arp depth and more since 0.4.0. Development continues on `main` before
-a stable 1.0 (a chorus, stereo width and triplet speeds so far; CHANGELOG.md, "Unreleased"), and
+a stable 1.0 (ENERGY, a chorus, stereo width and triplet speeds so far; CHANGELOG.md, "Unreleased"), and
 [docs/PLAN.md](docs/PLAN.md) has the way to 1.0. Earlier releases have run on the unit: the default beat loads the
 CPU under 30%, and long, heavy play on an earlier build peaked at 84.3% with no dropouts. The
 features new in 0.5 are still being walked through on the hardware
