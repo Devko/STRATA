@@ -177,6 +177,20 @@ bool chain_resume(const Project &project, ChainPlayer &player);
 // under the next entry's name.
 bool chain_advance(const Project &project, ChainPlayer &player, uint8_t &bank, uint8_t &slot);
 
+// Song position in: where a chain started at tick 0 and played without a break has got to at
+// `tick`. An outside sequencer's MIDI song position pointer locates Enaga's clock (it sends
+// ENAGA_TRANSPORT_LOCATE under MIDI clock), and STRATA puts the chain where that position falls
+// rather than carrying on from wherever it stopped.
+//
+// Sets `player` to the entry and its finished passes, and `origin` to the tick that entry's
+// pattern started on: the first of a run of consecutive entries naming the same pattern, which
+// is where `chain_advance` leaves it (it does not restart a pattern that simply repeats). A
+// looping chain wraps; in song mode a tick at or past the song's end is `over`, with the player
+// back on entry 1 and `origin` at the end, as a song that played out leaves it. False, with the
+// player inactive, for an empty chain.
+bool chain_locate(const Project &project, uint32_t tick, ChainPlayer &player, uint32_t &origin,
+                  bool &over);
+
 // Song mode: is the pass now ending the chain's last? True on the last pass of the last entry,
 // which is where a song stops instead of wrapping. False for an inactive player, an empty chain
 // and a player whose entry was removed (it has a next entry to go to).
