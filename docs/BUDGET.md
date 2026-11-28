@@ -1902,8 +1902,22 @@ So the scenarios are the cost, then the uncached cl6x build. What the check loop
   header beside it and in Enaga's `include/`, the compiler and its flags without the include
   path), shared by every worktree, and compiles the misses side by side (`STRATA_BUILD_JOBS`,
   default up to 8). A one-file change recompiles one object; a header change recompiles the app
-  in parallel. The package is byte-identical to a build without the cache (checked GCC-only in
-  the cloud and with cl6x on Roland's PC, see the PR).
+  in parallel. The `.cpp` objects are GCC's in both builds, so a GCC-only build after a cl6x one
+  compiles only the `*.ti.c` loops.
 - **The Python-driven scenarios** (`gen`, `genload`, `shortcuts`, and `freeze`, `playmode`,
   `triplets` through `tools/emu_drive.py`) get compiled blocks like the rest
   (`enaga_cached.wrap_emulate`); they were the slowest scenarios after `visuals`.
+
+After (PR #261, Roland's PC nearly idle, 2026-11-28; the packages byte-identical to Enaga's own
+uncached build with cl6x and GCC-only):
+
+| Step | Time |
+| --- | --- |
+| `tools/build.sh`, cl6x, no cache at all (Enaga's serial build, idle machine) | 77.7 s |
+| `tools/build.sh`, cl6x, empty object cache (parallel) | 18.0 s |
+| every object cached, only the link | 2.9 s |
+| one source changed | 2.8 s |
+| GCC-only after a cl6x build (only the `*.ti.c` loops compile) | 2.8 s |
+| `make -C host test` (8 shards, the default) | 3.2 s |
+| full pass, cl6x, `tools/scenarios.sh -j 8` | **309 s**, 66 of 66 (`gen` 59 s, `genload` 62 s, `visuals` 121 s) |
+| full pass, GCC-only, 4-core cloud session, `-j 4` | 474 s |
