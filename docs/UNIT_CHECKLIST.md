@@ -936,7 +936,21 @@ and R (line level), headphones on.
   comes back on, as left. FUNC+HOME, NEW: the input is off. `____`
 
 
-**W70. Song sections on the chain (6 min).** Beat playing, A01; scene 3 captured with the
+**W70. VariSpeed (3 min).** A01 playing at 130, internal clock.
+- Hold FUNC, turn VALUE up slowly: `VARISPEED +0.1 130.8` and on, the beat speeding up AND every
+  track rising in pitch together, the kick, the sample loop and the chords alike, like a record
+  sped up. No clicks or dropouts as it moves; held chords bend with it. The top bar shows the
+  moved tempo, the live strip `VS+`. `____`
+- Up to `VARISPEED +12.0 260.0`: an octave up, still in time, the delay echoes on the beat. MAX
+  from SETUP there: `________ %`. Turn back down: it stops on `VARISPEED 0 130.0` and only goes
+  below on the next click (`VS-`, slower and lower). `____`
+- With it at -3.0 or so, FUNC + tap VALUE: straight back to `VARISPEED 0 130.0`, the beat as
+  programmed. VALUE alone still turns the tempo. Save with VariSpeed up, reload: the project
+  opens at its own tempo. `____`
+- SETUP, CLOCK SRC to MIDI with VariSpeed up: `VARISPEED 0 EXT CLOCK`; FUNC + turn VALUE says
+  `EXT CLOCK`. Back to INTERNAL: 130 again. `____`
+
+**W71. Song sections on the chain (6 min).** Beat playing, A01; scene 3 captured with the
 filters closed, scene 4 open and wet; something different in A02.
 - PROJECT, the screen key to CHAIN, OK twice: two entries of A01. UP to entry 1, push A:
   `SECT 1/2`, the SECTION view with `PAT A01`, `REP X1`, `MUT --`, `SCN --`. Turn D to 3. The
@@ -956,19 +970,6 @@ filters closed, scene 4 open and wet; something different in A02.
   once, the outside tempo stays. Back to INTERNAL. `____`
 - Save, power cycle, open: the sections are still there and play the same. Open a project saved
   by v0.5.0: its chain plays as it did, every field `--`. `____`
-**W70. VariSpeed (3 min).** A01 playing at 130, internal clock.
-- Hold FUNC, turn VALUE up slowly: `VARISPEED +0.1 130.8` and on, the beat speeding up AND every
-  track rising in pitch together, the kick, the sample loop and the chords alike, like a record
-  sped up. No clicks or dropouts as it moves; held chords bend with it. The top bar shows the
-  moved tempo, the live strip `VS+`. `____`
-- Up to `VARISPEED +12.0 260.0`: an octave up, still in time, the delay echoes on the beat. MAX
-  from SETUP there: `________ %`. Turn back down: it stops on `VARISPEED 0 130.0` and only goes
-  below on the next click (`VS-`, slower and lower). `____`
-- With it at -3.0 or so, FUNC + tap VALUE: straight back to `VARISPEED 0 130.0`, the beat as
-  programmed. VALUE alone still turns the tempo. Save with VariSpeed up, reload: the project
-  opens at its own tempo. `____`
-- SETUP, CLOCK SRC to MIDI with VariSpeed up: `VARISPEED 0 EXT CLOCK`; FUNC + turn VALUE says
-  `EXT CLOCK`. Back to INTERNAL: 130 again. `____`
 
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.

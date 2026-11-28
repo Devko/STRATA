@@ -143,7 +143,7 @@ FM4 and GRAIN machines.
 | **Queue from any screen**: hold PROJECT + STEP n queues slot n of the shown bank and the screen stays; PROJECT opens on its release | Unreleased | ○ (W67) | The bank is the one PROJECT last showed |
 | Chain of up to 64 entries, repeats X1-X16 | v0.1.0 | ○ (3b, 12) | |
 | **Song mode**: per-entry mute recall, SONG plays once and stops | v0.1.0 | ○ (13i) | |
-| **Song sections**: a chain entry's SCN, MRP (SNAP, RIDE, BACK, SNAP A), NRG, BPM and MUT CAP, applied as it starts; the SECTION view (push A on CHAIN) with quick fill (hold OK); saved in PROJECT.BIN section 10 | Unreleased | ○ (W70), E (scenario_sections.sh) | BPM is skipped under an outside clock. Quick fill writes SNAP or SNAP A, whichever side the morph is nearer. No kit per section (byte 7 reserved). ARR REC is the next step |
+| **Song sections**: a chain entry's SCN, MRP (SNAP, RIDE, BACK, SNAP A), NRG, BPM and MUT CAP, applied as it starts; the SECTION view (push A on CHAIN) with quick fill (hold OK); saved in PROJECT.BIN section 10 | Unreleased | ○ (W71), E (scenario_sections.sh) | BPM is skipped under an outside clock. Quick fill writes SNAP or SNAP A, whichever side the morph is nearer. No kit per section (byte 7 reserved). ARR REC is the next step |
 | Restart (FUNC+PLAY) and stop-and-reset (FUNC+STOP, also resets the chain) | v0.1.0 | ○ (11) | |
 
 ## Performance
