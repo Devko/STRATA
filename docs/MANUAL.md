@@ -1179,9 +1179,9 @@ STOP. The header shows which (`CHAIN 3/64 ON SONG`). Both are saved with the pro
 from before song mode loops, with no recalls.
 
 **Sections.** Push A on an entry for its **SECTION** view. Each entry can also change the sound,
-the energy and the tempo as it starts, so one pattern can be an intro, a build and a drop. The
+the energy, the key and the tempo as it starts, so one pattern can be an intro, a build and a drop. The
 screen keys switch two pages: **SECT** (A PAT, B REP, C MUT, D SCN) and **MOVE** (A MRP, B NRG,
-C BPM). Every field reads `--` until you turn it, and `--` leaves that thing as it is.
+C BPM, D TRN). Every field reads `--` until you turn it, and `--` leaves that thing as it is.
 
 <p><img src="screens/section.png" width="256" alt="The SECTION view, MOVE page"></p>
 
@@ -1192,17 +1192,18 @@ C BPM). Every field reads `--` until you turn it, and `--` leaves that thing as 
 | MRP | `--`, SNAP, RIDE, BACK, SNAP A | SNAP jumps the morph to B; RIDE rides it to B over the whole entry; BACK rides it to A; SNAP A jumps it to A |
 | NRG | `--`, -64 to +64 | ENERGY jumps there |
 | BPM | `--`, 20-300 | the tempo changes there, a whole BPM a click |
+| TRN | `--`, -12 to +12 | TRANSPOSE jumps there, in the unit the FUNC menu's TRANSPOSE row has (scale steps or semitones) |
 
 A push on a knob puts its field back to `--`. UP/DOWN go to the previous or next entry without
 leaving the view, and OK or CLR go back to the list. **Hold OK** to fill the fields from what
-plays: the mutes as CAP, the scene on side B, SNAP if the morph is past half way (else SNAP A), the ENERGY and
-the tempo. So a breakdown is set by ear: dial it in, hold OK.
+plays: the mutes as CAP, the scene on side B, SNAP if the morph is past half way (else SNAP A), the ENERGY,
+the TRANSPOSE and the tempo. So a breakdown is set by ear: dial it in, hold OK.
 
-Your hands win until the next entry: a mute, the morph or ENERGY changed during a section takes
+Your hands win until the next entry: a mute, the morph, ENERGY or TRANSPOSE changed during a section takes
 over at once and stops a RIDE where it is. The next entry applies its own fields. A section's
 tempo becomes the project's tempo, as a turn of VALUE would; under an outside clock it is skipped
 and STRATA says `EXT CLOCK: BPM SKIPPED` once. On the list, `+` under an entry marks fields of its
-own, `C` a CAP, and the cursor's entry lists them under MUTES (`S4 SNAP E-40 132BPM`). OK copies
+own, `C` a CAP, and the cursor's entry lists them under MUTES (`S4 SNAP E-40 T+2 132BPM`). OK copies
 an entry with its fields. A project from before sections opens with every field `--`.
 
 ### Recording a song by playing it: ARR REC
@@ -1214,9 +1215,9 @@ closes and STRATA says `ARR: PRESS PLAY` (or `ARR REC ON` with the transport run
 you had is kept for undo, the chain is emptied, and the chain is not followed while you record.
 
 Then play. At the end of every pass of the pattern, STRATA looks at what played: if it is the
-same pattern with the same mutes, scene on side B, morph side, ENERGY and tempo as the chain's
-last entry, that entry gets one more repeat; otherwise a new entry starts, holding those as its
-section fields (MUT CAP, SCN, MRP SNAP or SNAP A, NRG, BPM). A pass counts as what played at its
+same pattern with the same mutes, scene on side B, morph side, ENERGY, TRANSPOSE and tempo as the
+chain's last entry, that entry gets one more repeat; otherwise a new entry starts, holding those as
+its section fields (MUT CAP, SCN, MRP SNAP or SNAP A, NRG, TRN, BPM). A pass counts as what played at its
 start, so a mute or an ENERGY move shows from the next pass; one made a hair after the downbeat
 still belongs to the pass it was meant for. An entry holds up to X16, then a new entry of the
 same starts. The live strip shows `ARR` and how many sections are written (`ARR7`), the menu row
@@ -1229,6 +1230,8 @@ slot is there for the song. More passes of the same mix in a row use the same sl
 has no free slot, or the parts hold more locks than one pattern can, the pass is written as the
 playing pattern alone and STRATA says `LAUNCH NOT KEPT`. Every part replays from the slot's first
 step, so a launch you landed NOW or on a 16 or 32 step grid replays from the pattern's start.
+A slot that a queued pattern change or launch is about to land on is never taken, so an empty
+pattern you queued is still empty when you get there.
 
 STOP, OK on the row again, or turning the chain on ends the take (`ARR 23 SECTIONS`); so does a
 65th entry (`ARR FULL 64 SECTIONS`). A pass you leave before half of it has played (a pattern
@@ -1236,12 +1239,14 @@ change at once, STOP) is not written; one past half is written whole. A take tha
 gives you the old chain back (`ARR NOTHING KEPT`).
 
 To hear it, set CHAIN END to SONG, turn CHAIN on and press PLAY from stop: the jam plays back with
-its patterns, mutes, scenes, breakdowns and tempo changes, quantized to whole passes. Edit any
+its patterns, mutes, scenes, breakdowns, key changes and tempo changes, quantized to whole passes. Edit any
 entry on the CHAIN page or in its SECTION view. A morph swept by hand is written as the side it
 ended a pass nearer to; set RIDE or BACK on the entry for a sweep. **ARR UNDO** (the FUNC menu,
 under CHAIN END) swaps the chain from before the take back in (`ARR UNDONE`), and OK again brings
 the take back (`ARR REDONE`). It keeps one chain until the next take or until a project is
-opened. Under an outside clock the sections carry no BPM, and the song follows the clock.
+opened. After a take that wrote launched tracks into slots, ARR UNDO also empties those slots, so
+the jam leaves nothing behind in the bank; a slot you have edited since, or one playing at that
+moment, is kept. Such a take cannot be brought back, and a second ARR UNDO says `NO ARR TO UNDO`. Under an outside clock the sections carry no BPM, and the song follows the clock.
 
 ### Track Launch: one track from another pattern
 
@@ -1253,7 +1258,8 @@ that track plays the same track's part of that pattern from the next boundary, f
 to its own part.
 
 A launched track is read only: its steps belong to the other pattern, so edits are refused
-(`T3 B07 READ ONLY`). When the mix is right, **hold OK**: CAPTURE writes what plays into the
+(`T3 B07 READ ONLY`). COPY still works and copies the part the track plays, so you can paste one
+borrowed part onto another track or pattern. When the mix is right, **hold OK**: CAPTURE writes what plays into the
 first empty slot of the bank and switches to it, every track on its own part again, ready to edit.
 
 A pattern change sends every track back to its own part, unless you **pin** it with push B: a
@@ -1533,7 +1539,7 @@ changes. It is not saved, not undone and not held by a LOCK, like the tempo.
 
 **FUNC + SEL> moves the melodic tracks up a step of the scale, FUNC + SEL< down**, on every
 screen, up to 12 steps either way. Press **both screen keys** with FUNC (the second while the
-first is still down) to go back to 0. Every note walks the project's scale, so the parts stay in
+first is still down) to go back to 0; pressed together, no step is heard on the way. Every note walks the project's scale, so the parts stay in
 the key and move the way a chord progression does: in A minor, two steps down takes a bass line
 on A to F and the A minor chord to F major, the key's VI, with every note still one of A minor's.
 The notice says `TRANSPOSE -2 IN KEY`, and `TRANSPOSE 0` at rest. PERFORM shows `TR-2` on its
@@ -1558,7 +1564,8 @@ cleanly after a change.
 
 Nothing is written. A note you record in KEYS while transposed is stored as the key you pressed,
 so it plays back moved with the rest, as you heard it, and at 0 everything is as programmed.
-TRANSPOSE is not saved or undone; a LOCK holds it, so a jump brings back the key you stored.
+TRANSPOSE is not saved or undone; a LOCK holds it, so a jump brings back the key you stored. A
+song section's TRN sets it as the entry starts, and ARR REC records it there.
 
 ### Beat repeat, throws and auto-fill
 

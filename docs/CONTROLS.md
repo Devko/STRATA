@@ -177,7 +177,8 @@ FUNC + EDIT twice is KIT.
 | LOOP LEN | | the performance mixer's looper: `4 BAR` (1 2 4 8), what push VALUE + STEP 16 records |
 | CHAIN | | ON / OFF |
 | CHAIN END | | SONG (play once) / LOOP |
-| ARR UNDO | swaps the chain the last ARR REC take replaced back in (`ARR UNDONE`); OK again brings the take back (`ARR REDONE`). `NO ARR TO UNDO` with none, or during a take | |
+| ARR UNDO | swaps the chain the last ARR REC take replaced back in (`ARR UNDONE`); OK again brings the take back (`ARR REDONE`), unless the take captured launched lanes: then the undo also empties the slots it captured into and is final. `NO ARR TO UNDO` with none, or during a take | |
+| PROG CHG OUT | | `OFF` (a new project) / `ON`: a program change on MIDI CH every time the playing pattern changes, the pattern's number 0-127. Saved with the project |
 | SAVE AS | PROJECTS page with the name entry open | |
 | OPEN PROJECT | PROJECTS page; OK twice there opens | |
 | KITS | the kit browser | |
@@ -364,7 +365,7 @@ moment too long would not be one you can play.
 | --- | --- | --- |
 | FUNC + SEL> | Up a step, to +12 at most | `TRANSPOSE +2 IN KEY`; on SEMI `TRANSPOSE +3 C` |
 | FUNC + SEL< | Down a step, to -12 at most | `TRANSPOSE -1 IN KEY`; on SEMI `TRANSPOSE -1 G#` |
-| FUNC + both screen keys | Back to 0: the second key pressed while the first is down | `TRANSPOSE 0` |
+| FUNC + both screen keys | Back to 0: the second key pressed while the first is down. A press waits 40 ms for the other key before it moves anything, so both pressed together go to 0 with no step heard first | `TRANSPOSE 0` |
 | FUNC menu, TRANSPOSE | `SCALE` (every start) or `SEMI`: what a step is. The amount stays and is heard in the new unit | `TRANSPOSE SEMITONES`, `TRANSPOSE IN SCALE` |
 
 - **Which tracks move: the ones that fold into the scale**, by the same rule: VA MONO, VA POLY,
@@ -386,8 +387,8 @@ moment too long would not be one you can play.
   row), and a jump or swap puts it back. The FUNC menu row is not saved either.
 - **On screen**: the notice; `TR+3` on PERFORM's status line (beside `BAR` while stopped) and in
   the live strip on every screen. The FUNC help's FUNC + KNOB OR PAD page lists it.
-- **Later, perhaps**: a song section field, so a chain entry can set the transpose as NRG sets
-  ENERGY. Not built.
+- **In a song**: a section's TRN sets it as the entry starts (SECTION, below), and ARR REC records
+  it, so a key change made in a take replays.
 
 ## The track menu: GEN, EVOLVE and the track's settings (hold OK in GRID or KEYS)
 
@@ -488,7 +489,9 @@ pattern of the project. PROJECT pressed twice quickly opens LAUNCH, PROJECT's la
   A pinned lane on its own part keeps playing the pattern being left. Launches queued for the same
   boundary land after the change, over the new pattern.
 - **Read only**: a launched lane plays another pattern's part, and edits to it (a trig, a lock,
-  LEN, speed, GEN, recording ...) are refused with `T3 B07 READ ONLY`, which on GRID and KEYS
+  LEN, speed, GEN, recording, a paste ...) are refused with `T3 B07 READ ONLY`. COPY only reads,
+  so it works, and copies the part the lane plays: paste it on another track or pattern to keep
+  one lane without a CAPTURE. The refusal, on GRID and KEYS,
   takes turns with `HOLD OK: CAPTURE` (U2): the track menu's CAPTURE row makes it a pattern of its
   own. EVOLVE pauses on it.
   Sounds, mutes and the mixer are the track's as ever: only the steps come from elsewhere.
@@ -517,12 +520,12 @@ together).
 | the same row, OK (or LEFT/RIGHT, B) | ARR REC off: the take is over | `ARR 23 SECTIONS` |
 | STOP | ends the take too | `ARR 23 SECTIONS` |
 | FUNC menu CHAIN ON | ends the take and plays what it wrote | `ARR 23 SECTIONS` |
-| FUNC menu ARR UNDO, OK | the chain from before the take; again, the take | `ARR UNDONE` / `ARR REDONE` |
+| FUNC menu ARR UNDO, OK | the chain from before the take; again, the take (not after a take that captured, below) | `ARR UNDONE` / `ARR REDONE` |
 
 - **A pass at a time.** At the end of each pass of the playing pattern, the pass is compared with
   the chain's last entry: the same pattern with the same mute mask, scene on side B, morph side
-  (past half way is B), ENERGY and tempo adds a repeat; anything else starts a new entry holding
-  them as section fields (MUT CAP, SCN, MRP SNAP or SNAP A, NRG, BPM). A pass is what played at
+  (past half way is B), ENERGY, TRANSPOSE and tempo adds a repeat; anything else starts a new entry
+  holding them as section fields (MUT CAP, SCN, MRP SNAP or SNAP A, NRG, TRN, BPM). A pass is what played at
   its start: a mute or an ENERGY move inside a pass shows from the next one, except in the pass's
   first 12 ticks (half a sixteenth, the queue's grace), which still count for it.
 - **X16** is an entry's most: a seventeenth pass of the same starts a new entry of it. **64
@@ -540,7 +543,13 @@ together).
   names that slot (`LAUNCH IN A05`). More passes of the same mix in a row use the same slot; the
   same mix after something else takes a new one. With no free slot, or more locks than a pattern
   holds, the pass is written as the playing pattern alone (`LAUNCH NOT KEPT`). Each part replays
-  from the slot's step 1, so a launch landed NOW or on a 16 / 32 grid replays shifted to it.
+  from the slot's step 1, so a launch landed NOW or on a 16 / 32 grid replays shifted to it. A
+  slot a queued pattern change or a queued launch is about to land on is never taken, so the
+  empty pattern you queued is still empty when you get there.
+- **ARR UNDO after a take that captured** also empties the slots the take captured into (Roland,
+  2026-11-28), so the jam leaves nothing behind in the bank. A captured slot you have edited
+  since, or one playing at the moment of the undo, is kept. Its patterns gone, such a take cannot
+  come back: a second ARR UNDO says `NO ARR TO UNDO`.
 - Editing the chain by hand during a take is allowed; the next pass then starts a new entry.
 - The take's passes mark the project for the next save, as an edit would.
 
@@ -548,12 +557,12 @@ together).
 
 The arrangement concept, Roland's decisions of 2026-11-28, `core/queue.hpp` (`SectionExtra`,
 `section_step`), `app/ui_section.hpp`. A chain entry is a section: its pattern, repeats and mute
-state, plus a scene, a morph move, an ENERGY and a tempo applied as the entry starts. **Push A** on
+state, plus a scene, a morph move, an ENERGY, a TRANSPOSE and a tempo applied as the entry starts. **Push A** on
 a CHAIN entry opens its SECTION view; the list's own keys are unchanged.
 
 | Key | Does | Says |
 | --- | --- | --- |
-| A-D | the page's four fields: **SECT** PAT REP MUT SCN, **MOVE** MRP NRG BPM (D free) | |
+| A-D | the page's four fields: **SECT** PAT REP MUT SCN, **MOVE** MRP NRG BPM TRN | |
 | push A-D | the field back to `--` (PAT and REP have none) | `SCN --`, `PAT HAS NO --` |
 | Screen keys | SECT / MOVE | |
 | UP / DOWN | the previous / next entry, staying in the view | `SECT 3/8` |
@@ -567,21 +576,26 @@ a CHAIN entry opens its SECTION view; the list's own keys are unchanged.
   it takes the mutes as they stand). SCN `--` or 1-16: that scene goes on morph side B. MRP `--`,
   **SNAP** (the morph jumps to B), **RIDE** (it rides to B over the whole entry), **BACK** (it
   rides to A over the whole entry), **SNAP A** (it jumps to A). NRG `--` or -64..+64: ENERGY on the boundary. BPM `--` or
-  20-300, a whole BPM a click: the tempo on the boundary.
+  20-300, a whole BPM a click: the tempo on the boundary. TRN `--` or -12..+12: TRANSPOSE on the
+  boundary, in the unit the FUNC menu's TRANSPOSE row has (scale steps or semitones).
 - `--` leaves that thing as it is, so an entry with every field `--` plays exactly as a chain
-  entry always has. NRG and BPM leave `--` on any turn, at ENERGY 0 and the tempo playing.
+  entry always has. NRG, BPM and TRN leave `--` on any turn, at ENERGY 0, the tempo playing and
+  TRANSPOSE 0.
 - **The hands win** until the next entry: a mute, the morph (VALUE in PERFORM, the mixer's slot)
-  or ENERGY turned during a section takes over at once, and ends a RIDE or BACK where it is.
+  ENERGY or TRANSPOSE turned during a section takes over at once, and ends a RIDE or BACK where it is.
 - **BPM under an outside clock** is skipped, with `EXT CLOCK: BPM SKIPPED` once per run of the
   transport; the song follows the outside clock. A section's tempo becomes the project's, as a
   turn of VALUE does.
 - **Quick fill** (hold OK): MUT CAP with the mutes as they stand, SCN the scene on side B, MRP
-  SNAP when the morph is past half way to B, else SNAP A, NRG the ENERGY, BPM the tempo. Dial the
+  SNAP when the morph is past half way to B, else SNAP A, NRG the ENERGY, TRN the TRANSPOSE, BPM
+  the tempo. Dial the
   breakdown in by ear, then hold OK.
 - **The list** marks an entry with fields of its own: under its mute state on the lane, `S4`
   (its scene) or `+` for any other field; the cursor's entry lists them under MUTES.
 - **Saved** in PROJECT.BIN section 10. A project from before this opens with every field `--`; an
-  older build plays pattern, repeats and mute recall, and reads a CAP entry as `--`.
+  older build plays pattern, repeats and mute recall, and reads a CAP entry as `--`. TRN sits in
+  a byte of the record that builds before it wrote 0 and ignore, so they play such an entry
+  untransposed.
 
 ## The performance mixer (push VALUE + STEP)
 

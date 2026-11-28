@@ -1032,7 +1032,8 @@ stopped on A01, scenes 3 and 4 as in W71.
   jump to +3 semitones, a new key. FUNC + SEL<: `TRANSPOSE +2 ..` with the key named in sharps.
   Back to `SCALE`. `____`
 - FUNC held down, SEL< then SEL> while SEL< is still down: `TRANSPOSE 0`, A01 exactly as
-  programmed. Hold FUNC alone for a second: the help comes up, and LEFT/RIGHT (not the screen
+  programmed. From +2, both screen keys pressed together: straight to 0, no step down heard
+  first. Hold FUNC alone for a second: the help comes up, and LEFT/RIGHT (not the screen
   keys) turn its pages. `____`
 - KEYS on the bass track: hold a pad, FUNC + SEL> twice while it sounds, let go of the pad: the
   note ends cleanly, nothing hangs. The next pad sounds two scale steps up. With REC on, a note
@@ -1073,6 +1074,23 @@ slots, no chain.
   lane edits again. `____`
 - FUNC+HOME, RELOAD PROJECT, OK: `OK AGAIN: RELOAD`; wait 3 s. PROJECT, SLOT, FUNC + LEFT:
   `LEFT AGAIN: CLEAR`; wait. Every confirmation on the unit reads `<KEY> AGAIN: <WHAT>`. `____`
+
+**W78. Everything up at once, and the review's fixes (8 min).** A project filled the way
+`scenario_stack` does: GEN (DENSITY 100, RANGE 3 OCT, LEAP 100) on all eight tracks, PLAY.
+- The line input on (MIXER IN, push A), PERFORM, FUNC + turn A, B and C to the top (`REL ALL +64`,
+  `LEN ALL 200%`, `ENERGY +64`), FUNC + turn VALUE to `VARISPEED +12.0`, FUNC + SEL> three times,
+  then FUNC+HOME, DOWN, OK (JAM REC). Let it run a minute. Top-line load: `____`, MAX from SETUP:
+  `____`, GUARD shown? `____`. No clicks or dropouts? `____`
+- Stop JAM REC, everything back to rest. CHAIN, an entry, push A, MOVE page: D reads `TRN --`;
+  turn it to `-2`, CHAIN ON, PLAY: the entry plays two steps down, the next (TRN `--`) stays
+  there. `____`
+- ARR REC a take with FUNC + SEL> moved in the middle: the chain gets a new entry with `T+1` on
+  the list, and it replays the key change. `____`
+- LAUNCH a lane from A07, ARR REC two passes (`LAUNCH IN A..`), STOP; queue an empty slot and ARR
+  REC another launched pass: the queued slot stays empty. FUNC menu ARR UNDO: `ARR UNDONE`, the
+  captured slots are empty again; ARR UNDO once more: `NO ARR TO UNDO`. `____`
+- A launched lane on GRID: FUNC + UP (copy) says `COPIED`, not `READ ONLY`; paste on another
+  track: that track plays the borrowed part. `____`
 
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.

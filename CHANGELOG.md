@@ -8,6 +8,17 @@ the project file format or the controls.
 
 ### Added
 
+- **TRN: a song section sets TRANSPOSE.** The SECTION view's MOVE page has TRN on D (`--`,
+  -12..+12, in the FUNC menu row's unit), applied as the entry starts; quick fill takes the
+  TRANSPOSE playing, the CHAIN list shows it (`T+2`), and **ARR REC records it**, so a key change
+  made in a take replays. Saved in a byte of PROJECT.BIN's song section that older builds wrote 0
+  and ignore.
+- **COPY on a launched lane.** COPY only reads, so the read-only guard lets it through, and it
+  copies the part the lane plays: paste it elsewhere to keep one borrowed part.
+- New emulator scenario `stack`: generated parts on all eight tracks with the line input on, REL
+  ALL, LEN ALL and ENERGY at the top, VariSpeed +12.0, TRANSPOSE and JAM REC running, the
+  features of 2026-11-28 measured together (`docs/BUDGET.md`, "Everything turned up").
+
 - **PERFORM shows its FUNC layer.** While FUNC is held in PERFORM the four gauges read `REL`,
   `LEN`, `NRG` and `RND` with where REL ALL, LEN ALL, ENERGY and LIVE RND are, so the turn you are
   about to make is on the screen. The FUNC help's second PERFORM page is PERFORM LIVE, and its
@@ -172,6 +183,16 @@ the project file format or the controls.
   further on (one SELECT_LEFT from TRK 1-4 still reaches EQ). New emulator scenario `chorus`.
 
 ### Fixed
+
+- **FUNC + both screen keys** go to TRANSPOSE 0 without a step sounding first: a press waits
+  40 ms for the other key before it moves anything.
+- **ARR REC never captures into a slot a queue is about to land on**, so an empty pattern you
+  queued (or a queued launch's empty source) is still empty when it lands.
+- **ARR UNDO after a take that captured launched lanes empties the slots it captured into**
+  (not one edited since, nor one playing), so the jam leaves nothing behind in the bank. Such a
+  take cannot be brought back with a second ARR UNDO.
+- Docs: the FUNC menu table in CONTROLS lists PROG CHG OUT, and the CHEATSHEET's mode table lists
+  TRANSPOSE.
 
 - **A section's BPM keeps VariSpeed.** With VariSpeed off rest, an entry's BPM set the clock to the
   plain tempo until VALUE was touched; it is now the tempo times VariSpeed's ratio, as VALUE's turn.
