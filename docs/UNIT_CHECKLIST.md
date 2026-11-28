@@ -1074,7 +1074,16 @@ slots, no chain.
 - FUNC+HOME, RELOAD PROJECT, OK: `OK AGAIN: RELOAD`; wait 3 s. PROJECT, SLOT, FUNC + LEFT:
   `LEFT AGAIN: CLEAR`; wait. Every confirmation on the unit reads `<KEY> AGAIN: <WHAT>`. `____`
 
-**W78. Tempo: sections, ARR REC, tap tempo and VariSpeed (5 min).** The factory beat stopped on
+**W78. LOCK keeps launched tracks apart (4 min).** A01 playing, its track 3 with a few steps of
+its own; A07's track 3 a different part.
+- PROJECT twice (LAUNCH), track 3, STEP 7, wait for `T3 A07`. Hold FUNC + MUTATE: `LOCK A01
+  STORED`. CLR on track 3 (`T3 < OWN`): A01's own track 3 plays, the top line shows `L+`. `____`
+- Tap FUNC + MUTATE: `BACK TO LOCK A01`, track 3 plays A07's part again and LAUNCH shows A07 on
+  it. Tap again: `SWAPPED BACK A01`, track 3 plays A01's own part, unchanged. `____`
+- STEP 7 on track 3 again, tap FUNC + MUTATE twice, then CLR on track 3: A01's own track 3 is
+  still its own part, not A07's. Save, RELOAD PROJECT: the same. `____`
+
+**W79. Tempo: sections, ARR REC, tap tempo and VariSpeed (5 min).** The factory beat stopped on
 A01 at 130.0, no chain.
 - On GRID, tap VALUE twice about a second apart: `TAP TEMPO` both times and the tempo stays
   130.0. Two more taps at the same pace: `TAP 60.0` or near. Turn VALUE back to 130.0. `____`
@@ -1092,15 +1101,6 @@ A01 at 130.0, no chain.
 - FUNC + turn VALUE to +5.0 at 130. Give a chain entry BPM 280: as it plays, `VARISPEED HELD`
   and a smaller amount; at the next entry with a slower BPM, `VARISPEED +5.0 ...` again.
   FUNC + tap VALUE. `____`
-**W78. LOCK keeps launched tracks apart (4 min).** A01 playing, its track 3 with a few steps of
-its own; A07's track 3 a different part.
-- PROJECT twice (LAUNCH), track 3, STEP 7, wait for `T3 A07`. Hold FUNC + MUTATE: `LOCK A01
-  STORED`. CLR on track 3 (`T3 < OWN`): A01's own track 3 plays, the top line shows `L+`. `____`
-- Tap FUNC + MUTATE: `BACK TO LOCK A01`, track 3 plays A07's part again and LAUNCH shows A07 on
-  it. Tap again: `SWAPPED BACK A01`, track 3 plays A01's own part, unchanged. `____`
-- STEP 7 on track 3 again, tap FUNC + MUTATE twice, then CLR on track 3: A01's own track 3 is
-  still its own part, not A07's. Save, RELOAD PROJECT: the same. `____`
-
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
 

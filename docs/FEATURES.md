@@ -224,8 +224,8 @@ FM4 and GRAIN machines.
 | Feature | Since | Unit | Known limits / notes |
 | --- | --- | --- | --- |
 | Follows the unit's clock: internal, MIDI clock, SYNC IN; refuses tempo/transport under external clock | v0.1.0 | ○ (M7) | STRATA cannot set CLOCK SRC (Enaga has no setter). SYNC polarity not selectable (Enaga) |
-| Tap tempo on VALUE, nudge on FUNC + push VALUE + turn | Unreleased | ○ (W72, W78) | Internal clock only; nothing set until three taps agree within 25%; the nudge is 4% for 250 ms a detent |
-| **Song tempo kept apart from the project's**: a section's BPM plays without becoming the saved tempo; ARR REC writes BPM only where the tempo changed (and the take's start tempo on its first entry); VariSpeed held back near 300 BPM says so and returns at a slower tempo | Unreleased | ○ (W78), E (scenario_sections.sh, scenario_arrrec.sh) | The clock no longer jumps back for a moment after a section BPM, a VALUE turn or a tap |
+| Tap tempo on VALUE, nudge on FUNC + push VALUE + turn | Unreleased | ○ (W72, W79) | Internal clock only; nothing set until three taps agree within 25%; the nudge is 4% for 250 ms a detent |
+| **Song tempo kept apart from the project's**: a section's BPM plays without becoming the saved tempo; ARR REC writes BPM only where the tempo changed (and the take's start tempo on its first entry); VariSpeed held back near 300 BPM says so and returns at a slower tempo | Unreleased | ○ (W79), E (scenario_sections.sh, scenario_arrrec.sh) | The clock no longer jumps back for a moment after a section BPM, a VALUE turn or a tap |
 | MIDI OUT per track (OFF/1-16): steps, chords, ratchets, arp, note repeat, pads, KEYS, MIDI IN | v0.1.0 | ○ (8d) | **On Enaga 0.2.0 (v0.1.0-v0.3.1):** with USB connected to a computer not reading, DIN out stalls; unplug USB. Fixed in Enaga 0.3.0, which `main` needs |
 | Every note gets its note-off; second STOP sends All Notes Off | v0.1.0 | ○ (8d) | Slide is not sent as legato |
 | MIDI IN notes (ch 1-8 = tracks, others = selected), held to note-off | v0.1.0 | ○ (8d) | No pitch bend or aftertouch |
