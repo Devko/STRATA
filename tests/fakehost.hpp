@@ -149,13 +149,19 @@ public:
     // A playback stream reads the card's file from its offset. It reports FILLING for the
     // first `set_stream_fill_polls` status calls after an open, and reads nothing meanwhile, as
     // a ring that has not yet been full; `set_stream_stall` makes every read come back empty, as
-    // a card that cannot keep up. Recording streams are still refused: STRATA writes takes with
+    // a card that cannot keep up. Recording streams are JAM REC's (below); STRATA writes takes with
     // files::save.
     void set_stream_fill_polls(int polls) { stream_fill_polls_ = polls; }
     void set_stream_stall(bool stall) { stream_stall_ = stall; }
     // At most this many bytes per read (0: no limit), as a ring that holds less than was asked
     // for: a frame then arrives split across two reads.
     void set_stream_read_limit(uint32_t bytes) { stream_read_limit_ = bytes; }
+    // A recording stream (stream_create) writes straight into a file of `set_record_room` bytes
+    // (default 4 MiB), the reserved header included: past that the card is FULL, as Enaga says it
+    // in the stream's state, and writes take nothing. `set_stream_stall` makes writes take
+    // nothing too, as a ring the card has not emptied. Closing writes the header over the start.
+    void set_record_room(uint32_t bytes) { record_room_ = bytes; }
+    int records_made() const { return records_made_; }
     int stream_opens() const { return stream_opens_; }
     int streams_open() const;
     uint32_t last_stream_offset() const { return last_stream_offset_; }
@@ -262,9 +268,11 @@ private:
     struct FakeStream {
         bool open;
         int entry;
-        uint32_t position;     // the next byte of the file a read returns
-        uint32_t offset;       // where it was opened
+        uint32_t position;     // the next byte of the file a read returns, or a write fills
+        uint32_t offset;       // where it was opened; a recording's reserved header bytes
         int fill_polls;        // status calls left that say FILLING
+        bool record;           // made by stream_create
+        int32_t error;         // a recording's failure (the card filled), sticky like Enaga's
     };
     static constexpr int kStreams = int(ENAGA_STREAMS);
     FakeStream streams_[kStreams]{};
@@ -273,6 +281,8 @@ private:
     uint32_t stream_read_limit_ = 0;
     int stream_opens_ = 0;
     uint32_t last_stream_offset_ = 0;
+    uint32_t record_room_ = 4u << 20;
+    int records_made_ = 0;
 
     struct Pending {
         enaga_file_done_t done;

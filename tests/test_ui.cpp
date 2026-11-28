@@ -74,6 +74,8 @@ struct UiProbe {
         app.rnd_unit_ = kLiveRndOff;                 // LIVE RND off, every track armed
         app.rnd_armed_ = kLiveRndAllTracks;
         app.post(Cmd::set_live_rnd, 0, 0, kLiveRndOff, kLiveRndAllTracks);
+        app.energy_ = 0;                             // ENERGY to rest
+        app.post(Cmd::set_energy, 0, 0, 0);
     }
     static int selected(const Strata &app) { return app.selected_; }
     static int page(const Strata &app) { return app.page_; }
@@ -388,7 +390,7 @@ void open_keys() {
 enum MenuRow : int { kMenuSave, kMenuSaveAs, kMenuOpen, kMenuNew, kMenuReload, kMenuClear,
                      kMenuKits, kMenuSample, kMenuSpeed, kMenuPlay, kMenuChain, kMenuSong,
                      kMenuAutofill, kMenuQuantize, kMenuRecMode, kMenuClick, kMenuCountIn,
-                     kMenuGlide, kMenuFreeze, kMenuLoopLen, kMenuDemo, kMenuRowCount };
+                     kMenuGlide, kMenuFreeze, kMenuLoopLen, kMenuDemo, kMenuJam, kMenuRowCount };
 
 // FUNC + HOME, then DOWN to `row`: the cursor starts on SAVE each time the menu opens.
 void menu_to(int row) {
@@ -5697,6 +5699,68 @@ TEST(ui_samples_push_a_hears_the_file_without_loading_it) {
     CHECK(UiProbe::mode(app) != int(Mode::samples));
     for (int i = 0; i < 20 && app_storage().auditioning(); i++) pump();
     CHECK(!app_storage().auditioning());
+    pump_until_idle();
+}
+
+// With the transport running, the audition would go out to the room with the beat (there is
+// no cue output), so push A takes a second push within kSaveArmMs.
+TEST(ui_samples_push_a_while_playing_takes_a_second_push) {
+    Strata &app = fresh();
+    seed_sample_card();
+    card_wav("/SAMPLES/A_HIT.WAV", 4800);
+    card_wav("/SAMPLES/b loop.wav", 4800);
+    sample_track_in_edit();
+    key(ENAGA_KEY_F5);                             // PLAY
+    CHECK(enaga::clock::running());
+    key(ENAGA_KEY_OK);
+    pump(4);
+    key(ENAGA_KEY_DOWN);                           // A_HIT.WAV
+
+    // One push: nothing heard, a toast says how.
+    key(ENAGA_KEY_PUSH_A);
+    CHECK_EQ(UiProbe::notice(app), "A AGAIN TO HEAR");
+    CHECK(!app_storage().auditioning());
+    pump(8);
+    CHECK(!app_storage().auditioning());
+    CHECK_EQ(FakeHost::the().streams_open(), 0);
+
+    // Too late: the second push only arms again.
+    g_ms += 2500;
+    pump();                                        // the app reads the time in update()
+    key(ENAGA_KEY_PUSH_A);
+    CHECK_EQ(UiProbe::notice(app), "A AGAIN TO HEAR");
+    CHECK(!app_storage().auditioning());
+
+    // Moving away and back lets the first push go.
+    key(ENAGA_KEY_DOWN);
+    key(ENAGA_KEY_UP);
+    key(ENAGA_KEY_PUSH_A);
+    CHECK_EQ(UiProbe::notice(app), "A AGAIN TO HEAR");
+    CHECK(!app_storage().auditioning());
+
+    // In time, on the same file: heard.
+    key(ENAGA_KEY_PUSH_A);
+    CHECK_EQ(UiProbe::notice(app), "HEARING");
+    CHECK(app_storage().auditioning());
+    CHECK(std::strcmp(app_storage().audition_path(), "/SAMPLES/A_HIT.WAV") == 0);
+
+    // Once heard, the cursor still hears the next without asking again, and one push stops it.
+    key(ENAGA_KEY_DOWN);
+    CHECK(app_storage().auditioning());
+    CHECK(std::strcmp(app_storage().audition_path(), "/SAMPLES/b loop.wav") == 0);
+    key(ENAGA_KEY_PUSH_A);
+    CHECK_EQ(UiProbe::notice(app), "STOPPED");
+    for (int i = 0; i < 20 && app_storage().auditioning(); i++) pump();
+    CHECK(!app_storage().auditioning());
+
+    // Stopped transport: one push, as before.
+    key(ENAGA_KEY_F6);                             // STOP
+    key(ENAGA_KEY_F6);
+    CHECK(!enaga::clock::running());
+    key(ENAGA_KEY_PUSH_A);
+    CHECK_EQ(UiProbe::notice(app), "HEARING");
+    CHECK(app_storage().auditioning());
+    key(ENAGA_KEY_F4);
     pump_until_idle();
 }
 
@@ -11158,6 +11222,92 @@ TEST(ui_a_lock_jump_puts_live_rnd_back_and_the_knob_follows) {
     CHECK_EQ(int(engine.live_rnd_unit()), 4);
 }
 
+// --- ENERGY (core/energy.hpp) -----------------------------------------------------------------
+
+// FUNC + turn C in PERFORM is ENERGY: two counts a click, a detent at rest, held to +-64. The
+// notice, the BAR line and the live strip say where it is; without FUNC, C is still its macro,
+// and nothing is saved or undone.
+TEST(ui_func_c_in_perform_is_energy_with_a_detent_at_rest) {
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+    shift_key(ENAGA_KEY_F7);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::perform));
+    pump(1600);
+    CHECK_EQ(int(engine.energy()), 0);
+    const uint8_t macro_c = engine.macro_position(2);
+    const uint8_t undo_before = undo_depth();
+
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_encoder(2, -10);
+    pump(2);
+    CHECK_EQ(int(engine.energy()), -20);
+    CHECK(std::strcmp(UiProbe::notice(app), "ENERGY -20") == 0);
+    CHECK_EQ(int(engine.macro_position(2)), int(macro_c));   // not the macro
+    app.on_encoder(2, -40);                                   // stops at the bottom
+    pump(2);
+    CHECK_EQ(int(engine.energy()), -kEnergyRange);
+    app.on_encoder(2, +40);                                   // and on rest, crossing it
+    pump(2);
+    CHECK_EQ(int(engine.energy()), 0);
+    CHECK(std::strcmp(UiProbe::notice(app), "ENERGY 0") == 0);
+    app.on_encoder(2, +6);
+    pump(2);
+    CHECK_EQ(int(engine.energy()), 12);
+    CHECK(std::strcmp(UiProbe::notice(app), "ENERGY +12") == 0);
+    app.on_key(ENAGA_KEY_F1, false);
+
+    pump(1600);
+    CHECK(screen_has(app, "BAR 1 EN+12"));
+    CHECK(strip_has(app, "EN+"));
+    check_layout(app, "PERFORM, ENERGY up");
+
+    // Without FUNC, C is the macro again, and nothing went on the undo history.
+    app.on_encoder(2, +1);
+    pump(2);
+    CHECK_EQ(int(engine.energy()), 12);
+    CHECK(engine.macro_position(2) != macro_c);
+    app.on_encoder(2, -1);
+    CHECK_EQ(int(undo_depth()), int(undo_before));
+
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_encoder(2, -30);
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(1600);
+    CHECK_EQ(int(engine.energy()), 0);                        // the detent caught it
+    CHECK(!strip_has(app, "EN"));
+    CHECK(!screen_has(app, "EN+"));
+}
+
+// ENERGY is in a LOCK: a jump puts it back and the UI's knob follows.
+TEST(ui_a_lock_jump_puts_energy_back_and_the_knob_follows) {
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+    shift_key(ENAGA_KEY_F7);
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_encoder(2, -8);                                    // -16
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(2);
+    func_mutate_hold(app);                                    // store
+    pump(2);
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_encoder(2, +8);                                    // rest
+    app.on_encoder(2, +4);                                    // +8
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(2);
+    CHECK_EQ(int(engine.energy()), 8);
+    func_mutate_tap(app);                                     // jump
+    pump(4);
+    CHECK_EQ(int(engine.energy()), -16);
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_encoder(2, -1);                                    // on from the lock's -16
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(2);
+    CHECK_EQ(int(engine.energy()), -18);
+    func_mutate_tap(app);                                     // swap back
+    pump(4);
+    CHECK_EQ(int(engine.energy()), 8);
+}
+
 // FEEL on the PATTERN page: D turns it from anywhere on the page, the row is the field after
 // SWG, and UP / DOWN walk it there.
 TEST(ui_the_pattern_page_sets_feel_on_d_and_on_its_row) {
@@ -12153,4 +12303,80 @@ TEST(ui_hold_ok_in_grid_opens_the_track_menu_for_gen_and_evolve) {
     key(ENAGA_KEY_F4);
     pump(2);
     CHECK(!screen_has(app, "OK: RUN"));
+}
+
+// JAM REC (app/storage.hpp, "jam recording"): the FUNC menu's last row, one UP from SAVE. OK
+// starts the jam and closes the menu, the row then counts the time, a dot in the top bar blinks
+// on every screen, and OK again stops it; SAVED comes once the file is closed.
+TEST(ui_jam_rec_starts_and_stops_from_the_menu_and_shows_it_is_running) {
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    key(ENAGA_KEY_F8);                                  // EDIT
+    shift_key(ENAGA_KEY_F4);
+    key(ENAGA_KEY_UP);                                  // the last row
+    CHECK_EQ(UiProbe::menu_cursor(app), int(kMenuJam));
+    CHECK(screen_has(app, "JAM REC"));
+    CHECK(screen_has(app, "OFF"));
+    key(ENAGA_KEY_OK);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::edit));      // closed, back over EDIT
+    CHECK(std::strncmp(UiProbe::notice(app), "JAM REC JAM ", 12) == 0);
+    check_layout(app, "JAM REC started");
+    CHECK(app_storage().jam_recording());
+    pump(2);
+    CHECK(app_engine().jam_attached());
+
+    // The dot: lit for 600 ms of each second, dark for the rest. A whole second of the test's
+    // clock (a millisecond a block), drawn after each block, whatever phase it starts in.
+    enaga::Canvas canvas(g_pixels);
+    int lit = 0;
+    for (int i = 0; i < 1000; i++) {
+        pump();
+        app.draw(canvas);
+        lit += pixel_at(76, 3) == 15 ? 1 : 0;
+    }
+    CHECK(lit >= 595 && lit <= 605);
+
+    // The row counts: a second and a bit is 0:01.
+    menu_to(kMenuJam);
+    CHECK(screen_has(app, "0:01"));
+    key(ENAGA_KEY_OK);                                  // stop
+    CHECK_EQ(UiProbe::notice(app), "JAM STOPPING");
+    CHECK(UiProbe::mode(app) == int(Mode::menu));
+    bool saved = false;
+    for (int i = 0; i < 20 && !saved; i++) {
+        pump();
+        saved = std::strncmp(UiProbe::notice(app), "SAVED JAM ", 10) == 0;
+    }
+    CHECK(saved);
+    check_layout(app, "JAM REC saved");
+    CHECK(!app_storage().jam_running());
+    CHECK(screen_has(app, "OFF"));
+    char path[64];
+    std::snprintf(path, sizeof path, "/RECORD/%s", app_storage().jam_name());
+    CHECK(host.file_bytes(path) > 44 + 1000 * 64 * 6);
+    key(ENAGA_KEY_CLR);
+    lit = 0;
+    for (int i = 0; i < 1000; i += 50) {
+        pump(50);
+        app.draw(canvas);
+        lit += pixel_at(76, 3) == 15 ? 1 : 0;
+    }
+    CHECK_EQ(lit, 0);                                   // no dot once it has stopped
+    host.remove_file(path);
+}
+
+TEST(ui_jam_rec_without_a_card_says_why) {
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    host.set_card(false);
+    app.on_card(false);
+    menu_to(kMenuJam);
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK_EQ(UiProbe::notice(app), "NO CARD");
+    CHECK(!app_storage().jam_running());
+    CHECK_EQ(UiProbe::mode(app), int(Mode::menu));      // the menu stays: nothing started
+    key(ENAGA_KEY_CLR);
+    host.set_card(true);
+    app.on_card(true);
 }

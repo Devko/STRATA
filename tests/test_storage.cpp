@@ -609,9 +609,14 @@ const Expect kTable[] = {
     {Cmd::set_move_all, 0u, "set_move_all"},
     // LIVE RND is a performance move: no file (core/liverand.hpp).
     {Cmd::set_live_rnd, 0u, "set_live_rnd"},
+    // ENERGY too (core/energy.hpp).
+    {Cmd::set_energy, 0u, "set_energy"},
     // An audition is heard, not kept: the track and the project are untouched.
     {Cmd::audition_start, 0u, "audition_start"},
     {Cmd::audition_stop, 0u, "audition_stop"},
+    // JAM REC writes /RECORD/JAM_<n>.WAV, which is no project file.
+    {Cmd::jam_start, 0u, "jam_start"},
+    {Cmd::jam_stop, 0u, "jam_stop"},
     // GEN writes steps, and HOME puts them back: the bank. EVOLVE's settings are PROJECT.BIN's
     // (core/project.hpp), and HOME stops EVOLVE too.
     {Cmd::generate, kDirtyBank, "generate"},
@@ -5041,4 +5046,270 @@ TEST(storage_an_audition_plays_while_a_sample_loads_into_a_track) {
     CHECK(settle_long());
     host.remove_file("/SAMPLES/AUD.WAV");
     host.remove_file("/SAMPLES/LOADED.WAV");
+}
+
+// --- JAM REC (app/storage.hpp, "jam recording") --------------------------------------------------
+
+namespace {
+
+// The running or last jam's path, from its name.
+const char *jam_path() {
+    static char path[64];
+    std::snprintf(path, sizeof path, "/RECORD/%s", storage().jam_name());
+    return path;
+}
+
+// Pump until the jam's file is closed; true if it was within `limit` blocks.
+bool pump_until_jam_closed(int limit = 50) {
+    for (int i = 0; i < limit && storage().jam_running(); i++) pump();
+    return !storage().jam_running();
+}
+
+// A 24-bit little-endian sample at `p`, as a float of full scale 1.
+float jam_sample(const uint8_t *p) {
+    int32_t v = int32_t(uint32_t(p[0]) | uint32_t(p[1]) << 8 | uint32_t(p[2]) << 16);
+    if (v & 0x800000) v -= 0x1000000;
+    return float(v) / 8388608.0f;
+}
+
+constexpr uint32_t kJamFrameBytes = 6;   // stereo 24-bit
+
+}  // namespace
+
+TEST(storage_a_jam_records_the_master_block_for_block_into_a_24_bit_wav) {
+    clean();
+    FakeHost &host = FakeHost::the();
+    const bool dirty = storage().dirty();
+    CHECK(storage().request_jam_start());
+    CHECK(storage().jam_recording());
+    CHECK(std::strncmp(storage().jam_name(), "JAM_", 4) == 0);
+    pump();                                        // jam_start lands; this block is the first
+    CHECK(engine().jam_attached());
+    CHECK_EQ(host.records_made(), 1);
+    CHECK_EQ(host.streams_open(), 1);
+
+    // A kick, and every block that comes out kept to compare against the file.
+    strata::test::put_trig(0, 0);
+    host.set_running(true);
+    constexpr int kBlocks = 100;
+    static float heard[kBlocks * strata::test::kRigStereo];
+    const int before = int(engine().jam_writer().frames()) / kBlk;
+    int got = 0;
+    float peak = 0.0f;
+    for (int b = 0; b < kBlocks; b++) {
+        if (b == 0) host.deliver_tick(0, 0);
+        peak = std::fmax(peak, pump());
+        for (int i = 0; i < strata::test::kRigStereo; i++)
+            heard[got * strata::test::kRigStereo + i] = strata::test::last_block()[i];
+        got++;
+    }
+    CHECK(peak > 0.05f);
+    CHECK(storage().jam_seconds() == 0u);
+    CHECK_EQ(storage().jam_lost_frames(), 0u);
+
+    storage().request_jam_stop();
+    CHECK(storage().jam_running());               // closing: the audio side still owns it
+    CHECK(!storage().jam_recording());
+    CHECK(pump_until_jam_closed());
+    CHECK(!engine().jam_attached());
+    CHECK_EQ(host.streams_open(), 0);
+    const char *message = storage().take_jam_message();
+    CHECK(message != nullptr && std::strncmp(message, "SAVED JAM ", 10) == 0);
+    CHECK(storage().take_jam_message() == nullptr);   // once
+
+    // The file: a WAV header with the length, 48 kHz stereo 24-bit, and the samples as heard.
+    const int32_t bytes = host.file_bytes(jam_path());
+    CHECK(bytes > 44);
+    static uint8_t file[1u << 20];
+    const int32_t read = host.read_prefix(jam_path(), file, sizeof file);
+    CHECK_EQ(read, bytes);
+    enaga::wav::Format format{};
+    CHECK(enaga::wav::parse(file, uint32_t(read), format));
+    CHECK_EQ(int(format.encoding), int(enaga::wav::pcm));
+    CHECK_EQ(int(format.channels), 2);
+    CHECK_EQ(format.rate, 48000u);
+    CHECK_EQ(int(format.bits), 24);
+    CHECK_EQ(format.data_offset, 44u);
+    CHECK_EQ(format.data_bytes, uint32_t(bytes) - 44u);
+    CHECK_EQ(format.data_bytes % kJamFrameBytes, 0u);
+    CHECK_EQ(format.data_bytes / kJamFrameBytes, engine().jam_writer().frames());
+    // Block `before + b` of the file is block b of what came out, to a 24-bit step.
+    float worst = 0.0f;
+    for (int b = 0; b < kBlocks; b++) {
+        for (int i = 0; i < strata::test::kRigStereo; i++) {
+            const uint32_t at = 44u + (uint32_t(before + b) * kBlk * 2u + uint32_t(i)) * 3u;
+            float want = heard[b * strata::test::kRigStereo + i];
+            want = want > 1.0f ? 1.0f : (want < -1.0f ? -1.0f : want);
+            worst = std::fmax(worst, std::fabs(jam_sample(file + at) - want));
+        }
+    }
+    CHECK(worst < 2.0f / 8388608.0f);
+    // Not a project file: nothing to save.
+    CHECK_EQ(storage().dirty(), dirty);
+    host.set_running(false);
+    host.remove_file(jam_path());
+}
+
+TEST(storage_a_jam_never_hears_the_audition_or_the_click) {
+    clean();
+    FakeHost &host = FakeHost::the();
+    make_wav("/SAMPLES/AUD.WAV", 48000, 1, 16, 24000);
+    CHECK(storage().request_jam_start());
+    CHECK(storage().request_audition("/SAMPLES/AUD.WAV"));
+    bool reached = false;
+    pump_while_not([] { return engine().audition_attached(); }, 200, &reached);
+    CHECK(reached);
+    CHECK_EQ(host.streams_open(), 2);              // the jam's and the audition's
+    CHECK(pump(100) > 0.1f);                       // heard in the room
+    storage().stop_audition();
+    storage().request_jam_stop();
+    CHECK(pump_until_jam_closed());
+    storage().take_jam_message();
+    static uint8_t file[1u << 20];
+    const int32_t read = host.read_prefix(jam_path(), file, sizeof file);
+    CHECK(read > 44 + 100 * kBlk * 6);
+    float loudest = 0.0f;
+    for (int32_t at = 44; at + 3 <= read; at += 3) loudest = std::fmax(loudest, std::fabs(jam_sample(file + at)));
+    CHECK(loudest < 1e-4f);                        // the settle()d project is all the jam holds
+    pump_while_not([] { return !storage().auditioning(); }, 50);
+    host.remove_file(jam_path());
+    host.remove_file("/SAMPLES/AUD.WAV");
+}
+
+TEST(storage_jams_are_numbered_and_never_replace_each_other) {
+    clean();
+    FakeHost &host = FakeHost::the();
+    CHECK(storage().request_jam_start());
+    char first[24];
+    std::snprintf(first, sizeof first, "%s", storage().jam_name());
+    CHECK(storage().request_jam_start());          // a second start while one records: the same
+    CHECK(std::strcmp(storage().jam_name(), first) == 0);
+    pump(5);
+    storage().request_jam_stop();
+    CHECK(!storage().request_jam_start());         // still closing
+    CHECK(std::strcmp(storage().take_jam_message(), "JAM BUSY") == 0);
+    CHECK(pump_until_jam_closed());
+    storage().take_jam_message();
+    CHECK(storage().request_jam_start());
+    CHECK(std::strcmp(storage().jam_name(), first) != 0);
+    pump(5);
+    storage().request_jam_stop();
+    CHECK(pump_until_jam_closed());
+    storage().take_jam_message();
+    char path[64];
+    std::snprintf(path, sizeof path, "/RECORD/%s", first);
+    CHECK(host.has_file(path));
+    CHECK(host.has_file(jam_path()));
+    // The counter is in the settings, on the card: a restart carries on from it.
+    static char settings[4096];
+    const int32_t n = host.read_prefix("/ENAGA/DATA/STRATA/SETTINGS.TXT", settings, sizeof settings - 1);
+    CHECK(n > 0);
+    settings[n > 0 ? n : 0] = '\0';
+    CHECK(std::strstr(settings, "JAMSEQ=") != nullptr);
+    host.remove_file(path);
+    host.remove_file(jam_path());
+}
+
+TEST(storage_a_jam_on_a_full_card_is_closed_cleanly_and_says_so) {
+    clean();
+    FakeHost &host = FakeHost::the();
+    // Room for the header and 0.2 s: 9600 frames.
+    host.set_record_room(44u + 9600u * kJamFrameBytes);
+    CHECK(storage().request_jam_start());
+    bool closed = false;
+    for (int i = 0; i < 400 && !closed; i++) {
+        pump();
+        closed = !storage().jam_running();
+    }
+    CHECK(closed);
+    CHECK(std::strcmp(storage().take_jam_message(), "CARD FULL: JAM SAVED") == 0);
+    CHECK_EQ(host.streams_open(), 0);
+    static uint8_t file[1u << 16];
+    const int32_t read = host.read_prefix(jam_path(), file, sizeof file);
+    enaga::wav::Format format{};
+    CHECK(enaga::wav::parse(file, uint32_t(read), format));
+    CHECK_EQ(format.data_bytes, 9600u * kJamFrameBytes);
+    CHECK_EQ(uint32_t(read), 44u + format.data_bytes);
+    host.remove_file(jam_path());
+}
+
+TEST(storage_a_jam_stops_itself_at_its_length_limit) {
+    clean();
+    FakeHost &host = FakeHost::the();
+    storage().set_jam_limit(48000u * kJamFrameBytes);     // a second, for 3 h 51 min
+    CHECK(storage().request_jam_start());
+    int blocks = 0;
+    while (storage().jam_running() && blocks < 2000) {
+        pump();
+        blocks++;
+    }
+    storage().set_jam_limit(Storage::kJamMaxBytes);
+    CHECK(blocks >= 750 && blocks <= 755);
+    CHECK(std::strcmp(storage().take_jam_message(), "4 HOURS: JAM SAVED") == 0);
+    CHECK(storage().jam_seconds() >= 1u);
+    static uint8_t file[1u << 20];
+    const int32_t read = host.read_prefix(jam_path(), file, sizeof file);
+    enaga::wav::Format format{};
+    CHECK(enaga::wav::parse(file, uint32_t(read), format));
+    CHECK(format.data_bytes >= 48000u * kJamFrameBytes);
+    host.remove_file(jam_path());
+}
+
+TEST(storage_a_card_too_slow_for_a_jam_drops_whole_blocks_and_counts_them) {
+    clean();
+    FakeHost &host = FakeHost::the();
+    CHECK(storage().request_jam_start());
+    pump(10);
+    host.set_stream_stall(true);
+    pump(10);
+    host.set_stream_stall(false);
+    pump(10);
+    CHECK_EQ(storage().jam_lost_frames(), 10u * kBlk);
+    storage().request_jam_stop();
+    CHECK(pump_until_jam_closed());
+    storage().take_jam_message();
+    // What reached the card is whole frames, and the header says how many.
+    static uint8_t file[1u << 16];
+    const int32_t read = host.read_prefix(jam_path(), file, sizeof file);
+    enaga::wav::Format format{};
+    CHECK(enaga::wav::parse(file, uint32_t(read), format));
+    CHECK_EQ(format.data_bytes, engine().jam_writer().frames() * kJamFrameBytes);
+    host.remove_file(jam_path());
+}
+
+TEST(storage_a_jam_cut_by_the_card_going_lets_its_stream_go) {
+    clean();
+    FakeHost &host = FakeHost::the();
+    CHECK(storage().request_jam_start());
+    pump(20);
+    host.set_card(false);
+    storage().on_card(false);
+    CHECK(pump_until_jam_closed());
+    CHECK(!engine().jam_attached());
+    CHECK(std::strcmp(storage().take_jam_message(), "CARD OUT: JAM CUT") == 0);
+    CHECK_EQ(host.streams_open(), 0);
+    // And none starts without a card.
+    CHECK(!storage().request_jam_start());
+    CHECK(std::strcmp(storage().take_jam_message(), "NO CARD") == 0);
+    CHECK(!storage().jam_running());
+    host.set_card(true);
+    storage().on_card(true);
+    settle(4);
+}
+
+TEST(storage_a_jam_running_at_shutdown_is_closed_with_its_header) {
+    clean();
+    FakeHost &host = FakeHost::the();
+    CHECK(storage().request_jam_start());
+    pump(50);
+    storage().save_for_shutdown();
+    CHECK(!storage().jam_running());
+    CHECK_EQ(host.streams_open(), 0);
+    static uint8_t file[1u << 16];
+    const int32_t read = host.read_prefix(jam_path(), file, sizeof file);
+    enaga::wav::Format format{};
+    CHECK(enaga::wav::parse(file, uint32_t(read), format));
+    CHECK_EQ(format.data_bytes, 50u * kBlk * kJamFrameBytes);
+    storage().take_jam_message();
+    host.remove_file(jam_path());
 }
