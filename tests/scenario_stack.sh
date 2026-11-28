@@ -14,9 +14,11 @@
 #   PLAY, the GEN presses of tests/scenario_genload.sh  -> "GEN T1 BOTH" .. "GEN T8 BOTH"
 #   CLR, MIXER, SEL< x4, push A                         -> "IN ON"
 #   FUNC + MIXER                                        -> PERFORM
-#   FUNC + turn A +32, B +32, C +32                     -> "REL ALL +64", "LEN ALL 200%",
+#   FUNC + turn A +32, B +32, C +40                     -> "REL ALL +64", "LEN ALL 200%",
 #                                                          "ENERGY +64"
-#   FUNC + turn VALUE +124                              -> "VARISPEED +12.0 ..."
+#   FUNC + turn VALUE +150                              -> "VARISPEED +12.0 ..."
+#   (C and VALUE turn past their ends, which hold: over the generated parts some quick detents
+#   do not land, about 1 in 6 on C and 1 in 20 on VALUE in the first run.)
 #   FUNC + SEL> x3                                      -> "TRANSPOSE +3 IN KEY"
 #   FUNC + HOME, DOWN, OK                               -> "JAM REC JAM <n>"
 #   3 s of play, every block's cost read
@@ -171,9 +173,9 @@ func_turn(ENC_B, 32)
 len_all = [l for l in log if l.startswith("LEN ALL ")]
 check(bool(len_all) and len_all[-1] != "LEN ALL 100%" and
       int(len_all[-1][8:-1]) > 100, "FUNC + turn B took LEN ALL past 100%", f"{len_all[-1:]}")
-func_turn(ENC_C, 32)
+func_turn(ENC_C, 40)
 check("ENERGY +64" in log, "FUNC + turn C took ENERGY to +64", f"log={log[-6:]}")
-func_turn(ENC_VALUE, 124)
+func_turn(ENC_VALUE, 150)
 check(has("VARISPEED +12.0 "), "FUNC + turn VALUE took VariSpeed to +12.0", f"log={log[-6:]}")
 for _ in range(3): func_key(SEL_R)
 check("TRANSPOSE +3 IN KEY" in log, "FUNC + SEL> took TRANSPOSE to +3", f"log={log[-6:]}")
