@@ -18,3 +18,10 @@ Makefile  text eol=lf
 *.bin     binary
 *.wav     binary
 *.png     binary
+
+# Lists that parallel PRs append to at the same place: merge both sides' lines instead of
+# stopping on a conflict (the threads bring main into their branch before a merge). Union keeps
+# every line, so a line both sides edited comes out twice: read the merged hunk. For the checklist,
+# tools/check_rules.sh fails when two items took the same number.
+CHANGELOG.md            merge=union
+docs/UNIT_CHECKLIST.md  merge=union
