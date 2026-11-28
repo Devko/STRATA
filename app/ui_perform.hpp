@@ -257,11 +257,40 @@
 
     // TRANSPOSE (core/transpose.hpp): FUNC + SEL< / SEL> a step (a scale step, or a semitone
     // with the FUNC menu's row on SEMI), the other screen key held as well puts it back to 0.
+    // A press waits kTransposeChordMs before it moves anything (or until its key comes up), so
+    // both keys pressed together go straight to 0 without a step sounding first (review L3,
+    // 2026-11-28); a second key pressed later still finds the first step taken, and resets.
+    static constexpr uint32_t kTransposeChordMs = 40;
+
+    void transpose_press(int delta) {
+        if (sel_left_down_ && sel_right_down_) {
+            transpose_pending_ = 0;
+            transpose_set(0);
+            return;
+        }
+        if (transpose_pending_ != 0) transpose_commit();
+        transpose_pending_ = int8_t(delta);
+        transpose_pending_ms_ = last_ms_;
+    }
+
+    void transpose_commit() {
+        const int delta = transpose_pending_;
+        transpose_pending_ = 0;
+        if (delta != 0) transpose_set(transpose_turn(transpose_, delta));
+    }
+
+    // From update(): a press held past the wait with no second key is a step.
+    void service_transpose() {
+        if (transpose_pending_ != 0 &&
+            uint32_t(last_ms_ - transpose_pending_ms_) >= kTransposeChordMs) {
+            transpose_commit();
+        }
+    }
+
     // Posted absolute with the mode; the notice is logged so a scenario can follow it:
     // `TRANSPOSE +2 IN KEY`, `TRANSPOSE +3 C` (SEMI: the key the parts are in), `TRANSPOSE 0`.
-    void transpose_key(int delta) {
-        const bool both = sel_left_down_ && sel_right_down_;
-        transpose_ = both ? int8_t(0) : transpose_turn(transpose_, delta);
+    void transpose_set(int8_t amount) {
+        transpose_ = amount;
         post_transpose();
         transpose_text(transpose_, transpose_semis_, engine_.key_root(), notice_buffer_,
                        kTransposeTextMax);

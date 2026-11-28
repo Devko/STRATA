@@ -1530,7 +1530,7 @@ TEST(chain_section_fields_out_of_range_are_refused_whole) {
     const Entry entries[] = {{0, 0, 1}};
     set_chain(g_project, entries, 1);
     CHECK(chain_set_section(g_project, 0, section_with_scene(16)));
-    SectionExtra bad[7];
+    SectionExtra bad[8];
     bad[0].scene = 17;
     bad[1].morph = kSectionMorphMax + 1;
     bad[2].energy = kSectionEnergyMax + 1;
@@ -1538,6 +1538,7 @@ TEST(chain_section_fields_out_of_range_are_refused_whole) {
     bad[4].bpm = kTempoCentiMax + 1;
     bad[5].cap = 2;
     bad[6].mask = 1;                                  // a mask with no CAP
+    bad[7].transpose = kSectionTransposeMax + 1;
     for (const SectionExtra &e : bad) {
         CHECK(!section_valid(e));
         CHECK(!chain_set_section(g_project, 0, e));
@@ -1557,10 +1558,9 @@ TEST(chain_section_fields_out_of_range_are_refused_whole) {
     edges.bpm = kTempoCentiMin;
     edges.energy = 1;
     CHECK(chain_set_section(g_project, 0, edges));
-    // reserved is not kept.
-    edges.reserved = 9;
+    edges.transpose = kSectionTransposeMax;
     CHECK(chain_set_section(g_project, 0, edges));
-    CHECK_EQ(int(g_project.chain_extra[0].reserved), 0);
+    CHECK_EQ(int(g_project.chain_extra[0].transpose), int(kSectionTransposeMax));
 }
 
 TEST(chain_entry_section_is_the_playing_entrys) {
@@ -1633,7 +1633,16 @@ TEST(chain_section_step_walks_each_field_and_clear_puts_it_back) {
     CHECK_EQ(int(e.bpm), int(kTempoCentiMax));
     for (int i = 0; i < 3; i++) CHECK(section_step(g_project, 0, SectionField::bpm, -128, 0, 12850));
     CHECK_EQ(int(e.bpm), int(kTempoCentiMin));
+    // TRN leaves `--` for 0 on any turn, then walks a step a click to +-12.
+    CHECK(section_step(g_project, 0, SectionField::trn, 4, 0, 13000));
+    CHECK_EQ(section_transpose(e.transpose), 0);
+    CHECK(section_step(g_project, 0, SectionField::trn, -3, 0, 13000));
+    CHECK_EQ(section_transpose(e.transpose), -3);
+    CHECK(section_step(g_project, 0, SectionField::trn, 100, 0, 13000));
+    CHECK_EQ(section_transpose(e.transpose), 12);
     CHECK(section_valid(e));
+    CHECK(section_clear(g_project, 0, SectionField::trn));
+    CHECK_EQ(int(e.transpose), 0);
     // Push: back to `--`, field by field.
     CHECK(section_clear(g_project, 0, SectionField::bpm));
     CHECK_EQ(int(e.bpm), 0);

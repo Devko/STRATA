@@ -286,6 +286,7 @@
         service_section();
         service_arr();
         service_input_route();
+        service_transpose();
 
         // A queued launch landed (Track Launch): the lane's source is saved in PROJECT.BIN.
         {
@@ -538,6 +539,7 @@
                 section_event_seen_ = event;
                 morph_ = engine_.morph();
                 energy_ = engine_.energy();
+                transpose_ = engine_.transpose();   // TRN
             }
             // A section's BPM: only this context may set Enaga's clock. Refused under an outside
             // clock, which the song then follows, said once a run of the transport.

@@ -1851,6 +1851,29 @@ TEST(engine_an_entry_with_no_section_fields_plays_as_it_always_did) {
     section_chain_done();
 }
 
+TEST(engine_a_section_sets_the_transpose_and_keeps_its_unit) {
+    // TRN (review L1): the amount as the entry starts, in the unit the FUNC menu's row has.
+    SectionExtra first;
+    first.transpose = section_transpose_byte(3);
+    SectionExtra second;
+    second.transpose = section_transpose_byte(0);
+    Engine &engine = section_chain(first, second);
+    post(Cmd::set_transpose, 0, 0, uint8_t(int8_t(-5)), 1);   // semitones
+    pump();
+    FakeHost::the().set_running(true);
+    tick_at(0);
+    post(Cmd::set_chain, 0, 0, 1);
+    pump();
+    CHECK_EQ(int(engine.transpose()), 3);
+    CHECK(engine.transpose_semitones());
+    tick_at(1);
+    tick_at(1536);                                    // the second entry: TRN 0, the key back
+    CHECK_EQ(int(engine.transpose()), 0);
+    section_chain_done();
+    post(Cmd::set_transpose, 0, 0, 0, 0);
+    pump();
+}
+
 TEST(engine_a_section_snaps_the_morph_to_either_side) {
     SectionExtra first;
     first.morph = kSectionMorphSnap;
@@ -1993,6 +2016,7 @@ TEST(engine_section_edits_copy_and_quick_fill) {
     morph.u = kMorphScale * 3 / 4;
     CHECK(engine.commands().post(morph));
     post(Cmd::set_energy, 0, 0, uint8_t(int8_t(20)));
+    post(Cmd::set_transpose, 0, 0, uint8_t(int8_t(-2)), 0);
     pump();
     chain_op(ChainEdit::fill, 2);
     const SectionExtra &f = engine.project().chain_extra[2];
@@ -2002,6 +2026,9 @@ TEST(engine_section_edits_copy_and_quick_fill) {
     CHECK_EQ(int(f.morph), int(kSectionMorphSnap));
     CHECK_EQ(section_energy(f.energy), 20);
     CHECK_EQ(int(f.bpm), int(engine.project().settings.tempo_centi_bpm));
+    CHECK_EQ(section_transpose(f.transpose), -2);
+    post(Cmd::set_transpose, 0, 0, 0, 0);
+    pump();
     // The morph at rest fills SNAP A, so the section brings it home after one that moved it.
     post(Cmd::set_morph, 0, 0, 0, 0, 0);
     pump();

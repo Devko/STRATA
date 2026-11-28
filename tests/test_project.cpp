@@ -1092,6 +1092,7 @@ void fill_sections(Project &project) {
         e.morph = uint8_t(i % 5);
         e.energy = uint8_t((i * 7) % 130);
         e.bpm = i % 5 == 0 ? uint16_t(0) : uint16_t(kTempoCentiMin + i * 400);
+        e.transpose = uint8_t(i % 26);
     }
 }
 
@@ -1115,9 +1116,11 @@ TEST(project_song_sections_round_trip) {
         CHECK_EQ(int(b.morph), int(a.morph));
         CHECK_EQ(int(b.energy), int(a.energy));
         CHECK_EQ(int(b.bpm), int(a.bpm));
+        CHECK_EQ(int(b.transpose), int(a.transpose));
         CHECK_EQ(int(g_loaded.chain[i].mutes), int(g_source.chain[i].mutes));
     }
-    // The record's layout, byte by byte: entry 3 is CAP 0x82, SCN 3, MRP 3, NRG 21, BPM 3200.
+    // The record's layout, byte by byte: entry 3 is CAP 0x82, SCN 3, MRP 3, NRG 21, BPM 3200,
+    // TRN 3 (TRANSPOSE -10), in the byte builds before TRN wrote 0 and ignore.
     const uint32_t at = section_at(g_project, kSectionProjectSections);
     CHECK_EQ(int(g_project[at]), 0);                  // the layout byte
     const uint32_t r = at + 1 + 3 * 8;
@@ -1127,7 +1130,7 @@ TEST(project_song_sections_round_trip) {
     CHECK_EQ(int(g_project[r + 3]), 3);
     CHECK_EQ(int(g_project[r + 4]), 21);
     CHECK_EQ(int(peek_u16(g_project, r + 5)), int(kTempoCentiMin) + 3 * 400);
-    CHECK_EQ(int(g_project[r + 7]), 0);               // reserved
+    CHECK_EQ(int(g_project[r + 7]), 3);               // TRN
 }
 
 // The 1.0 rule both ways. An older file has no section 10 and opens with every field `--`; an
@@ -1174,6 +1177,7 @@ TEST(project_a_damaged_song_section_reads_as_left_alone) {
     g_project[at + 8 + 2] = 17;     // SCN past 16
     g_project[at + 8 + 3] = 5;      // MRP past SNAP A
     g_project[at + 8 + 4] = 130;    // NRG past +64
+    g_project[at + 8 + 7] = 26;     // TRN past +12
     poke_u16(g_project, at + 8 + 5, uint16_t(kTempoCentiMax + 1));
     // Entry 2: a BPM under the clock's range; entry 3 (CAP) with a recall in section 5 too.
     poke_u16(g_project, at + 16 + 5, uint16_t(kTempoCentiMin - 1));

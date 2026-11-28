@@ -1742,6 +1742,8 @@ bool Engine::apply_bulk_edit(const Command &command, int track, int step) {
             gesture.step = uint8_t(step);
             gesture.seq = command.b;
             undo_.mark(live(), gesture);
+            // An edit to a slot ARR REC captured into: ARR UNDO keeps it now.
+            arr_touched(arr_, arr_backup_, int(project_.bank), int(project_.slot));
             break;
         }
 
@@ -1767,7 +1769,10 @@ bool Engine::apply_bulk_edit(const Command &command, int track, int step) {
             break;
 
         case Cmd::range_copy:
-            range_copy(live(), track, step, int(command.a), clip_);
+            // From what the lane plays: a launched lane copies the part it borrows (only a read,
+            // so the read-only guard lets it through), the way to keep one lane's part when a
+            // whole CAPTURE is more than wanted.
+            range_copy(lane_pattern(project_, track), track, step, int(command.a), clip_);
             break;
 
         case Cmd::range_paste:
@@ -2020,6 +2025,7 @@ bool Engine::apply_arrangement(const Command &command, int, int) {
                     extra.morph = command.e;
                     extra.energy = uint8_t(command.u & 0xFFu);
                     extra.bpm = uint16_t(command.u >> 8);
+                    extra.transpose = uint8_t(command.u >> 24);
                     done = chain_set_section(project_, at, extra);
                     break;
                 }
@@ -2051,6 +2057,7 @@ bool Engine::apply_arrangement(const Command &command, int, int) {
                     extra.morph = morph_ * 2u > kMorphScale ? kSectionMorphSnap
                                                             : kSectionMorphSnapA;
                     extra.energy = section_energy_byte(perform_.energy);
+                    extra.transpose = section_transpose_byte(transpose_);
                     const uint16_t tempo = project_.settings.tempo_centi_bpm;
                     extra.bpm = tempo < kTempoCentiMin ? uint16_t(kTempoCentiMin)
                                                        : (tempo > kTempoCentiMax
@@ -2122,13 +2129,21 @@ bool Engine::apply_arrangement(const Command &command, int, int) {
             }
             break;
 
-        case Cmd::arr_undo:
-            if (!arr_undo(project_, arr_, arr_backup_)) {
+        case Cmd::arr_undo: {
+            uint8_t emptied = 0;
+            if (!arr_undo(project_, arr_, arr_backup_, &emptied)) {
                 status_.bump_refused();
                 status_.bump_arr_event(uint8_t(ArrEvent::no_undo), 0);
                 break;
             }
             arr_undone_ = !arr_undone_;
+            // The slots the take captured into were emptied: their banks are saved again.
+            if (emptied != 0) {
+                status_.arr_capture_banks.store(emptied, std::memory_order_relaxed);
+                status_.arr_captures.store(
+                    uint8_t(status_.arr_captures.load(std::memory_order_relaxed) + 1),
+                    std::memory_order_release);
+            }
             // The chain under a running player has been swapped: it stops being followed, as
             // an emptied chain does, and the pattern plays on.
             chain_.active = false;
@@ -2137,6 +2152,7 @@ bool Engine::apply_arrangement(const Command &command, int, int) {
             status_.bump_arr_event(uint8_t(arr_undone_ ? ArrEvent::undone : ArrEvent::redone),
                                    uint8_t(chain_length(project_)));
             break;
+        }
 
         case Cmd::cancel_queue:
             // Unconditional: cancelling a queue that is not armed is what the UI does when the
@@ -2938,6 +2954,7 @@ void Engine::apply_perf_plan(SendSettings &sends, MasterSettings &master) const 
 // --- pattern changes ------------------------------------------------------
 
 void Engine::pattern_replaced(int bank, int slot) {
+    arr_touched(arr_, arr_backup_, bank, slot);   // written whole by hand: ARR UNDO keeps it
     if (bank != int(project_.bank) || slot != int(project_.slot)) {
         // Track Launch: a lane borrowing the slot just written plays the new part from its step
         // 1, measured again, as a launch would.
@@ -3241,6 +3258,10 @@ void Engine::chain_entry_started() {
         morph_ride_start(section->morph == kSectionMorphRide ? kMorphScale : 0, length);
     }
     if (section->energy != 0) perform_.energy = energy_turn(int8_t(section_energy(section->energy)), 0);
+    // TRN: the amount, in the unit the FUNC menu's row has now (a LOCK holds it the same way).
+    if (section->transpose != 0) {
+        transpose_ = transpose_turn(int8_t(section_transpose(section->transpose)), 0);
+    }
     // Only the main context may set Enaga's clock: ask, and the UI sets it or says it was refused.
     if (section->bpm != 0) status_.bump_tempo_due(section->bpm);
     status_.bump_section_event();
@@ -3291,10 +3312,19 @@ void Engine::morph_ride_tick(uint32_t tick) {
 // What plays now, as a section holds it.
 ArrState Engine::arr_now() const {
     ArrState state = arr_state(project_.bank, project_.slot, mute_state_capture(muted_), scene_b_,
-                               morph_, int(perform_.energy), project_.settings.tempo_centi_bpm,
+                               morph_, int(perform_.energy), int(transpose_),
+                               project_.settings.tempo_centi_bpm,
                                enaga::clock::source() != ENAGA_CLOCK_INTERNAL);
     arr_state_lanes(state, project_);
     return state;
+}
+
+// What the queues are about to land on, so a capture leaves those slots alone (ArrRec::queued).
+void Engine::arr_note_queued() {
+    arr_.queued[0] = queue_.pending ? lane_source(int(queue_.bank), int(queue_.slot)) : kLaneOwn;
+    for (int t = 0; t < kTracks; t++) {
+        arr_.queued[t + 1] = lane_queue_[t].queue.pending ? lane_queue_[t].source : kLaneOwn;
+    }
 }
 
 // What the pass just written did with Track Launch, told to the UI: the slot a borrowed mix was
@@ -3326,6 +3356,7 @@ void Engine::arr_tick(uint32_t tick, uint32_t previous, bool new_pass, bool jump
     }
     if (new_pass || jumped_back) {
         // A transport that jumped back ended the pass where it was, not here.
+        arr_note_queued();
         const ArrPass ended = arr_pass_end(project_, arr_, jumped_back ? previous : tick);
         arr_say_launch();
         if (ended == ArrPass::full) {
@@ -3348,6 +3379,7 @@ void Engine::arr_tick(uint32_t tick, uint32_t previous, bool new_pass, bool jump
 
 // The take is over: STOP, ARR REC off, the chain started, or a 65th entry needed (`full`).
 void Engine::arr_end(uint32_t tick, bool full) {
+    arr_note_queued();
     const int written = arr_finish(project_, arr_, arr_backup_, tick);
     arr_say_launch();
     arr_publish();
@@ -3412,7 +3444,8 @@ void Engine::land_launch(int track, uint8_t source, bool restart, uint32_t start
 
 // The read-only guard (Roland, 2026-11-27): a lane playing another pattern's part takes no edit
 // until CAPTURE makes it a part of its own. The borrowed pattern is never changed by being
-// borrowed, and undo stays one pattern's history.
+// borrowed, and undo stays one pattern's history. COPY is not refused: it only reads, and copies
+// the borrowed part (Cmd::range_copy).
 bool Engine::launch_refuses(const Command &command, int track) {
     switch (command.cmd) {
         case Cmd::toggle_trig:
@@ -3431,7 +3464,6 @@ bool Engine::launch_refuses(const Command &command, int track) {
         case Cmd::set_track_speed:
         case Cmd::set_track_play:
         case Cmd::set_track_swing:
-        case Cmd::range_copy:
         case Cmd::range_paste:
         case Cmd::range_erase:
         case Cmd::track_erase:

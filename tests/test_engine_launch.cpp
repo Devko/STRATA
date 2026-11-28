@@ -144,6 +144,28 @@ TEST(engine_launch_a_borrowed_lane_is_read_only) {
     CHECK((e.pattern().tracks[3].steps[5].flags & kStepTrig) != 0);
 }
 
+TEST(engine_launch_copy_on_a_borrowed_lane_takes_the_borrowed_part) {
+    // COPY only reads, so the read-only guard lets it through, and it copies what the lane
+    // plays: B07's track 3 (trigs on steps 1 and 2), not A01's hidden own part (empty).
+    Engine &e = blank_set();
+    launch(0x04, lane_source(1, 6), QueueMode::immediate);
+    const uint8_t before = launch_event();
+    post(Cmd::range_copy, 2, 0, 16);
+    pump();
+    CHECK_EQ(int(uint8_t(launch_event() - before)), 0);
+    // Pasted onto track 4, which plays its own part, it is B07's.
+    post(Cmd::range_paste, 3, 0);
+    pump();
+    CHECK((e.pattern().tracks[3].steps[0].flags & kStepTrig) != 0);
+    CHECK((e.pattern().tracks[3].steps[1].flags & kStepTrig) != 0);
+    CHECK((e.pattern().tracks[3].steps[2].flags & kStepTrig) == 0);
+    // A paste onto the borrowed lane itself is still refused.
+    post(Cmd::range_paste, 2, 0);
+    pump();
+    CHECK_EQ(int(uint8_t(launch_event() - before)), 1);
+    CHECK((e.pattern().tracks[2].steps[0].flags & kStepTrig) == 0);
+}
+
 TEST(engine_launch_a_pattern_change_sends_lanes_home_and_pin_keeps_one) {
     Engine &e = blank_set();
     launch(0x04, lane_source(1, 6), QueueMode::immediate);

@@ -4972,7 +4972,7 @@ TEST(ui_section_view_edits_an_entrys_section_fields) {
     CHECK_EQ(int(project.chain[0].slot), 3);
     CHECK_EQ(int(project.chain[0].repeats), 3);
 
-    // MOVE on the screen keys: A MRP, B NRG, C BPM; D free.
+    // MOVE on the screen keys: A MRP, B NRG, C BPM, D TRN.
     key(ENAGA_KEY_SELECT_RIGHT);
     CHECK_EQ(UiProbe::notice(app), "MOVE PAGE");
     app.on_encoder(0, +2);
@@ -4980,11 +4980,16 @@ TEST(ui_section_view_edits_an_entrys_section_fields) {
     app.on_encoder(1, -12);
     app.on_encoder(2, -1);                            // `--` to the tempo playing
     app.on_encoder(2, +5);
+    app.on_encoder(3, +1);                            // `--` to TRANSPOSE 0 on any turn
+    app.on_encoder(3, -12);
     pump(2);
+    CHECK_EQ(UiProbe::notice(app), "TRN");
     const SectionExtra &e = project.chain_extra[0];
     CHECK_EQ(int(e.morph), int(kSectionMorphRide));
     CHECK_EQ(section_energy(e.energy), -12);
     CHECK_EQ(int(e.bpm), int(project.settings.tempo_centi_bpm) + 500);
+    CHECK_EQ(section_transpose(e.transpose), -12);
+    CHECK(screen_has(app, "TRN"));
     check_layout(app, "SECTION, MOVE, every field set");
     // Pushes put a field back to `--`.
     key(ENAGA_KEY_PUSH_B);
@@ -12485,6 +12490,52 @@ TEST(ui_func_and_the_screen_keys_transpose_on_every_screen) {
     CHECK(!strip_has(app, "TR"));
     post_cmd(Cmd::set_root, 0);
     pump(2);
+}
+
+// Both screen keys pressed together go straight to rest, with no step sounding first (review L3,
+// 2026-11-28): a press waits kTransposeChordMs for the other key before it moves anything. Held
+// past the wait it is a step without being let go; a second key after that still resets.
+TEST(ui_both_screen_keys_together_reach_rest_without_a_step_first) {
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+    key(ENAGA_KEY_F4);                                       // GRID
+    app.on_key(ENAGA_KEY_F1, true);
+    key(ENAGA_KEY_SELECT_RIGHT);
+    key(ENAGA_KEY_SELECT_RIGHT);
+    pump(2);
+    CHECK_EQ(int(engine.transpose()), 2);
+
+    // SEL< down, 20 ms of blocks, SEL> down: rest, and +1 was never posted.
+    app.on_key(ENAGA_KEY_SELECT_LEFT, true);
+    bool stepped = false;
+    for (int i = 0; i < 20; i++) {
+        pump(1);
+        if (engine.transpose() == 1) stepped = true;
+    }
+    CHECK(!stepped);
+    app.on_key(ENAGA_KEY_SELECT_RIGHT, true);
+    pump(2);
+    CHECK_EQ(int(engine.transpose()), 0);
+    CHECK(std::strcmp(UiProbe::notice(app), "TRANSPOSE 0") == 0);
+    app.on_key(ENAGA_KEY_SELECT_RIGHT, false);
+    app.on_key(ENAGA_KEY_SELECT_LEFT, false);
+    pump(60);
+    CHECK_EQ(int(engine.transpose()), 0);                    // the releases add nothing
+
+    // Held past the wait: a step while still down, and the release adds nothing.
+    app.on_key(ENAGA_KEY_SELECT_RIGHT, true);
+    pump(int(Strata::kTransposeChordMs) + 4);
+    CHECK_EQ(int(engine.transpose()), 1);
+    CHECK(std::strcmp(UiProbe::notice(app), "TRANSPOSE +1 IN KEY") == 0);
+    // The other key now, late: still rest.
+    app.on_key(ENAGA_KEY_SELECT_LEFT, true);
+    pump(2);
+    CHECK_EQ(int(engine.transpose()), 0);
+    app.on_key(ENAGA_KEY_SELECT_LEFT, false);
+    app.on_key(ENAGA_KEY_SELECT_RIGHT, false);
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(60);
+    CHECK_EQ(int(engine.transpose()), 0);
 }
 
 // TRANSPOSE is in a LOCK: a jump puts it back and the next press goes on from there.

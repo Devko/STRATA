@@ -505,7 +505,8 @@ struct SectionExtra {
     uint8_t scene = 0;      // SCN: 0 --, 1-16 that scene on morph side B
     uint8_t morph = 0;      // MRP: kSectionMorph*
     uint8_t energy = 0;     // NRG: 0 --, 1-129 = ENERGY -64 .. +64
-    uint8_t reserved = 0;   // byte 7 of the file's record; written 0, ignored on read
+    uint8_t transpose = 0;  // TRN: 0 --, 1-25 = TRANSPOSE -12 .. +12 (byte 7 of the record,
+                            // which builds before TRN wrote 0 and ignore)
     uint16_t bpm = 0;       // BPM: 0 --, else centi-BPM, kTempoCentiMin .. kTempoCentiMax
 };
 static_assert(sizeof(SectionExtra) == 8, "64 of them sit in the Project, beside the chain");
@@ -520,10 +521,15 @@ constexpr uint8_t kSectionScenesMax = 16;
 // NRG's byte for ENERGY 0, and its highest (+64).
 constexpr uint8_t kSectionEnergyZero = 65;
 constexpr uint8_t kSectionEnergyMax = 129;
+// TRN's byte for TRANSPOSE 0, and its highest (+12): the amount in the unit the FUNC menu's
+// TRANSPOSE row has, scale steps or semitones, as a LOCK holds it.
+constexpr uint8_t kSectionTransposeZero = 13;
+constexpr uint8_t kSectionTransposeMax = 25;
 
 // True when the entry sets nothing beyond what an older build plays.
 constexpr bool section_empty(const SectionExtra &e) {
-    return e.cap == 0 && e.scene == 0 && e.morph == 0 && e.energy == 0 && e.bpm == 0;
+    return e.cap == 0 && e.scene == 0 && e.morph == 0 && e.energy == 0 && e.bpm == 0 &&
+           e.transpose == 0;
 }
 
 // --- the project ----------------------------------------------------------

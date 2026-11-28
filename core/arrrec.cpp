@@ -10,7 +10,7 @@ namespace {
 
 bool same_fields(const SectionExtra &a, const SectionExtra &b) {
     return a.cap == b.cap && a.mask == b.mask && a.scene == b.scene && a.morph == b.morph &&
-           a.energy == b.energy && a.bpm == b.bpm;
+           a.energy == b.energy && a.bpm == b.bpm && a.transpose == b.transpose;
 }
 
 // Copy the chain into or out of a backup, whole (all 64, so the zeroed tail goes with it).
@@ -45,18 +45,38 @@ bool borrows(const ArrState &state) {
     return false;
 }
 
-// CAPTURE what `pass` played into a free slot of its bank, avoiding both what it played and
-// what plays now (core/launch.hpp). The slot, or -1 when none is free or the locks do not fit.
-int capture_pass(Project &project, const ArrState &pass) {
-    uint8_t avoid[kTracks + 1];
+// CAPTURE what `pass` played into a free slot of its bank, avoiding what it played, what plays
+// now (core/launch.hpp) and whatever a queue is about to land on (`queued`, ArrRec::queued). The
+// slot, or -1 when none is free or the locks do not fit.
+void captured_add(ArrCaptured &captured, int index) {
+    for (int i = 0; i < captured.count; i++) {
+        if (captured.index[i] == index) return;
+    }
+    if (captured.count < kProjectPatterns) captured.index[captured.count++] = uint8_t(index);
+}
+
+void captured_remove(ArrCaptured &captured, int index) {
+    int keep = 0;
+    for (int i = 0; i < captured.count; i++) {
+        if (captured.index[i] != index) captured.index[keep++] = captured.index[i];
+    }
+    captured.count = uint8_t(keep);
+}
+
+int capture_pass(Project &project, const ArrState &pass, const uint8_t *queued,
+                 ArrCaptured &captured) {
+    constexpr int kAvoid = 2 * (kTracks + 1);
+    uint8_t avoid[kAvoid];
     avoid[0] = lane_source(pass.bank, pass.slot);
     for (int t = 0; t < kTracks; t++) avoid[t + 1] = pass.lanes[t];
-    const int slot = launch_capture_slot_avoiding(project, pass.bank, avoid, kTracks + 1);
+    for (int i = 0; i <= kTracks; i++) avoid[kTracks + 1 + i] = queued[i];
+    const int slot = launch_capture_slot_avoiding(project, pass.bank, avoid, kAvoid);
     if (slot < 0) return -1;
     if (!launch_compose_lanes(project, avoid[0], pass.lanes, project.patterns[pass.bank][slot])) {
         return -1;
     }
     project.bank_dirty[pass.bank] = true;
+    captured_add(captured, int(pass.bank) * kPatternsPerBank + slot);
     return slot;
 }
 
@@ -69,7 +89,7 @@ void arr_state_lanes(ArrState &state, const Project &project) {
 }
 
 ArrState arr_state(uint8_t bank, uint8_t slot, uint8_t mutes, uint8_t scene_b, uint16_t morph,
-                   int energy, uint16_t tempo_centi, bool external) {
+                   int energy, int transpose, uint16_t tempo_centi, bool external) {
     ArrState state;
     state.bank = bank;
     state.slot = slot;
@@ -81,6 +101,7 @@ ArrState arr_state(uint8_t bank, uint8_t slot, uint8_t mutes, uint8_t scene_b, u
     // guessed RIDE). Half way exactly is side A.
     f.morph = uint32_t(morph) * 2u > kMorphScale ? kSectionMorphSnap : kSectionMorphSnapA;
     f.energy = section_energy_byte(energy);
+    f.transpose = section_transpose_byte(transpose);
     if (external) {
         f.bpm = 0;
     } else {
@@ -95,6 +116,7 @@ bool arr_start(Project &project, ArrRec &rec, ArrBackup &backup) {
     if (rec.on) return false;
     store(project, backup);
     backup.valid = true;
+    backup.captured = ArrCaptured{};
     for (int i = 0; i < kChainEntries; i++) {
         project.chain[i] = ChainEntry{};
         project.chain_extra[i] = SectionExtra{};
@@ -149,7 +171,7 @@ ArrPass arr_pass_end(Project &project, ArrRec &rec, uint32_t tick) {
     if (length >= kChainEntries) return ArrPass::full;
     ArrLaunch launch = ArrLaunch::none;
     if (!known) {
-        const int captured = capture_pass(project, rec.pass);
+        const int captured = capture_pass(project, rec.pass, rec.queued, rec.captured);
         if (captured >= 0) {
             slot = uint8_t(captured);
             launch = ArrLaunch::kept;
@@ -182,6 +204,7 @@ int arr_finish(Project &project, ArrRec &rec, ArrBackup &backup, uint32_t tick) 
     const ArrLaunch launch = rec.launch;
     const uint8_t launch_bank = rec.launch_bank;
     const uint8_t launch_slot = rec.launch_slot;
+    backup.captured = rec.captured;
     rec = ArrRec{};
     rec.launch = launch;
     rec.launch_bank = launch_bank;
@@ -193,7 +216,8 @@ int arr_finish(Project &project, ArrRec &rec, ArrBackup &backup, uint32_t tick) 
     return written;
 }
 
-bool arr_undo(Project &project, const ArrRec &rec, ArrBackup &backup) {
+bool arr_undo(Project &project, const ArrRec &rec, ArrBackup &backup, uint8_t *emptied_banks) {
+    if (emptied_banks != nullptr) *emptied_banks = 0;
     if (rec.on || !backup.valid) return false;
     // A swap, entry by entry: the take goes into the backup, so ARR UNDO again brings it back.
     for (int i = 0; i < kChainEntries; i++) {
@@ -207,7 +231,30 @@ bool arr_undo(Project &project, const ArrRec &rec, ArrBackup &backup) {
     const uint8_t length = project.settings.chain_length;
     project.settings.chain_length = backup.length;
     backup.length = length;
+    if (backup.captured.count == 0) return true;
+    // The take captured: empty what it filled, keep what is playing, and drop the take.
+    for (int i = 0; i < backup.captured.count; i++) {
+        const int index = backup.captured.index[i];
+        const int bank = index / kPatternsPerBank;
+        const int slot = index % kPatternsPerBank;
+        const uint8_t here = lane_source(bank, slot);
+        bool playing = here == lane_live_source(project);
+        for (int t = 0; t < kTracks; t++) playing = playing || lane_playing_source(project, t) == here;
+        if (playing) continue;
+        pattern_init(project.patterns[bank][slot]);
+        project.bank_dirty[bank] = true;
+        if (emptied_banks != nullptr) *emptied_banks = uint8_t(*emptied_banks | (1u << bank));
+    }
+    backup.captured = ArrCaptured{};
+    backup.valid = false;
     return true;
+}
+
+void arr_touched(ArrRec &rec, ArrBackup &backup, int bank, int slot) {
+    if (bank < 0 || bank >= kBanks || slot < 0 || slot >= kPatternsPerBank) return;
+    const int index = bank * kPatternsPerBank + slot;
+    captured_remove(rec.captured, index);
+    captured_remove(backup.captured, index);
 }
 
 }  // namespace strata

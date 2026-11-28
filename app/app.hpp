@@ -1002,6 +1002,8 @@ private:
     // read back from the engine after a LOCK jump. Which screen keys are down, for the reset.
     int8_t transpose_ = 0;
     bool transpose_semis_ = false;      // the FUNC menu's TRANSPOSE row: SEMI, else SCALE
+    int8_t transpose_pending_ = 0;      // a FUNC + screen key step not yet applied (-1, +1, 0)
+    uint32_t transpose_pending_ms_ = 0; // when that key went down
     bool sel_left_down_ = false;
     bool sel_right_down_ = false;
     // VariSpeed (core/varispeed.hpp): tenths of a semitone, 0 rest. Not in a LOCK, not saved.

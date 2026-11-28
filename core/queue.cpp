@@ -457,7 +457,7 @@ void chain_player_removed(ChainPlayer &player, int at) {
 bool section_valid(const SectionExtra &extra) {
     return extra.cap <= 1 && (extra.cap != 0 || extra.mask == 0) &&
            extra.scene <= kSectionScenesMax && extra.morph <= kSectionMorphMax &&
-           extra.energy <= kSectionEnergyMax &&
+           extra.energy <= kSectionEnergyMax && extra.transpose <= kSectionTransposeMax &&
            (extra.bpm == 0 || (extra.bpm >= kTempoCentiMin && extra.bpm <= kTempoCentiMax));
 }
 
@@ -465,8 +465,7 @@ bool chain_set_section(Project &project, int at, const SectionExtra &extra) {
     if (!section_valid(extra)) return false;
     if (at < 0 || at >= chain_length(project)) return false;
     chain_normalize(project);
-    SectionExtra fields = extra;
-    fields.reserved = 0;
+    const SectionExtra &fields = extra;
     project.chain_extra[at] = fields;
     // CAP replaces a mute recall: one field, MUT, on the screen and in the file.
     if (fields.cap != 0) project.chain[at].mutes = 0;
@@ -522,6 +521,11 @@ bool section_step(Project &project, int at, SectionField field, int delta, uint8
             e.bpm = uint16_t(clamp_walk(from, step, int(kTempoCentiMin), int(kTempoCentiMax)));
             break;
         }
+        case SectionField::trn:
+            e.transpose = e.transpose == 0 ? kSectionTransposeZero
+                                           : uint8_t(clamp_walk(int(e.transpose), delta, 1,
+                                                                int(kSectionTransposeMax)));
+            break;
         case SectionField::count:
             break;
     }
@@ -542,6 +546,7 @@ bool section_clear(Project &project, int at, SectionField field) {
         case SectionField::mrp: e.morph = kSectionMorphNone; break;
         case SectionField::nrg: e.energy = 0; break;
         case SectionField::bpm: e.bpm = 0; break;
+        case SectionField::trn: e.transpose = 0; break;
         case SectionField::count: break;
     }
     return true;
