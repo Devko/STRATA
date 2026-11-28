@@ -695,28 +695,43 @@ private:
 
     // --- VariSpeed (core/varispeed.hpp) ------------------------------------
     //
-    // Enaga's tempo is the project's times VariSpeed's ratio. Every place that sets the clock
-    // from the project's tempo goes through here, so the clock and the pitch never part: VALUE's
-    // turn, a loaded project's tempo, and VariSpeed itself. False when Enaga refuses (an outside
-    // clock), as enaga::clock::set_tempo.
-    bool set_clock_tempo(uint32_t project_centi) {
-        // A faster project tempo can take the moved one past 300 BPM (or a slower one under
-        // 20): VariSpeed comes back towards 0 until it fits, rather than the clock clamping and
-        // the pitch going on alone.
-        const int8_t fitted = vari_fit(vari_, project_centi, kTempoCentiMin, kTempoCentiMax);
+    // Enaga's tempo is the playing tempo times VariSpeed's ratio. Every place that sets the
+    // clock's tempo goes through here, so the clock and the pitch never part: VALUE's turn, a
+    // tap, a loaded project's tempo, a section's BPM, the end of a nudge, and VariSpeed itself.
+    // `centi` (the tempo before VariSpeed) is kept in `clock_centi_`, which VariSpeed and the
+    // nudge build on. False when Enaga refuses (an outside clock), as enaga::clock::set_tempo.
+    bool set_clock_tempo(uint32_t centi) {
+        clock_centi_ = uint16_t(centi);
+        // A faster tempo can take the moved one past 300 BPM (or a slower one under 20):
+        // VariSpeed comes back towards 0 until it fits, rather than the clock clamping and the
+        // pitch going on alone. The amount the user set is kept in `vari_set_`, so it comes back
+        // when the tempo drops again; both moves are said (the review's L4).
+        const int8_t fitted = vari_fit(vari_set_, centi, kTempoCentiMin, kTempoCentiMax);
         if (fitted != vari_) {
             vari_ = fitted;
             post(Cmd::set_varispeed, 0, 0, uint8_t(vari_));
+            if (fitted != vari_set_) {
+                char *out = notice_buffer_;
+                append(out, "VARISPEED HELD ");
+                char amount[kVariTextMax];
+                vari_text(vari_, amount, kVariTextMax);
+                append(out, amount);
+                *out = 0;
+                notice_logged(notice_buffer_);
+            } else {
+                vari_notice();
+            }
         }
-        const float bpm = float(project_centi) * 0.01f * vari_ratio(vari_);
+        const float bpm = float(centi) * 0.01f * vari_ratio(vari_);
         return enaga::clock::set_tempo(bpm);
     }
 
     // VariSpeed to `tenths`: the clock first, then the machines' pitch and the delay's beat. The
     // project's tempo is left alone, so a save stores the tempo the song was written at.
     void vari_apply(int8_t tenths) {
+        vari_set_ = tenths;
         vari_ = tenths;
-        clock_refused_ = !set_clock_tempo(adopted_tempo_centi_);
+        clock_refused_ = !set_clock_tempo(clock_centi_);
         post(Cmd::set_varispeed, 0, 0, uint8_t(vari_));
     }
 
@@ -728,7 +743,7 @@ private:
             notice("EXT CLOCK");
             return;
         }
-        vari_apply(vari_fit(vari_turn(vari_, delta), adopted_tempo_centi_, kTempoCentiMin,
+        vari_apply(vari_fit(vari_turn(vari_, delta), clock_centi_, kTempoCentiMin,
                             kTempoCentiMax));
         vari_notice();
     }
@@ -739,9 +754,10 @@ private:
     // again, since Enaga kept the one VariSpeed last set.
     void vari_follow_source(int source) {
         if (source == ENAGA_CLOCK_INTERNAL) {
-            clock_refused_ = !set_clock_tempo(adopted_tempo_centi_);
+            clock_refused_ = !set_clock_tempo(clock_centi_);
             return;
         }
+        vari_set_ = 0;
         if (vari_ == 0) return;
         vari_ = 0;
         post(Cmd::set_varispeed, 0, 0, 0);
@@ -757,7 +773,7 @@ private:
         vari_text(vari_, amount, kVariTextMax);
         append(out, amount);
         *out++ = ' ';
-        append_tenths(out, vari_tempo_tenths((uint32_t(adopted_tempo_centi_) + 5u) / 10u, vari_));
+        append_tenths(out, vari_tempo_tenths((uint32_t(clock_centi_) + 5u) / 10u, vari_));
         *out = 0;
         notice_logged(notice_buffer_);
     }
@@ -848,6 +864,8 @@ private:
     // this run of the transport has already said a section's BPM was refused (once a song).
     uint8_t section_event_seen_ = 0;
     uint8_t tempo_due_seen_ = 0;
+    // Status::project_loads as last acted on: a change is a load, whose tempo the clock takes.
+    uint8_t project_loads_seen_ = 0;
     bool bpm_skip_said_ = false;
     // ARR REC: Status::arr_event and Status::arr_passes as last acted on.
     uint8_t arr_event_seen_ = 0;
@@ -1007,7 +1025,10 @@ private:
     bool sel_left_down_ = false;
     bool sel_right_down_ = false;
     // VariSpeed (core/varispeed.hpp): tenths of a semitone, 0 rest. Not in a LOCK, not saved.
+    // `vari_` is what plays; `vari_set_` what the user set, which `vari_` falls short of while
+    // the tempo would otherwise pass the clock's range (set_clock_tempo).
     int8_t vari_ = 0;
+    int8_t vari_set_ = 0;
     uint16_t morph_ = 0;
     bool repeat_held_ = false;
     RepeatLength repeat_length_ = RepeatLength::sixteenth;
@@ -1166,13 +1187,20 @@ private:
     bool project_tapped_ = false;         // PROJECT double-tapped is LAUNCH, as HOME's is KEYS
     uint32_t project_tapped_at_ms_ = 0;
 
-    // The project tempo this side has already reconciled with the clock, so that a LOAD is
-    // adopted and the engine's echo of our own knob move is not.
-    uint16_t adopted_tempo_centi_ = 13000;
+    // The tempo on the clock before VariSpeed, in centi-BPM: the project's, or a section's
+    // while one plays (set_clock_tempo keeps it).
+    uint16_t clock_centi_ = 13000;
 
     // The screen last logged, as mode * 16 + page. -1 so the first pass logs whatever is up.
     int logged_screen_ = -1;
     bool shift_ = false;
+    // PERFORM's A-D: whether each knob's last turn reached the FUNC layer, and when. A turn
+    // keeps that layer while the knob has not rested for kKnobLayerMs (knob_layer_moves), so
+    // FUNC let go (or pressed) mid-turn does not hand the last clicks to the other layer.
+    bool knob_moves_[kMacros] = {};
+    uint32_t knob_turn_ms_[kMacros] = {};
+    bool knob_turned_[kMacros] = {};
+    static constexpr uint32_t kKnobLayerMs = 250;
     bool stop_armed_ = false;
     bool clock_refused_ = false;   // the last transport call was refused: an external source
     bool muted_[kTracks] = {};

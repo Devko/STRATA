@@ -307,6 +307,69 @@ TEST(arrrec_a_recorded_chain_writes_cap_so_an_old_build_reads_no_recall) {
     CHECK_EQ(int(g_project.chain_extra[0].mask), 0x0F);
 }
 
+// --- The tempo (the review's M1) ----------------------------------------------------------------
+
+namespace {
+
+ArrState at_tempo(uint8_t slot, uint16_t centi) {
+    return arr_state(0, slot, 0, 0, 0, 0, 0, centi, false);
+}
+
+}  // namespace
+
+TEST(arrrec_a_take_at_one_tempo_writes_no_bpm) {
+    // A recorded song used to pin 130.00 on every entry, so VALUE lasted until the next one.
+    reset();
+    CHECK(arr_start(g_project, g_rec, g_backup));
+    uint32_t tick = 0;
+    pass(at_tempo(0, 13000), tick);
+    pass(at_tempo(1, 13000), tick);
+    pass(at_tempo(2, 13000), tick);
+    CHECK_EQ(chain_length(g_project), 3);
+    for (int i = 0; i < 3; i++) CHECK_EQ(int(g_project.chain_extra[i].bpm), 0);
+}
+
+TEST(arrrec_a_tempo_change_writes_its_bpm_and_pins_the_start_on_the_first_entry) {
+    reset();
+    CHECK(arr_start(g_project, g_rec, g_backup));
+    uint32_t tick = 0;
+    pass(at_tempo(0, 13000), tick);
+    pass(at_tempo(1, 13000), tick);
+    pass(at_tempo(1, 13500), tick);     // VALUE turned: same pattern, a new entry
+    pass(at_tempo(1, 13500), tick);     // a repeat of it, compared as played
+    pass(at_tempo(2, 13500), tick);     // a new pattern at the same tempo: no BPM
+    pass(at_tempo(2, 12000), tick);
+    CHECK_EQ(chain_length(g_project), 5);
+    const int bpm[] = {13000, 0, 13500, 0, 12000};
+    for (int i = 0; i < 5; i++) CHECK_EQ(int(g_project.chain_extra[i].bpm), bpm[i]);
+    CHECK_EQ(int(g_project.chain[2].repeats), 2);
+    for (int i = 0; i < 5; i++) CHECK(section_valid(g_project.chain_extra[i]));
+}
+
+TEST(arrrec_a_take_under_an_outside_clock_writes_no_bpm) {
+    reset();
+    CHECK(arr_start(g_project, g_rec, g_backup));
+    uint32_t tick = 0;
+    pass(arr_state(0, 0, 0, 0, 0, 0, 0, 13000, true), tick);
+    pass(arr_state(0, 1, 0, 0, 0, 0, 0, 14000, true), tick);
+    CHECK_EQ(int(g_project.chain_extra[0].bpm), 0);
+    CHECK_EQ(int(g_project.chain_extra[1].bpm), 0);
+}
+
+TEST(arrrec_after_a_hand_edit_the_first_entry_keeps_its_bpm) {
+    reset();
+    CHECK(arr_start(g_project, g_rec, g_backup));
+    uint32_t tick = 0;
+    pass(at_tempo(0, 13000), tick);
+    CHECK(chain_insert(g_project, 0, 0, 5, 1, 0));    // an entry put in front by hand
+    arr_chain_edited(g_rec);
+    pass(at_tempo(1, 14000), tick);
+    CHECK_EQ(chain_length(g_project), 3);
+    CHECK_EQ(int(g_project.chain_extra[0].bpm), 0);
+    CHECK_EQ(int(g_project.chain_extra[1].bpm), 0);
+    CHECK_EQ(int(g_project.chain_extra[2].bpm), 14000);
+}
+
 // --- Track Launch (the arrangement concept's choice 4) -----------------------------------------
 
 namespace {

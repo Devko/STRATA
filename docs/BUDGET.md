@@ -109,14 +109,14 @@ build is not what ships and the scenario does not fail on its load.
 
 The unit question stays open: on dense parts the unit has read 2.0-2.4x the emulator's top line
 (see "GENERATE on every track"). Applied to 36% mean that would be 72-87% on the unit, where the
-CPU guard (`core/cpuguard.hpp`, 70% over 85 ms) would act. UNIT_CHECKLIST W79 asks for the unit's
+CPU guard (`core/cpuguard.hpp`, 70% over 85 ms) would act. UNIT_CHECKLIST W81 asks for the unit's
 MAX in this state. If it is too high, the first cut is the hats' ENERGY appetite (`kFill` in
 core/energy.cpp), as the ENERGY entry below says.
 
 Over the generated parts, quick encoder turns lose some detents in the emulator (about 1 in 6
 on C, 1 in 20 on VALUE, more GCC-only): the main loop gets less time between audio blocks, and a
 12 ms detent's pin phases are missed. The scenario turns each knob past its end, where it holds.
-The unit's encoder at this load is a W79 question too. Image with cl6x: payload 1,833,672 bytes,
+The unit's encoder at this load is a W81 question too. Image with cl6x: payload 1,833,672 bytes,
 bss 1,684,400 (GCC-only payload 1,802,056).
 
 ### JAM REC (2026-11-28, emulator, Enaga v0.4.0)

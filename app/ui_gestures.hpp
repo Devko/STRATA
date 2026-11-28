@@ -60,6 +60,21 @@
         notice("PASTED");
     }
 
+    // Which layer a turn of A-D reaches in PERFORM: the Moves layer (REL ALL, LEN ALL, ENERGY,
+    // LIVE RND) with FUNC held, else the macros. A knob still turning keeps the layer its turn
+    // started on until it rests for kKnobLayerMs: a hand lets go of FUNC (or presses it) with
+    // the knob still moving, and those clicks used to land on the macro and stay there (Roland
+    // on the unit, 2026-11-28: "energy also changes macro C").
+    bool knob_layer_moves(int encoder) {
+        const bool turning = knob_turned_[encoder] &&
+                             uint32_t(last_ms_ - knob_turn_ms_[encoder]) < kKnobLayerMs;
+        const bool moves = turning ? knob_moves_[encoder] : shift_;
+        knob_moves_[encoder] = moves;
+        knob_turn_ms_[encoder] = last_ms_;
+        knob_turned_[encoder] = true;
+        return moves;
+    }
+
     void on_encoder(int encoder, int delta) override {
         shift_alone_ = false;                   // FUNC + a knob: the hand knew; no help
         value_alone_ = false;                   // push VALUE + any turn is a chord, not a reset
@@ -180,7 +195,6 @@
             // holding the default for ever: a project saved at 142 reopened at 130. The engine
             // also re-derives the tempo-synced delay from it.
             post_tempo(float(tempo_tenths_) * 0.1f);
-            adopted_tempo_centi_ = uint16_t(tempo_tenths_ * 10);
             return;
         }
 
@@ -191,7 +205,9 @@
         // FUNC + turn A / B in PERFORM: REL ALL and LEN ALL (core/moveall.hpp), the Moves layer's
         // two global controls beside the macros. Before the macros, which FUNC + turn only
         // duplicated. 0 is a detent and rest: the programmed sound to the bit.
-        if (mode_ == Mode::perform && shift_ && (encoder == 0 || encoder == 1)) {
+        const bool moves = mode_ == Mode::perform && encoder >= 0 && encoder < kMacros &&
+                           knob_layer_moves(encoder);
+        if (moves && (encoder == 0 || encoder == 1)) {
             int8_t &amount = encoder == 0 ? rel_all_ : len_all_;
             amount = all_turn(amount, delta);
             post(Cmd::set_move_all, 0, 0, uint8_t(encoder), uint8_t(amount));
@@ -202,7 +218,7 @@
         // FUNC + turn C in PERFORM: ENERGY (core/energy.hpp), from a sparse breakdown at -64 to
         // the peak at +64. 0 is a detent and rest: the programmed part to the bit. Before the
         // macros, which FUNC + turn only duplicated.
-        if (mode_ == Mode::perform && shift_ && encoder == 2) {
+        if (moves && encoder == 2) {
             energy_ = energy_turn(energy_, delta);
             post(Cmd::set_energy, 0, 0, uint8_t(energy_));
             energy_notice();
@@ -211,7 +227,7 @@
 
         // FUNC + turn D in PERFORM: LIVE RND (core/liverand.hpp), the unit for every armed track,
         // OFF 1 2 4 8 16 and stopping at both ends.
-        if (mode_ == Mode::perform && shift_ && encoder == 3) {
+        if (moves && encoder == 3) {
             const uint8_t was = rnd_unit_;
             rnd_unit_ = live_rnd_turn(rnd_unit_, delta);
             // LIVE RND starts with the kick out (Roland, 2026-11-28, D3): a kick drawn out of

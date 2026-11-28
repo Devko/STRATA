@@ -828,6 +828,12 @@ private:
     int8_t vari_tenths_ = 0;
     float vari_semis_ = 0.0f;
     float vari_inv_ratio_ = 1.0f;
+    // A song section's BPM, in centi-BPM, while it plays; 0 follows the project's tempo. A
+    // section sets the clock without becoming the project's saved tempo (the review's M1), but
+    // the tempo-synced delay and what ARR REC and the quick fill record follow what plays.
+    // Cleared by a turn of VALUE (Cmd::set_tempo) and by a load.
+    uint16_t section_tempo_centi_ = 0;
+    uint16_t playing_tempo_centi() const;
 
     // Every note-on a track's machine takes -- a step, a chord, an arp or roll hit, a pad or a
     // key -- goes through here: the screen's trig light, and LFO TRIG's restart.

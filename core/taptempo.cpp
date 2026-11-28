@@ -45,6 +45,22 @@ uint32_t tap_tempo(TapTempo &tap, uint32_t now_ms) {
         sum += interval;
     }
 
+    // Two intervals that agree before anything is set. The second interval is compared with the
+    // first alone; one that is off keeps only itself, as the first of a new pair.
+    if (tap.count < 2) return 0;
+    if (tap.count == 2) {
+        const uint32_t a = tap.intervals[0];
+        const uint32_t b = tap.intervals[1];
+        const uint32_t diff = a > b ? a - b : b - a;
+        if (diff * 100u > a * kTapAgreePercent) {
+            tap.intervals[0] = b;
+            tap.intervals[1] = 0;
+            tap.count = 1;
+            tap.next = 1;
+            return 0;
+        }
+    }
+
     // Tenths of a BPM from the mean interval in ms: 600000 / mean, rounded, as
     // 600000 * count / sum. Main context, not a hot loop: the division is fine here.
     const uint32_t count = uint32_t(tap.count);

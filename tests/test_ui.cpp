@@ -81,6 +81,7 @@ struct UiProbe {
         app.transpose_semis_ = false;
         app.post(Cmd::set_transpose, 0, 0, 0, 0);
         app.vari_ = 0;                               // VariSpeed to rest
+        app.vari_set_ = 0;
         app.post(Cmd::set_varispeed, 0, 0, 0);
     }
     static int vari(const Strata &app) { return app.vari_; }
@@ -1514,13 +1515,16 @@ TEST(ui_func_value_is_varispeed_the_clock_and_every_pitch_together) {
     CHECK(UiProbe::vari(app) > 0 && UiProbe::vari(app) < 20);
     CHECK(host.tempo() <= 300.0f);
     CHECK(280.0f * vari_ratio(int8_t(UiProbe::vari(app) + 1)) > 300.0f);
-    // And a faster project tempo brings it back towards 0 rather than past 300.
+    const int set = UiProbe::vari(app);
+    // And a faster project tempo brings it back towards 0 rather than past 300, and says so
+    // (the review's L4: it used to be silent).
     app.on_key(ENAGA_KEY_F1, false);
     app.on_encoder(4, 200);                          // 300 BPM
     pump(2);
     CHECK_EQ(UiProbe::vari(app), 0);
     CHECK_EQ(int(app_engine().varispeed()), 0);
     CHECK_NEAR(host.tempo(), 300.0f, 0.01);
+    CHECK_EQ(UiProbe::notice(app), "VARISPEED HELD 0");
 
     // Under an outside clock it is refused, and it drops back when the source changes.
     for (int i = 0; i < 1700; i++) {
@@ -1529,10 +1533,14 @@ TEST(ui_func_value_is_varispeed_the_clock_and_every_pitch_together) {
     }
     pump();
     CHECK_EQ(int(UiProbe::tempo_tenths(app)), 1300);
+    // Back at a tempo where it fits, the amount that was set comes back.
+    CHECK_EQ(UiProbe::vari(app), set);
+    CHECK_EQ(int(app_engine().varispeed()), set);
+    CHECK_NEAR(host.tempo(), 130.0f * vari_ratio(int8_t(set)), 0.01);
     app.on_key(ENAGA_KEY_F1, true);
     app.on_encoder(4, 30);
     pump(2);
-    CHECK_EQ(UiProbe::vari(app), 30);
+    CHECK_EQ(UiProbe::vari(app), set + 30);
     host.set_source(ENAGA_CLOCK_MIDI);
     pump(2);
     CHECK_EQ(UiProbe::vari(app), 0);
@@ -5060,11 +5068,13 @@ TEST(ui_a_sections_tempo_is_set_here_or_skipped_under_an_outside_clock) {
     Strata &app = fresh();
     FakeHost &host = FakeHost::the();
     Status &status = const_cast<Status &>(app_engine().status());
-    // Internal clock: the clock and the project take the section's tempo, as a turn of VALUE.
+    // Internal clock: the clock and the screen take the section's tempo; the project's saved
+    // tempo does not (the review's M1: a song rewrote it, and a save kept the last section's).
     status.bump_tempo_due(14250);
     pump(3);
     CHECK_NEAR(host.tempo(), 142.5f, 0.01);
-    CHECK_EQ(int(app_engine().project().settings.tempo_centi_bpm), 14250);
+    CHECK_EQ(int(UiProbe::tempo_tenths(app)), 1425);
+    CHECK_EQ(int(app_engine().project().settings.tempo_centi_bpm), 13000);
     CHECK(!UiProbe::clock_refused(app));
     // Outside clock: skipped, said once for a run of the transport, and the tempo stays.
     host.set_source(ENAGA_CLOCK_MIDI);
@@ -5072,7 +5082,7 @@ TEST(ui_a_sections_tempo_is_set_here_or_skipped_under_an_outside_clock) {
     pump(3);
     CHECK_EQ(UiProbe::notice(app), "EXT CLOCK: BPM SKIPPED");
     CHECK(UiProbe::clock_refused(app));
-    CHECK_EQ(int(app_engine().project().settings.tempo_centi_bpm), 14250);
+    CHECK_EQ(int(UiProbe::tempo_tenths(app)), 1425);
     g_ms += 4000;                                     // the notice fades
     pump(2);
     status.bump_tempo_due(9500);
@@ -5105,7 +5115,54 @@ TEST(ui_a_sections_tempo_is_set_here_or_skipped_under_an_outside_clock) {
     status.bump_tempo_due(12000);
     pump(3);
     CHECK_NEAR(host.tempo(), 120.0f * vari_ratio(-5), 0.01);
-    CHECK_EQ(int(app_engine().project().settings.tempo_centi_bpm), 12000);
+    CHECK_EQ(int(app_engine().project().settings.tempo_centi_bpm), 13000);
+    // And VariSpeed builds on the section's tempo, not on the project's.
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_encoder(4, 5);
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(2);
+    CHECK_EQ(UiProbe::vari(app), 0);
+    CHECK_NEAR(host.tempo(), 120.0f, 0.01);
+    // A turn of VALUE goes on from what plays, and is the project's tempo again.
+    app.on_encoder(4, 10);
+    pump(2);
+    CHECK_NEAR(host.tempo(), 121.0f, 0.01);
+    CHECK_EQ(int(app_engine().project().settings.tempo_centi_bpm), 12100);
+}
+
+// The review's M2: the main context runs about twice an audio block, and it compared the
+// engine's copy of the tempo (a block behind every post) with its own, read the lag as a load
+// and put the clock back for a moment. A second click in that window built on the old tempo.
+TEST(ui_the_clock_does_not_jump_back_before_the_engine_has_the_tempo) {
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    Status &status = const_cast<Status &>(app_engine().status());
+    pump(2);
+    CHECK_NEAR(host.tempo(), 130.0f, 0.01);
+    // Two clicks, each followed by a main-context pass with no audio block in between.
+    app.on_encoder(4, 1);
+    app.update(g_ms);
+    CHECK_NEAR(host.tempo(), 130.1f, 0.01);
+    app.on_encoder(4, 1);
+    app.update(g_ms);
+    CHECK_NEAR(host.tempo(), 130.2f, 0.01);
+    pump(2);
+    CHECK_NEAR(host.tempo(), 130.2f, 0.01);
+    CHECK_EQ(int(app_engine().project().settings.tempo_centi_bpm), 13020);
+    // A section's BPM: passes before and after the next block all keep it.
+    status.bump_tempo_due(14000);
+    app.update(g_ms);
+    app.update(g_ms);
+    CHECK_NEAR(host.tempo(), 140.0f, 0.01);
+    pump(2);
+    CHECK_NEAR(host.tempo(), 140.0f, 0.01);
+    // And a load still brings the project's own tempo.
+    Project &incoming = app_engine().project_for_load();
+    incoming.settings.tempo_centi_bpm = 11000;
+    post_cmd(Cmd::project_loaded);
+    pump(2);
+    CHECK_NEAR(host.tempo(), 110.0f, 0.01);
+    CHECK_EQ(int(UiProbe::tempo_tenths(app)), 1100);
 }
 
 // The section's morph and ENERGY reach the knobs the UI shadows, so a turn takes over from where
@@ -12106,6 +12163,7 @@ TEST(ui_func_turn_a_and_b_in_perform_are_rel_all_and_len_all) {
     app.on_encoder(0, -1);
     pump(2);
     CHECK_EQ(int(engine.macro_position(0)), int(macro_a));
+    pump(300);                                    // the knob rests: the next turn picks its layer
 
     // Back to rest, both: the hint returns and the strip is empty of them.
     app.on_key(ENAGA_KEY_F1, true);
@@ -12249,6 +12307,7 @@ TEST(ui_func_d_in_perform_is_live_rnd_and_func_lower_pad_arms_a_track) {
     CHECK(engine.macro_position(3) != macro_d);
     app.on_encoder(3, -1);
     CHECK_EQ(int(undo_depth()), int(undo_before));
+    pump(300);                                    // the knob rests: the next turn picks its layer
 
     app.on_key(ENAGA_KEY_F1, true);
     app.on_pad_press(pad_for_track(1), 100);
@@ -12359,6 +12418,7 @@ TEST(ui_func_c_in_perform_is_energy_with_a_detent_at_rest) {
     CHECK(engine.macro_position(2) != macro_c);
     app.on_encoder(2, -1);
     CHECK_EQ(int(undo_depth()), int(undo_before));
+    pump(300);                                    // the knob rests: the next turn picks its layer
 
     app.on_key(ENAGA_KEY_F1, true);
     app.on_encoder(2, -30);
@@ -12367,6 +12427,77 @@ TEST(ui_func_c_in_perform_is_energy_with_a_detent_at_rest) {
     CHECK_EQ(int(engine.energy()), 0);                        // the detent caught it
     CHECK(!strip_has(app, "EN"));
     CHECK(!screen_has(app, "EN+"));
+}
+
+// A knob still turning keeps the layer its turn started on (Roland on the unit, 2026-11-28:
+// "energy also changes macro C"). FUNC let go with C still moving gives the last clicks to
+// ENERGY, not to macro C; FUNC pressed mid-turn leaves the macro turn on the macro. Once the knob
+// has rested a quarter second, FUNC picks the layer again.
+TEST(ui_a_knob_still_turning_keeps_its_layer_across_func) {
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+    shift_key(ENAGA_KEY_F7);
+    pump(1600);
+    const uint8_t macro_c = engine.macro_position(2);
+
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_encoder(2, -4);                                    // ENERGY -8
+    pump(30);
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(30);
+    app.on_encoder(2, -1);                                    // the knob still moving
+    pump(30);
+    app.on_encoder(2, -1);
+    pump(2);
+    CHECK_EQ(int(engine.energy()), -12);
+    CHECK_EQ(int(engine.macro_position(2)), int(macro_c));    // macro C never moved
+
+    pump(300);                                                // rested: C is the macro again
+    app.on_encoder(2, +3);
+    pump(2);
+    CHECK_EQ(int(engine.energy()), -12);
+    CHECK_EQ(int(engine.macro_position(2)), int(macro_c) + 6);
+    pump(30);
+    app.on_key(ENAGA_KEY_F1, true);                           // FUNC pressed mid-turn
+    pump(30);
+    app.on_encoder(2, -3);
+    pump(2);
+    CHECK_EQ(int(engine.energy()), -12);
+    CHECK_EQ(int(engine.macro_position(2)), int(macro_c));
+    pump(300);                                                // rested, FUNC still held
+    app.on_encoder(2, +6);
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(2);
+    CHECK_EQ(int(engine.energy()), 0);
+    CHECK_EQ(int(engine.macro_position(2)), int(macro_c));
+}
+
+// A, B and D take the same path as C: FUNC let go mid-turn, the last click still reaches REL ALL,
+// LEN ALL and LIVE RND, and the macro under the knob never moves.
+TEST(ui_a_b_and_d_still_turning_keep_their_layer_across_func) {
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+    shift_key(ENAGA_KEY_F7);
+    pump(1600);
+    for (int knob : {0, 1, 3}) {
+        const uint8_t macro = engine.macro_position(knob);
+        app.on_key(ENAGA_KEY_F1, true);
+        app.on_encoder(knob, -1);
+        pump(30);
+        app.on_key(ENAGA_KEY_F1, false);
+        pump(30);
+        app.on_encoder(knob, knob == 3 ? +2 : -1);            // still turning: the FUNC layer
+        pump(2);
+        CHECK_EQ(int(engine.macro_position(knob)), int(macro));
+        if (knob == 0) CHECK_EQ(int(engine.rel_all()), -4);
+        if (knob == 1) CHECK(engine.len_all() < 0);
+        if (knob == 3) CHECK(engine.live_rnd_unit() != kLiveRndOff);
+        pump(300);                                            // rested: the macro again
+        app.on_encoder(knob, +1);
+        pump(2);
+        CHECK_EQ(int(engine.macro_position(knob)), int(macro) + 2);
+        pump(300);
+    }
 }
 
 // ENERGY is in a LOCK: a jump puts it back and the UI's knob follows.
@@ -13925,6 +14056,33 @@ uint8_t triggered_on(int track) {
 
 }  // namespace
 
+// A pass with nothing changed writes no LED. With VALUE pushed (the perf slots over the STEP keys)
+// and on LAUNCH (the slots over them), each key was written twice a pass, the step's colour and
+// then the overlay's: 32 blocking sends on the unit, which made update() slow enough to miss a
+// fast encoder turn while VALUE was held (the nudge in scenario_tempo).
+TEST(ui_a_steady_pass_writes_no_led_with_value_pushed_or_on_launch) {
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    pump(4);
+    int before = host.leds_set();
+    app.update(g_ms);
+    CHECK_EQ(host.leds_set() - before, 0);
+    app.on_key(ENAGA_KEY_PUSH_VALUE, true);
+    pump(4);
+    before = host.leds_set();
+    app.update(g_ms);
+    app.update(g_ms);
+    CHECK_EQ(host.leds_set() - before, 0);
+    app.on_key(ENAGA_KEY_PUSH_VALUE, false);
+    pump(4);
+    to_launch_page(app);
+    pump(4);
+    before = host.leds_set();
+    app.update(g_ms);
+    app.update(g_ms);
+    CHECK_EQ(host.leds_set() - before, 0);
+}
+
 TEST(ui_launch_project_twice_opens_launch_and_a_slow_second_press_does_not) {
     Strata &app = fresh();
     to_launch_page(app);
@@ -14101,11 +14259,14 @@ TEST(ui_value_taps_set_the_tempo_and_it_is_saved) {
     tap_value_after(app, 3000);                    // the first tap only starts the count
     CHECK_EQ(UiProbe::notice(app), "TAP TEMPO");
     CHECK_EQ(UiProbe::tempo_tenths(app), before);
-    tap_value_after(app, 500);
+    tap_value_after(app, 500);                     // two taps set nothing (the review's M5)
+    CHECK_EQ(UiProbe::notice(app), "TAP TEMPO");
+    CHECK_EQ(UiProbe::tempo_tenths(app), before);
+    CHECK_NEAR(host.tempo(), float(before) * 0.1f, 0.01f);
+    tap_value_after(app, 500);                     // the third, agreeing, sets it
     CHECK_EQ(UiProbe::tempo_tenths(app), 1200u);
     CHECK_EQ(UiProbe::notice(app), "TAP 120.0");
     CHECK_NEAR(host.tempo(), 120.0f, 0.01f);
-    tap_value_after(app, 500);
     tap_value_after(app, 400);                     // the mean of 500 500 400: 128.6
     CHECK_EQ(UiProbe::tempo_tenths(app), 1286u);
     pump(2);

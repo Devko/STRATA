@@ -842,6 +842,10 @@ struct Status {
     std::atomic<uint16_t> section_tempo{0};
     std::atomic<uint8_t> tempo_due{0};
     std::atomic<uint8_t> morph_riding{0};
+    // Bumped as the last thing Cmd::project_loaded does: the main context takes the loaded
+    // project's tempo on the change. A counter rather than a comparison with the engine's copy
+    // of the tempo, which lags every tempo the UI posts by a block and read as a change back.
+    std::atomic<uint8_t> project_loads{0};
 
     // ARR REC (core/arrrec.hpp). `arr_on`: 1 while a take is on (armed or recording);
     // `arr_written`: the entries it has written so far. `arr_event` is bumped for each thing the
@@ -901,6 +905,12 @@ struct Status {
     // Audio context only, one writer, as bump_song_end.
     void bump_section_event() {
         section_event.store(uint8_t(section_event.load(std::memory_order_relaxed) + 1),
+                            std::memory_order_release);
+    }
+
+    // Audio context only, one writer, as bump_song_end.
+    void bump_project_loads() {
+        project_loads.store(uint8_t(project_loads.load(std::memory_order_relaxed) + 1),
                             std::memory_order_release);
     }
 

@@ -8,6 +8,15 @@
 // An entry is capped at X16, so a seventeenth pass of the same thing starts a new entry of it.
 // The chain holds 64 entries; a take that needs a 65th ends there (ARR FULL).
 //
+// ## The tempo
+//
+// A tempo change splits a section as any other change does, but a BPM is written only where the
+// tempo changed (the review's M1). A take played at one tempo writes no BPM at all, so the
+// song follows the project's tempo and VALUE moves the whole song. Once the tempo changes in a
+// take, the new entry holds the new BPM and the take's first entry is given the tempo the take
+// started at, so the song comes back to it when it loops. A take whose chain was edited by
+// hand leaves its first entry alone (it may no longer be the take's).
+//
 // ## What a pass plays
 //
 // A pass is recorded as what played at its START: a mute or an ENERGY move made inside a pass is
@@ -127,6 +136,11 @@ struct ArrRec {
     ArrLaunch launch = ArrLaunch::none;
     uint8_t launch_bank = 0;
     uint8_t launch_slot = 0;
+    // The tempo: the entry the take began with (-1 once the chain was edited by hand), the BPM
+    // it began at, and whether a BPM has been written yet in this take.
+    int first_entry = -1;
+    uint16_t start_bpm = 0;
+    bool tempo_written = false;
 };
 
 // What ending a pass did with it.

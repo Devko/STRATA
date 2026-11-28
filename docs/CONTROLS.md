@@ -99,9 +99,10 @@ HOME "system", PLAY "◀◀", STOP "▶▶", MIXER "fx", EDIT "rec src".
      meanwhile) resets what it is on to 0: a picked effect's amount, the looper's mix, the morph
      (PERFORM, or slot 13 picked). Never swing or a field, and nothing while a STEP is held.
      With FUNC: a cut of the picked effect, or with none picked VariSpeed back to 0.
-     **Where VALUE is the tempo, the press is tap tempo** (2026-11-28): from the second tap the
-     tempo follows the last four taps (`TAP TEMPO`, then `TAP 128.0`), set and saved as a turn
-     sets it; a gap over 2 s or a tap at half or twice the pace starts a new count.
+     **Where VALUE is the tempo, the press is tap tempo** (2026-11-28): from the third tap, once
+     two gaps agree within 25%, the tempo follows the last four taps (`TAP TEMPO` twice, then
+     `TAP 128.0`), set and saved as a turn sets it; two stray taps set nothing. A gap over 2 s
+     or a tap at half or twice the pace starts a new count.
    - **STEP keys:** the sixteen of whatever the pad-row keys chose. **On every playing screen,
      PERFORM and KEYS included, they are steps** (D12, 2026-11-25): tap, hold + knob, hold + OK
      work as on GRID. MUTE MODE (STEP 1-8 the mute states), a held scene pad, push VALUE (the
@@ -269,6 +270,9 @@ changed meaning. C and D with FUNC are ENERGY and LIVE RND (below).
   jump or swap puts them where the lock had them.
 - **On screen**: PERFORM's line under the macros reads `FUNC+A/B REL/LEN ALL` at rest and
   `REL -12 LEN 71%` away from it; the live strip adds `RL-` / `RL+` and `LN-` / `LN+`.
+- **A turn keeps its layer**: a knob still turning stays on the layer its turn started on, the
+  macro or this one, until it rests for a quarter second. FUNC let go (or pressed) with the knob
+  still moving does not hand the last clicks to the other layer. The same for ENERGY and LIVE RND.
 - **While FUNC is held** in PERFORM the four gauges are this layer (U1, 2026-11-28): `REL`,
   `LEN`, `NRG` and `RND` under the letters, each gauge with its value (`-12`, `71`, `+40`, `4`,
   `OFF`), lit away from rest; the hint line gives way to them. Let go, and the macros are back.
@@ -342,7 +346,9 @@ effect picked or not (a picked effect owns VALUE's plain turn, not FUNC's).
   the sound are the project's to the bit.
 - **The project keeps its tempo**: a save stores the unmoved tempo, and VALUE alone turns it with
   VariSpeed riding on top. A turn that would take the clock past 20-300 BPM stops where it fits,
-  and a faster project tempo pulls VariSpeed back towards 0 rather than past 300.
+  and a faster tempo (VALUE, or a section's BPM) holds VariSpeed back towards 0 rather than past
+  300, saying `VARISPEED HELD +3.0`. The amount set is kept: at a slower tempo it comes back
+  (`VARISPEED +5.0 135.0`).
 - **What moves**: the clock (so the delay's division follows); the drums' base frequency and
   SAMPLE's and GRAIN's read rate; the synths' and FM4's pitch by semitones, as the LFO on TUN
   does. Held notes and ringing hits follow. Envelope times do not, and MID's notes go out as
@@ -537,6 +543,10 @@ together).
 - **A take that kept nothing** puts the old chain back (`ARR NOTHING KEPT`), with nothing to undo.
 - **ARR UNDO** keeps one chain: the next take replaces it, and opening a project drops it.
 - **Under an outside clock** the sections carry no BPM, so the song follows the clock it plays to.
+- **BPM only where the tempo changed.** A take at one tempo writes BPM `--` everywhere, so the
+  song plays at the project's tempo and VALUE moves all of it. A change of tempo during a take
+  writes the new BPM on that entry and the take's starting tempo on its first entry, so a looped
+  song comes back to it. A take whose chain was edited by hand leaves its first entry alone.
 - **While a take runs** the live strip starts with `ARR` and the sections written (`ARR7`), the
   menu row reads `ON 7`, and the REC key blinks dim red, in time with JAM REC's blink.
 - **Track Launch.** The chain holds no launch states, so a pass with a borrowed lane (LAUNCH) is
@@ -586,11 +596,12 @@ a CHAIN entry opens its SECTION view; the list's own keys are unchanged.
 - **The hands win** until the next entry: a mute, the morph (VALUE in PERFORM, the mixer's slot)
   ENERGY or TRANSPOSE turned during a section takes over at once, and ends a RIDE or BACK where it is.
 - **BPM under an outside clock** is skipped, with `EXT CLOCK: BPM SKIPPED` once per run of the
-  transport; the song follows the outside clock. A section's tempo becomes the project's, as a
-  turn of VALUE does.
+  transport; the song follows the outside clock. A section's tempo plays (the clock, the screen
+  and the tempo-synced delay) but does not become the project's saved tempo; a turn of VALUE goes
+  on from it and is saved as usual.
 - **Quick fill** (hold OK): MUT CAP with the mutes as they stand, SCN the scene on side B, MRP
-  SNAP when the morph is past half way to B, else SNAP A, NRG the ENERGY, TRN the TRANSPOSE, BPM
-  the tempo. Dial the
+  SNAP when the morph is past half way to B, else SNAP A, NRG the ENERGY, TRN the TRANSPOSE,
+  BPM the tempo playing. Dial the
   breakdown in by ear, then hold OK.
 - **The list** marks an entry with fields of its own: under its mute state on the lane, `S4`
   (its scene) or `+` for any other field; the cursor's entry lists them under MUTES.

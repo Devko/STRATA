@@ -8,8 +8,9 @@
 # key timing says. The emulator has no MIDI IN, so PROG CHG OUT and the song position pointer are
 # host-tested only (tests/test_midi.cpp, tests/test_engine.cpp) and walked on the unit (W68).
 #
-# Observable through Enaga's log (notice_logged): `TAP TEMPO` on the first tap, `TAP 120.0` from
-# the second, `NUDGE FASTER` on the detent; `run int` from the transport.
+# Observable through Enaga's log (notice_logged): `TAP TEMPO` on the first two taps (nothing is
+# set until two gaps agree), `TAP 120.0` from the third, `NUDGE FASTER` on the detent; `run int`
+# from the transport.
 #
 # Keys (third_party/enaga/include/enaga/abi.h): F5 = 22 (PLAY), PUSH_VALUE = 4, F1 = 19. A press
 # is released 20 M cycles later (54 ms), well inside VALUE's 0.5 s tap. 186 M cycles is 500 ms
@@ -80,9 +81,9 @@ check(report.get("app_status") == "APP RUNNING", "app is running",
       f'status={report.get("app_status")!r}')
 check(not report.get("crash_reason"), "no crash", f'reason={report.get("crash_reason")!r}')
 check("run int" in log, "the transport started", f"log={log}")
-check("TAP TEMPO" in log, "the first VALUE tap started a count", f"log={log}")
+check(log.count("TAP TEMPO") >= 2, "the first two VALUE taps set nothing", f"log={log}")
 taps = [l for l in log if re.fullmatch(r"TAP \d+\.\d", l)]
-check(len(taps) >= 3, "the next three taps each set a tempo", f"lines={taps}")
+check(len(taps) >= 2, "the third and fourth taps each set a tempo", f"lines={taps}")
 if taps:
     bpm = float(taps[-1].split()[1])
     # The keys are 500 ms apart in cycles; the emulator's millisecond clock may run a little off

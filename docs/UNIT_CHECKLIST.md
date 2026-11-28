@@ -1084,7 +1084,35 @@ its own; A07's track 3 a different part.
 - STEP 7 on track 3 again, tap FUNC + MUTATE twice, then CLR on track 3: A01's own track 3 is
   still its own part, not A07's. Save, RELOAD PROJECT: the same. `____`
 
-**W79. Everything up at once, and the review's fixes (8 min).** A project filled the way
+**W79. A knob keeps its layer through FUNC (2 min).** A01 playing, PERFORM.
+- Hold FUNC, turn C down steadily and let go of FUNC while still turning, for about half a
+  second more: ENERGY goes on going down (`ENERGY -30`), and after letting go macro C's gauge has
+  not moved. Turn C back up with FUNC to `ENERGY 0`: the part is as programmed, the dub delay as
+  before. `____`
+- Rest the knob a moment, then turn C without FUNC: `MACRO C` and a number, macro C moves at once. Turn it
+  and press FUNC mid-turn: macro C goes on; rest, then turn: ENERGY. The same with A (REL ALL) and
+  D (LIVE RND). `____`
+
+**W80. Tempo: sections, ARR REC, tap tempo and VariSpeed (5 min).** The factory beat stopped on
+A01 at 130.0, no chain.
+- On GRID, tap VALUE twice about a second apart: `TAP TEMPO` both times and the tempo stays
+  130.0. Two more taps at the same pace: `TAP 60.0` or near. Turn VALUE back to 130.0. `____`
+- Turn VALUE fast, several clicks in one flick, while the beat plays: the tempo moves by every
+  click and the beat never stumbles back to the old tempo. `____`
+- ARR REC (FUNC+HOME, DOWN, DOWN, OK), PLAY, two passes; turn VALUE to 140.0, two passes; STOP.
+  PROJECT, CHAIN, push A on entry 1: MOVE page BPM 130; entry 2: BPM 140. `____`
+- CHAIN END SONG, CHAIN ON, PLAY from stop: entry 2 plays at 140, the loop back to entry 1 at 130.
+  STOP, save, power cycle, open: the project opens at the tempo it was saved with, not at the last
+  section's. `____`
+- Record a take at one tempo only: no entry has a BPM, and VALUE during playback holds for the
+  whole song. `____`
+- Push VALUE and flick it fast for swing, then FUNC + push VALUE + flick for the nudge: every
+  detent counts (swing moves by each click, `NUDGE FASTER` every time). `____`
+- FUNC + turn VALUE to +5.0 at 130. Give a chain entry BPM 280: as it plays, `VARISPEED HELD`
+  and a smaller amount; at the next entry with a slower BPM, `VARISPEED +5.0 ...` again.
+  FUNC + tap VALUE. `____`
+
+**W81. Everything up at once, and the review's fixes (8 min).** A project filled the way
 `scenario_stack` does: GEN (DENSITY 100, RANGE 3 OCT, LEAP 100) on all eight tracks, PLAY.
 - The line input on (MIXER IN, push A), PERFORM, FUNC + turn A, B and C to the top (`REL ALL +64`,
   `LEN ALL 400%`, `ENERGY +64`), FUNC + turn VALUE to `VARISPEED +12.0`, FUNC + SEL> three times,

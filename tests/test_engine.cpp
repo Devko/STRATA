@@ -1779,11 +1779,17 @@ TEST(engine_a_section_applies_its_fields_as_its_entry_starts) {
     const Status &status = engine.status();
     const uint8_t events = status.section_event.load();
     const uint8_t due = status.tempo_due.load();
+    const uint16_t saved = engine.project().settings.tempo_centi_bpm;
+    const float delay = engine.sends().delay_seconds;
 
     FakeHost::the().set_running(true);
     tick_at(0);
     post(Cmd::set_chain, 0, 0, 1);
     pump();
+    // The BPM plays (the delay follows it at once) but is not the project's saved tempo, so a
+    // save during or after the song keeps the tempo the project was set to (the review's M1).
+    CHECK_EQ(int(engine.project().settings.tempo_centi_bpm), int(saved));
+    CHECK_NEAR(engine.sends().delay_seconds, delay * float(saved) / 14000.0f, 0.0005f);
     // Entry 1: the exact mute mask, scene 5 on side B, the morph at B, ENERGY +32, a tempo asked
     // of the main context.
     CHECK(engine.muted(0));
@@ -2147,8 +2153,8 @@ TEST(engine_arr_rec_writes_a_jam_into_the_chain_pass_by_pass) {
     for (int i = 0; i < 4; i++) {
         CHECK_EQ(int(engine.project().chain[i].repeats), repeats[i]);
         CHECK_EQ(int(engine.project().chain_extra[i].cap), 1);
-        CHECK_EQ(int(engine.project().chain_extra[i].bpm),
-                 int(engine.project().settings.tempo_centi_bpm));
+        // One tempo all take: no BPM anywhere, so VALUE moves the whole song (the review's M1).
+        CHECK_EQ(int(engine.project().chain_extra[i].bpm), 0);
     }
     arr_done();
 }
