@@ -836,8 +836,8 @@ TEST(ui_the_parameter_page_decides_which_parameter_an_encoder_writes) {
     // The pages wrap, so the four of them are reachable in either direction.
     key(ENAGA_KEY_SELECT_LEFT);
     CHECK_EQ(UiProbe::param_page(app), int(Page::src));
-    // A drum has six of the eight: the keys step over ENV and OSC.
-    for (int i = 0; i < kEditPages - 2; i++) key(ENAGA_KEY_SELECT_LEFT);
+    // A drum has six of the pages: the keys step over ENV, OSC, the hole and SCAN.
+    for (int i = 0; i < 6; i++) key(ENAGA_KEY_SELECT_LEFT);
     CHECK_EQ(UiProbe::param_page(app), int(Page::src));
 
     // And a lock follows the same page. The step page is not open and the mode is GRID, but
@@ -5235,7 +5235,7 @@ TEST(ui_asr_is_edits_seventh_page_and_speaks_for_the_vas_only) {
     Strata &app = fresh();
     key(ENAGA_KEY_F8);                                // EDIT, track 1: a drum
     goto_edit_page(app, Page::asr);
-    CHECK_EQ(int(Page::asr), kEditPages - 2);
+    CHECK_EQ(int(Page::asr), int(Page::osc) - 1);
     check_layout(app, "EDIT ASR, a drum");
     CHECK(screen_has(app, "NOT ON THIS MACHINE"));
     CHECK(!screen_has(app, "ATK"));
@@ -5308,11 +5308,73 @@ TEST(ui_asr_on_sample_shows_sus_and_rel_only) {
     key(ENAGA_KEY_F4);
 }
 
+// The SCAN page: the ninth on a WAVE track (past the hole for the note locks), and stepped over
+// on every other machine. MOD by its mode's name, SPD as the LFO's RAT, END as a frame, CRV as
+// LIN or signed. Every value fits.
+TEST(ui_scan_is_the_wave_pairs_ninth_page_and_names_its_modes) {
+    Strata &app = fresh();
+    key(ENAGA_KEY_F8);                                // EDIT, track 1: a drum
+    for (int i = 0; i < 2 * kEditPages; i++) {
+        app.on_key(ENAGA_KEY_SELECT_RIGHT, true);
+        app.on_key(ENAGA_KEY_SELECT_RIGHT, false);
+        CHECK(UiProbe::param_page(app) != int(Page::scn));
+        CHECK(UiProbe::param_page(app) < int(Page::osc) + 1);
+    }
+    CHECK(!screen_has(app, "SCAN"));                  // no tab for a page it does not have
+
+    post_track(Cmd::set_machine, 0, uint8_t(MachineId::wave_mono));
+    pump(4);
+    goto_edit_page(app, Page::src);
+    bool reached = false;
+    for (int i = 0; i < kEditPages && !reached; i++) {
+        app.on_key(ENAGA_KEY_SELECT_RIGHT, true);
+        app.on_key(ENAGA_KEY_SELECT_RIGHT, false);
+        CHECK(UiProbe::param_page(app) != 8 && UiProbe::param_page(app) != 9);   // the hole
+        reached = UiProbe::param_page(app) == int(Page::scn);
+    }
+    CHECK(reached);
+    pump();
+    check_layout(app, "EDIT SCAN, WAVE MONO");
+    CHECK(screen_has(app, "SCAN"));
+    CHECK(screen_has(app, "MOD"));
+    CHECK(screen_has(app, "SPD"));
+    CHECK(screen_has(app, "END"));
+    CHECK(screen_has(app, "CRV"));
+    CHECK(screen_has(app, "SCAN OFF: TURN MOD"));     // the kit's default: no scan
+
+    post_cmd_track_param(0, uint8_t(kScnFirst + 0), 5);
+    post_cmd_track_param(0, uint8_t(kScnFirst + 3), 64);
+    pump();
+    CHECK(screen_has(app, "PING"));
+    CHECK(screen_has(app, "LIN"));
+    CHECK(screen_has(app, "EACH NOTE: POS TO END"));
+    post_cmd_track_param(0, uint8_t(kScnFirst + 0), 9);
+    post_cmd_track_param(0, uint8_t(kScnFirst + 3), 127);
+    pump();
+    CHECK(screen_has(app, "DRFT"));
+    CHECK(screen_has(app, "+63"));
+    post_cmd_track_param(0, 1, 40);                   // POS
+    post_cmd_track_param(0, uint8_t(kScnFirst + 2), 40);
+    pump();
+    CHECK(screen_has(app, "END = POS: NO TRAVEL"));
+    for (int b = 0; b < 128; b++) {
+        for (int i = 0; i < kScnParams; i++) post_cmd_track_param(0, uint8_t(kScnFirst + i), uint8_t(b));
+        pump();
+        check_layout(app, "EDIT SCAN, WAVE MONO, every value");
+    }
+
+    post_track(Cmd::set_machine, 0, uint8_t(MachineId::wave_poly));
+    pump(4);
+    check_layout(app, "EDIT SCAN, WAVE POLY");
+    CHECK(screen_has(app, "MOD"));
+}
+
 TEST(ui_osc_is_edits_eighth_page_and_names_its_waves_and_modes) {
     Strata &app = fresh();
     key(ENAGA_KEY_F8);                                // EDIT, track 1: a drum
     goto_edit_page(app, Page::osc);
-    CHECK_EQ(int(Page::osc), kEditPages - 1);
+    CHECK_EQ(int(Page::osc), int(Page::scn) - 3);     // the hole's two pages between
+    CHECK_EQ(int(Page::scn), kEditPages - 1);
     check_layout(app, "EDIT OSC, a drum");
     CHECK(screen_has(app, "NOT ON THIS MACHINE"));
     CHECK(!screen_has(app, "A WAV"));                 // no knob of the VA's
@@ -8805,15 +8867,15 @@ TEST(ui_screenshots) {
     }
     // The ASR page on track 7 (VA POLY), set up as a pad; then everything back as it was, so the
     // shots after this one draw what they always drew.
-    key(ENAGA_KEY_SELECT_RIGHT);
     for (int i = 0; i < 6; i++) key(ENAGA_KEY_DOWN);
+    edit_page_to(Page::asr);
     const uint8_t pad[kAsrParams] = {72, 89, 90, 40};    // ~400 MS, 70%, ~1.9 S, 31%
     for (int i = 0; i < kAsrParams; i++) post_cmd_track_param(6, uint8_t(kAsrFirst + i), pad[i]);
     pump();
     write_shot(folder, "edit_asr");
     for (int i = 0; i < kAsrParams; i++) post_cmd_track_param(6, uint8_t(kAsrFirst + i), 0);
     // And the OSC page on the same track: a square, OSC 2 detuned, a little sub and drive.
-    key(ENAGA_KEY_SELECT_RIGHT);
+    edit_page_to(Page::osc);
     const TrackParams before_osc = app_engine().params(6);
     const uint8_t osc[kOscParams] = {32, 30, 40, 30};    // SQR, D14, 40, 30
     for (int i = 0; i < kOscParams; i++) post_cmd_track_param(6, uint8_t(kOscFirst + i), osc[i]);
@@ -8822,10 +8884,9 @@ TEST(ui_screenshots) {
     for (int i = 0; i < kOscParams; i++) {
         post_cmd_track_param(6, uint8_t(kOscFirst + i), before_osc.v[kOscFirst + i]);
     }
-    key(ENAGA_KEY_SELECT_LEFT);
     pump();
     for (int i = 0; i < 6; i++) key(ENAGA_KEY_UP);
-    key(ENAGA_KEY_SELECT_LEFT);
+    edit_page_to(Page::src);
 
     mixer_page(app, 0);
     write_shot(folder, "mixer");
@@ -8934,6 +8995,18 @@ TEST(ui_screenshots) {
     post_cmd_track_param(0, kAsrFirst + 1, 80);     // SUS: the note holds
     write_shot(folder, "edit_vfltr");
     for (int i = 0; i < kAsrParams; i++) post_cmd_track_param(0, uint8_t(kAsrFirst + i), 0);
+    back_to_a_kick();
+    // WAVE MONO's SCAN page: PING from POS 2 up to END 12, slow to start.
+    post_track(Cmd::set_machine, 0, uint8_t(MachineId::wave_mono));
+    pump(4);
+    key(ENAGA_KEY_F8);
+    post_cmd_track_param(0, 1, 16);                 // POS
+    post_cmd_track_param(0, kScnFirst + 0, 5);      // MOD PING
+    post_cmd_track_param(0, kScnFirst + 1, 96);     // SPD a beat
+    post_cmd_track_param(0, kScnFirst + 2, 100);    // END
+    post_cmd_track_param(0, kScnFirst + 3, 90);     // CRV
+    edit_page_to(Page::scn);
+    write_shot(folder, "edit_scan");
     back_to_a_kick();
 
     key(ENAGA_KEY_F6);

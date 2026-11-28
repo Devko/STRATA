@@ -59,6 +59,11 @@ constexpr int kProjectPatterns = kBanks * kPatternsPerBank;   // 128
 // follow the LFO's in the same way, and in a section of their own again, and so do the four of
 // the VA machines' ASR page (attack, sustain, release, filter sustain; dsp/va.cpp) and the four
 // of their OSC page (wave, OSC 2, sub, drive).
+//
+// The WAVE machines' SCN page (scan mode, speed, end, curve; dsp/va.cpp) comes after a HOLE of
+// eight ids, 32-39, that no track parameter uses: a step's lock ids 32-36 were already the extra
+// notes of a chord (core/stepnotes.hpp) when SCN came, and a parameter's index is its lock id
+// everywhere. So kKitParams counts the hole, and `kit_param_real` says which indices are real.
 constexpr int kKitSoundParams = 16;
 constexpr int kKitLfoParams = 4;
 constexpr int kKitLfoEnd = kKitSoundParams + kKitLfoParams;
@@ -67,7 +72,28 @@ constexpr int kKitArpEnd = kKitLfoEnd + kKitArpParams;
 constexpr int kKitAsrParams = 4;
 constexpr int kKitAsrEnd = kKitArpEnd + kKitAsrParams;
 constexpr int kKitOscParams = 4;
-constexpr int kKitParams = kKitAsrEnd + kKitOscParams;
+constexpr int kKitOscEnd = kKitAsrEnd + kKitOscParams;
+constexpr int kKitScnFirst = 40;
+constexpr int kKitScnParams = 4;
+constexpr int kKitParams = kKitScnFirst + kKitScnParams;
+static_assert(kKitOscEnd == 32 && kKitScnFirst > kKitOscEnd, "the hole sits between OSC and SCN");
+
+// Whether `index` is a parameter at all: false in the hole and out of range.
+constexpr bool kit_param_real(int index) {
+    return (index >= 0 && index < kKitOscEnd) || (index >= kKitScnFirst && index < kKitParams);
+}
+// How many are: every index but the hole's.
+constexpr int kKitRealParams = kKitOscEnd + kKitScnParams;
+// A real index counted without the hole, 0 .. kKitRealParams - 1, for a list of them.
+constexpr int kit_real_index(int index) { return index < kKitScnFirst ? index : index - (kKitScnFirst - kKitOscEnd); }
+
+// SCN's MOD byte is a number like the LFO's WAV (format decision C): the scan mode, 0 OFF.
+constexpr int kKitScanModeIndex = kKitScnFirst + 0;
+constexpr int kKitScanModes = 10;                            // static_asserted in dsp/va.hpp
+constexpr uint8_t kKitScanModeMax = uint8_t(kKitScanModes - 1);
+// What a kit from before SCN loads as, and what a fresh track holds: no scan, SPD at 1 Hz, END
+// on the last frame, CRV straight.
+constexpr uint8_t kKitScnDefault[kKitScnParams] = {0, 28, 127, 64};
 
 // --- the LFO's WAV and DST bytes: numbers, not bands (format decision C, 2026-11-26) ----------
 //
@@ -84,11 +110,13 @@ constexpr uint8_t kKitLfoDestMax = uint8_t(kKitSoundParams);  // OFF, then the 1
 // The marker byte the layout sections hold: 1 = WAV and DST are numbers.
 constexpr uint8_t kLfoLayoutNumbers = 1;
 
-// The highest value a parameter byte may hold: 127 for all but WAV and DST. Knobs, locks,
-// random ranges and LIVE RND clamp to it, so a knob does not wind past the last shape.
+// The highest value a parameter byte may hold: 127 for all but WAV, DST and SCN's MOD. Knobs,
+// locks, random ranges and LIVE RND clamp to it, so a knob does not wind past the last shape.
 constexpr uint8_t kit_param_max(int index) {
-    return index == kKitLfoWaveIndex ? kKitLfoWaveMax
-                                     : (index == kKitLfoDestIndex ? kKitLfoDestMax : uint8_t(127));
+    return index == kKitLfoWaveIndex    ? kKitLfoWaveMax
+           : index == kKitLfoDestIndex  ? kKitLfoDestMax
+           : index == kKitScanModeIndex ? kKitScanModeMax
+                                        : uint8_t(127);
 }
 
 // A byte of the old band layout as the number it meant: WAV in six bands, DST in seventeen; any
@@ -223,6 +251,8 @@ constexpr bool machine_reads_asr_slot(uint8_t id, int slot) {
 constexpr bool machine_is_wave(uint8_t id) {
     return id == uint8_t(MachineId::wave_mono) || id == uint8_t(MachineId::wave_poly);
 }
+// The SCN page (the wavetable scan) is the WAVE pair's alone.
+constexpr bool machine_reads_scn(uint8_t id) { return machine_is_wave(id); }
 
 // FM4: four sine operators in one of eight algorithms (dsp/fm.hpp).
 constexpr bool machine_is_fm(uint8_t id) { return id == uint8_t(MachineId::fm); }
@@ -726,6 +756,10 @@ constexpr uint16_t kSectionKitChorus = 14;
 // The stereo widths, one byte per track (KitTrack::width). Optional on read: a KIT.BIN from before
 // them loads every track mono, which is how every track played. An older build ignores it.
 constexpr uint16_t kSectionKitWidth = 15;
+// The WAVE machines' SCN page, four bytes per track (kKitScnParams: MOD SPD END CRV). Optional on
+// read: a KIT.BIN from before it loads kKitScnDefault on every track, which scans nothing. An
+// older build ignores it.
+constexpr uint16_t kSectionKitScn = 16;
 
 constexpr uint16_t kBankVersion = 1;
 constexpr uint16_t kSectionBankPatterns = 1;

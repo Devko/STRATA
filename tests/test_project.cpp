@@ -45,7 +45,7 @@ using namespace strata;
 // (12) and its 11 bytes, optional like the others. 429 since the chorus: its four send bytes on the
 // end of the mixer section. 450 since Track Launch: an eighth entry (12) and its 9 bytes.
 constexpr uint32_t kProjectFileBytes = 450;
-constexpr uint32_t kKitFileBytes = 1506;   // 1486 before the widths (12 + 8), 1466 before the chorus sends (12 + 8), 1453 before the LFO layout (12 + 1), 1409 before the arp settings (12 + 32), 1389 before the choke groups (12 + 8), 1329 before the mod slots (12 + 48), 1309 before LFO TRIG (12 + 8), 1296 before the filter layout (12 + 1), 1076 before the LFO and arp (12 + 8 x 4 each), 1164 before SLC AUTO (12 + 8), 1184 before ASR (12 + 32), 1228 before the duck (12 + 12), 1252 before OSC (12 + 32)
+constexpr uint32_t kKitFileBytes = 1550;   // 1506 before the SCN page (12 + 32), 1486 before the widths (12 + 8), 1466 before the chorus sends (12 + 8), 1453 before the LFO layout (12 + 1), 1409 before the arp settings (12 + 32), 1389 before the choke groups (12 + 8), 1329 before the mod slots (12 + 48), 1309 before LFO TRIG (12 + 8), 1296 before the filter layout (12 + 1), 1076 before the LFO and arp (12 + 8 x 4 each), 1164 before SLC AUTO (12 + 8), 1184 before ASR (12 + 32), 1228 before the duck (12 + 12), 1252 before OSC (12 + 32)
 
 // Room past the end of every file, filled with a sentinel, so that a writer going one byte long
 // is caught by value rather than by luck.
@@ -195,6 +195,11 @@ void fill_kit(Kit &kit) {
         for (int p = 0; p < kKitParams; p++) {
             // Within each parameter's range: WAV and DST hold numbers (core/project.hpp).
             track.params[p] = uint8_t((t * 16 + p * 7) % (int(kit_param_max(p)) + 1));
+            if (!kit_param_real(p)) track.params[p] = 0;   // the hole: never stored, always 0
+            // SCN at what a kit from before it loads (kKitScnDefault), so that the tests of
+            // older files, which drop its section first, see the same kit; its own test
+            // (kit_the_scn_page_round_trips...) fills it with values of its own.
+            if (p >= kKitScnFirst) track.params[p] = kKitScnDefault[p - kKitScnFirst];
         }
         track.machine = uint8_t(t % kMachines);
         // Thousandths, so the fader survives the format exactly: project.cpp stores it as
@@ -453,7 +458,10 @@ TEST(project_init_empties_everything_and_lives_on_a01) {
         for (int p = 0; p < kKitParams; p++) {
             // TON's flat is 64, not 0 (D8): a blank synth track starts with its tone flat.
             const bool tone = p == kSlotTone && machine_has_voice_filter(g_source.kit.tracks[t].machine);
-            if (g_source.kit.tracks[t].params[p] != (tone ? kToneFlat : 0)) kit_set++;
+            // And SCN loads no scan, END and SPD set (kKitScnDefault), as a kit from before it.
+            const int want = tone ? kToneFlat
+                                  : (p >= kKitScnFirst ? kKitScnDefault[p - kKitScnFirst] : 0);
+            if (g_source.kit.tracks[t].params[p] != want) kit_set++;
         }
         if (g_source.kit.tracks[t].sample[0] != '\0') kit_set++;
         // The fader's default is unity, not zero: a project that opened silent would look broken.
@@ -1563,8 +1571,15 @@ uint32_t fresh_kit_file() {
 // been (lfo_migrated()).
 void drop_lfo_layout_section();
 
-// g_kit_file as a build from before the widths wrote it: their section, the last, dropped.
+// g_kit_file as a build from before the SCN page wrote it: its section, the last, dropped.
+void drop_scn_section() {
+    CHECK_EQ(drop_last_section(g_kit_file, g_kit_alt), 1506u);
+    for (uint32_t i = 0; i < 1506u; i++) g_kit_file[i] = g_kit_alt[i];
+}
+
+// g_kit_file as a build from before the widths wrote it: their section and SCN's dropped.
 void drop_width_section() {
+    drop_scn_section();
     CHECK_EQ(drop_last_section(g_kit_file, g_kit_alt), 1486u);
     for (uint32_t i = 0; i < 1486u; i++) g_kit_file[i] = g_kit_alt[i];
 }
@@ -1642,8 +1657,12 @@ void drop_duck_section() {
 int old_lfo(int t, int p) { return int(kit_lfo_from_band(p, g_kit_source.tracks[t].params[p])); }
 
 // What a parameter loads as when its section is absent: 0, except the OSC page's, which loads
-// the legacy voice (core/project.hpp, kKitOscLegacy).
-int absent_param(int p) { return p >= kKitAsrEnd ? int(kKitOscLegacy[p - kKitAsrEnd]) : 0; }
+// the legacy voice (core/project.hpp, kKitOscLegacy), and SCN's, which loads no scan
+// (kKitScnDefault).
+int absent_param(int p) {
+    if (p >= kKitScnFirst) return int(kKitScnDefault[p - kKitScnFirst]);
+    return p >= kKitAsrEnd && p < kKitOscEnd ? int(kKitOscLegacy[p - kKitAsrEnd]) : 0;
+}
 
 // The fader as it went down on disk, in thousandths of unity.
 uint16_t stored_level(const uint8_t *file, int track) {
@@ -1709,7 +1728,7 @@ TEST(kit_write_refuses_a_buffer_one_byte_short_and_touches_nothing) {
              int(SerializeResult::ok));
     CHECK_EQ(written, kKitFileBytes);
     CHECK_EQ(int(peek_u16(g_kit_file, kVersionOffset)), int(kKitVersion));
-    CHECK_EQ(int(peek_u16(g_kit_file, 6)), 15);    // the tracks, the LFO, the arp, SLC AUTO, ASR, the duck, OSC, the filter layout, LFO TRIG, the mod slots, the choke groups, the arp settings, the LFO layout, the chorus sends, the widths
+    CHECK_EQ(int(peek_u16(g_kit_file, 6)), 16);    // the tracks, the LFO, the arp, SLC AUTO, ASR, the duck, OSC, the filter layout, LFO TRIG, the mod slots, the choke groups, the arp settings, the LFO layout, the chorus sends, the widths
 }
 
 TEST(kit_a_parameter_a_file_cannot_hold_is_clamped_to_127) {
@@ -1804,10 +1823,13 @@ TEST(kit_the_lfo_and_arp_bytes_round_trip_and_are_clamped_on_the_way_in) {
     for (uint32_t i = 0; i < uint32_t(kKitAsrParams * kTracks); i++) g_kit_file[asr + i] = 202;
     const uint32_t osc = section_at(g_kit_file, kSectionKitOsc);
     for (uint32_t i = 0; i < uint32_t(kKitOscParams * kTracks); i++) g_kit_file[osc + i] = 203;
+    const uint32_t scn = section_at(g_kit_file, kSectionKitScn);
+    for (uint32_t i = 0; i < uint32_t(kKitScnParams * kTracks); i++) g_kit_file[scn + i] = 204;
     refresh_crc(g_kit_file);
     CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
     for (int t = 0; t < kTracks; t++) {
         for (int p = kKitSoundParams; p < kKitParams; p++) {
+            if (!kit_param_real(p)) continue;
             CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), int(kit_param_max(p)));
         }
     }
@@ -3134,7 +3156,7 @@ TEST(kit_the_asr_page_round_trips_and_an_older_file_loads_it_at_zero) {
 }
 
 TEST(kit_the_osc_page_round_trips_and_an_older_file_loads_the_legacy_voice) {
-    // The VA machines' WAV OS2 SUB DRV (kSectionKitOsc), the last section. A kit from before the
+    // The VA machines' WAV OS2 SUB DRV (kSectionKitOsc), before SCN. A kit from before the
     // page has none, and every track comes back with kKitOscLegacy -- a saw over the sub the
     // voice had fixed -- even read into a kit whose page held something else.
     fresh_kit_file();
@@ -3167,6 +3189,64 @@ TEST(kit_the_osc_page_round_trips_and_an_older_file_loads_the_legacy_voice) {
     // Present but short is damage, not an old file.
     fresh_kit_file();
     const uint32_t entry = section_entry_at(g_kit_file, kSectionKitOsc);
+    poke_u32(g_kit_file, entry + 8, peek_u32(g_kit_file, entry + 8) - 1);
+    refresh_crc(g_kit_file);
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)),
+             int(SerializeResult::malformed));
+}
+
+TEST(kit_the_scn_page_round_trips_and_an_older_file_loads_it_off) {
+    // The WAVE machines' MOD SPD END CRV (kSectionKitScn), the last section, at ids 40-43 past
+    // the note locks' hole. A kit from before the page has none, and every track comes back
+    // with kKitScnDefault -- MOD OFF, so the WAVE pair sounds as it did -- even read into a kit
+    // whose page held a scan. A MOD past the last mode is clamped to the last on the way in.
+    fresh_kit_file();
+    for (int t = 0; t < kTracks; t++) {
+        for (int i = 0; i < kKitScnParams; i++) {
+            g_kit_source.tracks[t].params[kKitScnFirst + i] =
+                uint8_t(i == 0 ? t % kKitScanModes : (10 + 13 * t + 31 * i) % 128);
+        }
+    }
+    uint32_t written = 0;
+    CHECK_EQ(int(kit_write(g_kit_source, g_kit_file, kKitFileBytes, &written)),
+             int(SerializeResult::ok));
+    CHECK_EQ(written, kKitFileBytes);
+    CHECK(section_at(g_kit_file, kSectionKitScn) > section_at(g_kit_file, kSectionKitOsc));
+    CHECK_EQ(int(g_kit_file[section_at(g_kit_file, kSectionKitScn) + 4 * 6 + 2]),
+             int(g_kit_source.tracks[6].params[kKitScnFirst + 2]));
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
+    for (int t = 0; t < kTracks; t++) {
+        for (int p = 0; p < kKitParams; p++) {
+            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), int(g_kit_source.tracks[t].params[p]));
+        }
+        for (int p = kKitOscEnd; p < kKitScnFirst; p++) {
+            CHECK_EQ(int(g_kit_loaded.tracks[t].params[p]), 0);       // the hole stays empty
+        }
+    }
+
+    // A MOD byte no build writes reads as DRFT, the last mode.
+    g_kit_file[section_at(g_kit_file, kSectionKitScn) + 4 * 3] = 200;
+    refresh_crc(g_kit_file);
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)), int(SerializeResult::ok));
+    CHECK_EQ(int(g_kit_loaded.tracks[3].params[kKitScnFirst]), kKitScanModes - 1);
+
+    // A kit from before the page.
+    fresh_kit_file();
+    const uint32_t old_size = drop_last_section(g_kit_file, g_kit_alt);
+    CHECK_EQ(old_size, 1506u);
+    for (int t = 0; t < kTracks; t++) {
+        for (int i = 0; i < kKitScnParams; i++) g_kit_loaded.tracks[t].params[kKitScnFirst + i] = 9;
+    }
+    CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_alt, old_size)), int(SerializeResult::ok));
+    for (int t = 0; t < kTracks; t++) {
+        for (int i = 0; i < kKitScnParams; i++) {
+            CHECK_EQ(int(g_kit_loaded.tracks[t].params[kKitScnFirst + i]), int(kKitScnDefault[i]));
+        }
+    }
+
+    // Present but short is damage, not an old file.
+    fresh_kit_file();
+    const uint32_t entry = section_entry_at(g_kit_file, kSectionKitScn);
     poke_u32(g_kit_file, entry + 8, peek_u32(g_kit_file, entry + 8) - 1);
     refresh_crc(g_kit_file);
     CHECK_EQ(int(kit_read(g_kit_loaded, g_kit_file, kKitFileBytes)),

@@ -176,6 +176,17 @@ void VaPoly::prepare(const TrackParams &params) {
     // Slot 10 is DET here, so VaSettings::make leaves it alone. The glide coefficients stay at
     // their default of 1 -- arrive at once -- which is what a machine with no glide wants.
     detune_ = wave_ ? 0.0f : kDetuneSemis * params.unit(10);
+
+    // A synced SCN SPD, at the tempo the engine last gave (va.cpp, "SCN").
+    if (settings_.scan_sync_ticks != 0) set_tick_frames(tick_frames_);
+}
+
+void VaPoly::set_tick_frames(float frames) {
+    tick_frames_ = frames;
+    if (settings_.scan_sync_ticks != 0) {
+        settings_.scan_inc =
+            frames > 0.0f ? enaga::dsp::reciprocal(float(settings_.scan_sync_ticks) * frames) : 0.0f;
+    }
 }
 
 void VaPoly::trigger(const Trig &trig) {

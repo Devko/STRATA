@@ -523,13 +523,18 @@ constexpr const char *kGrainAsrWords[4] = {"ATTACK", "SUSTAIN", "RELEASE", ""};
 // SAMPLE's: SUS and REL only, its attack being AMP's (dsp/sample.cpp).
 constexpr const char *kSampleAsrWords[4] = {"", "SUSTAIN", "RELEASE", ""};
 constexpr const char *kGrainOscWords[4] = {"SCAN SPEED", "PITCH SPRAY", "", ""};
+// The WAVE pair's SCAN page (dsp/va.cpp, "SCN").
+constexpr const char *kScnWords[4] = {"SCAN MODE", "SCAN SPEED", "SCAN END FRAME", "SCAN CURVE"};
+constexpr int kScanHelpPage = 10;
 
-const char *const kEditPageNames[kHelpEditPages] = {"SRC", "FLTR", "AMP", "FX",
-                                                    "LFO", "ARP", "ENV", "OSC"};
+const char *const kEditPageNames[kHelpEditPages] = {"SRC", "FLTR", "AMP", "FX",   "LFO", "ARP",
+                                                    "ENV", "OSC",  "---", "---", "SCAN"};
 
-// Does the machine read EDIT's page 6 (ASR) or 7 (OSC)?
+// Does the machine read EDIT's page 6 (ASR), 7 (OSC) or 10 (SCAN)? Nobody reads the hole.
 bool reads_page(uint8_t machine, int page) {
-    return page == 6 ? machine_reads_asr(machine) : machine_reads_osc(machine);
+    if (page == 6) return machine_reads_asr(machine);
+    if (page == 7) return machine_reads_osc(machine);
+    return page == kScanHelpPage && machine_reads_scn(machine);
 }
 
 const char *osc_words(uint8_t machine, int slot) {
@@ -590,7 +595,9 @@ void knob_rows(const HelpPlace &place, bool slc_auto, char rows[kHelpRows][kHelp
                int &count) {
     const int page = place.page < kHelpEditPages ? place.page : 0;
     if (page >= 6 && !reads_page(place.machine, page)) {
-        add_row(rows, count, page == 6 ? "ASR: SYNTHS GRN SMP" : "OSC: VA WAVE FM GRN");
+        add_row(rows, count, page == 6   ? "ASR: SYNTHS GRN SMP"
+                             : page == 7 ? "OSC: VA WAVE FM GRN"
+                                         : "SCAN: WAVE ONLY");
         return;
     }
     for (int slot = 0; slot < 4; slot++) knob_row(place, slot, rows[count++]);
@@ -643,6 +650,13 @@ void knob_rows(const HelpPlace &place, bool slc_auto, char rows[kHelpRows][kHelp
                 add_row(rows, count, "OS2 1-63 DETUNE");
                 add_row(rows, count, "OS2 64+  SYNC");
             }
+            break;
+        case kScanHelpPage:
+            add_row(rows, count, "POS TO END EACH NOTE");
+            add_row(rows, count, "MOD OFF FWD REV LOOP");
+            add_row(rows, count, "LREV PING RET SINE");
+            add_row(rows, count, "RAND DRFT");
+            add_row(rows, count, "SPD 64+ SYNCED");
             break;
         default: break;
     }
@@ -824,7 +838,9 @@ const char *help_param_words(uint8_t machine, int index) {
                    : machine_is_grain(machine)               ? kGrainAsrWords[slot]
                    : machine == uint8_t(MachineId::sample)   ? kSampleAsrWords[slot]
                                                              : kAsrWords[slot];
-        default: return osc_words(machine, slot);
+        case 7: return osc_words(machine, slot);
+        case kScanHelpPage: return machine_reads_scn(machine) ? kScnWords[slot] : "";
+        default: return "";
     }
 }
 

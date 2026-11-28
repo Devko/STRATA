@@ -2,7 +2,8 @@
 //
 // The kit library (app/storage.hpp) swaps all eight tracks at once, which is the wrong size for
 // "try a different kick": the rest of the beat goes with it. A sound preset is one machine's
-// worth of knobs -- SRC, the insert chain's FLTR page and AMP, and on the VAs, FM4 and GRAIN the ASR and OSC pages --
+// worth of knobs -- SRC, the insert chain's FLTR page and AMP, on the VAs, FM4 and GRAIN the ASR and
+// OSC pages, and on the WAVE pair the SCN page --
 // written into the selected track and nothing else. Opened with OK from EDIT or MACHINE on any
 // track whose machine has some (app/app.hpp, SOUNDS), the way OK opens the sample browser on a
 // SAMPLE track. GRAIN has both, so on a GRAIN track OK opens SOUNDS from EDIT and the sample
@@ -45,6 +46,9 @@ struct SoundPreset {
     uint8_t amp[4];          // 8-11
     uint8_t asr[4];          // 24-27: ATK SUS REL FSU, written on the machines that read ASR
     uint8_t osc[4];          // 28-31: the OSC page (WAV OS2 SUB DRV on a VA), the same
+    // 40-43: the WAVE pair's SCN page (MOD SPD END CRV). Left out (all 0) is a preset that scans
+    // nothing, which writes kKitScnDefault.
+    uint8_t scn[4] = {};
 };
 
 constexpr int kSoundNameChars = 6;
@@ -53,6 +57,8 @@ constexpr int kSoundNameChars = 6;
 constexpr int kSoundAsrFirst = kKitArpEnd;
 // And of the OSC page.
 constexpr int kSoundOscFirst = kKitAsrEnd;
+// And of the SCN page.
+constexpr int kSoundScnFirst = kKitScnFirst;
 
 // How many presets `machine` has: 0 for SAMPLE, MID and any id this build lacks.
 int sound_preset_count(uint8_t machine);
@@ -61,7 +67,7 @@ int sound_preset_count(uint8_t machine);
 const SoundPreset *sound_preset(uint8_t machine, int index);
 
 // Bit p set: a preset of `machine` writes KitTrack parameter p. 0 for a machine with none.
-uint32_t sound_preset_writes(uint8_t machine);
+uint64_t sound_preset_writes(uint8_t machine);
 
 // Write preset `index` of `machine` into `params` (kKitParams bytes), the masked bytes only.
 // False, and nothing written, for a preset that does not exist.
@@ -76,8 +82,8 @@ bool sound_preset_matches(uint8_t machine, int index, const uint8_t *params);
 // so a track switched to SAMPLE inherited STA half way in, nine slices and a short DEC from
 // whatever it hosted before, and the new sample "started at a random position".
 //
-// Every parameter the machine reads for its SOUND is written: SRC, FLTR and AMP, and ASR and OSC
-// on a machine that reads them. That is MORE than a preset writes (sound_preset_writes): a preset
+// Every parameter the machine reads for its SOUND is written: SRC, FLTR and AMP, and ASR, OSC and
+// SCN on a machine that reads them. That is MORE than a preset writes (sound_preset_writes): a preset
 // leaves HAT's choke group and GRAIN's POS and PIT alone because they say how the track sits in
 // the kit or the sample, but values left there by another machine mean nothing, so a switch sets
 // them too. The values are preset 0 of the machine's SOUNDS list, the factory kit's sound; SAMPLE,

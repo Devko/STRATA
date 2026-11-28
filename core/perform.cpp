@@ -112,10 +112,10 @@ SerializeResult find_sections(const uint8_t *buffer, uint32_t size, uint16_t ver
 
 // --- PERFORM.BIN sizes ----------------------------------------------------
 
-constexpr uint32_t kPerformSections = 8;
-// The last six, the scenes' LFO bytes, their master EQ, their arp bytes, their ASR bytes, their
-// OSC bytes and the LFO layout, may each be absent (an older file).
-constexpr uint32_t kPerformOptionalSections = 6;
+constexpr uint32_t kPerformSections = 9;
+// The last seven, the scenes' LFO bytes, their master EQ, their arp bytes, their ASR bytes, their
+// OSC bytes, the LFO layout and their SCN bytes, may each be absent (an older file).
+constexpr uint32_t kPerformOptionalSections = 7;
 constexpr uint32_t kSceneTrackBytes = uint32_t(kKitSoundParams) + 2; // values, then the bitmask
 constexpr uint32_t kSceneBytes = kSceneTrackBytes * uint32_t(kTracks);
 constexpr uint32_t kScenesBytes = kSceneBytes * uint32_t(kScenes);
@@ -151,16 +151,25 @@ constexpr uint32_t kSceneOscBytes =
 constexpr uint32_t kSceneOscOffset = kSceneAsrOffset + kSceneAsrBytes;
 constexpr uint32_t kPerformLfoLayoutBytes = 1;
 constexpr uint32_t kPerformLfoLayoutOffset = kSceneOscOffset + kSceneOscBytes;
-constexpr uint32_t kPerformTotalBytes = kHeaderBytes + kPerformLfoLayoutOffset + kPerformLfoLayoutBytes;
+// The SCN page's four values and its four stored bits (the low half of the sixth mask byte; the
+// fifth holds the hole between OSC and SCN, never set).
+constexpr uint32_t kSceneScnTrackBytes = uint32_t(kKitScnParams) + 1;
+constexpr uint32_t kSceneScnBytes =
+    kSceneScnTrackBytes * uint32_t(kTracks) * uint32_t(kScenes);
+constexpr uint32_t kSceneScnOffset = kPerformLfoLayoutOffset + kPerformLfoLayoutBytes;
+constexpr uint32_t kPerformTotalBytes = kHeaderBytes + kSceneScnOffset + kSceneScnBytes;
 constexpr uint8_t kLfoStoredMask = uint8_t((1u << kKitLfoParams) - 1u);
 constexpr uint8_t kAsrStoredMask = uint8_t((1u << kKitAsrParams) - 1u);
 constexpr uint8_t kOscStoredMask = uint8_t((1u << kKitOscParams) - 1u);
+constexpr uint8_t kScnStoredMask = uint8_t((1u << kKitScnParams) - 1u);
+constexpr int kScnStoredByte = kKitScnFirst / 8;
 
 static_assert(kKitSoundParams == 16, "section 1's stored bitmask is two bytes on the strength of "
                                      "16 sound parameters per track");
-static_assert(kKitLfoParams + kKitArpParams == 8 && kSceneStoredBytes == 4,
+static_assert(kKitLfoParams + kKitArpParams == 8 && kSceneStoredBytes == 6,
               "the LFO's stored bits are the low half of the third mask byte, the arp's the high");
-static_assert(kKitParams <= 32, "scene_morph reads a track's stored bits as one 32-bit mask");
+static_assert(kKitScnFirst % 8 == 0 && kKitScnParams == 4,
+              "the SCN page's stored bits are the low half of the sixth mask byte");
 static_assert(kKitArpEnd == 24 && kKitAsrParams == 4 && kKitOscParams == 4,
               "the ASR page's stored bits are the low half of the fourth mask byte, OSC's the high");
 
@@ -169,14 +178,14 @@ static_assert(kKitArpEnd == 24 && kKitAsrParams == 4 && kKitOscParams == 4,
 // --- scenes ---------------------------------------------------------------
 
 void scene_set(Scene &scene, int track, int param, uint8_t value) {
-    if (track < 0 || track >= kTracks || param < 0 || param >= kKitParams) return;
+    if (track < 0 || track >= kTracks || !kit_param_real(param)) return;
     scene.values[track][param] = clamp_u8(value, 0, kParamMax);
     scene.stored[track][param >> 3] =
         uint8_t(scene.stored[track][param >> 3] | uint8_t(1u << (param & 7)));
 }
 
 void scene_clear(Scene &scene, int track, int param) {
-    if (track < 0 || track >= kTracks || param < 0 || param >= kKitParams) return;
+    if (track < 0 || track >= kTracks || !kit_param_real(param)) return;
     scene.stored[track][param >> 3] =
         uint8_t(scene.stored[track][param >> 3] & ~uint8_t(1u << (param & 7)));
     // The value is left alone. It costs nothing, and it means clearing and storing again gets
@@ -472,6 +481,7 @@ SerializeResult perform_write(const SceneSet &scenes, const MacroSet &macros, ui
         {kSectionPerformSceneAsr, kSceneAsrOffset, kSceneAsrBytes},
         {kSectionPerformSceneOsc, kSceneOscOffset, kSceneOscBytes},
         {kSectionPerformLfoLayout, kPerformLfoLayoutOffset, kPerformLfoLayoutBytes},
+        {kSectionPerformSceneScn, kSceneScnOffset, kSceneScnBytes},
     };
 
     Writer w(buffer, capacity);
@@ -533,11 +543,19 @@ SerializeResult perform_write(const SceneSet &scenes, const MacroSet &macros, ui
     for (int s = 0; s < kScenes; s++) {
         const Scene &scene = scenes.scenes[s];
         for (int t = 0; t < kTracks; t++) {
-            for (int p = kKitAsrEnd; p < kKitParams; p++) w.u8(scene.values[t][p]);
+            for (int p = kKitAsrEnd; p < kKitOscEnd; p++) w.u8(scene.values[t][p]);
             w.u8(uint8_t(scene.stored[t][3] >> kKitAsrParams));
         }
     }
     w.u8(kLfoLayoutNumbers);
+
+    for (int s = 0; s < kScenes; s++) {
+        const Scene &scene = scenes.scenes[s];
+        for (int t = 0; t < kTracks; t++) {
+            for (int p = kKitScnFirst; p < kKitParams; p++) w.u8(scene.values[t][p]);
+            w.u8(uint8_t(scene.stored[t][kScnStoredByte] & kScnStoredMask));
+        }
+    }
 
     if (!w.ok() || w.size() != kPerformTotalBytes) return SerializeResult::buffer_too_small;
     return finish_container(w, buffer, kPerformTotalBytes, written);
@@ -556,7 +574,8 @@ SerializeResult perform_read(SceneSet &scenes, MacroSet &macros, const uint8_t *
     const uint16_t wanted[kPerformSections] = {kSectionPerformScenes, kSectionPerformMacros,
                                                kSectionPerformSceneLfo, kSectionPerformSceneMaster,
                                                kSectionPerformSceneArp, kSectionPerformSceneAsr,
-                                               kSectionPerformSceneOsc, kSectionPerformLfoLayout};
+                                               kSectionPerformSceneOsc, kSectionPerformLfoLayout,
+                                               kSectionPerformSceneScn};
     uint32_t offset[kPerformSections] = {};
     uint32_t length[kPerformSections] = {};
     const SerializeResult found = find_sections(buffer, size, kPerformVersion, wanted,
@@ -572,6 +591,7 @@ SerializeResult perform_read(SceneSet &scenes, MacroSet &macros, const uint8_t *
     if (offset[5] != 0 && length[5] < kSceneAsrBytes) return refuse(SerializeResult::malformed);
     if (offset[6] != 0 && length[6] < kSceneOscBytes) return refuse(SerializeResult::malformed);
     if (offset[7] != 0 && length[7] < kPerformLfoLayoutBytes) return refuse(SerializeResult::malformed);
+    if (offset[8] != 0 && length[8] < kSceneScnBytes) return refuse(SerializeResult::malformed);
 
     Reader r(buffer, size);
     if (!r.seek(kHeaderBytes + offset[0])) return refuse(SerializeResult::malformed);
@@ -719,7 +739,7 @@ SerializeResult perform_read(SceneSet &scenes, MacroSet &macros, const uint8_t *
         for (int s = 0; s < kScenes; s++) {
             Scene &scene = scenes.scenes[s];
             for (int t = 0; t < kTracks; t++) {
-                for (int p = kKitAsrEnd; p < kKitParams; p++) scene.values[t][p] = 0;
+                for (int p = kKitAsrEnd; p < kKitOscEnd; p++) scene.values[t][p] = 0;
             }
         }
     } else {
@@ -727,11 +747,35 @@ SerializeResult perform_read(SceneSet &scenes, MacroSet &macros, const uint8_t *
         for (int s = 0; s < kScenes; s++) {
             Scene &scene = scenes.scenes[s];
             for (int t = 0; t < kTracks; t++) {
-                for (int p = kKitAsrEnd; p < kKitParams; p++) {
+                for (int p = kKitAsrEnd; p < kKitOscEnd; p++) {
                     scene.values[t][p] = clamp_u8(r.u8(), 0, kParamMax);
                 }
                 const uint8_t bits = uint8_t(r.u8() & kOscStoredMask);
                 scene.stored[t][3] = uint8_t(scene.stored[t][3] | (bits << kKitAsrParams));
+            }
+        }
+        if (!r.ok()) return refuse(SerializeResult::truncated);
+    }
+
+    // The scenes' SCN bytes, into the sixth mask byte; the fifth (the hole) is never set.
+    // Absent: no scene stores one. MOD past the last mode reads as the last.
+    for (int s = 0; s < kScenes; s++) {
+        Scene &scene = scenes.scenes[s];
+        for (int t = 0; t < kTracks; t++) {
+            for (int p = kKitOscEnd; p < kKitParams; p++) scene.values[t][p] = 0;
+            scene.stored[t][kKitOscEnd / 8] = 0;
+            scene.stored[t][kScnStoredByte] = 0;
+        }
+    }
+    if (offset[8] != 0) {
+        if (!r.seek(kHeaderBytes + offset[8])) return refuse(SerializeResult::malformed);
+        for (int s = 0; s < kScenes; s++) {
+            Scene &scene = scenes.scenes[s];
+            for (int t = 0; t < kTracks; t++) {
+                for (int p = kKitScnFirst; p < kKitParams; p++) {
+                    scene.values[t][p] = clamp_u8(r.u8(), 0, kit_param_max(p));
+                }
+                scene.stored[t][kScnStoredByte] = uint8_t(r.u8() & kScnStoredMask);
             }
         }
         if (!r.ok()) return refuse(SerializeResult::truncated);

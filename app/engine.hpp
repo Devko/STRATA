@@ -766,6 +766,9 @@ private:
     // machine hands the new one the current value, so none keeps a stale offset.
     float pitch_mod_[kTracks] = {};
     Machine *pitch_mod_machine_[kTracks] = {};
+    // The tempo as each track's machine last heard it (Machine::set_tick_frames).
+    float tick_frames_sent_[kTracks] = {};
+    Machine *tick_frames_machine_[kTracks] = {};
 
     // Every note-on a track's machine takes -- a step, a chord, an arp or roll hit, a pad or a
     // key -- goes through here: the screen's trig light, and LFO TRIG's restart.

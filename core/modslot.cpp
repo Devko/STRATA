@@ -8,7 +8,9 @@ namespace {
 // does the same with kKitSoundParams and friends; tests/test_modslot.cpp holds the two together).
 constexpr int kSoundParams = 16;
 constexpr int kAsrFirst = 24;
-constexpr int kTrackParams = 32;
+// The end of the OSC page. The SCN page past the hole (40-43) is no slot's destination: a slot
+// moves a byte every block, and a scan is already a movement of its own.
+constexpr int kOscEnd = 32;
 
 }  // namespace
 
@@ -28,7 +30,7 @@ uint8_t mod_source_next(uint8_t source) {
 }
 
 bool mod_dest_allowed(int param) {
-    return (param >= 0 && param < kSoundParams) || (param >= kAsrFirst && param < kTrackParams);
+    return (param >= 0 && param < kSoundParams) || (param >= kAsrFirst && param < kOscEnd);
 }
 
 KitModSlot mod_slot_sanitized(uint8_t source, uint8_t dest, uint8_t depth_byte) {

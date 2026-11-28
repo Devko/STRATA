@@ -70,6 +70,8 @@ static_assert(kFactorySrc == page_first(Page::src) && kFactoryFltr == page_first
 static_assert(kSoundAsrFirst == kAsrFirst, "core/sounds.hpp's ASR page and dsp/track.hpp's have diverged");
 static_assert(kSoundOscFirst == kOscFirst && kFactoryOsc == kOscFirst,
               "core/'s OSC page and dsp/track.hpp's have diverged");
+static_assert(kSoundScnFirst == kScnFirst && kKitScnFirst == kScnFirst && kKitOscEnd == kOscEnd,
+              "core/'s SCN page and dsp/track.hpp's have diverged");
 
 static_assert(kLfoTrigFree == uint8_t(LfoTrig::free) && kLfoTrigRetrig == uint8_t(LfoTrig::retrig) &&
                   kLfoTrigOneShot == uint8_t(LfoTrig::one_shot) &&
@@ -443,15 +445,17 @@ void Engine::prepare_machine(int track) {
     Machine *machine = machines_[track];
     if (machine == nullptr) return;
     const TrackParams &params = sounding(track);
-    // The sound's 16 and the ASR and OSC pages' 8: a VA reads all of them (dsp/track.hpp). The
+    // The sound's 16, the ASR and OSC pages' 8 and SCN's 4: a WAVE reads all of them (dsp/track.hpp). The
     // LFO and arp bytes between them are not compared, so turning an LFO knob does not re-prepare
     // a machine.
-    static_assert(kOscFirst == kAsrFirst + kAsrParams && kTrackParams == kOscFirst + kOscParams,
-                  "ASR and OSC are the last eight bytes, compared as one run");
+    static_assert(kOscFirst == kAsrFirst + kAsrParams && kTrackParams == kScnFirst + kScnParams,
+                  "ASR and OSC are eight bytes compared as one run, SCN the last four");
     if (prepare_memo_ && machine_prepared_for_[track] == machine &&
         __builtin_memcmp(machine_prepared_[track].v, params.v, kParams) == 0 &&
         __builtin_memcmp(machine_prepared_[track].v + kAsrFirst, params.v + kAsrFirst,
-                         kAsrParams + kOscParams) == 0) {
+                         kAsrParams + kOscParams) == 0 &&
+        __builtin_memcmp(machine_prepared_[track].v + kScnFirst, params.v + kScnFirst,
+                         kScnParams) == 0) {
         return;
     }
     machine->prepare(params);
@@ -520,7 +524,7 @@ void Engine::apply(const Command &command) {
 bool Engine::apply_sound(const Command &command, int track, int) {
     switch (command.cmd) {
         case Cmd::set_param:
-            if (command.a < kTrackParams) {
+            if (track_param_real(command.a)) {
                 uint8_t value = command.b;
                 if (command.c == kSemitoneFlag && tune_param(machine_id_[track]) == command.a) {
                     value = tune_step(machine_id_[track], params_[track].v[command.a],
@@ -563,7 +567,7 @@ bool Engine::apply_sound(const Command &command, int track, int) {
                     status_.bump_refused();
                     break;
                 }
-                const uint32_t mask = sound_preset_writes(machine);
+                const uint64_t mask = sound_preset_writes(machine);
                 for (int p = 0; p < kTrackParams; p++) {
                     if ((mask >> p) & 1u) bytes[p] = sound_back_.v[p];
                 }
@@ -765,7 +769,7 @@ bool Engine::apply_step_edit(const Command &command, int track, int step) {
             break;
 
         case Cmd::lock_range_delta: {
-            if (command.a >= kTrackParams) break;
+            if (!track_param_real(command.a)) break;
             const int width =
                 int(pattern_get_range(live(), track, step, command.a)) + int(int8_t(command.b));
             const uint8_t wanted = uint8_t(width < 0 ? 0 : (width > 127 ? 127 : width));
@@ -779,7 +783,7 @@ bool Engine::apply_step_edit(const Command &command, int track, int step) {
         }
 
         case Cmd::lock_slide: {
-            if (command.a >= kTrackParams) break;
+            if (!track_param_real(command.a)) break;
             const uint8_t param = command.a;
             uint8_t value = 0;
             if (!pattern_get_lock(live(), track, step, param, value)) {
@@ -808,7 +812,7 @@ bool Engine::apply_step_edit(const Command &command, int track, int step) {
             break;
 
         case Cmd::lock_delta: {
-            if (command.a >= kTrackParams) break;
+            if (!track_param_real(command.a)) break;
             const uint8_t param = command.a;
 
             // The base is the step's own lock if it has one, and the kit value if it does not --
@@ -1088,9 +1092,11 @@ bool Engine::apply_perform(const Command &command, int track, int step) {
             break;
 
         case Cmd::macro_assign:
-            // `b` past the twenty track parameters names a master EQ band: kTrackParams + 0-2.
+            // `b` past the track parameters names a master EQ band: kTrackParams + 0-2. One in the hole
+            // between OSC and SCN names nothing.
             // The track byte cannot carry it -- every command naming track 8 is refused at the top.
-            if (command.a >= kMacros || command.b >= kTrackParams + kMasterBands) {
+            if (command.a >= kMacros || command.b >= kTrackParams + kMasterBands ||
+                (command.b < kTrackParams && !track_param_real(command.b))) {
                 // Counted, like the "macro is full" refusal below it. Two refusals in one
                 // command reported two different ways is how a user concludes the box is broken.
                 status_.bump_refused();
@@ -3582,7 +3588,7 @@ void Engine::start_slides(int track, const StepEvent &event) {
     for (const Lock *lock = locks.begin(); lock != locks.end(); ++lock) {
         if (!lock_slides(lock->param)) continue;
         const uint8_t param = lock_param(lock->param);
-        if (param >= kTrackParams || slide_count_[track] >= kLocksPerStep) continue;
+        if (!track_param_real(param) || slide_count_[track] >= kLocksPerStep) continue;
         // What the step glided to will play: its lock and range, or the sound it starts from.
         uint8_t to = lock_resolve(pattern, track, int(event.glide_step), event.glide_loop,
                                   int(param), performed_[track][param]);
@@ -3666,7 +3672,7 @@ void Engine::fire(const StepEvent &event) {
     uint64_t ranged = 0;
     for (const Lock *lock = locks.begin(); lock != locks.end(); ++lock) {
         const uint8_t param = lock_param(lock->param);
-        if (param >= kTrackParams || applied >= kMaxLocksApplied) continue;
+        if (!track_param_real(param) || applied >= kMaxLocksApplied) continue;
         applied++;
         if (lock_is_range(lock->param)) {
             ranged = ranged | (uint64_t(1) << param);
@@ -3679,7 +3685,7 @@ void Engine::fire(const StepEvent &event) {
         const uint32_t seed = playing.seed;
         for (const Lock *lock = locks.begin(); lock != locks.end(); ++lock) {
             const uint8_t param = lock_param(lock->param);
-            if (!lock_is_range(lock->param) || param >= kTrackParams) continue;
+            if (!lock_is_range(lock->param) || !track_param_real(param)) continue;
             effective_[track].v[param] =
                 lock_spread(effective_[track].v[param], lock->value, seed, track,
                             int(event.step), event.loop, int(param));
@@ -4033,6 +4039,13 @@ void Engine::run_lfos(uint32_t frames, bool running, uint32_t position, float fr
             if (machine != nullptr) machine->set_pitch_mod(pitch_mod);
             pitch_mod_machine_[t] = machine;
             pitch_mod_[t] = pitch_mod;
+        }
+        // And the tempo, for a machine with a synced setting of its own (the WAVE pair's SCN
+        // SPD): when it changes, or when the track has a new machine. Two compares otherwise.
+        if (samples_per_tick_ != tick_frames_sent_[t] || machine != tick_frames_machine_[t]) {
+            if (machine != nullptr) machine->set_tick_frames(samples_per_tick_);
+            tick_frames_machine_[t] = machine;
+            tick_frames_sent_[t] = samples_per_tick_;
         }
     }
 }
