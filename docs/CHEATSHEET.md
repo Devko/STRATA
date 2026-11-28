@@ -46,7 +46,7 @@ pads and the performance mixer.
 | SOUNDS | OK in EDIT or MACHINE on a drum, VA, WAVE or FM4 track; OK in EDIT on a GRN track | Load a factory sound into that track only; AS WAS puts yours back |
 | MIXER | MIXER | Levels, the sidechain duck, stereo width, delay, reverb, routing, chorus, master, kill EQ |
 | PERFORM | FUNC+MIXER | Scenes, morph, macros, mutation |
-| Track menu | **Hold OK** in GRID (a tap says `HOLD OK: TRACK MENU`) | The selected track's rows: GENERATE a drum or melodic part (DENSITY, RANGE, LEAP, WHAT); EVOLVE every 1-8 loops (mutation MIX: a different one each turn), ORBIT or DRIFT, KEEP or HOME, saved with the project; SPEED, PLAY, FREEZE, RELOAD SAMPLE |
+| Track menu | **Hold OK** in GRID or KEYS (a tap says `HOLD OK: TRACK MENU`) | The selected track's rows: GENERATE a drum or melodic part (DENSITY, RANGE, LEAP, WHAT); EVOLVE every 1-8 loops (mutation MIX: a different one each turn), ORBIT or DRIFT, KEEP or HOME, saved with the project; SPEED, PLAY, FREEZE, RELOAD SAMPLE |
 | PROJECT | PROJECT | Banks and patterns, key and scale, the card. On the slots: **hold OK** for the pattern menu (COPY, PASTE, CLEAR, DOUBLE; OK runs, PASTE/CLEAR/DOUBLE twice). Shortcuts: FUNC+UP copies, FUNC+DOWN twice pastes, FUNC+LEFT twice clears |
 | CHAIN | PROJECT, then screen key RIGHT | The pattern chain as a list |
 | PATTERN | PROJECT, screen key RIGHT twice | Master length (LEN), swing (SWG), FEEL and each track's own swing of the playing pattern |
@@ -181,7 +181,7 @@ Page 1 NOTE VEL LEN MICR, page 2 PROB COND RTCH RAMP, page 3 ACNT SLID CHRD.
 | KEYS | Track | Octave (OCT 0-7) | EDIT page (for A-D) | Step page | Current EDIT page params | — | Copy / paste |
 | MACHINE | Machine | Machine column (3 over) | Track | Step page | A: machine, B: MIDI OUT channel (OFF, 1-16) | SMP/GRN: open SAMPLES; drums and synths: open SOUNDS / — | Copy / paste |
 | KIT | Slot | Page of 8 slots | Page of 8 slots | — | A: slot | Recall (twice) / back to MACHINE | DOWN: save here, UP: read the card again |
-| MIXER | — | Page (17) | Page | Step page | Levels or page fields; on EQ, push A-C kills a band; on DLY+ and REV+, push A flips the mode; on WID and CHO 1-4 / 5-8, push A-D steps that track's width or send (OFF, 48, 96 / OFF, 64) | — / clear | Copy / paste |
+| MIXER | Group of pages: TRK DCK WID DLY REV CHO MST | Page (17) | Page | Step page | Levels or page fields; on EQ, push A-C kills a band; on DLY+ and REV+, push A flips the mode; on WID and CHO 1-4 / 5-8, push A-D steps that track's width or send (OFF, 48, 96 / OFF, 64) | — / clear | Copy / paste |
 | SAMPLES | Entry | Page of 8 | Page of 8 | — | A: entry; push A: hear the file (twice while playing) / stop | Load file or open folder / up a folder (at the top: back) | UP: read the folder again |
 | SOUNDS | Entry | First / last entry | Track | — | A: entry | Load into the track (AS WAS: put yours back) / back | — |
 | RESAMPLE | Bars 1/2/4/8 | Destination FILE, TRK 1-8 | Destination | Step page | A: bars, B: source, C: input level | Arm / cancel | Copy / paste |
@@ -214,7 +214,8 @@ its row, and from GENERATE UP once is RELOAD SAMPLE, twice FREEZE. FREEZE: the t
 bar loop of itself from RAM and stops computing; OK again unfreezes. CLICK: a click on every beat (ON/OFF). COUNT-IN: OFF, 1 BAR, 2 BAR clicked
 before a PLAY from stop with REC on (`COUNT-IN 4` .. `1`); internal clock only; neither saved.
 JAM REC: OK records the finished master to `/RECORD/JAM_<n>.WAV` (24-bit, about 1 GB an hour,
-up to 3 h 51 min) until OK again; a dot blinks before the load meanwhile; no click or audition.
+up to 3 h 51 min) until OK again; a dot blinks before the load and the REC key a dim red meanwhile;
+no click or audition. FUNC+REC twice (RESAMPLE, then again) starts and stops it too.
 **PROJECTS:** UP/DOWN or A move, LEFT/RIGHT page by 8. OK twice within 2 s opens the project
 under the cursor (AGAIN TO OPEN; it throws away unsaved work and stops the transport).
 FUNC+DOWN (or the menu's SAVE AS) is SAVE AS: A or LEFT/RIGHT move, B, VALUE or UP/DOWN change the character, OK saves

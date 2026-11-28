@@ -832,6 +832,9 @@ with "Include starter and demo files" ticked, copied onto the card.
   comes back where it was. GRID: no step changed, CLR's undo has nothing new. `____`
 - FUNC + turn C up to `+64`: ghost hits on the off-beats, hats busiest, the kick only now and
   then; a probability step plays every pass. Musical, or too busy for techno? `____`
+- Still at `+64`, GRID: the trig glow follows only the programmed trigs, never an empty step a
+  ghost plays on. ARP on the bass track (EDIT, ARP page, MOD UP): its own steps run the arp, its
+  ghosts are single notes between them. `____`
 - `ENERGY -30`, hold FUNC + MUTATE (a lock), turn it back to 0, tap FUNC + MUTATE: the
   breakdown is back; tap again: rest again. `____`
 - MAX at `+64` against the default beat at 0: `________ %`
@@ -864,7 +867,19 @@ it switch, put a few trigs on track 3 that sound clearly different, then PROJECT
   sound, and GRID now edits track 3. `____`
 - Launch something, save, power cycle, open: the launch is still playing. `____`
 
-**W65. The slimmer FUNC menu and the track menu's new rows (4 min).** Beat playing, A01.
+**W65. Usability quick wins: MIXER groups, the KEYS track menu, JAM REC on FUNC+REC (5 min).**
+Beat playing, A01, a card with some space.
+- MIXER, then DOWN: `DCK 1-4`; DOWN again `WID 1-4`, then `DLY`, `REV`, `CHO 1-4`, `MST` and
+  round to `TRK 1-4`. UP from `TRK 1-4` is `MST`. LEFT/RIGHT still go one page. `____`
+- HOME twice for KEYS, hold OK half a second: the track menu (`TRACK T1`, `>GENERATE`). The pads
+  still play notes; UP/DOWN move the menu's row, not the track; OK on GENERATE writes a part.
+  CLR: `KEYS`, the keyboard back. `____`
+- FUNC+REC: RESAMPLE, the last line reads `LEFT RIGHT: WHERE TO` and `JAM OFF`. FUNC+REC again:
+  `JAM REC JAM n`, the REC key blinks a dim red with the top bar's dot, and the last line reads
+  `FUNC+REC: STOP JAM` with the time counting. FUNC+REC again: `JAM STOPPING`, `SAVED JAM n`,
+  REC dark. `____`
+
+**W66. The slimmer FUNC menu and the track menu's new rows (4 min).** Beat playing, A01.
 - FUNC+HOME: SAVE, then JAM REC, CLICK, COUNT-IN, REC MODE, QUANTIZE, AUTO-FILL, FX GLIDE,
   LOOP LEN, CHAIN, CHAIN END, then the file rows down to LOAD DEMO (UP once from SAVE). No
   TRACK SPEED, TRACK PLAY, FREEZE or RELOAD SAMPLE. CLR.

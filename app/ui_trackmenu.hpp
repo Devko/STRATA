@@ -1,12 +1,14 @@
 // (Included inside class StrataApp; see app/app.hpp.)
 //
-    // --- the track menu: hold OK in GRID ------------------------------------------------------
+    // --- the track menu: hold OK in GRID or KEYS ----------------------------------------------
     //
     // Everything that belongs to the selected track: GEN and EVOLVE (Roland, 2026-11-27), and
     // SPEED, PLAY, FREEZE and RELOAD SAMPLE (moved here from the FUNC menu, 2026-11-28). Opened
     // the way the pattern menu opens on PROJECT's slots: a hold of kTrackMenuHoldMs on OK in GRID
-    // with nothing held. A tap does what OK in GRID always did, which is nothing, so the hold
-    // costs no gesture.
+    // or KEYS with nothing held. A tap does what OK there always did, which is nothing, so the
+    // hold costs no gesture. KEYS has it too (usability review, 2026-11-28): GEN on a melodic
+    // track while playing the pads. In KEYS the pads stay the piano; the arrows are the menu's
+    // while it is open.
     //
     // UP/DOWN or A pick a row, LEFT/RIGHT or B change it, OK runs an action row (and steps a
     // setting row forward, wrapping), CLR closes. A lower pad still selects the track, so one menu
@@ -56,9 +58,14 @@
         }
     }
 
+    // The screens the menu opens over, and draws in place of.
+    bool track_menu_screen() const {
+        return (mode_ == Mode::grid || mode_ == Mode::keys) && !step_page_;
+    }
+
     bool track_ok_target() const {
-        return mode_ == Mode::grid && !step_page_ && held_step_ < 0 && range_first_ < 0 &&
-               !shift_ && !mutation_pending_;
+        return track_menu_screen() && held_step_ < 0 && range_first_ < 0 && !shift_ &&
+               !mutation_pending_;
     }
 
     void track_row_value(TrackRow row, char *out) {
@@ -260,7 +267,7 @@
             switch (key) {
                 case ENAGA_KEY_CLR:
                     track_menu_ = false;
-                    notice_logged("GRID");
+                    notice_logged(mode_ == Mode::keys ? "KEYS" : "GRID");
                     break;
                 case ENAGA_KEY_UP:
                 case ENAGA_KEY_DOWN:
@@ -285,8 +292,8 @@
             return true;
         }
         if (track_ok_held_) {
-            // A tap: OK in GRID has no other job, so it says where the menu is (usability
-            // review, 2026-11-28: the hold was only in the FUNC help's sixth page).
+            // A tap: OK in GRID and KEYS has no other job, so it says where the menu is
+            // (usability review, 2026-11-28: the hold was only in the FUNC help's sixth page).
             track_ok_held_ = false;
             notice("HOLD OK: TRACK MENU");
             return true;
@@ -294,9 +301,10 @@
         return false;
     }
 
-    // update(): a held OK opens the menu, and leaving GRID closes it.
+    // update(): a held OK opens the menu, and leaving the screen it opened over closes it (GRID
+    // to KEYS too: HOME twice is a screen change).
     void service_track_menu() {
-        if (track_menu_ && (mode_ != Mode::grid || step_page_)) track_menu_ = false;
+        if (track_menu_ && (!track_menu_screen() || mode_ != track_menu_mode_)) track_menu_ = false;
         if (!track_ok_held_) return;
         if (!track_ok_target()) {
             track_ok_held_ = false;
@@ -305,6 +313,7 @@
         if (uint32_t(last_ms_ - track_ok_down_ms_) < kTrackMenuHoldMs) return;
         track_ok_held_ = false;
         track_menu_ = true;
+        track_menu_mode_ = mode_;
         post_evolve_config();
         char *out = notice_buffer_;
         append(out, "TRACK T");
