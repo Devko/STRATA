@@ -25,8 +25,8 @@ the top of `docs/UNIT_CHECKLIST.md` is the next pass.
 | --- | --- |
 | `make -C host test` | **3,923,641 checks, 0 failures** on `main` after #217 (2026-11-28): `core/`, `dsp/` and all of `app/`. The same under ASan and UBSan, with `ASAN_OPTIONS=detect_leaks=0` |
 | CI | `.github/workflows/ci.yml` on every PR: the suite with GCC, again under ASan and UBSan at -O1, the layout check, the screenshots, and the repo checks (`audit_commands.sh`, `check_rules.sh`, `enaga_check.sh`, `check_scripts.sh`, the packaging and build-cache scripts' tests, the card builder's tests). A docs-only PR skips the test jobs. `tools/ci_local.sh` runs the same lanes in WSL. `enaga-upstream.yml` reports new Enaga releases weekly. No device build or scenario runs in CI |
-| `tools/build.sh` | links. Last measured image (cl6x, 2026-11-25): payload 1,224,160 bytes, bss 1,605,248; no BOOT / MCU / SPI sections. `tests/test_memory.cpp` reads these two figures from here, so update both together |
-| `tools/scenarios.sh` | **58 scenarios**, run on Roland's PC only. All 50 that existed passed with cl6x on 2026-11-27 with the chorus and stereo width in; worst **34.20%**, `genload` (GENERATE at full density on all eight tracks). The v0.5.0 build: worst 26.34% cl6x, 55.06% GCC-only. Every run's figures, and what each change cost, are in `docs/BUDGET.md`. `tools/profile_guest.py` gives a scenario's guest profile by function |
+| `tools/build.sh` | links. Last measured image (cl6x, 2026-11-28): payload 1,691,888 bytes, bss 1,670,656; no BOOT / MCU / SPI sections. `tests/test_memory.cpp` reads these two figures from here, so update both together |
+| `tools/scenarios.sh` | every emulator scenario, run on Roland's PC only; each full pass and its worst peak is in `docs/SCENARIO_LOG.md`, what each change cost in `docs/BUDGET.md`. `tools/profile_guest.py` gives a scenario's guest profile by function |
 | unit | v0.3.1 and builds from `main` boot and play. Load on the top line (2026-11-27, main after #208): A01 15-28%, GENERATE on all tracks 40-60%, so the unit reads about 1.2-1.8x the emulator on a light beat and 2.0-2.4x on dense parts (`docs/BUDGET.md`, "GENERATE on every track"). MAX readings from SETUP are still owed |
 | memory | init takes **97.32 MiB of a 120 MiB heap**: 22.68 MiB spare against an 8 MiB headroom rule. `tests/test_memory.cpp` itemises it. Never checked on the unit |
 | milestones | M0–M7 code-complete; every load and feel exit criterion waits for the unit (`docs/PLAN.md`) |
@@ -49,9 +49,9 @@ the top of `docs/UNIT_CHECKLIST.md` is the next pass.
    guard's thresholds (`core/cpuguard.hpp`: rise at a 70% average over 85 ms or one 90% block,
    fall after a second's worth of blocks under 55%), and the performance mixer's worst case
    (host estimate: about +2 points).
-4. **On Roland's PC, when there is time:** the per-voice costs still owed in `docs/BUDGET.md`
-   (E13 the VA rework, E14 WAVE, both compilers; `scenario_wave` and `scenario_fm` themselves
-   run in every full pass).
+4. **On Roland's PC, when there is time:** a full scenario pass after each batch of merges, logged
+   in `docs/SCENARIO_LOG.md`. Still owed from `docs/BUDGET.md`: WAVE's time to its first table
+   (E14) and `tools/ti_loops.py` on the FM loops (E15).
 5. **Then, from the reference half of `docs/UNIT_CHECKLIST.md`**, the checks that decide whether a
    milestone stands: a start with no card, pulling the card during a save and during sample
    loading, swapping a sample on a sounding track, the M5 30-minute jam, and M7's hour locked to

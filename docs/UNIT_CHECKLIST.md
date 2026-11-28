@@ -973,28 +973,28 @@ needed for tonight's unit session; do them if the PC is free.
       (about an hour; builds each variant in its own worktree, so main is untouched). Audio check
       all `identical`: yes / no `____`. `head` vs `base`, scenario_m3 cl6x: `____ %` vs `____ %`.
       VA POLY per voice on `head` (E2's method): `________`
-- [ ] **E11.** The sends' ambient modes: `tests/scenario_ambient.sh` (DLY+ push A to LONG, REV+
+- [x] **E11.** The sends' ambient modes: `tests/scenario_ambient.sh` (DLY+ push A to LONG, REV+
       push A to HALL, on the default beat whose sends are open) against `scenario_m3.sh`, both
       compilers. Host estimate +1.9 points cl6x / +2.8 GCC-only once the classic tails have
       gone, +3.6 / +5.3 while they still ring (`docs/BUDGET.md`, "The sends' ambient modes").
-      cl6x `________ %` vs `________ %`, GCC `________ %` vs `________ %`
+      cl6x `25.47 %` vs `22.70 %`, GCC `55.38 %` vs `40.58 %` (2026-11-28, `db96b69`)
 - [ ] **E12.** The ASR page: `tests/scenario_asr.sh` (walks EDIT to ASR on track 1 and track 7;
       every ASR byte 0, so it should match `scenario_factory.sh` to within noise), both
       compilers. Then the held-chord cost: the temporary `factory_kit` edit in `docs/BUDGET.md`
       ("The ASR page", E12), `scenario_factory.sh` both compilers, and revert the edit.
-      Off: cl6x `________ %` GCC `________ %`. Held: cl6x `________ %` GCC `________ %`
-- [ ] **E13.** The OSC page: `tests/scenario_osc.sh` (walks EDIT to OSC on track 1 and track 7,
+      Off: cl6x `23.62 %` GCC `45.36 %` (2026-11-28). Held: cl6x `________ %` GCC `________ %`
+- [x] **E13.** The OSC page: `tests/scenario_osc.sh` (walks EDIT to OSC on track 1 and track 7,
       A01 as shipped) against `scenario_factory.sh` on the commit before it, both compilers.
       Then the worst case: the temporary `factory_kit` edit in `docs/BUDGET.md` ("The OSC page",
       E13), `scenario_factory.sh` both compilers, and revert the edit.
-      Shipped: cl6x `________ %` GCC `________ %`. Worst: cl6x `________ %` GCC `________ %`
+      Shipped: cl6x `23.62 %` GCC `45.36 %`. Worst: cl6x `25.84 %` GCC `54.28 %` (2026-11-28)
 - [ ] **E14.** WAVE: `tests/scenario_wave.sh` (tracks 6 and 7 switched to WMN and WPL on keys)
       against `scenario_factory.sh` on the same commit, both compilers; and the cycles to
       `strata ready` before and after the WAVE commit (`docs/BUDGET.md`, "WAVE MONO and WAVE POLY").
-      WAVE: cl6x `________ %` GCC `________ %`. Boot added: `________`
+      WAVE: cl6x `26.18 %` GCC `50.03 %` (2026-11-28; the beat 23.62 / 45.36). Boot added: `________`
 - [ ] **E15.** FM4: `tests/scenario_fm.sh` (track 7 switched to FM4 on keys) against
       `scenario_factory.sh` on the same commit, both compilers; and `tools/ti_loops.py` for the
-      two FM loops (`docs/BUDGET.md`, "FM4"). FM4: cl6x `________ %` GCC `________ %`
+      two FM loops (`docs/BUDGET.md`, "FM4"). FM4: cl6x `24.68 %` GCC `49.74 %` (2026-11-28)
 - [ ] **E5.** Load `STRATA_1.WAV` (15 s, 96 kHz) through the emulator's card, cl6x vs GCC.
       `________ s` / `________ s`
 - [ ] Optional pre-listen: `make -C host render` writes the four factory patterns and A01's
