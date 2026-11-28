@@ -8,6 +8,13 @@ the project file format or the controls.
 
 ### Added
 
+- **Starter content in the card builder.** strata.einblick.dev can now put something to play on
+  the card with STRATA: ten starter projects to open and jam on (TECHNO, DEEP, DUB, DRIFT,
+  ELECTRO, NIGHT, BREAKS, STEEL, SMASH, CHAOS; for 0.5.0 and newer), a sample pack of 105
+  one-shots and chords rendered by STRATA's own machines in `/SAMPLES/STRATA`, and a one-page
+  quick start, `STRATA-QUICKSTART.txt`. Each is a tick box; nothing in the app changed. The
+  projects live in `content/starter/` and a host test opens every one on each build.
+
 - **16th-note triplets as a track speed.** TRACK SPEED (FUNC menu) has a new **3/2** between 2
   and 1: a step every 16 ticks, six to the beat, so 24 steps make a bar. Set LEN 24 for a one-bar
   triplet hat. The arp, rolls over LEN and REPEAT already had 1/16T. No file change: a build from

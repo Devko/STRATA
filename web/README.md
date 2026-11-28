@@ -30,6 +30,7 @@ Functions.
   ENAGA-LICENSE.txt            Enaga's LICENSE from its repository at the release tag
   STRATA-LICENSES.txt          STRATA's LICENSE.txt and THIRD_PARTY_NOTICES.md (Enaga's MIT
                                notice, FatFs, TinyUSB)
+  ...                          and any starter content picked (below)
   ```
 
 - The asset function exists only because GitHub's release downloads send no CORS headers, so a
@@ -57,6 +58,51 @@ notice in `STRATA-LICENSES.txt`.
 STRATA's own releases still do not bundle Enaga (decided 2026-11-25): the user's browser fetches
 it from Enaga's release at the moment they ask, so users always get the authors' file, checked
 against its hash.
+
+## Starter content
+
+The page can add three optional things to the card, each a tick box (section 2 of the page):
+
+```text
+ENAGA/DATA/STRATA/PROJECTS/<NAME>/   starter projects, 11 files each (STRATA 0.5.0 and newer)
+SAMPLES/STRATA/<FOLDER>/*.WAV        the sample pack: DRUMS, PERC, BASS, LEADS, CHORDS
+STRATA-QUICKSTART.txt                one page: the first things to try
+```
+
+They are served from this site, `public/starter/`, and listed in `public/starter/starter.json`
+with each file's SHA-256, which the browser checks as it does the release zips. Projects are
+copied into the card zip still deflated, so ten projects of mostly empty banks add about 70 KB.
+The projects and the quick start are offered only for STRATA `min_strata` (0.5.0) and newer:
+they are saved in file format C, and 0.4.0 reads their LFOs wrong. The pack is plain WAV.
+
+**Where it comes from.** Nothing in `public/starter/` is edited by hand:
+
+- `content/starter/projects/<NAME>/` holds each project's files as STRATA saves them, and
+  `content/starter/projects.json` the line the page shows for it. `tests/test_starter.cpp` opens
+  every folder there through `app/storage.cpp` on each CI run, so a format change that would stop
+  them opening fails there first. They were made by the showcase
+  generators (the nine from 2026-11-27 by `tools/showcases/`), then opened and saved again through the app's real Storage by
+  `build/host/strata-starter resave SRC NAME OUT` (`make -C host starter`, `host/starter.cpp`).
+  Opened with v0.5.0's own code, the re-saved files read exactly what the originals do.
+- The sample pack is rendered by `build/host/strata-starter samples DIR`: every factory sound of
+  KICK, SNARE, HAT, PERC, VA MONO, WAVE MONO, VA POLY, WAVE POLY and FM4 through the real engine,
+  dry, 48 kHz 16-bit mono, normalised to -1 dBFS, at most 3 s. Melodic files carry their note in
+  the name (`MONO_ACID_C2`), and a SAMPLE track playing C4 plays a file at its own pitch; chords
+  are C minor sevenths (`_C3M7`).
+- `content/starter/QUICKSTART.txt` is the quick start.
+- `node tools/starter.mjs [--samples DIR]` packs all of it into `public/starter/` and writes
+  `starter.json`; without `--samples` it keeps the pack that is there. `npm test` checks that
+  `starter.json` matches the files and that every project zip holds exactly what
+  `content/starter/projects/` holds, so a stale pack fails CI.
+
+To change a project: regenerate or re-save it into `content/starter/projects/<NAME>/`, run
+`make -C host test` and `node tools/starter.mjs`, commit both, and deploy. To add one, also give
+it a line in `projects.json`. To re-render the pack after a sound changes:
+
+```sh
+make -C host starter && build/host/strata-starter samples /tmp/pack   # from the repository root
+cd web && node tools/starter.mjs --samples /tmp/pack
+```
 
 ## Adding a release
 
