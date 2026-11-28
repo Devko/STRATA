@@ -377,3 +377,45 @@ TEST(launch_capture_refuses_when_the_locks_do_not_fit_and_writes_nothing) {
     CHECK_EQ(int(launch_capture(g_project, 0, 2)), int(CaptureResult::locks_full));
     CHECK(!pattern_has_steps(g_project.patterns[0][2]));
 }
+
+TEST(launch_compose_lanes_writes_a_mix_that_no_longer_plays) {
+    fresh(0, 0);
+    Pattern &a01 = g_project.patterns[0][0];
+    Pattern &b07 = g_project.patterns[1][6];
+    blank(a01, 16, 0xAAAAu);
+    blank(b07, 32, 0xBBBBu);
+    put_trig(a01, 0, 0, 36);
+    put_trig(a01, 2, 0, 40);
+    put_trig(b07, 2, 5, 52);
+    pattern_set_lock(b07, 2, 5, 4, 11);
+    // Nothing is borrowed now and A05 plays; the mix asked for is A01 with B07's track 3.
+    g_project.slot = 4;
+    uint8_t lanes[kTracks] = {};
+    lanes[2] = lane_source(1, 6);
+    static Pattern out;
+    pattern_init(out);
+    CHECK(launch_compose_lanes(g_project, lane_source(0, 0), lanes, out));
+    CHECK_EQ(int(out.seed), 0xAAAA);
+    CHECK_EQ(int(out.master_length), 16);
+    CHECK_EQ(int(out.tracks[0].steps[0].note), 36);
+    CHECK_EQ(int(out.tracks[2].length), 32);
+    CHECK((out.tracks[2].steps[0].flags & kStepTrig) == 0);
+    CHECK_EQ(int(out.tracks[2].steps[5].note), 52);
+    uint8_t value = 0;
+    CHECK(pattern_get_lock(out, 2, 5, 4, value));
+    CHECK_EQ(int(value), 11);
+    // A source that names nothing reads as the lane's own part; a live that names nothing fails.
+    lanes[2] = 200;
+    CHECK(launch_compose_lanes(g_project, lane_source(0, 0), lanes, out));
+    CHECK_EQ(int(out.tracks[2].steps[0].note), 40);
+    CHECK(!launch_compose_lanes(g_project, kLaneOwn, lanes, out));
+    CHECK(!launch_compose_lanes(g_project, 200, lanes, out));
+}
+
+TEST(launch_capture_slot_avoiding_skips_the_sources_it_is_given) {
+    fresh(0, 0);
+    const uint8_t avoid[3] = {lane_source(0, 1), kLaneOwn, lane_source(0, 3)};
+    CHECK_EQ(launch_capture_slot_avoiding(g_project, 0, avoid, 3), 2);
+    CHECK_EQ(launch_capture_slot_avoiding(g_project, 0, avoid, 0), 1);
+    CHECK_EQ(launch_capture_slot_avoiding(g_project, 0, nullptr, 0), launch_capture_slot(g_project, 0));
+}

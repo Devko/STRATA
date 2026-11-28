@@ -707,6 +707,7 @@ private:
     void arr_tick(uint32_t tick, uint32_t previous, bool new_pass, bool jumped_back);
     void arr_end(uint32_t tick, bool full);
     void arr_publish();
+    void arr_say_launch();
     uint16_t ride_from_ = 0;
     uint16_t ride_to_ = 0;
     uint32_t ride_start_ = 0;

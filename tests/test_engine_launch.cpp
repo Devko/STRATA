@@ -264,3 +264,101 @@ TEST(engine_launch_a_slot_rewritten_under_a_borrowing_lane_restarts_it) {
     CHECK_EQ(between, 0);
     CHECK_EQ(fired_on(2, 301 + 192), 1);
 }
+
+// --- ARR REC (core/arrrec.hpp, "Track Launch") ------------------------------------------------
+
+TEST(engine_arr_rec_captures_a_launched_lane_into_a_slot_of_its_own) {
+    Engine &e = blank_set();
+    const uint32_t loop = uint32_t(master_loop_ticks(e.project().live()));
+    const Status &status = e.status();
+    launch(0x04, lane_source(1, 6), QueueMode::immediate);
+    const uint8_t captures = status.arr_captures.load();
+    post(Cmd::arr_rec, 0, 0, 1);
+    pump();
+    tick_at(1);
+    tick_at(loop);
+    // The pass with B07's track 3 under A01 went in as A02, the first free slot, and nothing
+    // switched: A01 still plays with the lane borrowed.
+    CHECK_EQ(chain_length(e.project()), 1);
+    CHECK_EQ(int(e.project().chain[0].bank), 0);
+    CHECK_EQ(int(e.project().chain[0].slot), 1);
+    CHECK_EQ(int(status.arr_last.load()), int(ArrEvent::launch_kept));
+    CHECK_EQ(int(status.arr_arg.load()), 1);
+    CHECK_EQ(int(uint8_t(status.arr_captures.load() - captures)), 1);
+    CHECK_EQ(int(status.arr_capture_banks.load()), 0x01);
+    CHECK_EQ(int(e.project().slot), 0);
+    CHECK(lane_borrowed(e.project(), 2));
+    const Pattern &a02 = e.project().patterns[0][1];
+    CHECK((a02.tracks[2].steps[1].flags & kStepTrig) != 0);
+    CHECK_EQ(int(a02.tracks[2].length), 16);
+
+    // A second pass of the same mix is a repeat of A02, with no second capture.
+    tick_at(loop + 1);
+    tick_at(2 * loop);
+    CHECK_EQ(chain_length(e.project()), 1);
+    CHECK_EQ(int(e.project().chain[0].repeats), 2);
+    CHECK_EQ(int(uint8_t(status.arr_captures.load() - captures)), 1);
+    CHECK(!pattern_has_steps(e.project().patterns[0][2]));
+
+    // Track 3 home: A01 alone is a section of its own.
+    launch(0x04, kLaneOwn, QueueMode::immediate);
+    tick_at(2 * loop + 1);
+    tick_at(3 * loop);
+    post(Cmd::arr_rec, 0, 0, 0);
+    pump();
+    CHECK_EQ(chain_length(e.project()), 2);
+    CHECK_EQ(int(e.project().chain[1].slot), 0);
+    CHECK_EQ(int(status.arr_last.load()), int(ArrEvent::ended));
+
+    // The chain replays it: A02 with every lane on its own part.
+    post(Cmd::set_chain, 0, 0, 1);
+    pump();
+    CHECK_EQ(int(e.project().slot), 1);
+    CHECK_EQ(int(lane_borrowed_mask(e.project())), 0);
+    CHECK((e.pattern().tracks[2].steps[1].flags & kStepTrig) != 0);
+    post(Cmd::set_chain, 0, 0, 0);
+    FakeHost::the().set_running(false);
+    pump();
+}
+
+TEST(engine_arr_rec_says_when_a_launch_cannot_be_kept) {
+    Engine &e = blank_set();
+    Project &project = e.project_for_load();
+    for (int s = 1; s < kPatternsPerBank; s++) project.patterns[0][s].tracks[7].steps[9].flags = kStepTrig;
+    const uint32_t loop = uint32_t(master_loop_ticks(e.project().live()));
+    launch(0x04, lane_source(1, 6), QueueMode::immediate);
+    const uint8_t captures = e.status().arr_captures.load();
+    post(Cmd::arr_rec, 0, 0, 1);
+    pump();
+    tick_at(1);
+    tick_at(loop);
+    CHECK_EQ(int(e.status().arr_last.load()), int(ArrEvent::launch_lost));
+    CHECK_EQ(int(e.project().chain[0].slot), 0);
+    CHECK_EQ(int(e.status().arr_captures.load()), int(captures));
+    post(Cmd::arr_rec, 0, 0, 0);
+    FakeHost::the().set_running(false);
+    pump();
+}
+
+TEST(engine_arr_rec_a_launch_landing_on_the_boundary_belongs_to_the_pass_it_starts) {
+    Engine &e = blank_set();
+    const uint32_t loop = uint32_t(master_loop_ticks(e.project().live()));
+    post(Cmd::arr_rec, 0, 0, 1);
+    pump();
+    tick_at(1);
+    // Queued for the end of A01's first pass: it lands on the tick that starts the second, after
+    // ARR REC has taken that pass's state, and still belongs to it.
+    launch(0x04, lane_source(1, 6), QueueMode::end_of_pattern);
+    tick_at(loop);
+    CHECK(lane_borrowed(e.project(), 2));
+    CHECK_EQ(chain_length(e.project()), 1);
+    CHECK_EQ(int(e.project().chain[0].slot), 0);   // the first pass: A01 alone
+    tick_at(loop + 1);
+    tick_at(2 * loop);
+    CHECK_EQ(chain_length(e.project()), 2);
+    CHECK_EQ(int(e.project().chain[1].slot), 1);   // the second: captured into A02
+    CHECK((e.project().patterns[0][1].tracks[2].steps[0].flags & kStepTrig) != 0);
+    post(Cmd::arr_rec, 0, 0, 0);
+    FakeHost::the().set_running(false);
+    pump();
+}

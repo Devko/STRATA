@@ -516,6 +516,13 @@ together).
 - **Under an outside clock** the sections carry no BPM, so the song follows the clock it plays to.
 - **While a take runs** the live strip starts with `ARR` and the sections written (`ARR7`), the
   menu row reads `ON 7`, and the REC key blinks dim red, in time with JAM REC's blink.
+- **Track Launch.** The chain holds no launch states, so a pass with a borrowed lane (LAUNCH) is
+  written as a pattern of its own: what every lane played goes into the first free slot of the
+  playing pattern's bank, as CAPTURE would write it but without switching to it, and the entry
+  names that slot (`LAUNCH IN A05`). More passes of the same mix in a row use the same slot; the
+  same mix after something else takes a new one. With no free slot, or more locks than a pattern
+  holds, the pass is written as the playing pattern alone (`LAUNCH NOT KEPT`). Each part replays
+  from the slot's step 1, so a launch landed NOW or on a 16 / 32 grid replays shifted to it.
 - Editing the chain by hand during a take is allowed; the next pass then starts a new entry.
 - The take's passes mark the project for the next save, as an edit would.
 

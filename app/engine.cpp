@@ -2104,6 +2104,7 @@ bool Engine::apply_arrangement(const Command &command, int, int) {
                 if (arr_.on) break;                  // already on: nothing to start
                 arr_start(project_, arr_, arr_backup_);
                 arr_undone_ = false;
+                status_.arr_capture_banks.store(0, std::memory_order_relaxed);
                 // The chain is being written, so it is not followed: the jam plays on.
                 chain_.active = false;
                 project_.settings.chain_enabled = false;
@@ -3289,9 +3290,30 @@ void Engine::morph_ride_tick(uint32_t tick) {
 
 // What plays now, as a section holds it.
 ArrState Engine::arr_now() const {
-    return arr_state(project_.bank, project_.slot, mute_state_capture(muted_), scene_b_, morph_,
-                     int(perform_.energy), project_.settings.tempo_centi_bpm,
-                     enaga::clock::source() != ENAGA_CLOCK_INTERNAL);
+    ArrState state = arr_state(project_.bank, project_.slot, mute_state_capture(muted_), scene_b_,
+                               morph_, int(perform_.energy), project_.settings.tempo_centi_bpm,
+                               enaga::clock::source() != ENAGA_CLOCK_INTERNAL);
+    arr_state_lanes(state, project_);
+    return state;
+}
+
+// What the pass just written did with Track Launch, told to the UI: the slot a borrowed mix was
+// captured into (and its bank, for the save), or that it could not be kept.
+void Engine::arr_say_launch() {
+    if (arr_.launch == ArrLaunch::none) return;
+    const uint8_t bank = arr_.launch_bank;
+    if (arr_.launch == ArrLaunch::kept) {
+        status_.arr_capture_banks.store(
+            uint8_t(status_.arr_capture_banks.load(std::memory_order_relaxed) | (1u << bank)),
+            std::memory_order_relaxed);
+        status_.arr_captures.store(uint8_t(status_.arr_captures.load(std::memory_order_relaxed) + 1),
+                                   std::memory_order_release);
+        status_.bump_arr_event(uint8_t(ArrEvent::launch_kept),
+                               uint8_t(bank * kPatternsPerBank + arr_.launch_slot));
+    } else {
+        status_.bump_arr_event(uint8_t(ArrEvent::launch_lost), 0);
+    }
+    arr_.launch = ArrLaunch::none;
 }
 
 // Once a tick while a take is on. `new_pass`: a pass of the pattern begins at this tick.
@@ -3305,6 +3327,7 @@ void Engine::arr_tick(uint32_t tick, uint32_t previous, bool new_pass, bool jump
     if (new_pass || jumped_back) {
         // A transport that jumped back ended the pass where it was, not here.
         const ArrPass ended = arr_pass_end(project_, arr_, jumped_back ? previous : tick);
+        arr_say_launch();
         if (ended == ArrPass::full) {
             arr_end(tick, true);
             return;
@@ -3326,6 +3349,7 @@ void Engine::arr_tick(uint32_t tick, uint32_t previous, bool new_pass, bool jump
 // The take is over: STOP, ARR REC off, the chain started, or a 65th entry needed (`full`).
 void Engine::arr_end(uint32_t tick, bool full) {
     const int written = arr_finish(project_, arr_, arr_backup_, tick);
+    arr_say_launch();
     arr_publish();
     const ArrEvent event = written == 0 ? ArrEvent::empty
                                         : (full ? ArrEvent::full : ArrEvent::ended);

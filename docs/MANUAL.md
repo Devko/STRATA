@@ -1222,6 +1222,14 @@ still belongs to the pass it was meant for. An entry holds up to X16, then a new
 same starts. The live strip shows `ARR` and how many sections are written (`ARR7`), the menu row
 `ON 7`, and the REC key blinks.
 
+Track Launch is recorded too. A pass in which a track plays another pattern's part (LAUNCH, below)
+is written into the first free slot of the playing pattern's bank, exactly as you heard it, and
+the new entry names that slot: STRATA says `LAUNCH IN A05`. Nothing switches while you play; the
+slot is there for the song. More passes of the same mix in a row use the same slot. When the bank
+has no free slot, or the parts hold more locks than one pattern can, the pass is written as the
+playing pattern alone and STRATA says `LAUNCH NOT KEPT`. Every part replays from the slot's first
+step, so a launch you landed NOW or on a 16 or 32 step grid replays from the pattern's start.
+
 STOP, OK on the row again, or turning the chain on ends the take (`ARR 23 SECTIONS`); so does a
 65th entry (`ARR FULL 64 SECTIONS`). A pass you leave before half of it has played (a pattern
 change at once, STOP) is not written; one past half is written whole. A take that kept nothing
