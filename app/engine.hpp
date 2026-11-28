@@ -49,6 +49,7 @@
 #include "moveall.hpp"   // REL ALL and LEN ALL: every track's release and note length
 #include "varispeed.hpp" // VariSpeed: every machine's pitch with the tempo
 #include "arp.hpp"       // the arpeggiator's notes
+#include "arrrec.hpp"    // ARR REC: the jam written into the chain
 #include "sample.hpp"
 #include "scale.hpp"       // the global key and scale: Cmd::set_root and set_scale
 #include "scope.hpp"       // the master output for the screen's scopes and spectra
@@ -676,6 +677,17 @@ private:
     void morph_ride_stop();
     void morph_ride_tick(uint32_t tick);
     bool ride_on_ = false;
+    // ARR REC (core/arrrec.hpp): the take, the chain it replaced, and what resolve_tick watches
+    // to see a pass begin (a boundary, a pattern switch, the pattern's start moved).
+    ArrRec arr_;
+    ArrBackup arr_backup_;
+    bool arr_undone_ = false;        // the backup holds the take, the chain the one before it
+    bool arr_switched_ = false;      // switch_pattern ran since the last tick
+    uint32_t arr_origin_ = 0;        // origin_ as resolve_tick last saw it
+    ArrState arr_now() const;
+    void arr_tick(uint32_t tick, uint32_t previous, bool new_pass, bool jumped_back);
+    void arr_end(uint32_t tick, bool full);
+    void arr_publish();
     uint16_t ride_from_ = 0;
     uint16_t ride_to_ = 0;
     uint32_t ride_start_ = 0;

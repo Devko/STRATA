@@ -161,6 +161,9 @@ bool mutates_project(Cmd cmd) {
         case Cmd::set_tempo:
         case Cmd::set_chain:
         case Cmd::chain_edit:
+        // ARR REC empties the chain as a take starts; ARR UNDO swaps it (core/arrrec.hpp).
+        case Cmd::arr_rec:
+        case Cmd::arr_undo:
         case Cmd::queue_pattern:
         case Cmd::set_mute:
         case Cmd::set_root:

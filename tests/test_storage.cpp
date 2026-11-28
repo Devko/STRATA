@@ -529,6 +529,10 @@ const Expect kTable[] = {
     {Cmd::restart, 0u, "restart"},
     // The chain's entries are PROJECT.BIN's second section.
     {Cmd::chain_edit, kDirtyProject, "chain_edit"},
+    // ARR REC empties the chain as it starts, and ARR UNDO swaps it. The passes a take writes
+    // come with no command: App marks them from Status::arr_passes.
+    {Cmd::arr_rec, kDirtyProject, "arr_rec"},
+    {Cmd::arr_undo, kDirtyProject, "arr_undo"},
 
     // --- the performance layer --------------------------------------------
     //

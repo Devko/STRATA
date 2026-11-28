@@ -316,6 +316,14 @@ enum class Cmd : uint8_t {
     // core/queue.hpp's chain_set / chain_insert / chain_remove, which keep the chain a prefix.
     chain_edit,
 
+    // ARR REC (core/arrrec.hpp), the FUNC menu's row under JAM REC. a: 1 on, 0 off. On keeps the
+    // chain for ARR UNDO, empties it and stops following it; from the next pass (or the next
+    // PLAY) every pass of the jam is written into it. Off, STOP and a full chain end the take.
+    // Status::arr_event says what happened.
+    arr_rec,
+    // ARR UNDO: swap the chain and the one the last take replaced (one level, both ways).
+    arr_undo,
+
     // The pattern's master length in steps, 1-64: what a queued change and a chain wait for.
     // a: length; or c = 1: b is an int8 delta.
     set_master_length,
@@ -466,6 +474,17 @@ enum class DuckField : uint8_t { depth, source, attack, hold, release, count };
 // bank by bank), its repeat count (1-16) or its mute recall (0 none, 1-8) by the int8 in `b`,
 // so knob clicks applied a block late are not lost. `song` sets song mode, b = 0 or 1, and
 // ignores the entry.
+// What ARR REC tells the UI (Status::arr_last; Status::arr_arg is the entries written).
+enum class ArrEvent : uint8_t {
+    started = 0,   // a take is on: `ARR REC ON`, or `ARR: PRESS PLAY` with the transport stopped
+    ended,         // off, STOP or a chain edit that started the chain: `ARR 23 SECTIONS`
+    full,          // a 65th entry was needed: `ARR FULL 64 SECTIONS`
+    empty,         // the take wrote nothing and the old chain is back: `ARR NOTHING KEPT`
+    undone,        // ARR UNDO swapped in the chain from before the take: `ARR UNDONE`
+    redone,        // and back again: `ARR REDONE`
+    no_undo,       // ARR UNDO with nothing to swap, or during a take: `NO ARR TO UNDO`
+};
+
 enum class ChainEdit : uint8_t {
     set = 0, insert, remove, pattern_delta, repeats_delta, mutes_delta, song,
     // Song sections (core/project.hpp, SectionExtra) on entry `step`:
@@ -803,6 +822,20 @@ struct Status {
     std::atomic<uint8_t> tempo_due{0};
     std::atomic<uint8_t> morph_riding{0};
 
+    // ARR REC (core/arrrec.hpp). `arr_on`: 1 while a take is on (armed or recording);
+    // `arr_written`: the entries it has written so far. `arr_event` is bumped for each thing the
+    // UI says, `arr_last` an ArrEvent and `arr_arg` its count of entries. `arr_undo_ready`: 1
+    // while ARR UNDO has a chain to swap in.
+    std::atomic<uint8_t> arr_on{0};
+    std::atomic<uint8_t> arr_written{0};
+    // Bumped for each pass a take writes into the chain (a repeat or a new entry), so the UI
+    // marks PROJECT.BIN dirty: no command did it.
+    std::atomic<uint8_t> arr_passes{0};
+    std::atomic<uint8_t> arr_undo_ready{0};
+    std::atomic<uint8_t> arr_event{0};
+    std::atomic<uint8_t> arr_last{0};
+    std::atomic<uint8_t> arr_arg{0};
+
     // Track Launch. Bumped by the audio side for each thing the UI says: `launch_last` is a
     // LaunchEvent, `launch_arg` its track or the slot CAPTURE wrote.
     std::atomic<uint8_t> launch_event{0};
@@ -827,6 +860,15 @@ struct Status {
     void bump_tempo_due(uint16_t centi) {
         section_tempo.store(centi, std::memory_order_relaxed);
         tempo_due.store(uint8_t(tempo_due.load(std::memory_order_relaxed) + 1),
+                        std::memory_order_release);
+    }
+
+    // Audio context only, one writer: what happened first, so a reader that sees the bump (with
+    // acquire) sees what it is for.
+    void bump_arr_event(uint8_t last, uint8_t arg) {
+        arr_last.store(last, std::memory_order_relaxed);
+        arr_arg.store(arg, std::memory_order_relaxed);
+        arr_event.store(uint8_t(arr_event.load(std::memory_order_relaxed) + 1),
                         std::memory_order_release);
     }
 
