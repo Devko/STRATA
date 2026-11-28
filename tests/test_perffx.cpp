@@ -246,6 +246,37 @@ TEST(masterfx_the_pump_is_deepest_on_the_beat_and_open_before_the_next) {
     CHECK(before_next > 0.49f);
 }
 
+// The gate's smoothing starts open whenever the gate comes back: a gate that was faded out in
+// the closed half of a sixteenth does not leave its last level behind for the next one.
+TEST(masterfx_a_gate_brought_back_starts_open_like_a_fresh_one) {
+    static MasterFx fresh_fx;
+    MasterFxSettings on;
+    on.gate = 0.9f;
+    g_fx.init(kRate);
+    g_fx.set(on);
+    float io[2 * kBlk], ref[2 * kBlk];
+    for (int b = 0; b < 50; b++) {
+        for (float &x : io) x = 0.5f;
+        g_fx.process(io, kBlk, 0.15f, 0.0f);       // the closed half of a sixteenth
+    }
+    g_fx.set(MasterFxSettings{});
+    for (int b = 0; b < 200 && g_fx.active(); b++) {
+        for (float &x : io) x = 0.5f;
+        g_fx.process(io, kBlk, 0.15f, 0.0f);
+    }
+    CHECK(!g_fx.active());
+    g_fx.set(on);
+    fresh_fx.init(kRate);
+    fresh_fx.set(on);
+    for (int b = 0; b < 3; b++) {
+        for (float &x : io) x = 0.5f;
+        for (float &x : ref) x = 0.5f;
+        g_fx.process(io, kBlk, 0.15f, 0.0f);
+        fresh_fx.process(ref, kBlk, 0.15f, 0.0f);
+        CHECK(std::memcmp(io, ref, sizeof io) == 0);
+    }
+}
+
 // --- dsp/looper: slot 16 ------------------------------------------------------------------------
 
 namespace {
