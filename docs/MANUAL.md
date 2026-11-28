@@ -1653,7 +1653,8 @@ over the old one.
 
 A lock holds the pattern whole (steps, locks, conditions, lengths, swing), every track's sound
 (all eight EDIT pages) and fader, the sends and the master, the mutes, and where the morph and
-the four macros are, REL ALL and LEN ALL, LIVE RND, ENERGY and TRANSPOSE (FEEL is in the pattern). It does not hold the samples or the machines (a lock taken before a machine
+the four macros are, REL ALL and LEN ALL, LIVE RND, ENERGY and TRANSPOSE (FEEL is in the pattern),
+and which pattern each launched track plays (Track Launch, below). It does not hold the samples or the machines (a lock taken before a machine
 switch brings back the parameters only), the tempo, the kill EQ's switches, the scenes or the
 macro setup, the stored mute states or the chain. The performance mixer is not in it either: a
 jump rides the picked effect back to 0 over FX GLIDE and leaves a loop playing.
@@ -1668,6 +1669,10 @@ Things to know:
 - **A MUTATE waiting for OK or CLR is dropped** by a jump: its pattern is gone.
 - **Swap-back is for the moment of the jump.** Changing pattern, or storing a new lock, ends it.
   Undo (FUNC + CLR) still works on the pattern, but only swap-back brings the sound back.
+- **Launched tracks stay launched.** A jump sends each track back to the part it played when
+  you stored the lock, another pattern's or its own, and the swap-back sends it back to the
+  part it played before the jump. The pattern's own steps are never replaced by a launched
+  part; CAPTURE is the way to make one yours. Pins are not part of a lock.
 - The MUTATE pad glows half bright while the playing pattern has a lock.
 
 ### The performance mixer: VALUE as a crossfader
