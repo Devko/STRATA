@@ -66,9 +66,7 @@
         paint::small_text(px, 80, 2, line, 6);
         // JAM REC: a lit dot before the load, blinking once a second while the jam records and
         // steady while its file is being closed, on every screen.
-        if (storage_.jam_running() && (!storage_.jam_recording() || last_ms_ % 1000u < 600u)) {
-            canvas.rect(75, 2, 3, 4, 15);
-        }
+        if (jam_mark_on()) canvas.rect(75, 2, 3, 4, 15);
         if (lock_mark() != nullptr) paint::small_text(px, 96, 2, lock_mark(), 15);
         out = line;
         if (mode_ == Mode::mixer && kMixerPages[mixer_bank_].master && !func_help_showing()) {
@@ -135,7 +133,10 @@
                 case Mode::mixer:   draw_mixer(canvas); break;
                 case Mode::project: draw_project(canvas); break;
                 case Mode::perform: draw_perform(canvas); break;
-                case Mode::keys:    draw_keys(canvas); break;
+                case Mode::keys:
+                    if (track_menu_) draw_track_menu(canvas);
+                    else draw_keys(canvas);
+                    break;
                 case Mode::resample: draw_resample(canvas); break;
                 case Mode::machine: draw_machine(canvas); break;
                 case Mode::kit:     draw_kit(canvas); break;

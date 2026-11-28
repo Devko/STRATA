@@ -74,7 +74,7 @@
 
         // PROJECT's slots: a held OK opens the pattern menu, which then takes its keys.
         if (on_slot_menu_key(key, down)) return;
-        // GRID: a held OK opens the track menu (GEN and EVOLVE), which then takes its keys.
+        // GRID and KEYS: a held OK opens the track menu (GEN and EVOLVE), which then takes its keys.
         if (on_track_menu_key(key, down)) return;
 
         // FUNC + push D was the held tape stop until 2026-11-25 (backlog D5): one home per job,
@@ -631,6 +631,12 @@
 
             case ENAGA_KEY_F2:                         // REC, or F1 + F2 for resample setup
                 if (shift_) {
+                    // Pressed again on RESAMPLE it is JAM REC, on or off: the whole jam to the
+                    // card, beside the takes it already makes (as FUNC + EDIT twice is KIT).
+                    if (mode_ == Mode::resample) {
+                        toggle_jam(false);
+                        break;
+                    }
                     // docs/SPEC.md's key table gives F1 + F2 to "Resample setup". A mode rather
                     // than a one-shot, because a take has two settings to choose -- how many
                     // bars and where it lands -- and OK is what commits it.
@@ -902,7 +908,12 @@
                 // The take's length, A's other way in.
                 take_bars_index_ = (take_bars_index_ + delta + kTakeBarChoices) % kTakeBarChoices;
                 break;
-            case Mode::mixer:                   // nothing is selected by row on the mixer
+            case Mode::mixer:
+                // Nothing is selected by row on the mixer, so UP/DOWN jump a group of pages: the
+                // levels, the duck, the widths, the delay, the reverb, the chorus, the master.
+                mixer_bank_ = mixer_group_jump(mixer_bank_, delta);
+                notice_logged(kMixerPages[mixer_bank_].name);
+                break;
             case Mode::project:                 // PROJECT, PERFORM and KIT have their own handlers
             case Mode::perform:
             case Mode::kit:

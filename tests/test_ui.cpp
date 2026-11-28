@@ -222,6 +222,9 @@ struct UiProbe {
         app.slot_menu_ = false;
         app.slot_menu_cursor_ = 0;
         app.slot_ok_held_ = false;
+        app.track_menu_ = false;
+        app.track_menu_cursor_ = 0;
+        app.track_ok_held_ = false;
         app.clip_bank_ = 0;
         app.clip_slot_ = -1;
         app.slot_armed_ = Strata::SlotAction::none;
@@ -7828,7 +7831,6 @@ const char *quiet_reason(int s, const Probe &p, bool func) {
         {s_grid, false, "OK", "no job (hold STEP + OK opens the step page)"},
         {s_keys, false, "OK", "no job"},
         {s_pattern, false, "OK", "no job"},
-        {s_mixer, false, "UP", "no job"}, {s_mixer, false, "DOWN", "no job"},
         {s_mixer, false, "OK", "no job"},
         // Knobs a screen does not use. Each is stopped from falling through to the sound
         // parameters of a screen that is not showing, which is deliberate (app/app.hpp).
@@ -12329,6 +12331,113 @@ TEST(ui_jam_rec_starts_and_stops_from_the_menu_and_shows_it_is_running) {
     }
     CHECK_EQ(lit, 0);                                   // no dot once it has stopped
     host.remove_file(path);
+}
+
+// JAM REC on FUNC + REC twice (usability review, 2026-11-28): the first press is RESAMPLE, the
+// second starts the jam and stays there, the screen counts it and names the key that stops it, the
+// REC key blinks a dim red in time with the top bar's dot, and FUNC + REC again stops it.
+TEST(ui_jam_rec_on_func_rec_twice_starts_and_stops_it_from_resample) {
+    Strata &app = fresh();
+    key(ENAGA_KEY_F4);                                  // GRID
+    shift_key(ENAGA_KEY_F2);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::resample));
+    CHECK(!app_storage().jam_running());               // the first press is RESAMPLE alone
+    CHECK(screen_has(app, "JAM OFF"));
+    shift_key(ENAGA_KEY_F2);
+    CHECK(app_storage().jam_recording());
+    CHECK_EQ(UiProbe::mode(app), int(Mode::resample));  // still on RESAMPLE
+    CHECK(std::strncmp(UiProbe::notice(app), "JAM REC JAM ", 12) == 0);
+    pump(1100);                                         // a second and a bit
+    CHECK(screen_has(app, "FUNC+REC: STOP JAM"));
+    CHECK(screen_has(app, "0:01"));
+    check_layout(app, "JAM REC on RESAMPLE");
+
+    // The REC key: dim red for 600 ms of each second, dark for the rest; REC itself stays off.
+    int lit = 0;
+    for (int i = 0; i < 1000; i++) {
+        pump();
+        lit += UiProbe::key_red(app, ENAGA_KEY_F2) == 4 ? 1 : 0;
+    }
+    CHECK(lit >= 595 && lit <= 605);
+    CHECK(UiProbe::key_green(app, ENAGA_KEY_F2) > 0);   // and green: RESAMPLE
+
+    shift_key(ENAGA_KEY_F2);                            // stop
+    CHECK_EQ(UiProbe::notice(app), "JAM STOPPING");
+    CHECK_EQ(UiProbe::mode(app), int(Mode::resample));
+    bool saved = false;
+    for (int i = 0; i < 20 && !saved; i++) {
+        pump();
+        saved = std::strncmp(UiProbe::notice(app), "SAVED JAM ", 10) == 0;
+    }
+    CHECK(saved);
+    CHECK(!app_storage().jam_running());
+    CHECK(screen_has(app, "JAM OFF"));
+    pump(2);
+    CHECK_EQ(int(UiProbe::key_red(app, ENAGA_KEY_F2)), 0);
+    char path[64];
+    std::snprintf(path, sizeof path, "/RECORD/%s", app_storage().jam_name());
+    FakeHost::the().remove_file(path);
+}
+
+// MIXER's UP/DOWN (usability review, 2026-11-28): a group of pages at a time, to each group's
+// first page and round the ends, said in a toast; LEFT/RIGHT still walk page by page.
+TEST(ui_mixer_up_down_jump_between_the_groups_of_pages) {
+    Strata &app = fresh();
+    mixer_page(app, 0);
+    static const char *const kDown[] = {"DCK 1-4", "WID 1-4", "DLY", "REV", "CHO 1-4", "MST", "TRK 1-4"};
+    for (const char *name : kDown) {
+        key(ENAGA_KEY_DOWN);
+        CHECK_EQ(std::strcmp(kMixerPages[UiProbe::mixer_bank(app)].name, name), 0);
+        CHECK_EQ(UiProbe::notice(app), name);
+    }
+    key(ENAGA_KEY_UP);                                  // round the top: the master's group
+    CHECK_EQ(std::strcmp(kMixerPages[UiProbe::mixer_bank(app)].name, "MST"), 0);
+    key(ENAGA_KEY_RIGHT);                               // EQ, a page on
+    CHECK_EQ(UiProbe::mixer_bank(app), kMixerEqPage);
+    key(ENAGA_KEY_UP);                                  // from inside a group: the one before
+    CHECK_EQ(std::strcmp(kMixerPages[UiProbe::mixer_bank(app)].name, "CHO 1-4"), 0);
+    key(ENAGA_KEY_DOWN);
+    CHECK_EQ(std::strcmp(kMixerPages[UiProbe::mixer_bank(app)].name, "MST"), 0);
+    check_layout(app, "MIXER after a group jump");
+}
+
+// The track menu in KEYS (usability review, 2026-11-28): a hold of OK opens the same GEN and
+// EVOLVE menu over KEYS, a tap still does nothing, CLR goes back to KEYS, and leaving KEYS
+// (to GRID too) closes it.
+TEST(ui_hold_ok_in_keys_opens_the_track_menu) {
+    Strata &app = fresh();
+    key(ENAGA_KEY_F4);
+    open_keys();
+    CHECK_EQ(UiProbe::mode(app), int(Mode::keys));
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK(!screen_has(app, "GENERATE"));
+    app.on_key(ENAGA_KEY_OK, true);
+    pump(600);
+    app.on_key(ENAGA_KEY_OK, false);
+    pump(2);
+    CHECK(screen_has(app, ">GENERATE"));
+    CHECK_EQ(UiProbe::notice(app), "TRACK T1");
+    check_layout(app, "KEYS track menu");
+    key(ENAGA_KEY_DOWN);                                // the menu's row, not the track
+    CHECK(screen_has(app, ">DENSITY"));
+    CHECK_EQ(UiProbe::selected(app), 0);
+    key(ENAGA_KEY_CLR);
+    CHECK_EQ(UiProbe::notice(app), "KEYS");
+    pump(2);
+    CHECK(!screen_has(app, "OK: RUN"));
+    CHECK_EQ(UiProbe::mode(app), int(Mode::keys));
+
+    // Open again, then HOME: GRID, and the menu does not follow.
+    app.on_key(ENAGA_KEY_OK, true);
+    pump(600);
+    app.on_key(ENAGA_KEY_OK, false);
+    pump(2);
+    CHECK(screen_has(app, "OK: RUN"));
+    key(ENAGA_KEY_F4);
+    pump(2);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::grid));
+    CHECK(!screen_has(app, "OK: RUN"));
 }
 
 TEST(ui_jam_rec_without_a_card_says_why) {

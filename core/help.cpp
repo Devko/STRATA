@@ -27,7 +27,7 @@ struct Text {
 // --- the shared pages: the last five on every screen -------------------------------------------
 
 constexpr Text kFuncKeys = {"FUNC + KEY:", {
-    "REC    RESAMPLE",
+    "REC    RESAMPLE  JAM",
     "PROJ   SAMPLES",
     "HOME   MENU",
     "PLAY   RESTART",
@@ -403,7 +403,7 @@ constexpr Text kResample = {"RESAMPLE:", {
     "LEFT/RIGHT FILE/TRACK",
     "OK         ARM",
     "CLR        CANCEL",
-    "STARTS ON THE BAR",
+    "FUNC+REC   JAM REC",
     "MIC NEEDS HEADPHONES",
     "DONE: OK PUTS ON TRK",
     "DONE: CLR KEEPS FILE",
@@ -419,7 +419,7 @@ constexpr Text kMenu = {"FUNC MENU:", {
     "NEW RELOAD CLEAR",
     "PATTERN  OK TWICE",
     "TRACK PLAY FWD-RND16",
-    "UP OK  JAM REC ON/OFF",
+    "FUNC+REC TWICE  JAM",
 }};
 
 // The MIXER's pages, in app/app.hpp's kMixerPages order (its static_assert holds the count).
@@ -461,7 +461,8 @@ constexpr Text kMixer[kHelpMixerPages] = {
 };
 
 // Rows every MIXER page ends with, under its own.
-constexpr const char *kMixerKeys[] = {"LEFT/RIGHT PAGE", "SCREEN KEYS PAGE", "STEP KEYS  TRIGS",
+constexpr const char *kMixerKeys[] = {"LEFT/RIGHT PAGE", "UP/DOWN    GROUP", "SCREEN KEYS PAGE",
+                                      "STEP KEYS  TRIGS",
                                       "FUNC+MIXER PERFORM"};
 
 // --- what each knob does ------------------------------------------------------------------------
@@ -657,7 +658,7 @@ void edit_title(const char *screen, const HelpPlace &place, char title[kHelpChar
 
 // The screen's own pages, before the five shared ones. Indexed from 0; returns false past
 // the last, so help_page_count can count them with the same code that writes them.
-// GRID's track menu (app/ui_trackmenu.hpp): GEN and EVOLVE.
+// GRID's and KEYS' track menu (app/ui_trackmenu.hpp): GEN and EVOLVE.
 constexpr Text kTrackMenu = {"HOLD OK: TRACK MENU", {
     "GENERATE  NEW PART",
     "DENS RANGE LEAP WHAT",
@@ -703,6 +704,7 @@ bool own_page(const HelpPlace &place, int page, char title[kHelpChars + 1],
             list[listed++] = &kKeysPads;
             knobs = true;
             list[listed++] = &kKeysLights;
+            list[listed++] = &kTrackMenu;
             break;
         case HelpScreen::step:
             list[listed++] = &kStepPage;

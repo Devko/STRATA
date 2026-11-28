@@ -240,8 +240,8 @@
 
         // The FUNC menu: A scrolls it, as UP and DOWN do, and B changes the value of a setting
         // row, as LEFT and RIGHT do. C and D have nothing to set here.
-        // The track menu in GRID, the same way: A the row, B the value.
-        if (track_menu_ && mode_ == Mode::grid && !step_page_ && held_step_ < 0 && encoder >= 0 &&
+        // The track menu in GRID and KEYS, the same way: A the row, B the value.
+        if (track_menu_ && track_menu_screen() && held_step_ < 0 && encoder >= 0 &&
             encoder < 4) {
             if (encoder == 0) {
                 track_menu_cursor_ = step_wrap(track_menu_cursor_, delta > 0 ? 1 : -1, 0,
