@@ -205,7 +205,15 @@ TEST(help_covers_the_gestures_added_on_2026_11_23) {
     CHECK(page_has(place_of(HelpScreen::perform, 0, 0), "STEP KEYS  STEPS"));
     // LIVE RND (core/liverand.hpp): FUNC + D in PERFORM, on its own page with REL/LEN ALL.
     CHECK(page_has(place_of(HelpScreen::perform, 0, 0), "FUNC+D     LIVE RND"));
-    CHECK(page_has(place_of(HelpScreen::perform, 0, 0), "FUNC+PUSH D  TRACK"));
+    CHECK(page_has(place_of(HelpScreen::perform, 0, 0), "FUNC+LOWER PAD TRACK"));
+    CHECK(page_has(place_of(HelpScreen::perform, 0, 0), "HELD FUNC SHOWS THEM"));
+    // U1: the layer FUNC + turn reaches is PERFORM's second page, right after its own.
+    {
+        char title[kHelpChars + 1];
+        char rows[kHelpRows][kHelpChars + 1];
+        help_page(place_of(HelpScreen::perform, 0, 0), 1, title, rows);
+        CHECK(std::strcmp(title, "PERFORM LIVE:") == 0);
+    }
 }
 
 // 24 is the ASR page's first parameter, 28 the OSC page's (dsp/track.hpp).

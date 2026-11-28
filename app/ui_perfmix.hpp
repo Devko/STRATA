@@ -208,6 +208,7 @@
             len_all_ = engine_.len_all();
             rnd_unit_ = engine_.live_rnd_unit();
             rnd_armed_ = engine_.live_rnd_armed();
+            rnd_armed_chosen_ = true;              // the lock's set, kept as chosen
             energy_ = engine_.energy();
             // The mixer to rest over FX GLIDE (a lock holds no effect); a loop plays on.
             if (perf_target_fx() != PerfFx::none) perf_ride_to(perf_target_fx(), 0, false);

@@ -73,6 +73,7 @@ struct UiProbe {
         app.post(Cmd::set_move_all, 0, 0, 1, 0);
         app.rnd_unit_ = kLiveRndOff;                 // LIVE RND off, every track armed
         app.rnd_armed_ = kLiveRndAllTracks;
+        app.rnd_armed_chosen_ = false;
         app.post(Cmd::set_live_rnd, 0, 0, kLiveRndOff, kLiveRndAllTracks);
         app.energy_ = 0;                             // ENERGY to rest
         app.post(Cmd::set_energy, 0, 0, 0);
@@ -1163,6 +1164,7 @@ TEST(ui_func_fill_turns_note_repeat_on_and_a_held_pad_rolls) {
 TEST(ui_the_retired_chords_say_where_their_moves_went_and_do_nothing_else) {
     // Backlog D1 and D5 (2026-11-25): FUNC + VALUE (the DJ filter), FUNC + push D (the tape
     // stop) and FUNC + MUTATE (the delay freeze) retired for the mixer's slots 1-2, 8 and 5.
+    // FUNC + push D is the kill for all bands since (D2, 2026-11-28).
     // FUNC + VALUE is VariSpeed since (core/varispeed.hpp): it moves no DJ filter and not the
     // project's tempo. The other two name their slot, and fall through to no page's push or
     // mutation.
@@ -1179,11 +1181,19 @@ TEST(ui_the_retired_chords_say_where_their_moves_went_and_do_nothing_else) {
     CHECK_EQ(UiProbe::vari(app), 10);
     UiProbe::moves_to_rest(app);
 
+    // FUNC + push D is the kill EQ's fourth switch since 2026-11-28 (D2): every band out, and
+    // again every band back. No tape stop.
     app.on_key(ENAGA_KEY_PUSH_D, true);
     pump(2);
     CHECK(!app_engine().tape_stop().held());
-    CHECK_EQ(UiProbe::notice(app), "TAPE STOP: SLOT 8");
+    CHECK_EQ(UiProbe::notice(app), "KILL ALL");
+    CHECK_EQ(int(app_engine().project().settings.eq_kills), 7);
     app.on_key(ENAGA_KEY_PUSH_D, false);
+    app.on_key(ENAGA_KEY_PUSH_D, true);
+    app.on_key(ENAGA_KEY_PUSH_D, false);
+    pump(2);
+    CHECK_EQ(UiProbe::notice(app), "ALL BANDS BACK");
+    CHECK_EQ(int(app_engine().project().settings.eq_kills), 0);
 
     // FUNC + MUTATE is LOCK now (core/lockstore.hpp): a tap with no lock stored says so and
     // freezes nothing.
@@ -12066,12 +12076,72 @@ TEST(ui_func_turn_a_and_b_in_perform_are_rel_all_and_len_all) {
     CHECK(!strip_has(app, "LN+"));
 }
 
+// U1 (2026-11-28): while FUNC is held in PERFORM the gauges are the Moves layer FUNC + turn
+// reaches: REL LEN NRG RND under the letters, each with its value, and the stopped hint goes.
+// Let go, and the macros are back.
+TEST(ui_perform_names_the_func_layer_while_func_is_held) {
+    Strata &app = fresh();
+    shift_key(ENAGA_KEY_F7);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::perform));
+    pump(1600);
+    CHECK(screen_has(app, "FUNC+A/B REL/LEN ALL"));
+    CHECK(!screen_has(app, "NRG"));
+
+    app.on_key(ENAGA_KEY_F1, true);
+    for (const char *name : {"REL", "LEN", "NRG", "RND"}) CHECK(screen_has(app, name));
+    CHECK(screen_has(app, "100"));                         // LEN ALL at rest: 100%
+    CHECK(screen_has(app, "OFF"));                         // LIVE RND off
+    CHECK(!screen_has(app, "FUNC+A/B REL/LEN ALL"));
+    check_layout(app, "PERFORM, FUNC held");
+    app.on_encoder(0, -3);                                 // REL ALL -6
+    app.on_encoder(2, +5);                                 // ENERGY +10
+    app.on_encoder(3, +3);                                 // RND4
+    pump(1600);                                            // the notices gone, FUNC still down
+    CHECK(screen_has(app, "-6"));
+    CHECK(screen_has(app, "+10"));
+    CHECK(screen_has(app, "4"));
+    check_layout(app, "PERFORM, FUNC held, the layer off rest");
+    app.on_key(ENAGA_KEY_F1, false);
+    CHECK(!screen_has(app, "NRG"));
+    UiProbe::moves_to_rest(app);
+    pump(2);
+}
+
+// D2 (2026-11-28): FUNC + push D is the kill for all three bands on every screen. With some out
+// it takes the rest out; with all out, all come back.
+TEST(ui_func_push_d_kills_every_band_on_every_screen) {
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+    for (const bool perform : {true, false}) {                 // PERFORM, then MIXER
+        if (perform) shift_key(ENAGA_KEY_F7); else key(ENAGA_KEY_F7);
+        pump(2);
+        CHECK_EQ(UiProbe::mode(app), int(perform ? Mode::perform : Mode::mixer));
+        app.on_key(ENAGA_KEY_F1, true);
+        app.on_key(ENAGA_KEY_PUSH_A, true);                    // LOW out alone
+        app.on_key(ENAGA_KEY_PUSH_A, false);
+        pump(2);
+        CHECK_EQ(int(engine.project().settings.eq_kills), 1);
+        app.on_key(ENAGA_KEY_PUSH_D, true);
+        app.on_key(ENAGA_KEY_PUSH_D, false);
+        pump(2);
+        CHECK_EQ(int(engine.project().settings.eq_kills), 7);
+        CHECK_EQ(UiProbe::notice(app), "KILL ALL");
+        CHECK_EQ(int(engine.live_rnd_armed()), int(kLiveRndAllTracks));   // not LIVE RND's
+        app.on_key(ENAGA_KEY_PUSH_D, true);
+        app.on_key(ENAGA_KEY_PUSH_D, false);
+        pump(2);
+        CHECK_EQ(int(engine.project().settings.eq_kills), 0);
+        CHECK_EQ(UiProbe::notice(app), "ALL BANDS BACK");
+        app.on_key(ENAGA_KEY_F1, false);
+    }
+}
+
 // --- LIVE RND (core/liverand.hpp) -------------------------------------------------------------
 
-// FUNC + turn D in PERFORM sets LIVE RND's unit for the armed tracks (all eight at start), FUNC +
-// push D takes the selected track out or puts it back. The screen line, the live strip and the
+// FUNC + turn D in PERFORM sets LIVE RND's unit for the armed tracks (every track but the kick at
+// start, D3), FUNC + lower pad takes that track out or puts it back (D2). The screen line, the live strip and the
 // help say so; without FUNC, D is still its macro. Nothing is saved or undone.
-TEST(ui_func_d_in_perform_is_live_rnd_and_func_push_d_arms_the_selected_track) {
+TEST(ui_func_d_in_perform_is_live_rnd_and_func_lower_pad_arms_a_track) {
     Strata &app = fresh();
     Engine &engine = app_engine();
     shift_key(ENAGA_KEY_F7);
@@ -12086,23 +12156,31 @@ TEST(ui_func_d_in_perform_is_live_rnd_and_func_push_d_arms_the_selected_track) {
     app.on_encoder(3, +3);
     pump(2);
     CHECK_EQ(int(engine.live_rnd_unit()), 3);
-    CHECK(std::strcmp(UiProbe::notice(app), "LIVE RND4 8 TRK") == 0);
+    CHECK_EQ(int(engine.machine_id(0)), int(MachineId::kick));
+    CHECK_EQ(int(engine.live_rnd_armed()), 0xFE);             // the kick out (D3)
+    CHECK(std::strcmp(UiProbe::notice(app), "LIVE RND4 7 TRK") == 0);
     CHECK_EQ(int(engine.macro_position(3)), int(macro_d));   // not the macro
     app.on_encoder(3, +9);                                    // stops at RND16
     pump(2);
     CHECK_EQ(int(engine.live_rnd_unit()), int(kLiveRndMax));
-    CHECK(std::strcmp(UiProbe::notice(app), "LIVE RND16 8 TRK") == 0);
+    CHECK(std::strcmp(UiProbe::notice(app), "LIVE RND16 7 TRK") == 0);
     app.on_encoder(3, -3);
     pump(2);
     CHECK_EQ(int(engine.live_rnd_unit()), 2);
 
-    // FUNC + push D: the selected track (track 1 after fresh()) out, then in again.
-    app.on_key(ENAGA_KEY_PUSH_D, true);
-    app.on_key(ENAGA_KEY_PUSH_D, false);
+    // FUNC + lower pad: track 2 out, then the kick in; no mute, no track selected.
+    app.on_pad_press(pad_for_track(1), 100);
+    app.on_pad_release(pad_for_track(1));
     pump(2);
-    CHECK_EQ(int(engine.live_rnd_armed()), 0xFE);
-    CHECK(std::strcmp(UiProbe::notice(app), "T1 RND OUT 7 TRK") == 0);
-    CHECK(!engine.tape_stop().held());                        // not the old tape stop hint
+    CHECK_EQ(int(engine.live_rnd_armed()), 0xFC);
+    CHECK(std::strcmp(UiProbe::notice(app), "T2 RND OUT 6 TRK") == 0);
+    CHECK(!engine.muted(1));
+    app.on_pad_press(pad_for_track(0), 100);
+    app.on_pad_release(pad_for_track(0));
+    pump(2);
+    CHECK_EQ(int(engine.live_rnd_armed()), 0xFD);
+    CHECK(std::strcmp(UiProbe::notice(app), "T1 RND IN 7 TRK") == 0);
+    CHECK_EQ(UiProbe::selected(app), 0);
     app.on_key(ENAGA_KEY_F1, false);
 
     pump(1600);
@@ -12129,11 +12207,11 @@ TEST(ui_func_d_in_perform_is_live_rnd_and_func_push_d_arms_the_selected_track) {
     CHECK_EQ(int(undo_depth()), int(undo_before));
 
     app.on_key(ENAGA_KEY_F1, true);
-    app.on_key(ENAGA_KEY_PUSH_D, true);
-    app.on_key(ENAGA_KEY_PUSH_D, false);
+    app.on_pad_press(pad_for_track(1), 100);
+    app.on_pad_release(pad_for_track(1));
     pump(2);
     CHECK_EQ(int(engine.live_rnd_armed()), int(kLiveRndAllTracks));
-    CHECK(std::strcmp(UiProbe::notice(app), "T1 RND IN 8 TRK") == 0);
+    CHECK(std::strcmp(UiProbe::notice(app), "T2 RND IN 8 TRK") == 0);
     app.on_encoder(3, -9);                                    // back to OFF, and it stops there
     pump(2);
     CHECK_EQ(int(engine.live_rnd_unit()), 0);
@@ -12142,6 +12220,15 @@ TEST(ui_func_d_in_perform_is_live_rnd_and_func_push_d_arms_the_selected_track) {
     pump(1600);
     CHECK(screen_has(app, "FUNC+A/B REL/LEN ALL"));
     CHECK(!strip_has(app, "RN"));
+
+    // Chosen by hand, the set stays as it was left when LIVE RND comes on again.
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_encoder(3, +1);
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(2);
+    CHECK_EQ(int(engine.live_rnd_armed()), int(kLiveRndAllTracks));
+    UiProbe::moves_to_rest(app);
+    pump(2);
 }
 
 // LIVE RND is in a LOCK (D4): a jump puts the unit and the armed set back, and the UI's knob
@@ -12151,17 +12238,15 @@ TEST(ui_a_lock_jump_puts_live_rnd_back_and_the_knob_follows) {
     Engine &engine = app_engine();
     shift_key(ENAGA_KEY_F7);
     app.on_key(ENAGA_KEY_F1, true);
-    app.on_encoder(3, +4);                                    // RND8
-    app.on_key(ENAGA_KEY_PUSH_D, true);                       // track 1 out
-    app.on_key(ENAGA_KEY_PUSH_D, false);
+    app.on_encoder(3, +4);                                    // RND8, the kick (track 1) out
     app.on_key(ENAGA_KEY_F1, false);
     pump(2);
     func_mutate_hold(app);                                    // store
     pump(2);
     app.on_key(ENAGA_KEY_F1, true);
     app.on_encoder(3, -4);                                    // OFF
-    app.on_key(ENAGA_KEY_PUSH_D, true);                       // track 1 in
-    app.on_key(ENAGA_KEY_PUSH_D, false);
+    app.on_pad_press(pad_for_track(0), 100);                  // track 1 in
+    app.on_pad_release(pad_for_track(0));
     app.on_key(ENAGA_KEY_F1, false);
     pump(2);
     CHECK_EQ(int(engine.live_rnd_unit()), 0);

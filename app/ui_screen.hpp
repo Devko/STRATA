@@ -462,6 +462,8 @@
         append_number(out, uint32_t(help_page_ % pages + 1));
         *out++ = '/';
         append_number(out, uint32_t(pages));
+        // The pages go round: on the first, LEFT is the way to the last (the VALUE FX steps).
+        if (help_page_ % pages == 0 && pages > 1) append(out, "  < LAST");
         *out = 0;
         paint::small_text(canvas.data(), 0, 113, line, 8);
     }

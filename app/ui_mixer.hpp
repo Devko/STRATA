@@ -232,6 +232,16 @@
         enaga::log(was ? back[band] : killed[band]);
     }
 
+    // FUNC + push D: every band out, or, when all three are out already, every band back.
+    void toggle_kill_all() {
+        const uint8_t all = uint8_t((1u << kKillBands) - 1u);
+        const bool back = (engine_.project().settings.eq_kills & all) == all;
+        for (int band = 0; band < kKillBands; band++) {
+            post(Cmd::eq_kill, 0, 0, uint8_t(band), back ? 0 : 1);
+        }
+        notice_logged(back ? "ALL BANDS BACK" : "KILL ALL");
+    }
+
     // What a slot's byte MEANS, as four characters at most: a division, a switch, or the byte.
     void append_mixer_value(char *&out, int page, int slot) {
         const int8_t field = kMixerPages[page].field[slot];

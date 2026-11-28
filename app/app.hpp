@@ -966,10 +966,12 @@ private:
     // macro, and read back from the engine after a LOCK jump.
     int8_t rel_all_ = 0;
     int8_t len_all_ = 0;
-    // LIVE RND (core/liverand.hpp): the unit FUNC + D left (0 OFF) and the tracks FUNC + push D
-    // armed. Posted absolute, like REL ALL, and read back from the engine after a LOCK jump.
+    // LIVE RND (core/liverand.hpp): the unit FUNC + D left (0 OFF) and the tracks FUNC + lower
+    // pad armed. Posted absolute, like REL ALL, and read back from the engine after a LOCK jump.
+    // Until the set is chosen by hand, turning LIVE RND on arms every track but the kicks (D3).
     uint8_t rnd_unit_ = kLiveRndOff;
     uint8_t rnd_armed_ = kLiveRndAllTracks;
+    bool rnd_armed_chosen_ = false;
     // ENERGY (core/energy.hpp): where FUNC + C left it, posted absolute like REL ALL and read
     // back from the engine after a LOCK jump.
     int8_t energy_ = 0;
