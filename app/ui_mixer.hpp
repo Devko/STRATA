@@ -545,9 +545,18 @@
         if (machine_is_grain(engine_.machine_id(selected_)) && append_grain_value(out, index, value)) return;
         if (machine_is_kick(engine_.machine_id(selected_)) && index >= kOscFirst &&
             index < kOscFirst + kOscParams) {
-            // KICK's CUT (dsp/kick.hpp): CHK, OFF or the choke's fade.
-            if (index != kOscFirst) {
-                append(out, "---");
+            // KICK's TAIL (dsp/kick.hpp): CHK OFF or the choke's fade; RMB a percent; RTN the
+            // rumble's low-pass in Hz; RDR its drive in dB.
+            if (index == kOscFirst + 1) {
+                append_number(out, uint32_t((int(value) * 100 + 63) / 127));
+                *out++ = '%';
+            } else if (index == kOscFirst + 2) {
+                append_number(out, uint32_t(60.0f * enaga::dsp::exp2(2.737f * float(value) * (1.0f / 127.0f)) + 0.5f));
+                append(out, "HZ");
+            } else if (index == kOscFirst + 3) {
+                append(out, "+");
+                append_number(out, uint32_t((int(value) * 30 + 63) / 127));
+                append(out, "DB");
             } else if (value == 0) {
                 append(out, "OFF");
             } else {

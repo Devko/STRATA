@@ -591,7 +591,7 @@
         const uint8_t id = engine_.machine_id(selected_);
         if (!machine_has_osc_page(id)) return "---";
         if (machine_is_kick(id)) {
-            static const char *const kick[kOscParams] = {"CHK", "---", "---", "---"};
+            static const char *const kick[kOscParams] = {"CHK", "RMB", "RTN", "RDR"};
             return kick[slot];
         }
         if (machine_is_fm(id)) {

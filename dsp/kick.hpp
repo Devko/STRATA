@@ -44,11 +44,17 @@
 // the tick (its noise has a generator of its own, so the click's noise stream never moves), and
 // DRP 0 leaves f0 alone.
 //
-// And one knob on the OSC page's first slot (28), on a page of its own, CUT:
+// And the OSC page's four slots (28-31), on a page of its own, TAIL:
 //   CHK  choke: 0 lets a hit ring under the next as it always has; above 0 the next hit fades the
 //        sounding one out, over 60 ms at 1 down to 1 ms at 127. Sample-based techno kicks are
 //        cut at the next beat (RY Divinity's are exactly one beat long), which is what lets a long,
 //        sustained body sit under a four-on-the-floor without stacking.
+//   RMB  rumble: the kick's own output through a small diffuse tail (two all-passes, two feedback
+//        combs), driven, low-passed and ducked by every hit -- the techno rumble (kick -> reverb
+//        -> distortion -> low-pass -> sidechain) inside the track, so it needs neither the shared
+//        reverb nor effects after a send. 0 renders nothing.
+//   RTN  the rumble's low-pass, 60-400 Hz exponential
+//   RDR  the rumble's drive into a soft clip, 0 to +30 dB (made up at the output)
 //
 // It reads the SRC page (0-3), the AMP page (8-11), PNCH (24-27) and CUT (28); FLTR and FX
 // belong to the insert chain.
@@ -163,6 +169,29 @@ private:
     uint8_t punch_bytes_[5] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
     int choke_frames_ = 0;         // CHK: 0 off, else the fade a new hit gives the sounding one
     uint8_t choke_byte_ = 0;
+
+    // TAIL's rumble (RMB RTN RDR). Delay lines of prime lengths near 7.4, 11.7, 37.3 and 53.3 ms
+    // at 48 kHz; 5,262 floats, 21 KiB, members so nothing is allocated.
+    static constexpr int kRumbleAp1 = 353, kRumbleAp2 = 563, kRumbleC1 = 1789, kRumbleC2 = 2557;
+    float rumble_ap1_[kRumbleAp1] = {};
+    float rumble_ap2_[kRumbleAp2] = {};
+    float rumble_c1_[kRumbleC1] = {};
+    float rumble_c2_[kRumbleC2] = {};
+    int rumble_pos_[4] = {0, 0, 0, 0};
+    float rumble_in_lp_ = 0.0f;
+    float rumble_duck_ = 0.0f;
+    float rumble_level_ = 0.0f;       // RMB, as a gain
+    float rumble_drive_ = 1.0f;       // RDR, into the clip
+    float rumble_makeup_ = 1.0f;      // and back out
+    int rumble_tail_ = 0;             // frames the tail still rings after the last sound
+    uint8_t rumble_bytes_[3] = {0xFF, 0xFF, 0xFF};
+    enaga::dsp::Svf rumble_lp_;
+    enaga::dsp::SvfCoefficients rumble_coefficients_{};
+    enaga::dsp::OnePole rumble_hp_;
+    float mix_[kBlock] = {};
+    float rumble_[kBlock] = {};
+    float rumble_aux_[kBlock] = {};
+    void render_rumble(float *out, int n);
     bool active_ = false;
 
     float body_[kBlock] = {};

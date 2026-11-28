@@ -545,7 +545,7 @@ const char *page_name(Page page) {
 // The same, on a machine: KICK's ASR page is PNCH, its knock, tick and drop (dsp/kick.hpp).
 const char *page_name_on(Page page, uint8_t machine) {
     if (machine_is_kick(machine) && page == Page::asr) return "PNCH";
-    if (machine_is_kick(machine) && page == Page::osc) return "CUT";
+    if (machine_is_kick(machine) && page == Page::osc) return "TAIL";
     return page_name(page);
 }
 // KICK's PNCH page's encoder names.

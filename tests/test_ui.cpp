@@ -860,7 +860,7 @@ TEST(ui_the_parameter_page_decides_which_parameter_an_encoder_writes) {
     // The pages wrap, so the four of them are reachable in either direction.
     key(ENAGA_KEY_SELECT_LEFT);
     CHECK_EQ(UiProbe::param_page(app), int(Page::src));
-    // KICK has eight of the pages (its ENV slot is PNCH, its OSC slot CUT): the keys step over
+    // KICK has eight of the pages (its ENV slot is PNCH, its OSC slot TAIL): the keys step over
     // the hole and SCAN.
     for (int i = 0; i < 8; i++) key(ENAGA_KEY_SELECT_LEFT);
     CHECK_EQ(UiProbe::param_page(app), int(Page::src));
@@ -11599,15 +11599,17 @@ TEST(ui_envelope_on_asr_holds_when_sus_is_up) {
     key(ENAGA_KEY_F4);
 }
 
-TEST(ui_a_kicks_osc_page_is_cut) {
-    // KICK's OSC slot is CUT (dsp/kick.hpp): CHK on A, OFF at 0, the rest empty.
+TEST(ui_a_kicks_osc_page_is_tail) {
+    // KICK's OSC page is TAIL (dsp/kick.hpp): CHK on A, OFF at 0, then the rumble.
     Strata &app = fresh();
     key(ENAGA_KEY_F8);
     goto_edit_page(app, Page::osc);
     CHECK_EQ(UiProbe::param_page(app), int(Page::osc));
-    check_layout(app, "EDIT CUT, KICK");
-    CHECK(screen_has(app, "CUT"));
+    check_layout(app, "EDIT TAIL, KICK");
+    CHECK(screen_has(app, "TAIL"));
     CHECK(screen_has(app, "CHK"));
+    CHECK(screen_has(app, "RMB"));
+    CHECK(screen_has(app, "RDR"));
     CHECK(screen_has(app, "OFF"));
     CHECK(!screen_has(app, "NOT ON THIS MACHINE"));
     app.on_encoder(0, +10);

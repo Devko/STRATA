@@ -576,7 +576,10 @@ bool reads_page(uint8_t machine, int page) {
 
 const char *osc_words(uint8_t machine, int slot) {
     if (!machine_has_osc_page(machine)) return "";
-    if (machine_is_kick(machine)) return slot == 0 ? "CHOKE" : "";
+    if (machine_is_kick(machine)) {
+        static const char *const kick[4] = {"CHOKE", "RUMBLE", "RUMBLE TONE", "RUMBLE DRIVE"};
+        return kick[slot];
+    }
     if (machine_is_fm(machine)) return kFmOscWords[slot];
     if (machine_is_grain(machine)) return kGrainOscWords[slot];
     if (!machine_is_wave(machine)) return kOscWords[slot];
@@ -724,7 +727,7 @@ void knob_rows(const HelpPlace &place, bool slc_auto, char rows[kHelpRows][kHelp
 void edit_title(const char *screen, const HelpPlace &place, char title[kHelpChars + 1]) {
     const int page = place.page < kHelpEditPages ? place.page : 0;
     const char *name = page == 6 && machine_is_kick(place.machine)   ? "PNCH"
-                       : page == 7 && machine_is_kick(place.machine) ? "CUT"
+                       : page == 7 && machine_is_kick(place.machine) ? "TAIL"
                                                                      : kEditPageNames[page];
     Line(title).add(screen).add(" ").add(name).add(" ").add(machine_name(place.machine));
 }

@@ -45,6 +45,18 @@ void strata_kick_body_knock(float *out, int hold, int n, float f0_norm, float fm
  * *env carries on from the last block. */
 void strata_kick_tick(float *out, const float *src, int n, float gain, float decay, float *env);
 
+/* The rumble (kick.cpp, TAIL): the kick's own output through a one-pole low-pass, two
+ * all-passes (the smear) and two parallel feedback combs (the tail), soft-clipped at `drive`
+ * (gain into enaga_soft_clip, its output scaled back by `makeup`) and ducked: the gain is
+ * 1 - *duck, and *duck falls by `release` a sample, so each hit pulls the rumble under it and it
+ * swells back between hits. Writes out[0..n) (does not add). Delay lines are circular, their
+ * positions carried by pointer. */
+void strata_kick_rumble(float *out, const float *in, int n, float lp_coef, float *lp,
+                        float *ap1, int ap1_len, int *ap1_pos, float *ap2, int ap2_len,
+                        int *ap2_pos, float *c1, int c1_len, int *c1_pos, float *c2, int c2_len,
+                        int *c2_pos, float feedback, float drive, float makeup, float *duck,
+                        float release);
+
 /* The click: a gate high for the first `gate` samples, slewed 0.5 rising / 0.1 falling, less its
  * one-pole high-pass. *slew and *high_pass carry on from the last block. */
 void strata_kick_click(float *out, int n, int gate, float *slew, float *high_pass);

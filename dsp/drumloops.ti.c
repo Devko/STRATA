@@ -86,6 +86,45 @@ void strata_kick_tick(float *restrict out, const float *restrict src, int n, flo
     *env = e;
 }
 
+void strata_kick_rumble(float *restrict out, const float *restrict in, int n, float lp_coef,
+                        float *lp, float *restrict ap1, int ap1_len, int *ap1_pos,
+                        float *restrict ap2, int ap2_len, int *ap2_pos, float *restrict c1,
+                        int c1_len, int *c1_pos, float *restrict c2, int c2_len, int *c2_pos,
+                        float feedback, float drive, float makeup, float *duck, float release) {
+    float l = *lp, d = *duck;
+    int p1 = *ap1_pos, p2 = *ap2_pos, q1 = *c1_pos, q2 = *c2_pos;
+    const float g = 0.6f;
+    int i;
+    for (i = 0; i < n; i++) {
+        l += lp_coef * (in[i] - l);
+        /* two all-passes: y = -g x + z, z' = x + g y */
+        const float z1 = ap1[p1];
+        const float y1 = z1 - g * l;
+        ap1[p1] = l + g * y1;
+        p1 = p1 + 1 >= ap1_len ? 0 : p1 + 1;
+        const float z2 = ap2[p2];
+        const float y2 = z2 - g * y1;
+        ap2[p2] = y1 + g * y2;
+        p2 = p2 + 1 >= ap2_len ? 0 : p2 + 1;
+        /* two combs in parallel */
+        const float o1 = c1[q1];
+        const float o2 = c2[q2];
+        c1[q1] = y2 + feedback * o1;
+        c2[q2] = y2 + feedback * o2;
+        q1 = q1 + 1 >= c1_len ? 0 : q1 + 1;
+        q2 = q2 + 1 >= c2_len ? 0 : q2 + 1;
+        const float wet = enaga_soft_clip((o1 + o2) * drive) * makeup;
+        out[i] = wet * (1.0f - d);
+        d *= release;
+    }
+    *lp = l;
+    *duck = d;
+    *ap1_pos = p1;
+    *ap2_pos = p2;
+    *c1_pos = q1;
+    *c2_pos = q2;
+}
+
 void strata_kick_click(float *restrict out, int n, int gate, float *slew, float *high_pass) {
     float s = *slew;
     float hp = *high_pass;

@@ -665,7 +665,7 @@ distorted. Two voices, so a ratchet does not cut itself off.
 | SRC | **TUN** pitch, 25-120 Hz (55 Hz at 64) | **FMA** pitch-sweep amount, up to about +26 semitones | **FMD** sweep time, 8-128 ms | **CLK** click level |
 | AMP | **DEC** decay, 20-640 ms time constant | **TON** body low-pass: thud to open | **DRT** dirt: clean sine to soft-clipped | **LVL** |
 | PNCH | **KNK** knock: a fast second sweep, up to four octaves over the body | **KND** knock time, 1-16 ms | **TCK** tick: a 3 kHz click at the very front | **DRP** drop: the pitch keeps falling, up to an octave (in cents) |
-| CUT | **CHK** choke: `OFF`, or the next hit cuts this one over 60 ms down to 1 ms | | | |
+| TAIL | **CHK** choke: `OFF`, or the next hit cuts this one over 60 ms down to 1 ms | **RMB** rumble | **RTN** rumble tone, 60-400 Hz | **RDR** rumble drive, 0 to +30 dB |
 
 The trig note transposes the kick, so a kick follows the key. FMD in the middle of the knob is
 where the classic click lives. Add DRV on FLTR for more 909 grit.
@@ -676,10 +676,16 @@ click that cuts through on small speakers, DRP the fall that makes a long kick d
 held note. All four at 0 is the kick as it always was, so older projects sound the same. The
 SOUNDS TECHNO, WHOUSE, HEAVY, MINIM and FAT use the page; RUMBLE uses DRP.
 
-**CUT** (the eighth page) has one knob, **CHK**. Sample-based techno kicks are cut off at the next
-beat, which is what lets a long, held body sit under a four-on-the-floor without stacking up.
-With CHK up, each hit fades the one still ringing out over the choke time; at `OFF` two hits
-overlap as they always have. WHOUSE and FAT use it.
+**TAIL** (the eighth page) is what happens after the hit. **CHK** is a choke: sample-based techno
+kicks are cut off at the next beat, which is what lets a long, held body sit under a
+four-on-the-floor without stacking up. With CHK up, each hit fades the one still ringing out
+over the choke time; at `OFF` two hits overlap as they always have.
+
+**RMB**, **RTN** and **RDR** are a **rumble** built into the kick: its own tail runs through a
+small, smeared echo, is driven (RDR), low-passed (RTN) and ducked by every hit, so it swells up
+between the kicks and gets out of the way of each one. It is the techno rumble (kick into a
+reverb, distortion after it, a low-pass, sidechained) without the shared reverb, so the clap and
+stab sends stay clean. Keep RTN low for a sub rumble, raise RDR for growl. HEAVY and FAT use it.
 
 ### SNR: SNARE
 

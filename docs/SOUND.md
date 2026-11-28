@@ -119,7 +119,14 @@ drive or a loud tick overshoots the loop's mids and top by 10-20 dB while barely
 attack. Measure the attack with a window that does not fade in over its first milliseconds
 (a Hann window there hides the tick).
 
-**CUT / CHK** (slot 28): sample kicks are cut at the next beat. With CHK above 0, a trigger fades
+**TAIL** (slots 28-31). RMB RTN RDR are a rumble: the kick's own output, low-passed at 400 Hz,
+through two all-passes (7.4 and 11.7 ms, g 0.6) and two parallel combs (37.3 and 53.3 ms,
+feedback 0.7), soft-clipped with RDR's gain and made up, low-passed by an SVF at RTN (60-400 Hz),
+high-passed near 30 Hz and ducked by each hit (back up with a 120 ms release). Measured against
+RY Divinity's layered kicks, their 30-150 Hz energy 100-450 ms after the hit sits 2-6 dB above the
+hit's first 50 ms; HEAVY with its rumble sits 0.5-3.4 dB above.
+
+**CHK** (slot 28): sample kicks are cut at the next beat. With CHK above 0, a trigger fades
 every other sounding voice out over 60 ms (CHK 1) down to 1 ms (127), starting at the new hit's
 frame. Two blind tests with Roland (2026-11-28) also taught a voicing rule: the kicks that passed
 as samples share one recipe (TECHNO's); variants that changed drive, dirt, sweep and length at

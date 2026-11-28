@@ -73,6 +73,14 @@ constexpr float kTickK = 1.4f;
 constexpr float kTickTau = 0.0015f;
 constexpr float kTickGain = 2.0f;
 constexpr float kTickFloor = 1.0e-4f;
+// TAIL's rumble (kick.hpp): the combs' feedback (a tail of about a second, which every hit ducks
+// anyway), the input low-pass (the click and tick stay out of it), the duck's release (the
+// rumble back up about 120 ms after a hit) and how long it rings unfed before it is skipped.
+constexpr float kRumbleFeedback = 0.7f;
+constexpr float kRumbleInHz = 400.0f;
+constexpr float kRumbleRelease = 0.12f;
+constexpr float kRumbleTailSeconds = 1.5f;
+constexpr float kRumbleHpCoef = 0.004f;   // a one-pole high-pass near 30 Hz on the way out
 
 // ln(100): EnvelopeShape::make wants the time to reach 1% of the target, where the reference
 // gives time constants. One is ln(100) of the other, and the per-sample coefficient comes out
@@ -145,6 +153,9 @@ void Kick::init(float sample_rate) {
     tick_coefficients_ = SvfCoefficients::from_g(enaga::dsp::tan_pi(kTickHz * inv_rate_), kTickK);
     tick_decay_ = exp(-inv_rate_ * reciprocal(kTickTau));
     for (uint8_t &b : punch_bytes_) b = 0xFF;   // a new rate: PNCH's coefficients are made again
+    for (uint8_t &b : rumble_bytes_) b = 0xFF;
+    rumble_lp_.reset();
+    rumble_hp_.reset();
     choke_byte_ = 0;
     choke_frames_ = 0;
     for (Voice &v : voices_) {
@@ -188,6 +199,19 @@ void Kick::prepare(const TrackParams &params) {
             choke_byte_ = chk;
             const float t = kick_choke_seconds(chk);
             choke_frames_ = chk == 0 ? 0 : (int(t * rate_) > 0 ? int(t * rate_) : 1);
+        }
+        // RMB RTN RDR, made again only when one moves.
+        const uint8_t rb[3] = {params.get(kOscFirst + 1), params.get(kOscFirst + 2),
+                               params.get(kOscFirst + 3)};
+        if (rb[0] != rumble_bytes_[0] || rb[1] != rumble_bytes_[1] || rb[2] != rumble_bytes_[2]) {
+            for (int i = 0; i < 3; i++) rumble_bytes_[i] = rb[i];
+            const float level = float(rb[0]) * (1.0f / 127.0f);
+            rumble_level_ = level * level * 2.0f;
+            const float hz = 60.0f * exp2(2.737f * float(rb[1]) * (1.0f / 127.0f));   // 60-400 Hz
+            rumble_coefficients_ = SvfCoefficients::make(hz, 0.3f, rate_);
+            const float drive_db = 30.0f * float(rb[2]) * (1.0f / 127.0f);
+            rumble_drive_ = exp2(drive_db * (1.0f / 6.0206f)) * 0.5f;
+            rumble_makeup_ = reciprocal(1.0f + 0.15f * drive_db);
         }
     }
     // PNCH (kick.hpp): KNK KND TCK DRP, the ASR page's four slots. Made again only when one of
@@ -264,15 +288,39 @@ void Kick::kill_all() {
 
 void Kick::render_add(float *out, int frames) {
     if (!active_) return;   // nothing sounding and nothing pending: an idle machine costs a test
+    const bool rumble = rumble_level_ > 0.0f;
     int done = 0;
     while (done < frames) {
         const int n = frames - done < kBlock ? frames - done : kBlock;
-        for (Voice &v : voices_) render_voice(v, out + done, n);
+        if (!rumble) {
+            for (Voice &v : voices_) render_voice(v, out + done, n);
+        } else {
+            // With TAIL's rumble the voices go to a block of their own first, which feeds it.
+            enaga_clear(mix_, n);
+            for (Voice &v : voices_) render_voice(v, mix_, n);
+            enaga_add(out + done, mix_, n);
+            render_rumble(out + done, n);
+        }
         done += n;
     }
     bool busy = false;
     for (const Voice &v : voices_) busy = busy || v.busy();
-    active_ = busy;
+    if (rumble && busy) rumble_tail_ = int(kRumbleTailSeconds * rate_);
+    else if (rumble_tail_ > 0) rumble_tail_ -= frames;
+    active_ = busy || (rumble && rumble_tail_ > 0);
+}
+
+void Kick::render_rumble(float *out, int n) {
+    const float release = exp(-inv_rate_ * reciprocal(kRumbleRelease));
+    const float lp_coef = 1.0f - exp(-6.2831853f * kRumbleInHz * inv_rate_);
+    strata_kick_rumble(rumble_, mix_, n, lp_coef, &rumble_in_lp_, rumble_ap1_, kRumbleAp1,
+                       &rumble_pos_[0], rumble_ap2_, kRumbleAp2, &rumble_pos_[1], rumble_c1_,
+                       kRumbleC1, &rumble_pos_[2], rumble_c2_, kRumbleC2, &rumble_pos_[3],
+                       kRumbleFeedback, rumble_drive_, rumble_makeup_, &rumble_duck_, release);
+    strata_svf_inplace(&rumble_lp_.state_, &rumble_coefficients_, Svf::low_pass, rumble_, n);
+    rumble_hp_.process(rumble_, rumble_aux_, n, kRumbleHpCoef);
+    enaga_mix(rumble_, rumble_aux_, n, -1.0f);   // less its one-pole low-pass: a high-pass
+    enaga_mix(out, rumble_, n, rumble_level_);
 }
 
 const char *Kick::param_name(int index) const {
@@ -307,6 +355,7 @@ void Kick::start(Voice &v) {
     v.tick_env = v.trigger_level;
     v.drop_env = 1.0f;
     v.tick_hp.reset();
+    rumble_duck_ = 1.0f;     // TAIL: the hit pulls the rumble under it
     v.slew = 0.0f;
     v.click_hp = 0.0f;
     v.click_band.reset();

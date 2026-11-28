@@ -453,7 +453,10 @@
                 break;
             }
             case Page::osc:
-                if (machine_is_kick(id)) add("CHK  NEXT HIT CUTS");
+                if (machine_is_kick(id)) {
+                    add("CHK  NEXT HIT CUTS");
+                    add("RMB  RUMBLE");
+                }
                 else if (!machine_reads_osc(id)) add("NOT ON THIS MACHINE");
                 break;
             case Page::scn:

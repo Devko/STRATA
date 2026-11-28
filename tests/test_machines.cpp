@@ -936,6 +936,38 @@ TEST(kick_choke_cuts_a_ringing_hit_at_the_next_one) {
     CHECK_EQ(kick_choke_seconds(0), 0.0f);
 }
 
+TEST(kick_rumble_adds_a_low_tail_that_each_hit_ducks) {
+    // TAIL's RMB (dsp/kick.hpp): the kick's own tail through all-passes and combs, driven and
+    // low-passed. With it up, 150-450 ms after a short hit there is low energy where the plain
+    // kick has died away; right at the hit the rumble is ducked, so the first 2 ms are the
+    // plain kick's; and it is all low: little above 1 kHz.
+    static float plain[19200], rumble[19200];
+    TrackParams p = kick_909();
+    p.set(3, 0);                     // CLK off: no noise, so the hits line up
+    kick_hit(p, plain);
+    TrackParams r = p;
+    r.set(kOscFirst + 1, 110);       // RMB
+    r.set(kOscFirst + 2, 20);        // RTN: about 90 Hz
+    r.set(kOscFirst + 3, 60);        // RDR
+    kick_hit(r, rumble);
+    float late_plain = 0.0f, late_rumble = 0.0f;
+    for (int i = 7200; i < 9600; i++) {
+        late_plain += plain[i] * plain[i];
+        late_rumble += rumble[i] * rumble[i];
+    }
+    CHECK(late_rumble > 10.0f * late_plain + 1e-6f);
+    float early_diff = 0.0f, early = 0.0f;
+    for (int i = 0; i < 96; i++) {
+        early_diff += (rumble[i] - plain[i]) * (rumble[i] - plain[i]);
+        early += plain[i] * plain[i];
+    }
+    CHECK(early_diff < 0.01f * early + 1e-9f);
+    float diff[9600];
+    for (int i = 0; i < 9600; i++) diff[i] = rumble[i] - plain[i];
+    CHECK(energy_above(diff, 0, 9600, 1000.0f) < 0.01f * energy(diff, 9600));
+    CHECK(finite_within(rumble, 9600, 4.0f));
+}
+
 // --- SNARE ----------------------------------------------------------------
 
 TEST(snare_carries_the_909_oscillator_ratio) {
