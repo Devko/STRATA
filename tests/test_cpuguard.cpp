@@ -288,3 +288,32 @@ TEST(cpuguard_the_level_tables) {
         CHECK(CpuGuard::grain_limit(l, 8) <= CpuGuard::grain_limit(l - 1, 8));
     }
 }
+
+// The edges exactly: an average AT kHigh rises; the panic settle counts from a fall and from a
+// reset; and the cool second counts from the rise.
+TEST(cpuguard_the_waits_count_from_every_change_to_the_block) {
+    CpuGuard g;
+    // 70.1% steady settles the average at exactly 700 (the one-pole stops short of the load).
+    int blocks = 0;
+    while (g.level() == 0 && blocks < 5000) {
+        g.update(CpuGuard::kHigh + 1);
+        blocks++;
+    }
+    CHECK_EQ(g.level(), 1);
+    CHECK_EQ(g.average(), CpuGuard::kHigh);
+    // The cool second counts from the rise.
+    CpuGuard c;
+    feed(c, 300, 1000);
+    CHECK_EQ(c.update(CpuGuard::kPanic), 1);
+    // 300 is already under kLow, so every block from here is a cool one.
+    CHECK_EQ(feed(c, 300, CpuGuard::kFallBlocks - 1), 1);
+    CHECK_EQ(feed(c, 300, 1), 0);
+    // After that fall, a panic block waits kPanicSettle blocks again.
+    CHECK_EQ(feed(c, CpuGuard::kPanic, CpuGuard::kPanicSettle - 1), 0);
+    CHECK_EQ(c.update(CpuGuard::kPanic), 1);
+    // And after a reset.
+    feed(c, 300, 2000);
+    c.reset();
+    CHECK_EQ(feed(c, CpuGuard::kPanic, CpuGuard::kPanicSettle - 1), 0);
+    CHECK_EQ(c.update(CpuGuard::kPanic), 1);
+}
