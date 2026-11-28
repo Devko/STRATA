@@ -273,6 +273,28 @@ TEST(energy_source_step_is_the_trig_before_wrapping_and_none_on_an_empty_track) 
     CHECK_EQ(energy_source_step(pattern.tracks[1], 16, 5), -1);
 }
 
+// A trig that does not play every pass is not copied: the walk goes on back past it to a plain
+// one, and a track with only such trigs gets no ghost.
+TEST(energy_source_step_skips_conditional_and_zero_percent_trigs) {
+    static Pattern pattern;
+    blank(pattern);
+    TrackPattern &track = pattern.tracks[0];
+    put_trig(pattern, 0, 2);
+    put_trig(pattern, 0, 6);
+    put_trig(pattern, 0, 9);
+    put_trig(pattern, 0, 12);
+    track.steps[12].condition = condition_pack(Condition::FILL);       // a FILL-only crash
+    track.steps[9].condition = condition_pack_a_b(1, 4);              // a 1:4 hit
+    track.steps[6].probability = 0;                                   // a step set to 0%
+    CHECK_EQ(energy_source_step(track, 16, 14), 2);
+    CHECK_EQ(energy_source_step(track, 16, 1), 2);                    // round the end too
+    track.steps[6].probability = 40;                                  // sometimes still lends
+    CHECK_EQ(energy_source_step(track, 16, 14), 6);
+    track.steps[2].condition = condition_pack(Condition::FIRST);
+    track.steps[6].condition = condition_pack(Condition::NOT_FILL);
+    CHECK_EQ(energy_source_step(track, 16, 14), -1);                  // nothing plain: no ghost
+}
+
 // --- in the scheduler ------------------------------------------------------
 
 TEST(energy_at_rest_plays_the_programmed_part_to_the_bit) {

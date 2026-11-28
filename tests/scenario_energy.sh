@@ -25,10 +25,17 @@
 #                               +36, not +32: the emulator holds each encoder phase 3 ms and
 #                               Enaga's decoder counts a detent only on phase 0, so a main-loop
 #                               pass over 3 ms loses one (two of 32 here); ENERGY stops at +64
+#   run "load" (1.2 G cycles)
+#     PLAY, FUNC + MIXER     -> PERFORM
+#     FUNC + turn C -5       -> "ENERGY -10" (or short of it: any ENERGY below rest)
+#     FUNC + HOME, UP to LOAD DEMO (tools/menu_rows.py), OK, OK -> the demo loads
+#     FUNC + turn C +1       -> "ENERGY +2": the load put ENERGY back to rest, so the click
+#                               starts from 0 and not from -10
 #
 # -64 and the order the tracks thin in are tests/test_energy.cpp's.
 #
-# Keys (third_party/enaga/include/enaga/abi.h): F5 = 22, F1 = 19, F7 = 21; encoder C is 2. The
+# Keys (third_party/enaga/include/enaga/abi.h): F5 = 22, F1 = 19, F7 = 21, F4 = 27, UP = 17,
+# OK = 23; encoder C is 2. The
 # first press must come LATE (tests/scenario_m1.sh).
 set -euo pipefail
 
@@ -37,7 +44,7 @@ cd "$(dirname "$0")/.."
 source tools/env.sh
 
 # Both runs together, for tools/scenarios.sh's longest-first order.
-CYCLES=2900000000
+CYCLES=4100000000
 export CYCLES
 if [ $# -gt 0 ]; then
     echo "error: unknown argument: $1" >&2
@@ -57,6 +64,7 @@ STAGE="$ENAGA_BUILD/stage/STRATA"
 mkdir -p "$ENAGA_BUILD"
 LOG="$ENAGA_BUILD/scenario_energy.log"
 LOG_WALK="$ENAGA_BUILD/scenario_energy_walk.log"
+LOG_LOAD="$ENAGA_BUILD/scenario_energy_load.log"
 : > "$LOG"
 
 emulate() {   # emulate LOGFILE CYCLES KEYS...
@@ -85,8 +93,23 @@ emulate "$LOG" 1900000000 \
     --key 19@380000000 --key 21@385000000 \
     --key 19@460000000 --turn 2:36@462000000
 
+echo "running the emulator: ENERGY across LOAD DEMO ..."
+# UP from SAVE, round the bottom, to LOAD DEMO: counted from the FUNC menu's own order.
+load_keys=(--key 22@300000000
+           --key 19@380000000 --key 21@385000000
+           --key 19@460000000 --turn 2:-5@462000000
+           --key 19@560000000 --key 27@565000000)
+ups=$(python3 -B tools/menu_rows.py app/ui_perfmix.hpp MenuItem demo --up)
+for ((i = 0; i < ups; i++)); do
+    load_keys+=(--key "17@$((640000000 + i * 40000000))")
+done
+ok_at=$((640000000 + ups * 40000000 + 40000000))
+load_keys+=(--key "23@$ok_at" --key "23@$((ok_at + 60000000))")
+load_keys+=(--key 19@1000000000 --turn 2:1@1002000000)
+emulate "$LOG_LOAD" 1200000000 "${load_keys[@]}"
+
 rc=0
-python3 - "$LOG_WALK" "$LOG" <<'PY' || rc=$?
+python3 - "$LOG_WALK" "$LOG" "$LOG_LOAD" <<'PY' || rc=$?
 import json, os, re, sys
 
 CYCLES_PER_BLOCK = 496_000
@@ -146,6 +169,17 @@ log = common(peak_run, "peak")
 check("ENERGY +64" in log, "peak: FUNC + turn C took ENERGY to +64", f"log={log}")
 check("ENERGY +66" not in log, "peak: and it stopped there", f"log={log}")
 
+load_run = load(sys.argv[3])
+log = common(load_run, "load")
+# Whatever the turn down reached (a dropped detent leaves it at -8), the first ENERGY notice
+# after the load is the click up from rest.
+energy = [i for i, l in enumerate(log) if l.startswith("ENERGY ")]
+downs = [i for i in energy if log[i].startswith("ENERGY -")]
+check(bool(downs), "load: ENERGY below rest before the load", f"log={log}")
+later = [i for i in energy if downs and i > downs[-1]]
+check(bool(later) and log[later[0]] == "ENERGY +2",
+      "load: after LOAD DEMO the first click up reads +2, from rest", f"log={log}")
+
 peak = peak_run.get("audio_cycles_peak", 0)
 percent = 100.0 * peak / CYCLES_PER_BLOCK
 check(percent > 5.0, "the beat was sounding", f"{percent:.2f}% peak")
@@ -166,7 +200,7 @@ PY
 
 echo
 if [ "$rc" -ne 0 ]; then
-    echo "SCENARIO FAILED; logs: $LOG_WALK $LOG" >&2
+    echo "SCENARIO FAILED; logs: $LOG_WALK $LOG $LOG_LOAD" >&2
     exit 1
 fi
-echo "SCENARIO OK  (logs: $LOG_WALK $LOG)"
+echo "SCENARIO OK  (logs: $LOG_WALK $LOG $LOG_LOAD)"

@@ -578,6 +578,18 @@
             const uint8_t loads = engine_.status().project_loads.load(std::memory_order_acquire);
             if (loads != project_loads_seen_) {
                 project_loads_seen_ = loads;
+                // The engine put the live moves and VariSpeed to rest, as it clears the LOCKs:
+                // the knobs the UI shadows follow, so the next turn starts from rest and not from
+                // where the last project left them, and the clock below loses VariSpeed's ratio.
+                rel_all_ = 0;
+                len_all_ = 0;
+                rnd_unit_ = kLiveRndOff;
+                rnd_armed_ = kLiveRndAllTracks;
+                rnd_armed_chosen_ = false;
+                energy_ = 0;
+                transpose_ = 0;
+                vari_ = 0;
+                vari_set_ = 0;
                 const uint16_t project_centi = engine_.project().settings.tempo_centi_bpm;
                 tempo_tenths_ = uint32_t(project_centi) / 10;
                 // Refused under an outside clock, which is not an error: the project's tempo is
