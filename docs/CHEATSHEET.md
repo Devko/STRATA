@@ -52,6 +52,7 @@ pads and the performance mixer.
 | PATTERN | PROJECT, screen key RIGHT twice | Master length (LEN), swing (SWG), FEEL and each track's own swing of the playing pattern |
 | SETUP | PROJECT, screen key RIGHT three times | Record quantize; shows clock and MIDI settings |
 | PROJECTS | PROJECT, screen key RIGHT four times, or the menu's OPEN PROJECT | Open another project from the card, save this one under a new name, rename or delete one |
+| LAUNCH | PROJECT twice quickly | Each track from another pattern: STEP launches that slot on the selected track (or held pads, silent here), CLR back to its own part, push B pins, **hold OK** CAPTUREs what plays into a free slot |
 | RESAMPLE | FUNC+REC ("sampling") | Record the output, or the audio input, to a file or a track |
 | Step page | Hold STEP + OK | One step's own fields (opens over GRID) |
 | Enaga menu | FUNC+POWER | CLOCK SRC, CLOCK/SYNC OUT, MIDI CH |
