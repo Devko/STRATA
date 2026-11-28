@@ -14,11 +14,12 @@
 #   PLAY, the GEN presses of tests/scenario_genload.sh  -> "GEN T1 BOTH" .. "GEN T8 BOTH"
 #   CLR, MIXER, SEL< x4, push A                         -> "IN ON"
 #   FUNC + MIXER                                        -> PERFORM
-#   FUNC + turn A +32, B +32, C +40                     -> "REL ALL +64", "LEN ALL 200%",
+#   FUNC + turn A +40, B +32, C +40                     -> "REL ALL +64", "LEN ALL 200%",
 #                                                          "ENERGY +64"
 #   FUNC + turn VALUE +150                              -> "VARISPEED +12.0 ..."
-#   (C and VALUE turn past their ends, which hold: over the generated parts some quick detents
-#   do not land, about 1 in 6 on C and 1 in 20 on VALUE in the first run.)
+#   (A, C and VALUE turn past their ends, which hold: over the generated parts some quick
+#   detents do not land, about 1 in 6 on C and 1 in 20 on VALUE in the first cl6x run, and 3 in
+#   16 on A GCC-only.)
 #   FUNC + SEL> x3                                      -> "TRANSPOSE +3 IN KEY"
 #   FUNC + HOME, DOWN, OK                               -> "JAM REC JAM <n>"
 #   3 s of play, every block's cost read
@@ -167,7 +168,7 @@ check("IN ON" in log, "push A turned the line input on", f"log={log[-12:]}")
 # PERFORM, and its FUNC layer turned up.
 func_key(MIXER)
 check("scr PERFORM" in log, "FUNC + MIXER reached PERFORM", f"log={log[-12:]}")
-func_turn(ENC_A, 32)
+func_turn(ENC_A, 40)
 check("REL ALL +64" in log, "FUNC + turn A took REL ALL to +64", f"log={log[-6:]}")
 func_turn(ENC_B, 32)
 len_all = [l for l in log if l.startswith("LEN ALL ")]
