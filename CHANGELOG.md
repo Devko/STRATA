@@ -8,6 +8,14 @@ the project file format or the controls.
 
 ### Added
 
+- **Song sections on the chain.** Push A on a CHAIN entry opens its SECTION view: besides the
+  pattern, repeats and mute state, an entry can put a scene on morph side B (SCN), jump or ride the
+  morph to B or back to A over the whole entry (MRP SNAP, RIDE, BACK), set ENERGY (NRG) and the
+  tempo (BPM) as it starts, and store an exact mute mask (MUT CAP). `--` leaves each one as it is,
+  and the hands take over until the next entry. Hold OK in the view to fill the fields from what
+  plays. A BPM is skipped under an outside clock (`EXT CLOCK: BPM SKIPPED`). Saved in PROJECT.BIN
+  section 9: older projects open with every field `--`, and older builds play the chain as before.
+  New emulator scenario `sections`.
 - **Queue a pattern from any screen.** Hold PROJECT and press STEP n: slot n of the shown bank is
   queued (`A05 QUEUED END`) and the screen you play on stays up. PROJECT now opens when the key
   comes up, and not at all when a STEP was pressed while it was held. The FUNC help's FUNC + KNOB

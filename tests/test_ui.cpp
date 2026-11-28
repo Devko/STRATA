@@ -9100,6 +9100,24 @@ TEST(ui_screenshots) {
         write_shot(folder, project_pages[p]);
     }
 
+    // SECTION: the cursor's entry with a mute recall and a scene, then a SNAP and an energy on
+    // the MOVE page.
+    for (int p = 0; p < 3; p++) key(ENAGA_KEY_SELECT_LEFT);
+    CHECK_EQ(UiProbe::project_page(app), 1);
+    key(ENAGA_KEY_PUSH_A);
+    CHECK(UiProbe::section_view(app));
+    app.on_encoder(3, +3);                      // SCN 3
+    pump(2);
+    key(ENAGA_KEY_SELECT_RIGHT);
+    app.on_encoder(0, +1);                      // MRP SNAP
+    app.on_encoder(1, +1);                      // NRG: the first turn takes the ENERGY playing
+    pump(2);
+    app.on_encoder(1, +12);
+    pump(2);
+    write_shot(folder, "section");
+    key(ENAGA_KEY_CLR);
+    for (int p = 0; p < 3; p++) key(ENAGA_KEY_SELECT_RIGHT);
+
     // The kit browser, with the factory kit stored in slot 1 so the screen has a kit to show.
     shift_key(ENAGA_KEY_F8);
     shift_key(ENAGA_KEY_F8);
