@@ -1074,7 +1074,16 @@ slots, no chain.
 - FUNC+HOME, RELOAD PROJECT, OK: `OK AGAIN: RELOAD`; wait 3 s. PROJECT, SLOT, FUNC + LEFT:
   `LEFT AGAIN: CLEAR`; wait. Every confirmation on the unit reads `<KEY> AGAIN: <WHAT>`. `____`
 
-**W78. A knob keeps its layer through FUNC (2 min).** A01 playing, PERFORM.
+**W78. LOCK keeps launched tracks apart (4 min).** A01 playing, its track 3 with a few steps of
+its own; A07's track 3 a different part.
+- PROJECT twice (LAUNCH), track 3, STEP 7, wait for `T3 A07`. Hold FUNC + MUTATE: `LOCK A01
+  STORED`. CLR on track 3 (`T3 < OWN`): A01's own track 3 plays, the top line shows `L+`. `____`
+- Tap FUNC + MUTATE: `BACK TO LOCK A01`, track 3 plays A07's part again and LAUNCH shows A07 on
+  it. Tap again: `SWAPPED BACK A01`, track 3 plays A01's own part, unchanged. `____`
+- STEP 7 on track 3 again, tap FUNC + MUTATE twice, then CLR on track 3: A01's own track 3 is
+  still its own part, not A07's. Save, RELOAD PROJECT: the same. `____`
+
+**W79. A knob keeps its layer through FUNC (2 min).** A01 playing, PERFORM.
 - Hold FUNC, turn C down steadily and let go of FUNC while still turning, for about half a
   second more: ENERGY goes on going down (`ENERGY -30`), and after letting go macro C's gauge has
   not moved. Turn C back up with FUNC to `ENERGY 0`: the part is as programmed, the dub delay as
