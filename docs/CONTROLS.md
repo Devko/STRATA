@@ -498,8 +498,10 @@ pattern of the project. PROJECT pressed twice quickly opens LAUNCH, PROJECT's la
   `CAPTURED A02`; `NO FREE SLOT IN BANK` or `LOCKS FULL` when it cannot. Not undoable; the source
   patterns are untouched. Master length, swing, key, FEEL and the seed come from the playing
   pattern.
-- **LOCK** (FUNC + MUTATE) stores what you hear, launched parts included, as the playing
-  pattern's own.
+- **LOCK** (FUNC + MUTATE) stores the playing pattern and, apart from it, what each lane plays.
+  A jump puts the lanes back on those parts and the pattern's own tracks back as they were; the
+  swap-back does the same with the state from before the jump. A borrowed part never becomes the
+  pattern's own (CAPTURE does that). The pins are not in a lock.
 - **GRID** draws each lane's playing part; a launched lane's number is underlined, a queued one
   blinks, and the info line ends `<B07`.
 - **Saved** in the project (PROJECT.BIN section 8): each lane's source and the pins. Not in the

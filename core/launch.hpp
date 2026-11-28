@@ -132,8 +132,8 @@ enum class CaptureResult : uint8_t {
 // Write what every lane plays into `out`, which must be none of the project's patterns that a
 // lane reads (the playing pattern or a source): each lane's part with its locks compacted into
 // `out`'s pool, and the playing pattern's master length, swing, FEEL, key, scale and seed. False,
-// writing nothing, when the parts' locks together do not fit in one pool. CAPTURE and LOCK both
-// take what you hear through this.
+// writing nothing, when the parts' locks together do not fit in one pool. CAPTURE writes through
+// this. LOCK does not: it keeps the lane sources apart (core/lockstore.hpp).
 bool launch_compose(const Project &project, Pattern &out);
 
 // launch_compose for a mix that is not (or no longer) the project's own: `live` is the playing
