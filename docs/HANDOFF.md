@@ -10,9 +10,11 @@ not append a history. Measurements go to `docs/BUDGET.md`, releases to `CHANGELO
 
 **STRATA runs on the unit and has six releases**, v0.1.0 to v0.5.0 (`docs/PLAN.md` has the
 table). **v0.5.0 (2026-11-27, Enaga 0.4.0) was planned as the release candidate for 1.0**; Roland lifted
-the feature freeze on 2026-11-28. Since the tag,
-`main` has gained the CPU guard fix (#211), 16th-note triplets, stereo width and the chorus send
-(#213-#216, `CHANGELOG.md` "Unreleased"). On the unit, v0.3.1 and builds from `main` boot and
+the feature freeze on 2026-11-28. Since the tag, `main` has gained about thirty
+features and fixes, all in `CHANGELOG.md` "Unreleased": among them the CPU guard fix, triplets,
+stereo width and the chorus send, JAM REC, ENERGY, Track Launch with CAPTURE, VariSpeed, song
+sections, ARR REC, TRANSPOSE, the line input strip, user sounds, WAVE scan and PERFORM's FUNC
+layer. Their combined CPU cost is `scenario_stack` (`docs/BUDGET.md`, "Everything turned up"). On the unit, v0.3.1 and builds from `main` boot and
 play; A01 reads 15-28% on the top line and dense generated parts 40-60% (Roland, 2026-11-27).
 Most of what came after v0.2.0 has not been walked through on the unit yet: the walkthrough at
 the top of `docs/UNIT_CHECKLIST.md` is the next pass.
@@ -23,9 +25,9 @@ the top of `docs/UNIT_CHECKLIST.md` is the next pass.
 
 | | |
 | --- | --- |
-| `make -C host test` | **3,923,641 checks, 0 failures** on `main` after #217 (2026-11-28): `core/`, `dsp/` and all of `app/`. The same under ASan and UBSan, with `ASAN_OPTIONS=detect_leaks=0` |
+| `make -C host test` | **4,876,600 checks, 0 failures** on this branch after the 2026-11-28 review fixes: `core/`, `dsp/` and all of `app/`. The same under ASan and UBSan, with `ASAN_OPTIONS=detect_leaks=0` |
 | CI | `.github/workflows/ci.yml` on every PR: the suite with GCC, again under ASan and UBSan at -O1, the layout check, the screenshots, and the repo checks (`audit_commands.sh`, `check_rules.sh`, `enaga_check.sh`, `check_scripts.sh`, the packaging and build-cache scripts' tests, the card builder's tests). A docs-only PR skips the test jobs. `tools/ci_local.sh` runs the same lanes in WSL. `enaga-upstream.yml` reports new Enaga releases weekly. No device build or scenario runs in CI |
-| `tools/build.sh` | links. Last measured image (cl6x, 2026-11-28): payload 1,691,888 bytes, bss 1,670,656; no BOOT / MCU / SPI sections. `tests/test_memory.cpp` reads these two figures from here, so update both together |
+| `tools/build.sh` | links. Last measured image (cl6x, 2026-11-28): payload 1,833,672 bytes, bss 1,684,400 (at `af72cfa`); no BOOT / MCU / SPI sections. `tests/test_memory.cpp` reads these two figures from here, so update both together |
 | `tools/scenarios.sh` | `--changed` is a PR's set (CLAUDE.md, "The check loop"); with no names, every emulator scenario, run on Roland's PC only; each full pass and its worst peak is in `docs/SCENARIO_LOG.md`, what each change cost in `docs/BUDGET.md`. `tools/profile_guest.py` gives a scenario's guest profile by function |
 | unit | v0.3.1 and builds from `main` boot and play. Load on the top line (2026-11-27, main after #208): A01 15-28%, GENERATE on all tracks 40-60%, so the unit reads about 1.2-1.8x the emulator on a light beat and 2.0-2.4x on dense parts (`docs/BUDGET.md`, "GENERATE on every track"). MAX readings from SETUP are still owed |
 | memory | init takes **97.32 MiB of a 120 MiB heap**: 22.68 MiB spare against an 8 MiB headroom rule. `tests/test_memory.cpp` itemises it. Never checked on the unit |

@@ -83,6 +83,42 @@ The image grew: with cl6x payload 1,691,888 bytes and bss 1,670,656 (2026-11-25:
 emulator's default 4 MiB card that no longer fits, which is why `scenario_projects` failed CARD
 FULL with cl6x only; it runs on an 8 MiB card since.
 
+### Everything turned up (2026-11-28, emulator, Enaga v0.4.0)
+
+The features of 2026-11-28, measured together for the first time (review M4). `scenario_stack`
+builds `genload`'s generated parts on all eight tracks, then turns everything a jam can turn up:
+the line input strip on, REL ALL +64, LEN ALL up, ENERGY +64, VariSpeed +12.0 (260 BPM, so
+twice the triggers and SAMPLE and GRAIN reading twice as fast), TRANSPOSE +3 and JAM REC running,
+with PERFORM on screen, then reads every block for 3 s. Measured at `af72cfa` on Roland's PC, both
+compilers, no overruns; `genload` and `m7` from the same run for comparison.
+
+| | cl6x | GCC-only |
+| --- | --- | --- |
+| `m7` (the factory beat) | 24.28% | 45.54% |
+| `genload` (generated parts alone) | 35.40% | 64.41% |
+| **`stack` peak** | **45.57%** | **80.07%** |
+| `stack` mean / p99 of 2,250 blocks | 36.17% / 41.99% | 69.15% / 75.33% |
+| CPU guard | stayed at 0 | rose to 1 |
+
+**Under the 60% target with cl6x, by 14 points**, so no guard or cut is needed for the build that
+ships. The stack costs about 10 points over `genload` with cl6x (the sum of the single-feature
+deltas, ENERGY +9.7, VariSpeed +8, JAM REC +1.8, overestimated it at about 50%: VariSpeed and
+ENERGY overlap, since both cost voice starts and the generated parts already fill most steps).
+GCC-only it reads 80%, well over target, and the CPU guard rises to level 1 as designed; that
+build is not what ships and the scenario does not fail on its load.
+
+The unit question stays open: on dense parts the unit has read 2.0-2.4x the emulator's top line
+(see "GENERATE on every track"). Applied to 36% mean that would be 72-87% on the unit, where the
+CPU guard (`core/cpuguard.hpp`, 70% over 85 ms) would act. UNIT_CHECKLIST W82 asks for the unit's
+MAX in this state. If it is too high, the first cut is the hats' ENERGY appetite (`kFill` in
+core/energy.cpp), as the ENERGY entry below says.
+
+Over the generated parts, quick encoder turns lose some detents in the emulator (about 1 in 6
+on C, 1 in 20 on VALUE, more GCC-only): the main loop gets less time between audio blocks, and a
+12 ms detent's pin phases are missed. The scenario turns each knob past its end, where it holds.
+The unit's encoder at this load is a W82 question too. Image with cl6x: payload 1,833,672 bytes,
+bss 1,684,400 (GCC-only payload 1,802,056).
+
 ### JAM REC (2026-11-28, emulator, Enaga v0.4.0)
 
 JAM REC writes the finished master to an Enaga recording stream every block: Enaga's

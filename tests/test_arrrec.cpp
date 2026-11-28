@@ -34,7 +34,7 @@ void reset() {
 }
 
 ArrState state(uint8_t slot, uint8_t mutes = 0, int energy = 0, uint16_t morph = 0) {
-    return arr_state(0, slot, mutes, 0, morph, energy, 13000, false);
+    return arr_state(0, slot, mutes, 0, morph, energy, 0, 13000, false);
 }
 
 // One whole pass of `s` starting at `*tick`, which moves on by the loop.
@@ -47,7 +47,7 @@ ArrPass pass(const ArrState &s, uint32_t &tick) {
 }  // namespace
 
 TEST(arrrec_state_holds_cap_scene_side_energy_and_tempo) {
-    const ArrState s = arr_state(2, 5, 0x81, 3, kMorphScale, -20, 12850, false);
+    const ArrState s = arr_state(2, 5, 0x81, 3, kMorphScale, -20, -3, 12850, false);
     CHECK_EQ(int(s.bank), 2);
     CHECK_EQ(int(s.slot), 5);
     CHECK_EQ(int(s.fields.cap), 1);
@@ -56,21 +56,26 @@ TEST(arrrec_state_holds_cap_scene_side_energy_and_tempo) {
     CHECK_EQ(int(s.fields.morph), int(kSectionMorphSnap));
     CHECK_EQ(section_energy(s.fields.energy), -20);
     CHECK_EQ(int(s.fields.bpm), 12850);
+    CHECK_EQ(section_transpose(s.fields.transpose), -3);
     CHECK(section_valid(s.fields));
+    // TRANSPOSE at rest is TRN 0, not `--`: a section after a key change puts the key back.
+    CHECK_EQ(section_transpose(state(0).fields.transpose), 0);
+    CHECK(state(0).fields.transpose != 0);
     // The morph to its nearer side; half way is A.
-    CHECK_EQ(int(arr_state(0, 0, 0, 0, kMorphScale / 2, 0, 12000, false).fields.morph),
+    CHECK_EQ(int(arr_state(0, 0, 0, 0, kMorphScale / 2, 0, 0, 12000, false).fields.morph),
              int(kSectionMorphSnapA));
-    CHECK_EQ(int(arr_state(0, 0, 0, 0, kMorphScale / 2 + 1, 0, 12000, false).fields.morph),
+    CHECK_EQ(int(arr_state(0, 0, 0, 0, kMorphScale / 2 + 1, 0, 0, 12000, false).fields.morph),
              int(kSectionMorphSnap));
     // An outside clock's tempo is not the song's.
-    CHECK_EQ(int(arr_state(0, 0, 0, 0, 0, 0, 12000, true).fields.bpm), 0);
+    CHECK_EQ(int(arr_state(0, 0, 0, 0, 0, 0, 0, 12000, true).fields.bpm), 0);
     // Out of range in, in range out.
-    const ArrState wild = arr_state(0, 0, 0, 200, 0, 99, 100, false);
+    const ArrState wild = arr_state(0, 0, 0, 200, 0, 99, 40, 100, false);
     CHECK(section_valid(wild.fields));
     CHECK_EQ(int(wild.fields.scene), 16);
     CHECK_EQ(section_energy(wild.fields.energy), 64);
+    CHECK_EQ(section_transpose(wild.fields.transpose), 12);
     CHECK_EQ(int(wild.fields.bpm), int(kTempoCentiMin));
-    CHECK_EQ(int(arr_state(0, 0, 0, 0, 0, 0, 65000, false).fields.bpm), int(kTempoCentiMax));
+    CHECK_EQ(int(arr_state(0, 0, 0, 0, 0, 0, 0, 65000, false).fields.bpm), int(kTempoCentiMax));
 }
 
 TEST(arrrec_start_keeps_the_chain_and_empties_it) {
@@ -124,6 +129,23 @@ TEST(arrrec_a_synthetic_jam_becomes_the_expected_chain) {
     CHECK(!g_rec.on);
     CHECK(g_backup.valid);
     CHECK_EQ(chain_length(g_project), 4);
+}
+
+TEST(arrrec_a_key_change_starts_a_new_entry_and_replays) {
+    // Review L1 (2026-11-28): TRANSPOSE is recorded as TRN, so a key change made in a take is a
+    // new section and the chain plays it back moved.
+    reset();
+    CHECK(arr_start(g_project, g_rec, g_backup));
+    uint32_t tick = 0;
+    pass(arr_state(0, 0, 0, 0, 0, 0, 0, 13000, false), tick);
+    pass(arr_state(0, 0, 0, 0, 0, 0, 0, 13000, false), tick);
+    pass(arr_state(0, 0, 0, 0, 0, 0, 2, 13000, false), tick);
+    pass(arr_state(0, 0, 0, 0, 0, 0, 2, 13000, false), tick);
+    CHECK_EQ(chain_length(g_project), 2);
+    CHECK_EQ(int(g_project.chain[0].repeats), 2);
+    CHECK_EQ(section_transpose(g_project.chain_extra[0].transpose), 0);
+    CHECK_EQ(int(g_project.chain[1].repeats), 2);
+    CHECK_EQ(section_transpose(g_project.chain_extra[1].transpose), 2);
 }
 
 TEST(arrrec_a_section_splits_at_x16) {
@@ -290,7 +312,7 @@ TEST(arrrec_a_recorded_chain_writes_cap_so_an_old_build_reads_no_recall) {
 namespace {
 
 ArrState at_tempo(uint8_t slot, uint16_t centi) {
-    return arr_state(0, slot, 0, 0, 0, 0, centi, false);
+    return arr_state(0, slot, 0, 0, 0, 0, 0, centi, false);
 }
 
 }  // namespace
@@ -328,8 +350,8 @@ TEST(arrrec_a_take_under_an_outside_clock_writes_no_bpm) {
     reset();
     CHECK(arr_start(g_project, g_rec, g_backup));
     uint32_t tick = 0;
-    pass(arr_state(0, 0, 0, 0, 0, 0, 13000, true), tick);
-    pass(arr_state(0, 1, 0, 0, 0, 0, 14000, true), tick);
+    pass(arr_state(0, 0, 0, 0, 0, 0, 0, 13000, true), tick);
+    pass(arr_state(0, 1, 0, 0, 0, 0, 0, 14000, true), tick);
     CHECK_EQ(int(g_project.chain_extra[0].bpm), 0);
     CHECK_EQ(int(g_project.chain_extra[1].bpm), 0);
 }
@@ -371,7 +393,7 @@ void launch_reset() {
 
 // What plays now, launches included.
 ArrState playing(uint8_t mutes = 0) {
-    ArrState s = arr_state(g_project.bank, g_project.slot, mutes, 0, 0, 0, 13000, false);
+    ArrState s = arr_state(g_project.bank, g_project.slot, mutes, 0, 0, 0, 0, 13000, false);
     arr_state_lanes(s, g_project);
     return s;
 }
@@ -469,6 +491,30 @@ TEST(arrrec_a_capture_avoids_what_the_pass_played_and_what_plays_now) {
     CHECK_EQ(int(g_project.patterns[0][3].tracks[0].steps[0].flags & kStepTrig), int(kStepTrig));
 }
 
+TEST(arrrec_a_capture_leaves_a_slot_a_queue_is_about_to_land_on) {
+    // Review L2 (2026-11-28): A02 is empty and a pattern change to it is queued, and track 5's
+    // launch of A03 (empty) waits too. The capture skips both and takes A04, so the user lands
+    // on the empty pattern they queued.
+    launch_reset();
+    CHECK(arr_start(g_project, g_rec, g_backup));
+    uint32_t tick = 0;
+    g_project.settings.lane_source[2] = lane_source(1, 6);
+    g_rec.queued[0] = lane_source(0, 1);
+    g_rec.queued[1 + 4] = lane_source(0, 2);
+    CHECK(pass(playing(), tick) == ArrPass::added);
+    CHECK(g_rec.launch == ArrLaunch::kept);
+    CHECK_EQ(int(g_project.chain[0].slot), 3);
+    CHECK(!pattern_has_steps(g_project.patterns[0][1]));
+    CHECK(!pattern_has_steps(g_project.patterns[0][2]));
+    // With nothing queued, the next capture takes the first free slot again.
+    for (int i = 0; i <= kTracks; i++) g_rec.queued[i] = kLaneOwn;
+    g_project.settings.lane_source[2] = kLaneOwn;
+    pass(playing(), tick);
+    g_project.settings.lane_source[2] = lane_source(1, 6);
+    pass(playing(), tick);
+    CHECK_EQ(int(g_project.chain[2].slot), 1);
+}
+
 TEST(arrrec_a_full_bank_writes_the_playing_pattern_and_says_so_once) {
     launch_reset();
     for (int s = 1; s < kPatternsPerBank; s++) {
@@ -504,4 +550,73 @@ TEST(arrrec_a_take_that_is_full_captures_nothing) {
     g_project.settings.lane_source[2] = lane_source(1, 6);
     CHECK(pass(playing(), tick) == ArrPass::full);
     for (int s = 1; s < kPatternsPerBank; s++) CHECK(!pattern_has_steps(g_project.patterns[0][s]));
+}
+
+// Review L2 and Roland's choice (2026-11-28): ARR UNDO of a take that captured empties the slots
+// it captured into, keeps one edited since or playing, and the take cannot come back.
+TEST(arrrec_undo_empties_the_slots_the_take_captured) {
+    launch_reset();
+    CHECK(arr_start(g_project, g_rec, g_backup));
+    uint32_t tick = 0;
+    g_project.settings.lane_source[2] = lane_source(1, 6);
+    pass(playing(), tick);                            // captured into A02
+    g_project.settings.lane_source[2] = kLaneOwn;
+    pass(playing(), tick);
+    g_project.settings.lane_source[2] = lane_source(1, 6);
+    pass(playing(), tick);                            // and again into A03
+    g_project.settings.lane_source[2] = lane_source(1, 6);
+    pass(playing(0x01), tick);                        // the same mix: A03 reused
+    CHECK(arr_finish(g_project, g_rec, g_backup, tick) > 0);
+    CHECK_EQ(int(g_backup.captured.count), 2);
+    g_project.settings.lane_source[2] = kLaneOwn;
+    g_project.bank_dirty[0] = false;
+    uint8_t emptied = 0xFF;
+    CHECK(arr_undo(g_project, g_rec, g_backup, &emptied));
+    CHECK_EQ(int(emptied), 0x01);
+    CHECK(!pattern_has_steps(g_project.patterns[0][1]));
+    CHECK(!pattern_has_steps(g_project.patterns[0][2]));
+    CHECK(g_project.bank_dirty[0]);
+    CHECK(pattern_has_steps(g_project.patterns[0][0]));   // A01 was never the take's
+    CHECK_EQ(chain_length(g_project), 0);             // the chain from before (empty)
+    // No redo: the take's patterns are gone.
+    CHECK(!g_backup.valid);
+    CHECK(!arr_undo(g_project, g_rec, g_backup));
+}
+
+TEST(arrrec_undo_keeps_a_captured_slot_edited_since_or_playing) {
+    launch_reset();
+    CHECK(arr_start(g_project, g_rec, g_backup));
+    uint32_t tick = 0;
+    g_project.settings.lane_source[2] = lane_source(1, 6);
+    pass(playing(), tick);                            // A02
+    g_project.settings.lane_source[2] = kLaneOwn;
+    pass(playing(), tick);
+    g_project.settings.lane_source[2] = lane_source(1, 6);
+    pass(playing(), tick);                            // A03
+    g_project.settings.lane_source[2] = kLaneOwn;
+    pass(playing(), tick);
+    g_project.settings.lane_source[2] = lane_source(1, 6);
+    pass(playing(), tick);                            // A04
+    arr_finish(g_project, g_rec, g_backup, tick);
+    g_project.settings.lane_source[2] = kLaneOwn;
+    arr_touched(g_rec, g_backup, 0, 1);               // A02 edited by hand
+    g_project.slot = 2;                               // A03 plays
+    CHECK(arr_undo(g_project, g_rec, g_backup));
+    CHECK(pattern_has_steps(g_project.patterns[0][1]));
+    CHECK(pattern_has_steps(g_project.patterns[0][2]));
+    CHECK(!pattern_has_steps(g_project.patterns[0][3]));
+    g_project.slot = 0;
+}
+
+TEST(arrrec_a_take_without_captures_still_comes_back) {
+    launch_reset();
+    CHECK(arr_start(g_project, g_rec, g_backup));
+    uint32_t tick = 0;
+    pass(playing(), tick);
+    arr_finish(g_project, g_rec, g_backup, tick);
+    CHECK_EQ(int(g_backup.captured.count), 0);
+    CHECK(arr_undo(g_project, g_rec, g_backup));
+    CHECK(g_backup.valid);
+    CHECK(arr_undo(g_project, g_rec, g_backup));
+    CHECK_EQ(chain_length(g_project), 1);
 }

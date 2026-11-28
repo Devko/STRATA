@@ -703,6 +703,7 @@ private:
     bool arr_undone_ = false;        // the backup holds the take, the chain the one before it
     bool arr_switched_ = false;      // switch_pattern ran since the last tick
     uint32_t arr_origin_ = 0;        // origin_ as resolve_tick last saw it
+    void arr_note_queued();
     ArrState arr_now() const;
     void arr_tick(uint32_t tick, uint32_t previous, bool new_pass, bool jumped_back);
     void arr_end(uint32_t tick, bool full);

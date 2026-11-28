@@ -590,7 +590,7 @@ SerializeResult project_write(const Project &project, uint8_t *buffer, uint32_t 
         w.u8(e.morph);
         w.u8(e.energy);
         w.u16(e.bpm);
-        w.u8(0);   // reserved (a kit slot, if a section ever recalls one)
+        w.u8(e.transpose);   // TRN, in what was a reserved byte: older builds ignore it
     }
 
     if (!w.ok() || w.size() != kProjectTotalBytes) return SerializeResult::buffer_too_small;
@@ -896,7 +896,7 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
                 const uint8_t morph = r.u8();
                 const uint8_t energy = r.u8();
                 const uint16_t bpm = r.u16();
-                (void)r.u8();   // reserved
+                const uint8_t transpose = r.u8();   // 0 in files from before TRN
                 if (project.chain[i].repeats == 0) continue;
                 SectionExtra &e = project.chain_extra[i];
                 e.cap = cap == 1 ? uint8_t(1) : uint8_t(0);
@@ -905,6 +905,7 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
                 e.morph = morph <= kSectionMorphMax ? morph : kSectionMorphNone;
                 e.energy = energy <= kSectionEnergyMax ? energy : uint8_t(0);
                 e.bpm = bpm >= kTempoCentiMin && bpm <= kTempoCentiMax ? bpm : uint16_t(0);
+                e.transpose = transpose <= kSectionTransposeMax ? transpose : uint8_t(0);
                 if (e.cap != 0) project.chain[i].mutes = 0;
             }
             if (!r.ok()) return refuse(SerializeResult::truncated);

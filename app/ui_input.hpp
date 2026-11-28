@@ -102,7 +102,9 @@
         // together, back to 0. On every screen and over every list, menu and view, as VariSpeed
         // is on FUNC + VALUE: a performance move works wherever the hands happen to be.
         if (shift_ && (key == ENAGA_KEY_SELECT_LEFT || key == ENAGA_KEY_SELECT_RIGHT)) {
-            if (down) transpose_key(key == ENAGA_KEY_SELECT_LEFT ? -1 : 1);
+            const int delta = key == ENAGA_KEY_SELECT_LEFT ? -1 : 1;
+            if (down) transpose_press(delta);
+            else if (transpose_pending_ == delta) transpose_commit();   // a tap inside the wait
             return;
         }
 

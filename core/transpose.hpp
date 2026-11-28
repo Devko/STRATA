@@ -40,8 +40,8 @@
 // undone; a LOCK holds it, like ENERGY and REL ALL. A held note keeps the pitch it started at
 // and is let go of at that pitch (the engine remembers the shift each held key took).
 //
-// Later, perhaps: a song section field (CHAIN's SECTION view) so a chain entry can set the
-// transpose, as NRG sets ENERGY. Not built: one byte on the end of the section entry.
+// A song section sets it with TRN (CHAIN's SECTION view, core/queue.hpp), as NRG sets ENERGY, and
+// ARR REC records it there, so a key change made in a take replays.
 //
 // core/: no Enaga headers, no allocation, integer only.
 #pragma once

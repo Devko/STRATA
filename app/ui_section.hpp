@@ -6,7 +6,7 @@
 // every member the class has.
 //
 // The view edits the entry under CHAIN's cursor: two pages of four fields, SECT (PAT REP MUT
-// SCN) and MOVE (MRP NRG BPM, D free), on the screen keys. A knob turns its field, a push puts it
+// SCN) and MOVE (MRP NRG BPM TRN), on the screen keys. A knob turns its field, a push puts it
 // back to `--`, UP/DOWN walk the entries, OK's tap or CLR go back to the list and a held OK fills
 // the fields from what plays. Every edit is a command the audio side applies to the authoritative
 // record (Cmd::chain_edit, ChainEdit::section_delta and friends), a delta and never a value read
@@ -17,11 +17,12 @@
     }
 
     // The field a knob edits on a page: PAT and REP are the entry's own, the rest SectionFields.
-    // -1 PAT, -2 REP, -3 none (MOVE's D).
+    // -1 PAT, -2 REP (-3, none, is no knob's since TRN took MOVE's D).
     static int section_knob_field(int page, int knob) {
         static const int kFields[2][4] = {
             {-1, -2, int(SectionField::mut), int(SectionField::scn)},
-            {int(SectionField::mrp), int(SectionField::nrg), int(SectionField::bpm), -3},
+            {int(SectionField::mrp), int(SectionField::nrg), int(SectionField::bpm),
+             int(SectionField::trn)},
         };
         return kFields[page & 1][knob & 3];
     }
@@ -35,12 +36,13 @@
             case int(SectionField::mrp): return "MRP";
             case int(SectionField::nrg): return "NRG";
             case int(SectionField::bpm): return "BPM";
+            case int(SectionField::trn): return "TRN";
             default: return "---";
         }
     }
 
     // The field's value as the view and the notices write it: "A05", "X2", "M3", "CAP", "4",
-    // "SNAP", "+32", "132.5", and "--" for a field left alone.
+    // "SNAP", "+32", "132.5", "-3", and "--" for a field left alone.
     void section_field_text(int field, const ChainEntry &entry, const SectionExtra &e,
                             char *out) const {
         switch (field) {
@@ -85,6 +87,13 @@
                     append_number(out, uint32_t(e.bpm) / 100);
                     *out++ = '.';
                     append_number(out, uint32_t(e.bpm) / 10 % 10);
+                }
+                break;
+            case int(SectionField::trn):
+                if (e.transpose == 0) {
+                    append(out, "--");
+                } else {
+                    append_signed(out, section_transpose(e.transpose));
                 }
                 break;
             default:
@@ -132,7 +141,7 @@
     void section_turn(int knob, int delta) {
         if (chain_entries() == 0) return;
         const int field = section_knob_field(section_page_, knob);
-        if (field == -3) return;                  // MOVE's D: free (docs/CONTROLS.md)
+        if (field == -3) return;                  // no field (none since TRN took MOVE's D)
         if (field == -1) {
             chain_delta(ChainEdit::pattern_delta, delta);
             return;
@@ -297,8 +306,8 @@
         paint::small_text(px, 0, 113, "PUSH A-D: SET TO --", 10);
     }
 
-    // The CHAIN list's summary of the cursor's section fields, "S4 SNAP E+32 132", or nothing
-    // when every field is `--`.
+    // The CHAIN list's summary of the cursor's section fields, "S4 SNAP E+32 T-2 132BPM", or
+    // nothing when every field is `--`.
     static void section_summary(const SectionExtra &e, char *out) {
         bool any = false;
         const auto gap = [&out, &any]() {
@@ -319,6 +328,11 @@
             gap();
             *out++ = 'E';
             append_signed(out, section_energy(e.energy));
+        }
+        if (e.transpose != 0) {
+            gap();
+            *out++ = 'T';
+            append_signed(out, section_transpose(e.transpose));
         }
         if (e.bpm != 0) {
             gap();

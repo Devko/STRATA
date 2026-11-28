@@ -241,14 +241,15 @@ bool chain_set_section(Project &project, int at, const SectionExtra &extra);
 const SectionExtra *chain_entry_section(const Project &project, const ChainPlayer &player);
 
 // The section fields a knob edits, in the order the detail view lays them out after PAT and REP.
-enum class SectionField : uint8_t { mut = 0, scn, mrp, nrg, bpm, count };
+enum class SectionField : uint8_t { mut = 0, scn, mrp, nrg, bpm, trn, count };
 
 // One knob turn of `field` on entry `at`, `delta` clicks:
 //   MUT walks --, M1-M8, CAP; arriving on CAP stores `live_mutes` as its mask.
 //   SCN walks --, 1-16 and MRP --, SNAP, RIDE, BACK, SNAP A, stopping at the ends.
 //   NRG and BPM leave `--` for a value on any turn (ENERGY 0; `tempo_centi`, the tempo playing),
-//   then walk -64..+64 and 20-300 BPM a whole BPM a click. Back to `--` is `section_clear`.
-// False for an index outside the chain or a field past the five.
+//   then walk -64..+64 and 20-300 BPM a whole BPM a click. TRN likewise leaves `--` for 0, then
+//   walks -12..+12 a step a click. Back to `--` is `section_clear`.
+// False for an index outside the chain or a field past the six.
 bool section_step(Project &project, int at, SectionField field, int delta, uint8_t live_mutes,
                   uint16_t tempo_centi);
 
@@ -259,6 +260,12 @@ bool section_clear(Project &project, int at, SectionField field);
 constexpr int section_energy(uint8_t byte) { return int(byte) - int(kSectionEnergyZero); }
 constexpr uint8_t section_energy_byte(int energy) {
     return uint8_t((energy < -64 ? -64 : (energy > 64 ? 64 : energy)) + int(kSectionEnergyZero));
+}
+
+// TRANSPOSE from TRN's byte (1-25), and back. Byte 0 is `--` and has no TRANSPOSE.
+constexpr int section_transpose(uint8_t byte) { return int(byte) - int(kSectionTransposeZero); }
+constexpr uint8_t section_transpose_byte(int steps) {
+    return uint8_t((steps < -12 ? -12 : (steps > 12 ? 12 : steps)) + int(kSectionTransposeZero));
 }
 
 // Keep a running player on the entry it is actually playing across an edit. `chain_insert` and

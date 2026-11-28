@@ -6,7 +6,7 @@
 # FUNC + that key, and a second screen key 10 M cycles in lands while the first is still down: the
 # both-at-once reset. Not closer: Enaga hands over the keys one poll found down in key order, and
 # the screen keys (8, 9) come before FUNC (19), so a screen key 2 M cycles after FUNC arrived
-# first, without FUNC, whenever one poll caught both (seen on the cl6x build, 2026-11-28). The notices are logged (app/ui_perform.hpp, transpose_key). Which tracks
+# first, without FUNC, whenever one poll caught both (seen on the cl6x build, 2026-11-28). The notices are logged (app/ui_perform.hpp, transpose_set). Which tracks
 # move and how is tests/test_transpose.cpp's, the gesture's every screen tests/test_ui.cpp's; this
 # proves the path runs on the C674x with the default beat playing transposed, under the load
 # target.
@@ -14,7 +14,9 @@
 #   PLAY
 #   FUNC + SEL>  three times    -> "TRANSPOSE +1 IN KEY", "+2", "+3"
 #   FUNC + SEL<                 -> "+2"
-#   FUNC + SEL< then SEL> held  -> "+1", then "TRANSPOSE 0": both screen keys are rest
+#   FUNC + SEL< then SEL> held  -> "TRANSPOSE 0": both screen keys are rest, with no "+1" first
+#                                 (the second key comes 13 ms after the first, inside the 40 ms
+#                                 a press waits for it, app/ui_perform.hpp transpose_press)
 #   FUNC + SEL<                 -> "TRANSPOSE -1 IN KEY", held there to the end: the load
 #
 # Keys (third_party/enaga/include/enaga/abi.h): F5 = 22, F1 = 19, SELECT_LEFT = 8,
@@ -95,7 +97,7 @@ for line in log:
     if m:
         seen.append((int(m.group(1)), m.group(2)))
 amounts = [a for a, _ in seen]
-check(amounts == [1, 2, 3, 2, 1, 0, -1], "the presses walked +1 +2 +3 +2 +1, rest, -1",
+check(amounts == [1, 2, 3, 2, 0, -1], "the presses walked +1 +2 +3 +2, rest, -1",
       f"seen={seen}")
 check(all((a == 0) == (k is None) for a, k in seen),
       "IN KEY away from rest (scale steps at every start), nothing at rest", f"seen={seen}")

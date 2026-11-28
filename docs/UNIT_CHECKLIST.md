@@ -1032,7 +1032,8 @@ stopped on A01, scenes 3 and 4 as in W71.
   jump to +3 semitones, a new key. FUNC + SEL<: `TRANSPOSE +2 ..` with the key named in sharps.
   Back to `SCALE`. `____`
 - FUNC held down, SEL< then SEL> while SEL< is still down: `TRANSPOSE 0`, A01 exactly as
-  programmed. Hold FUNC alone for a second: the help comes up, and LEFT/RIGHT (not the screen
+  programmed. From +2, both screen keys pressed together: straight to 0, no step down heard
+  first. Hold FUNC alone for a second: the help comes up, and LEFT/RIGHT (not the screen
   keys) turn its pages. `____`
 - KEYS on the bass track: hold a pad, FUNC + SEL> twice while it sounds, let go of the pad: the
   note ends cleanly, nothing hangs. The next pad sounds two scale steps up. With REC on, a note
@@ -1110,6 +1111,7 @@ A01 at 130.0, no chain.
 - FUNC + turn VALUE to +5.0 at 130. Give a chain entry BPM 280: as it plays, `VARISPEED HELD`
   and a smaller amount; at the next entry with a slower BPM, `VARISPEED +5.0 ...` again.
   FUNC + tap VALUE. `____`
+
 **W81. A project opens at rest; ENERGY ghosts skip conditional trigs (3 min).** A01 playing.
 - PERFORM: FUNC + turn C to `ENERGY -64`, FUNC + turn D to `LIVE RND4`, FUNC + turn A a few
   clicks, FUNC + SEL> three times (`TR+3`), FUNC + turn VALUE to `VARISPEED +12.0`. FUNC+HOME,
@@ -1119,6 +1121,24 @@ A01 at 130.0, no chain.
 - NEW PROJECT, PLAY. GRID, select the SNARE track and clear its trigs, then hold FILL and tap
   STEP 13: its only trig is a FILL trig. PERFORM, FUNC + turn C to `ENERGY +64`: the snare stays
   silent (before, its ghosts played the FILL hit every bar); hold FILL and step 13 plays. `____`
+
+**W82. Everything up at once, and the review's fixes (8 min).** A project filled the way
+`scenario_stack` does: GEN (DENSITY 100, RANGE 3 OCT, LEAP 100) on all eight tracks, PLAY.
+- The line input on (MIXER IN, push A), PERFORM, FUNC + turn A, B and C to the top (`REL ALL +64`,
+  `LEN ALL 400%`, `ENERGY +64`), FUNC + turn VALUE to `VARISPEED +12.0`, FUNC + SEL> three times,
+  then FUNC+HOME, DOWN, OK (JAM REC). Let it run a minute. Top-line load: `____`, MAX from SETUP:
+  `____`, GUARD shown? `____`. No clicks or dropouts? Every knob click landing? `____`
+- Stop JAM REC, everything back to rest. CHAIN, an entry, push A, MOVE page: D reads `TRN --`;
+  turn it to `-2`, CHAIN ON, PLAY: the entry plays two steps down, the next (TRN `--`) stays
+  there. `____`
+- ARR REC a take with FUNC + SEL> moved in the middle: the chain gets a new entry with `T+1` on
+  the list, and it replays the key change. `____`
+- LAUNCH a lane from A07, ARR REC two passes (`LAUNCH IN A..`), STOP; queue an empty slot and ARR
+  REC another launched pass: the queued slot stays empty. FUNC menu ARR UNDO: `ARR UNDONE`, the
+  captured slots are empty again; ARR UNDO once more: `NO ARR TO UNDO`. `____`
+- A launched lane on GRID: FUNC + UP (copy) says `COPIED`, not `READ ONLY`; paste on another
+  track: that track plays the borrowed part. `____`
+
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
 

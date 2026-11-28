@@ -2,8 +2,9 @@
 //
 // The arrangement concept (Roland, 2026-11-28; docs/CONTROLS.md "ARR REC"). While ARR REC is on,
 // every pass of the playing pattern is compared with the chain's last entry: the same pattern
-// with the same mutes, scene, morph side, ENERGY and tempo adds a repeat to that entry, anything
-// else starts a new entry holding what plays now (MUT CAP, SCN, MRP SNAP or SNAP A, NRG, BPM).
+// with the same mutes, scene, morph side, ENERGY, TRANSPOSE and tempo adds a repeat to that entry,
+// anything else starts a new entry holding what plays now (MUT CAP, SCN, MRP SNAP or SNAP A, NRG,
+// TRN, BPM).
 // An entry is capped at X16, so a seventeenth pass of the same thing starts a new entry of it.
 // The chain holds 64 entries; a take that needs a 65th ends there (ARR FULL).
 //
@@ -50,7 +51,10 @@
 // ## Undo
 //
 // Starting a take keeps the chain it replaces in an `ArrBackup` (one level). ARR UNDO swaps the
-// two, so a second ARR UNDO brings the take back. A take that wrote nothing puts the old chain
+// two, so a second ARR UNDO brings the take back -- unless the take captured. Then ARR UNDO also
+// empties the slots it captured into, so the jam leaves nothing behind (Roland, 2026-11-28,
+// review L2), and the take cannot come back: its patterns are gone. A captured slot edited since
+// (`arr_touched`), or playing at the time of the undo, is kept. A take that wrote nothing puts the old chain
 // back at once: turning ARR REC on and off by mistake costs nothing. The backup is dropped by the
 // next take and by a project load; the main context never touches it (it lives in the engine).
 //
@@ -69,27 +73,35 @@ namespace strata {
 struct ArrState {
     uint8_t bank = 0;
     uint8_t slot = 0;
-    SectionExtra fields;     // always MUT CAP; SCN, MRP, NRG set; BPM `--` under an outside clock
+    SectionExtra fields;     // always MUT CAP; SCN, MRP, NRG, TRN set; BPM `--` under an outside clock
     uint8_t lanes[kTracks] = {};   // each borrowed lane's source, kLaneOwn for its own part
 };
 
 // The live state as an ArrState. `scene_b` is 0-15, `morph` 0..kMorphScale (snapped to its
-// nearer side, as the SECTION view's quick fill does), `energy` -64..+64, `tempo_centi` the
+// nearer side, as the SECTION view's quick fill does), `energy` -64..+64, `transpose` -12..+12
+// (TRANSPOSE, recorded as TRN so a key change replays: review L1, 2026-11-28), `tempo_centi` the
 // project's tempo. `external`: the clock is someone else's, so BPM is `--` (a tempo that follows
 // an outside clock is not the song's, and would split a section on every drift).
 ArrState arr_state(uint8_t bank, uint8_t slot, uint8_t mutes, uint8_t scene_b, uint16_t morph,
-                   int energy, uint16_t tempo_centi, bool external);
+                   int energy, int transpose, uint16_t tempo_centi, bool external);
 
 // Fill `state.lanes` from the project's launch state: a borrowed lane's source, kLaneOwn for every
 // lane on its own part (so two states playing the same mix always compare equal).
 void arr_state_lanes(ArrState &state, const Project &project);
 
-// The chain as it was before a take.
+// The slots a take filled by CAPTURE, by pattern index (bank * 16 + slot), each once.
+struct ArrCaptured {
+    uint8_t count = 0;
+    uint8_t index[kProjectPatterns] = {};
+};
+
+// The chain as it was before a take, and (once the take is over) the slots the take captured.
 struct ArrBackup {
     ChainEntry chain[kChainEntries];
     SectionExtra extra[kChainEntries];
     uint8_t length = 0;
     bool valid = false;
+    ArrCaptured captured;
 };
 
 // What the last pass written did with Track Launch.
@@ -114,6 +126,12 @@ struct ArrRec {
     ArrState last;
     uint8_t target_bank = 0;
     uint8_t target_slot = 0;
+    // Sources a queued pattern change ([0]) or a queued launch ([1 + t]) is about to land on,
+    // kLaneOwn where nothing is queued, set by the caller before each arr_pass_end. A capture
+    // never takes one of these slots: an empty slot the user queued must still be empty when the
+    // queue lands (review L2, 2026-11-28).
+    uint8_t queued[kTracks + 1] = {};
+    ArrCaptured captured;       // the slots this take has captured into so far
     // What the last pass written did with Track Launch, for the engine to say. Kept by arr_finish.
     ArrLaunch launch = ArrLaunch::none;
     uint8_t launch_bank = 0;
@@ -155,7 +173,14 @@ void arr_chain_edited(ArrRec &rec);
 // from `backup` back and drops the backup. Does nothing (and returns 0) when no take is on.
 int arr_finish(Project &project, ArrRec &rec, ArrBackup &backup, uint32_t tick);
 
-// ARR UNDO: swap the chain and the backup. False when there is no backup or a take is on.
-bool arr_undo(Project &project, const ArrRec &rec, ArrBackup &backup);
+// ARR UNDO: swap the chain and the backup. False when there is no backup or a take is on. When
+// the take captured, its captured slots are emptied (not one edited since, nor the playing
+// pattern or a lane's source) and the backup is dropped. `emptied_banks`, when given, gets bit b
+// set for each bank a slot was emptied in (0 when none).
+bool arr_undo(Project &project, const ArrRec &rec, ArrBackup &backup,
+              uint8_t *emptied_banks = nullptr);
+
+// A slot was edited (or written whole) by hand: ARR UNDO no longer empties it.
+void arr_touched(ArrRec &rec, ArrBackup &backup, int bank, int slot);
 
 }  // namespace strata
