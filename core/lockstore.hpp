@@ -9,9 +9,20 @@
 // `LiveState`: the playing pattern whole (steps, p-locks, conditions, lengths, swing), every
 // track's sound bytes and fader, the send and master bytes, the mutes, the morph position and
 // the four macro positions, REL ALL and LEN ALL (core/moveall.hpp), LIVE RND, ENERGY
-// (core/energy.hpp) and TRANSPOSE (core/transpose.hpp). Not the tempo (STRATA may not own it
+// (core/energy.hpp) and TRANSPOSE (core/transpose.hpp), and which pattern each Track Launch lane
+// plays (core/launch.hpp). Not the tempo (STRATA may not own it
 // under external sync), not the samples, the machines or the chain, and not the performance
 // mixer: a jump rides the picked effect to rest instead (app/), and a loop keeps playing.
+//
+// ## Launched lanes stay launched (review H1, Roland 2026-11-28)
+//
+// A lock keeps the playing pattern's own tracks and each lane's source apart, as the project
+// does: a jump puts the pattern's own parts back and sends each lane to the part it played
+// when the lock was stored, and the swap-back does the same with the state from before the
+// jump. Storing the mix you hear as one pattern instead wrote the borrowed parts over the
+// pattern's own tracks (silent while their lanes borrowed), so the swap-back was no round trip
+// and the next save kept the loss. The pins are not in a lock: they say what a pattern change
+// does, not what plays.
 //
 // ## Why the swap-back exists (R1)
 //
@@ -61,6 +72,8 @@ struct LiveState {
     uint8_t rnd_armed;             // and the armed tracks, bit t = track t
     int8_t energy;                 // ENERGY (core/energy.hpp), 0 at rest
     int8_t transpose;              // TRANSPOSE (core/transpose.hpp), 0 at rest
+    uint8_t lanes[kTracks];        // Track Launch: each lane's source (core/launch.hpp), kLaneOwn
+                                   // for a lane on the playing pattern's own part
 };
 
 // Byte for byte, except the faders, which are compared as floats (a fader is never NaN: the
