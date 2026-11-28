@@ -6,6 +6,22 @@ the project file format or the controls.
 
 ## [Unreleased]
 
+### Added
+
+- **Techno sounds, measured against sample libraries.** Every factory sound was benchmarked
+  against 400+ techno one-shots and loops (octave bands over the whole hit and its first 20 ms).
+  KCK adds TECHNO, WHOUSE, INDUS and MINIM: the full sweep, full click and the chain's drive,
+  which put 6-9 dB more knock above 300 Hz into the attack than 909. SNR adds TCLAP. 125 factory
+  sounds in all.
+
+### Changed
+
+- **Re-voiced from the benchmark:** RUMBLE is now a rumble layer for a second kick track (no
+  click, driven, low-passed at 290 Hz; duck it from the main kick). CLAP4 and DARK are tuned down
+  so their noise reaches 1 kHz instead of starting at 2 kHz over a boxy 200 Hz body. ACID and
+  ACIDSQ open further (CUT 40 and 44) and drive harder: written around C3 they squelch in the
+  mids where the old voicing boomed at the fundamental. Levels stay balanced with each list.
+
 ### Fixed
 
 - **Docs brought up to 0.6.0.** README and OVERVIEW list the arrangement (song sections, ARR REC,

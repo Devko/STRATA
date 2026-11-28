@@ -76,7 +76,7 @@ is pretty safe as long as the bootloader is left alone
 
 - **Eleven machines on eight tracks, any machine on any track:** KICK, SNARE, HAT, PERC, SAMPLE,
   GRAIN, VA MONO, VA POLY, WAVE MONO, WAVE POLY and FM4, plus MID for an outboard synth.
-  WAVE scans its wavetable with each note in ten modes. 120 factory sounds load into one track at a time while the beat plays, and any two to eight
+  WAVE scans its wavetable with each note in ten modes. 125 factory sounds load into one track at a time while the beat plays, and any two to eight
   tracks can choke each other.
 - **A sequencer built for techno:** up to 64 steps per track with their own length, speed,
   swing and play mode (forward, reverse, ping-pong, random), parameter locks, trig conditions,

@@ -47,7 +47,7 @@ any machine. The factory kit:
 - **SAMPLE:** one-shot or slices by note, with SLC AUTO cutting a break at its hits.
 - **GRAIN:** granular clouds from a sample, with its own envelope, a scan that time-stretches,
   and a pitch spray up to an octave shimmer.
-- **Factory sounds:** 120 ready-made sounds for the drums, the VAs, WAVE, FM4 and GRAIN, loaded
+- **Factory sounds:** 125 ready-made sounds for the drums, the VAs, WAVE, FM4 and GRAIN, loaded
   into one track at a time while the beat plays. **Your own sounds** are saved by name (up to 16
   per machine) and load into any project; a sound also copies to another track, machine and all.
 - **Per track:** drive, multimode filter (LP, BP, HP, 12 or 24 dB; one TON knob on the VA and

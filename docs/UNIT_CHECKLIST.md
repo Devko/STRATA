@@ -1144,6 +1144,17 @@ A01 at 130.0, no chain.
   tables, a few notes on each, then back two tables. The table played a moment ago sounds on
   its first note, not sub only for a moment while it is built again. `____`
 
+**W84. The techno sounds (4 min).** Beat playing, A01.
+- Track 1, SOUNDS: TECHNO, WHOUSE, INDUS, MINIM. Each knocks harder than 909 (a thud with a
+  punch at its front, audible on small speakers too) and sits within a couple of dB of 909's
+  level. `____`
+- Track 5, FUNC+EDIT to KCK, SOUNDS RUMBLE, duck it from track 1 (MIXER DCK): a low growl under
+  the kick that breathes with it, no click of its own. `____`
+- Track 2, SOUNDS: TCLAP, CLAP4, DARK: the smack is in the middle (1-2 kHz), not a boxy 200 Hz
+  thud under a hiss. `____`
+- Track 6, SOUNDS ACID, transpose the bass up an octave (or play KEYS around C3): it squelches
+  in the mids rather than booming. `____`
+
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
 
