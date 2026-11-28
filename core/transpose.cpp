@@ -1,7 +1,7 @@
 #include "transpose.hpp"
 
 #include "project.hpp"   // machine_folds_note
-#include "scale.hpp"     // note_name
+#include "scale.hpp"     // note_name, scale_fold, scale_step
 
 namespace strata {
 
@@ -42,21 +42,30 @@ uint8_t transpose_note(uint8_t note, int semis) {
     return uint8_t(moved < 0 ? 0 : (moved > 127 ? 127 : moved));
 }
 
+uint8_t transpose_in_key(uint8_t note, int steps, uint8_t root, int scale) {
+    const uint8_t played = uint8_t(note & 0x7Fu);
+    if (steps == 0) return played;
+    const uint8_t base = scale_fold(played, root, scale);
+    const uint8_t moved = scale_step(base, root, scale, steps);
+    // Out of the key: keep the distance to the note it folds to (at most a few semitones).
+    return transpose_note(moved, int(played) - int(base));
+}
+
 uint8_t transpose_root(uint8_t root, int semis) {
     // Two octaves of headroom keep the sum positive for any root and any semis in the range;
     // a damaged root (over 11) is taken as its pitch class first.
     return uint8_t((int(root % 12) + semis + 24) % 12);
 }
 
-void transpose_text(int8_t semis, uint8_t root, char *out, int max) {
+void transpose_text(int8_t amount, bool semitones, uint8_t root, char *out, int max) {
     if (max <= 0) return;
     char *end = out + max - 1;
     put_text(out, end, "TRANSPOSE ");
-    const int8_t held = transpose_turn(semis, 0);
+    const int8_t held = transpose_turn(amount, 0);
     put_signed(out, end, held);
     if (held != 0) {
         put(out, end, ' ');
-        put_text(out, end, note_name(transpose_root(root, held)));
+        put_text(out, end, semitones ? note_name(transpose_root(root, held)) : "IN KEY");
     }
     *out = 0;
 }

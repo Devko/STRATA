@@ -255,15 +255,21 @@
         notice_logged(notice_buffer_);
     }
 
-    // TRANSPOSE (core/transpose.hpp): FUNC + SEL< / SEL> a semitone, the other screen key held
-    // as well puts it back to 0. Posted absolute; the notice names the key the melodic tracks
-    // are in and is logged so a scenario can follow it: `TRANSPOSE +3 C`, `TRANSPOSE 0`.
+    // TRANSPOSE (core/transpose.hpp): FUNC + SEL< / SEL> a step (a scale step, or a semitone
+    // with the FUNC menu's row on SEMI), the other screen key held as well puts it back to 0.
+    // Posted absolute with the mode; the notice is logged so a scenario can follow it:
+    // `TRANSPOSE +2 IN KEY`, `TRANSPOSE +3 C` (SEMI: the key the parts are in), `TRANSPOSE 0`.
     void transpose_key(int delta) {
         const bool both = sel_left_down_ && sel_right_down_;
         transpose_ = both ? int8_t(0) : transpose_turn(transpose_, delta);
-        post(Cmd::set_transpose, 0, 0, uint8_t(transpose_));
-        transpose_text(transpose_, engine_.key_root(), notice_buffer_, kTransposeTextMax);
+        post_transpose();
+        transpose_text(transpose_, transpose_semis_, engine_.key_root(), notice_buffer_,
+                       kTransposeTextMax);
         notice_logged(notice_buffer_);
+    }
+
+    void post_transpose() {
+        post(Cmd::set_transpose, 0, 0, uint8_t(transpose_), transpose_semis_ ? 1 : 0);
     }
 
     // LIVE RND's notice, logged so a scenario can follow it: `LIVE RND4 8 TRK` (the unit and how

@@ -1000,9 +1000,12 @@ GRID, CLOCK SRC INTERNAL. For the last two, a computer or a second unit on MIDI.
   (against W23's). FUNC+HOME, RELOAD PROJECT puts the beat back.
 
 **W74. TRANSPOSE (4 min).** Beat playing, A01.
-- FUNC + SEL> three times: `TRANSPOSE +1 ..`, `+2`, `+3` with the key named in sharps; the bass,
-  chords and leads move up together and stay in tune with each other, while the kick, hats, snare
-  and a sliced loop do not move. The live strip shows `TR+3`, PERFORM's status line `TR+3`. `____`
+- FUNC + SEL> three times: `TRANSPOSE +1 IN KEY`, `+2`, `+3`; the bass, chords and leads walk up
+  the scale together and stay in the key, while the kick, hats, snare and a sliced loop do not
+  move. The live strip shows `TR+3`, PERFORM's status line `TR+3`. Musical? `____`
+- FUNC+HOME, DOWN to TRANSPOSE (under FX GLIDE), RIGHT: `SEMI`, `TRANSPOSE SEMITONES`; the parts
+  jump to +3 semitones, a new key. FUNC + SEL<: `TRANSPOSE +2 ..` with the key named in sharps.
+  Back to `SCALE`. `____`
 - FUNC held down, SEL< then SEL> while SEL< is still down: `TRANSPOSE 0`, A01 exactly as
   programmed. Hold FUNC alone for a second: the help comes up, and LEFT/RIGHT (not the screen
   keys) turn its pages. `____`

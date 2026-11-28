@@ -977,6 +977,7 @@ private:
     // TRANSPOSE (core/transpose.hpp): where FUNC + the screen keys left it, posted absolute and
     // read back from the engine after a LOCK jump. Which screen keys are down, for the reset.
     int8_t transpose_ = 0;
+    bool transpose_semis_ = false;      // the FUNC menu's TRANSPOSE row: SEMI, else SCALE
     bool sel_left_down_ = false;
     bool sel_right_down_ = false;
     // VariSpeed (core/varispeed.hpp): tenths of a semitone, 0 rest. Not in a LOCK, not saved.

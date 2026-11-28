@@ -35,7 +35,11 @@ Step &raw_step(int track, int step) {
     return eng().project_for_load().live().tracks[track].steps[step];
 }
 
-void set_transpose(int semis) { post(Cmd::set_transpose, 0, 0, uint8_t(int8_t(semis))); }
+// Semitones unless `in_key`: most engine tests here are about WHICH notes move, which is easiest
+// to read in semitones; the in-key ones say so.
+void set_transpose(int amount, bool in_key = false) {
+    post(Cmd::set_transpose, 0, 0, uint8_t(int8_t(amount)), in_key ? 0 : 1);
+}
 
 // A fresh engine in C minor, the transpose at rest and MIDI OUT's log empty.
 void start() {
@@ -126,18 +130,25 @@ TEST(transpose_after_the_fold_is_the_fold_in_the_moved_key) {
     }
 }
 
-TEST(transpose_text_names_the_key_in_sharps) {
+TEST(transpose_text_names_the_key_in_sharps_or_says_in_key) {
     char text[kTransposeTextMax];
-    transpose_text(3, 9, text, sizeof text);
+    transpose_text(3, true, 9, text, sizeof text);
     CHECK(std::strcmp(text, "TRANSPOSE +3 C") == 0);
-    transpose_text(-1, 9, text, sizeof text);
+    transpose_text(-1, true, 9, text, sizeof text);
     CHECK(std::strcmp(text, "TRANSPOSE -1 G#") == 0);
-    transpose_text(0, 9, text, sizeof text);
+    transpose_text(0, true, 9, text, sizeof text);
     CHECK(std::strcmp(text, "TRANSPOSE 0") == 0);
-    transpose_text(-12, 1, text, sizeof text);
+    transpose_text(-12, true, 1, text, sizeof text);
     CHECK(std::strcmp(text, "TRANSPOSE -12 C#") == 0);
+    transpose_text(2, false, 9, text, sizeof text);
+    CHECK(std::strcmp(text, "TRANSPOSE +2 IN KEY") == 0);
+    transpose_text(0, false, 9, text, sizeof text);
+    CHECK(std::strcmp(text, "TRANSPOSE 0") == 0);
+    transpose_text(-12, false, 9, text, sizeof text);
+    CHECK(std::strcmp(text, "TRANSPOSE -12 IN KEY") == 0);
     CHECK(std::strlen(text) < size_t(kTransposeTextMax));
-    transpose_text(5, 0, text, 4);                // a short buffer is cut, never overrun
+    CHECK(std::strlen(text) <= 21u);              // one screen line
+    transpose_text(5, true, 0, text, 4);          // a short buffer is cut, never overrun
     CHECK(std::strcmp(text, "TRA") == 0);
 
     char brief[kTransposeShortMax];
@@ -149,7 +160,59 @@ TEST(transpose_text_names_the_key_in_sharps) {
     CHECK(brief[0] == 0);
 }
 
+// In scale steps a note in the key walks the scale; one outside keeps its distance to the note it
+// folds to; a step under CHROMATIC is a semitone.
+TEST(transpose_in_key_walks_the_scale) {
+    const int minor = int(Scale::minor);
+    // A minor (root 9): A3 = 57. Two steps down is F3, two up C4, seven up A4.
+    CHECK_EQ(int(transpose_in_key(57, -2, 9, minor)), 53);
+    CHECK_EQ(int(transpose_in_key(57, 2, 9, minor)), 60);
+    CHECK_EQ(int(transpose_in_key(57, 7, 9, minor)), 69);
+    CHECK_EQ(int(transpose_in_key(57, 0, 9, minor)), 57);
+    // A# (58) is not in A minor: it folds down to A, which moves, and keeps its semitone.
+    CHECK_EQ(int(transpose_in_key(58, 2, 9, minor)), 61);
+    CHECK_EQ(int(transpose_in_key(60, 3, 0, int(Scale::chromatic))), 63);
+    // Every in-key note stays in the key, for every scale, root and amount.
+    for (int scale = 0; scale < kScaleCount; scale++) {
+        for (uint8_t root = 0; root < 12; root++) {
+            for (int steps = -kTransposeRange; steps <= kTransposeRange; steps++) {
+                for (int note = 24; note < 104; note++) {
+                    if (!scale_contains(uint8_t(note), root, scale)) continue;
+                    const uint8_t moved = transpose_in_key(uint8_t(note), steps, root, scale);
+                    CHECK(scale_contains(moved, root, scale));
+                    CHECK_EQ(int(transpose_apply(uint8_t(note), steps, false, root, scale)),
+                             int(moved));
+                }
+            }
+        }
+    }
+    CHECK_EQ(int(transpose_apply(60, 3, true, 9, minor)), 63);
+}
+
 // --- the engine -------------------------------------------------------------------------------
+
+// The default, in the key: C minor's tonic triad two steps up is the triad on E-flat, the key's
+// III, every note still C minor's. And a line: E folds to D#, and D# two steps up is G.
+TEST(transpose_engine_in_key_keeps_every_note_in_the_scale) {
+    start();
+    constexpr uint8_t kPolyTrack = 6, kMonoTrack = 5;
+    post(Cmd::set_machine, kPolyTrack, 0, uint8_t(MachineId::va_poly));
+    post(Cmd::set_machine, kMonoTrack, 0, uint8_t(MachineId::va_mono));
+    put_trig(kPolyTrack, 0);
+    raw_step(kPolyTrack, 0).note = 60;
+    raw_step(kPolyTrack, 0).chord = uint8_t(ChordType::major);
+    put_trig(kMonoTrack, 0);
+    raw_step(kMonoTrack, 0).note = 64;                     // E, folds to D# (63)
+    set_transpose(2, true);
+    play_tick(0);
+    CHECK(!eng().transpose_semitones());
+    CHECK_EQ(poly_on(kPolyTrack).busy_voices(), 3);
+    CHECK_EQ(poly_on(kPolyTrack).voice_note(0), 63);       // C D# G -> D# G A#
+    CHECK_EQ(poly_on(kPolyTrack).voice_note(1), 67);
+    CHECK_EQ(poly_on(kPolyTrack).voice_note(2), 70);
+    CHECK_EQ(int(eng().sent_note(kMonoTrack)), 67);        // D# two steps up is G
+    stop_and_settle();
+}
 
 // The same step on a VA MONO, a KICK and a sliced SAMPLE: the line moves, the kick and the
 // slices do not.

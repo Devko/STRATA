@@ -90,7 +90,7 @@ each line means.
 | VALUE turn | Tempo, 20-300 BPM in 0.1 steps (PERFORM: morph). With a performance effect picked: its amount (below) |
 | VALUE push + turn | Pattern swing |
 | Tap VALUE, twice or more | Tap tempo where VALUE turns the tempo (`TAP 128.0`), from the last four taps; a 2 s gap starts again |
-| FUNC + SEL< / SEL> | **TRANSPOSE**: the melodic tracks (VAs, WAVEs, FM4, GRAIN, unsliced SAMPLE) a semitone down / up, -12..+12, on every screen (`TRANSPOSE +3 C`, the key they are in); both screen keys together back to 0. Drums, sliced samples and MID stay. Not saved; in a LOCK |
+| FUNC + SEL< / SEL> | **TRANSPOSE**: the melodic tracks (VAs, WAVEs, FM4, GRAIN, unsliced SAMPLE) a scale step down / up, -12..+12, on every screen (`TRANSPOSE +2 IN KEY`); the FUNC menu's TRANSPOSE row on SEMI makes it semitones, the key moving too (`TRANSPOSE +3 C`). Both screen keys together back to 0. Drums, sliced samples and MID stay. Not saved; in a LOCK |
 | FUNC + VALUE turn | **VariSpeed**: tempo and the pitch of every machine together, like a turntable, a tenth of a semitone a click, an octave each way (`VARISPEED +1.2 140.3`). Rest is a detent; FUNC + tap VALUE (no effect picked) snaps back. Not saved; internal clock only (`EXT CLOCK`) |
 | FUNC + push VALUE + turn | Nudge: 4% faster or slower for 250 ms a detent, then back to the set tempo (`NUDGE FASTER`) |
 | Push VALUE + STEP, CLR, LEFT/RIGHT | The performance mixer (below) |
@@ -208,8 +208,8 @@ the track menu (hold OK in GRID); the last
 three throw away unsaved work, so each needs OK twice within 2 s (OK AGAIN TO RELOAD, OK AGAIN
 FOR NEW, OK AGAIN FOR DEMO). NEW is empty; LOAD DEMO is the factory demo a first start plays.
 **FUNC menu (FUNC+HOME):** SAVE, JAM REC, CLICK, COUNT-IN, REC MODE, QUANTIZE, AUTO-FILL, FX
-GLIDE, LOOP LEN, CHAIN, CHAIN END, PROG CHG OUT, SAVE AS, OPEN PROJECT, KITS, NEW PROJECT, RELOAD PROJECT, CLEAR
-PATTERN, LOAD DEMO. It always opens on SAVE: DOWN once is JAM REC, twice CLICK; the list wraps, so
+GLIDE, TRANSPOSE (SCALE or SEMI), LOOP LEN, CHAIN, CHAIN END, PROG CHG OUT, SAVE AS, OPEN
+PROJECT, KITS, NEW PROJECT, RELOAD PROJECT, CLEAR PATTERN, LOAD DEMO. It always opens on SAVE: DOWN once is JAM REC, twice CLICK; the list wraps, so
 UP once is LOAD DEMO, twice CLEAR PATTERN. UP/DOWN or A
 scroll, OK runs the row (NEW, RELOAD, CLEAR PATTERN and LOAD DEMO need OK twice), LEFT/RIGHT or B change a
 setting row (OK steps it too), CLR or FUNC+HOME close it. **Track menu (hold OK in GRID):**
@@ -251,9 +251,10 @@ the selected track out or back in (all eight at start). Pattern untouched; not s
 **ENERGY:** in PERFORM, FUNC + turn C from a breakdown (-64: drums and lines out, pads keep their
 strongest hits; hats go first, kick last) to the peak (+64: quiet ghosts on empty off-beats, hats
 most, probabilities towards 100). `ENERGY -20`; 0 is rest and a detent; pattern untouched; in a LOCK.
-**TRANSPOSE:** FUNC + SEL< / SEL> on any screen moves the tracks that fold into the scale a
-semitone, and the key with them (`TRANSPOSE +3 C`); both screen keys together back to 0. A held
-key is let go of at the pitch it started; recording stores the key played. Not saved; in a LOCK.
+**TRANSPOSE:** FUNC + SEL< / SEL> on any screen moves the tracks that fold into the scale a step
+of the scale, staying in the key (`TRANSPOSE +2 IN KEY`); FUNC menu TRANSPOSE `SEMI` makes it a
+semitone with the key moving (`TRANSPOSE +3 C`). Both screen keys together back to 0. A held key
+is let go of at the pitch it started; recording stores the key played. Not saved; in a LOCK.
 **MACRO LEARN:** in PERFORM push a macro's knob (A-D): EDIT opens with `LEARN B n/4`; **turn** any EDIT knob (any page, the LFO's included, any track), or LOW, MID and HI on MIXER's EQ page (the kill EQ), to where the macro's top should be; OK, CLR, HOME or any screen but EDIT and MIXER ends it (`B: 3 PARAMS`) and the knobs snap back, so the macro at 0 is the old sound and at 127 the one you dialled. A push takes a parameter the macro holds off it; a fifth knob says `FULL`. An EDIT knob on a parameter a turned-up macro holds says `HELD BY MACRO x`.
 **PERFORM:** macros are set by MACRO LEARN (above); the STEP keys are steps, as in GRID;
 FUNC+STEP a trigless step, as in GRID. OK's whole capture also stores the

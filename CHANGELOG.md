@@ -8,11 +8,12 @@ the project file format or the controls.
 
 ### Added
 
-- **TRANSPOSE: FUNC + the screen keys, on every screen.** The melodic tracks a semitone down
-  (SEL<) or up (SEL>), an octave either way; both screen keys together go back to 0. The tracks
-  that move are the ones that fold into the scale (VA MONO and POLY, WAVE MONO and POLY, FM4,
-  GRAIN, SAMPLE while unsliced); drums, sliced samples and MID stay. The key moves with the notes,
-  so lines and chords keep their shape, and the notice names it in sharps (`TRANSPOSE +3 C`).
+- **TRANSPOSE: FUNC + the screen keys, on every screen.** The melodic tracks a step of the scale
+  down (SEL<) or up (SEL>), 12 steps either way, staying in the key (`TRANSPOSE +2 IN KEY`); both
+  screen keys together go back to 0. The FUNC menu's new TRANSPOSE row switches to semitones
+  (`SEMI`), where the key moves with the notes and the notice names it in sharps
+  (`TRANSPOSE +3 C`). The tracks that move are the ones that fold into the scale (VA MONO and
+  POLY, WAVE MONO and POLY, FM4, GRAIN, SAMPLE while unsliced); drums, sliced samples and MID stay.
   Steps, chords, the arp, pads, KEYS, MIDI IN notes and MIDI OUT all follow; a held key lets go
   at the pitch it started. Nothing is written or saved; a LOCK holds it. PERFORM and the live
   strip show `TR+3`. New emulator scenario `transpose`.

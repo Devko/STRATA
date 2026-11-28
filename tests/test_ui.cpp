@@ -76,8 +76,9 @@ struct UiProbe {
         app.post(Cmd::set_live_rnd, 0, 0, kLiveRndOff, kLiveRndAllTracks);
         app.energy_ = 0;                             // ENERGY to rest
         app.post(Cmd::set_energy, 0, 0, 0);
-        app.transpose_ = 0;                          // TRANSPOSE to rest
-        app.post(Cmd::set_transpose, 0, 0, 0);
+        app.transpose_ = 0;                          // TRANSPOSE to rest, in scale steps
+        app.transpose_semis_ = false;
+        app.post(Cmd::set_transpose, 0, 0, 0, 0);
         app.vari_ = 0;                               // VariSpeed to rest
         app.post(Cmd::set_varispeed, 0, 0, 0);
     }
@@ -413,8 +414,8 @@ void open_keys() {
 
 // The FUNC menu's rows, in order (app/ui_perfmix.hpp, MenuItem).
 enum MenuRow : int { kMenuSave, kMenuJam, kMenuClick, kMenuCountIn, kMenuRecMode, kMenuQuantize,
-                     kMenuAutofill, kMenuGlide, kMenuLoopLen, kMenuChain, kMenuSong, kMenuProgOut, kMenuSaveAs,
-                     kMenuOpen, kMenuKits, kMenuNew, kMenuReload, kMenuClear, kMenuDemo,
+                     kMenuAutofill, kMenuGlide, kMenuTranspose, kMenuLoopLen, kMenuChain, kMenuSong,
+                     kMenuProgOut, kMenuSaveAs, kMenuOpen, kMenuKits, kMenuNew, kMenuReload, kMenuClear, kMenuDemo,
                      kMenuRowCount };
 
 // GRID's track menu's rows, in order (app/ui_trackmenu.hpp, TrackRow).
@@ -12296,22 +12297,24 @@ TEST(ui_func_and_the_screen_keys_transpose_on_every_screen) {
     const int knob_page = UiProbe::param_page(app);
     const uint8_t undo_before = undo_depth();
 
+    // Scale steps at every start.
     app.on_key(ENAGA_KEY_F1, true);
     key(ENAGA_KEY_SELECT_RIGHT);
     key(ENAGA_KEY_SELECT_RIGHT);
     key(ENAGA_KEY_SELECT_RIGHT);
     pump(2);
     CHECK_EQ(int(engine.transpose()), 3);
-    CHECK(std::strcmp(UiProbe::notice(app), "TRANSPOSE +3 C") == 0);
+    CHECK(!engine.transpose_semitones());
+    CHECK(std::strcmp(UiProbe::notice(app), "TRANSPOSE +3 IN KEY") == 0);
     CHECK_EQ(UiProbe::param_page(app), knob_page);           // no page turned
     key(ENAGA_KEY_SELECT_LEFT);
     pump(2);
     CHECK_EQ(int(engine.transpose()), 2);
-    CHECK(std::strcmp(UiProbe::notice(app), "TRANSPOSE +2 B") == 0);
-    for (int i = 0; i < 20; i++) key(ENAGA_KEY_SELECT_LEFT);  // stops an octave down
+    CHECK(std::strcmp(UiProbe::notice(app), "TRANSPOSE +2 IN KEY") == 0);
+    for (int i = 0; i < 20; i++) key(ENAGA_KEY_SELECT_LEFT);  // stops at -12
     pump(2);
     CHECK_EQ(int(engine.transpose()), -kTransposeRange);
-    CHECK(std::strcmp(UiProbe::notice(app), "TRANSPOSE -12 A") == 0);
+    CHECK(std::strcmp(UiProbe::notice(app), "TRANSPOSE -12 IN KEY") == 0);
     app.on_key(ENAGA_KEY_F1, false);
     pump(1600);
     CHECK(strip_has(app, "TR-12"));
@@ -12336,13 +12339,32 @@ TEST(ui_func_and_the_screen_keys_transpose_on_every_screen) {
     CHECK(strip_has(app, "TR+2"));
     check_layout(app, "PERFORM, TRANSPOSE up");
 
-    // In the FUNC menu as well.
+    // In the FUNC menu as well, where the TRANSPOSE row (under FX GLIDE) switches to semitones:
+    // the amount stays, in the new unit, and the notice then names the key.
     shift_key(ENAGA_KEY_F4);
     CHECK_EQ(UiProbe::mode(app), int(Mode::menu));
     shift_key(ENAGA_KEY_SELECT_LEFT);
     pump(2);
     CHECK_EQ(int(engine.transpose()), 1);
     CHECK_EQ(UiProbe::mode(app), int(Mode::menu));
+    for (int i = 0; i < 8; i++) key(ENAGA_KEY_DOWN);         // SAVE .. FX GLIDE, TRANSPOSE
+    CHECK(screen_has(app, "TRANSPOSE"));
+    CHECK(screen_has(app, "SCALE"));
+    key(ENAGA_KEY_RIGHT);
+    pump(2);
+    CHECK(engine.transpose_semitones());
+    CHECK_EQ(int(engine.transpose()), 1);
+    CHECK(std::strcmp(UiProbe::notice(app), "TRANSPOSE SEMITONES") == 0);
+    CHECK(screen_has(app, "SEMI"));
+    check_layout(app, "the FUNC menu on TRANSPOSE");
+    shift_key(ENAGA_KEY_SELECT_RIGHT);
+    pump(2);
+    CHECK(std::strcmp(UiProbe::notice(app), "TRANSPOSE +2 B") == 0);   // A + 2 semitones
+    shift_key(ENAGA_KEY_SELECT_LEFT);
+    key(ENAGA_KEY_OK);                                       // OK flips it back
+    pump(2);
+    CHECK(!engine.transpose_semitones());
+    CHECK(std::strcmp(UiProbe::notice(app), "TRANSPOSE IN SCALE") == 0);
     key(ENAGA_KEY_CLR);
 
     // Back to rest: the strip and PERFORM say nothing.

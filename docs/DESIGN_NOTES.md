@@ -83,12 +83,13 @@ and a gesture that sometimes paged the help would not be playable. The engine sh
 fold, at each place a note becomes a machine's trig on a track `transpose_moves` (=
 `machine_folds_note`) allows: `fire` (the plain note and every chord note), `arp_play` (every arp
 hit, a KEYS arp's included, so `fire` hands the arp the folded notes unmoved), `Cmd::trigger_note`
-and `roll_fire`. `key_shift_[track][note]` keeps the shift a held key took so `Cmd::release_note`
-lets go of the pitch that sounded. fold(x, root) + n == fold(x + n, root + n) away from the MIDI
-range's edges (tests/test_transpose.cpp checks every note, root, scale and shift), which is why
-"the key moves with it" needs no second fold. In a LOCK (`LiveState` grew a byte), not saved.
-Semitones with the key moving, not in-key scale steps: every chord keeps its colour and the
-screen can name the key; scale steps would be `scale_step` at the same places. A section field (NRG's sibling) is the
+and `roll_fire`, all through `transpose_apply`. `key_shift_[track][note]` keeps how far a held
+key moved so `Cmd::release_note` lets go of the pitch that sounded. Scale steps by default
+(Roland, 2026-11-28), `scale_step` on the folded note, with an out-of-key note (a KEYS pad)
+keeping its distance to its fold; the FUNC menu's TRANSPOSE row (not saved) makes it semitones,
+where fold(x, root) + n == fold(x + n, root + n) away from the MIDI range's edges
+(tests/test_transpose.cpp checks every note, root, scale and shift), so "the key moves with it"
+needs no second fold. The amount is in a LOCK (`LiveState` grew a byte), the row is not. A section field (NRG's sibling) is the
 natural next step and not built. UNIT_CHECKLIST W74, `scenario_transpose`.
 
 ## LIVE RND

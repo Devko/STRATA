@@ -1482,13 +1482,21 @@ Envelope times stay as they are, and MID tracks send their notes unmoved. VariSp
 internal clock: under MIDI or SYNC it says `EXT CLOCK`, and it goes back to rest when CLOCK SRC
 changes. It is not saved, not undone and not held by a LOCK, like the tempo.
 
-### TRANSPOSE: the melodic tracks in another key
+### TRANSPOSE: move the melodic tracks through the key
 
-**FUNC + SEL> moves the melodic tracks up a semitone, FUNC + SEL< down**, on every screen, up to
-an octave either way. Press **both screen keys** with FUNC (the second while the first is still
-down) to go back to 0. The notice says how far and the key the parts are in: in A minor,
-`TRANSPOSE +3 C` (C minor), `TRANSPOSE -1 G#`, and `TRANSPOSE 0` at rest. PERFORM shows `TR+3`
-on its status line (beside `BAR` while stopped) and the live strip says `TR+3` on every screen.
+**FUNC + SEL> moves the melodic tracks up a step of the scale, FUNC + SEL< down**, on every
+screen, up to 12 steps either way. Press **both screen keys** with FUNC (the second while the
+first is still down) to go back to 0. Every note walks the project's scale, so the parts stay in
+the key and move the way a chord progression does: in A minor, two steps down takes a bass line
+on A to F and the A minor chord to F major, the key's VI, with every note still one of A minor's.
+The notice says `TRANSPOSE -2 IN KEY`, and `TRANSPOSE 0` at rest. PERFORM shows `TR-2` on its
+status line (beside `BAR` while stopped) and the live strip says `TR-2` on every screen.
+
+**For semitones**, set the FUNC menu's TRANSPOSE row (under FX GLIDE) from `SCALE` to `SEMI`.
+A step is then a semitone and the key moves with the notes: every line keeps its shape and every
+chord its colour, so A minor +3 plays C minor, and the notice names the key, `TRANSPOSE +3 C`.
+The amount stays where it is when you switch, heard in the new unit. The row is not saved:
+every start is SCALE. With the project's scale on CHROMATIC the two are the same.
 
 The tracks that move are exactly the ones that fold into the scale: VA MONO, VA POLY, WAVE MONO,
 WAVE POLY, FM4, GRAIN, and SAMPLE while it plays the sample whole (SLC 1). The drums keep their
@@ -1496,8 +1504,7 @@ tuning, a sliced SAMPLE keeps its slices (there the note picks the slice) and MI
 their notes unmoved, since the instrument on the other end may be a drum machine. So the beat and
 the chopped loops stay put and the harmony moves.
 
-The key moves with the notes: every line keeps its shape and every chord its colour, so a minor
-riff stays a minor riff in the new key. Everything those tracks play moves: steps, chords, the
+Everything those tracks play moves: steps, chords, the
 arp (a running arp follows at its next note), pads, KEYS, MIDI IN notes, note repeat, and what
 goes to MIDI OUT. A key you are holding keeps sounding at the pitch it started on and lets go
 cleanly after a change.

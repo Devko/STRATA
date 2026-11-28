@@ -1181,6 +1181,7 @@ bool Engine::apply_perform(const Command &command, int track, int step) {
             // Heard from the next note: a note already sounding keeps its pitch, as a key
             // change on a keyboard leaves the held keys alone.
             transpose_ = transpose_turn(int8_t(command.a), 0);      // held to the range
+            transpose_semis_ = command.b != 0;
             break;
 
         case Cmd::set_varispeed:
@@ -1371,9 +1372,9 @@ bool Engine::apply_notes(const Command &command, int track, int) {
                 Trig trig;
                 // TRANSPOSE moves a played note as it moves a step's. A held key remembers the
                 // shift it took, so its release lets go of that pitch (Cmd::release_note).
-                const int shift = transpose_shift(track);
-                if (command.c == 1) key_shift_[track][clamp_7bit(command.a)] = int8_t(shift);
-                trig.note = transpose_note(clamp_7bit(command.a), shift);
+                const uint8_t played = clamp_7bit(command.a);
+                trig.note = transposed(track, played);
+                if (command.c == 1) key_shift_[track][played] = int8_t(int(trig.note) - int(played));
                 trig.velocity = uint8_t(command.b < 1 ? 1 : (command.b > 127 ? 127 : command.b));
                 trig.frame = 0;
                 trig.held = command.c == 1;   // a key or MIDI IN note: its release comes
@@ -3561,11 +3562,15 @@ void Engine::span_tick(uint32_t tick, uint32_t frame) {
     }
 }
 
-// TRANSPOSE (core/transpose.hpp): how far a note on `track` moves now. 0 at rest and on every
-// track that does not fold into the scale; SAMPLE asks its slice count as the fold does.
-int Engine::transpose_shift(int track) const {
-    if (transpose_ == 0 || machines_[track] == nullptr) return 0;
-    return transpose_moves(machine_id_[track], pool_[track].sampler.slices()) ? int(transpose_) : 0;
+// TRANSPOSE (core/transpose.hpp): `note` as `track` plays it now, through the key or by
+// semitones. Unmoved at rest and on every track that does not fold into the scale; SAMPLE asks
+// its slice count as the fold does.
+uint8_t Engine::transposed(int track, uint8_t note) const {
+    if (transpose_ == 0 || machines_[track] == nullptr ||
+        !transpose_moves(machine_id_[track], pool_[track].sampler.slices())) {
+        return note;
+    }
+    return transpose_apply(note, transpose_, transpose_semis_, key_root(), int(key_scale()));
 }
 
 // --- note repeat ---------------------------------------------------------
@@ -3585,7 +3590,7 @@ void Engine::roll_fire(int track, uint32_t frame) {
     if (machines_[track] == nullptr || muted_[track]) return;
     const Roll &roll = rolls_[track];
     Trig trig;
-    trig.note = transpose_note(roll.note, transpose_shift(track));   // each hit at the transpose of now
+    trig.note = transposed(track, roll.note);   // each hit at the transpose of now
     trig.velocity = roll.velocity;
     trig.frame = frame;
     trig.gate_frames = roll_gate_frames();
@@ -3739,7 +3744,7 @@ void Engine::arp_play(int track, uint8_t note, uint8_t velocity, bool accent, ui
     // TRANSPOSE here, on every hit, so a run moves the moment the transpose does, and a KEYS
     // arp's held notes move with the steps' (core/transpose.hpp). `fire` hands the arp the
     // folded notes unmoved for that reason.
-    note = transpose_note(note, transpose_shift(track));
+    note = transposed(track, note);
     Trig trig;
     trig.note = note;
     trig.velocity = velocity;
@@ -4046,8 +4051,10 @@ void Engine::fire(const StepEvent &event) {
                                    : event.note;
         // TRANSPOSE (core/transpose.hpp) after the fold, on exactly the tracks that fold: the
         // key moves with the notes. 0 on every other track and at rest.
-        const int shift = transpose_moves(machine_id_[track], slices) ? int(transpose_) : 0;
-        const uint8_t note = transpose_note(folded, shift);
+        const bool moves = transpose_ != 0 && transpose_moves(machine_id_[track], slices);
+        const uint8_t note = moves ? transpose_apply(folded, transpose_, transpose_semis_,
+                                                     key_root_now, key_scale_now)
+                                   : folded;
         sent_note_[track] = note;
 
         Trig trig;
@@ -4148,7 +4155,10 @@ void Engine::fire(const StepEvent &event) {
             // folded like the rest of the chord, within the same six voices.
             voiced = with_extra_notes(folding, track, event.step, notes, voiced, key_root_now,
                                       key_scale_now, true, PolyMachine::kVoices);
-            for (int i = 0; i < voiced; i++) notes[i] = transpose_note(notes[i], shift);
+            for (int i = 0; i < voiced && moves; i++) {
+                notes[i] = transpose_apply(notes[i], transpose_, transpose_semis_, key_root_now,
+                                           key_scale_now);
+            }
             for (int i = 0; i < voiced; i++) {
                 trig.note = notes[i];
                 // The budget across every POLY track (kPolyVoiceBudget, engine.hpp).

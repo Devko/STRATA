@@ -167,6 +167,7 @@ FUNC + EDIT twice is KIT.
 | QUANTIZE | | record quantize, by 5 |
 | AUTO-FILL | | OFF 4 8 16 bars |
 | FX GLIDE | | how long a button's jump in the performance mixer rides: `OFF`, `1/16`, `1 BEAT` (default), `1 BAR`, at the tempo. Not saved |
+| TRANSPOSE | | `SCALE` (default) / `SEMI`: what a FUNC + screen key step of TRANSPOSE is, a step of the scale or a semitone. Not saved |
 | LOOP LEN | | the performance mixer's looper: `4 BAR` (1 2 4 8), what push VALUE + STEP 16 records |
 | CHAIN | | ON / OFF |
 | CHAIN END | | SONG (play once) / LOOP |
@@ -205,7 +206,7 @@ Printed labels (above), and the moves made while playing:
 | FUNC + turn C in PERFORM | **ENERGY**: from a sparse breakdown to the peak (below) |
 | FUNC + turn D / push D in PERFORM | **LIVE RND**: the unit / the selected track in or out (below) |
 | FUNC + turn VALUE | **VariSpeed**: the tempo and every machine's pitch together, on every screen (below) |
-| FUNC + SEL< / SEL> | **TRANSPOSE**: the melodic tracks a semitone down / up, on every screen; both screen keys together, back to 0 (below) |
+| FUNC + SEL< / SEL> | **TRANSPOSE**: the melodic tracks a scale step (or a semitone) down / up, on every screen; both screen keys together, back to 0 (below) |
 | FUNC + MUTATE, tapped | Jump to that lock at once (`BACK TO LOCK A01`); tapped again, swap back to the state from just before the jump (`SWAPPED BACK A01`). No lock: `NO LOCK: HOLD STORES` |
 
 Retired 2026-11-25 (backlog D1, D5; CHANGELOG "Gestures that moved"): FUNC + VALUE (DJ filter,
@@ -337,30 +338,36 @@ effect picked or not (a picked effect owns VALUE's plain turn, not FUNC's).
 
 ## TRANSPOSE (FUNC + the screen keys)
 
-Backlog, After 1.0 > Performance (2026-11-28), `core/transpose.hpp`. The melodic tracks moved by
-semitones while the beat plays, from any screen. The screen keys with FUNC did nothing but turn
+Backlog, After 1.0 > Performance (2026-11-28), `core/transpose.hpp`. The melodic tracks moved
+through the key (or by semitones) while the beat plays, from any screen. The screen keys with FUNC did nothing but turn
 the FUNC help's pages once it was up; the help keeps LEFT/RIGHT for that, so no chord that did
 something changed meaning. A gesture that paged the help instead whenever FUNC had been held a
 moment too long would not be one you can play.
 
 | Gesture | Does | Says |
 | --- | --- | --- |
-| FUNC + SEL> | Up a semitone, to +12 at most | `TRANSPOSE +3 C` |
-| FUNC + SEL< | Down a semitone, to -12 at most | `TRANSPOSE -1 G#` |
+| FUNC + SEL> | Up a step, to +12 at most | `TRANSPOSE +2 IN KEY`; on SEMI `TRANSPOSE +3 C` |
+| FUNC + SEL< | Down a step, to -12 at most | `TRANSPOSE -1 IN KEY`; on SEMI `TRANSPOSE -1 G#` |
 | FUNC + both screen keys | Back to 0: the second key pressed while the first is down | `TRANSPOSE 0` |
+| FUNC menu, TRANSPOSE | `SCALE` (every start) or `SEMI`: what a step is. The amount stays and is heard in the new unit | `TRANSPOSE SEMITONES`, `TRANSPOSE IN SCALE` |
 
 - **Which tracks move: the ones that fold into the scale**, by the same rule: VA MONO, VA POLY,
   WAVE MONO, WAVE POLY, FM4, GRAIN, and SAMPLE while unsliced (SLC 1). The drums, a sliced SAMPLE
   (its note is the slice) and MID (maybe a drum machine) stay where they are.
-- **The key moves with the notes.** A step folds into the project's key and then moves, which is
-  the same as folding into the key that many semitones up: the parts keep their shape and their
-  chords their colour (A minor +3 plays C minor). The notice names that key, in sharps.
+- **SCALE stays in the key** (Roland, 2026-11-28: in scale by default, semitones in the menu).
+  Every note walks that many steps of the project's scale, so a riff moves the way a progression
+  does in the key: in A minor, -2 takes a line on A to F and the i chord to the VI (F major),
+  every note still A minor's. A note outside the key keeps its distance to the in-key note it
+  folds to. Under CHROMATIC a step is a semitone.
+- **SEMI moves the key with the notes.** A step folds into the project's key and then moves,
+  which is the same as folding into the key that many semitones up: the parts keep their shape
+  and their chords their colour (A minor +3 plays C minor). The notice names that key, in sharps.
 - **Every note those tracks play**: steps, chords, the arp's hits (a run follows a change at its
   next hit), pads, KEYS keys and MIDI IN notes, note repeat, and MIDI OUT's copy of them. A held
   key keeps the pitch it started at and is let go of there.
 - **Nothing is written.** A KEYS note recorded while transposed is stored as the key played and
-  plays back moved, as it was heard. Not saved, not undone; a LOCK holds it, and a jump or swap
-  puts it back.
+  plays back moved, as it was heard. Not saved, not undone; a LOCK holds the amount (not the
+  row), and a jump or swap puts it back. The FUNC menu row is not saved either.
 - **On screen**: the notice; `TR+3` on PERFORM's status line (beside `BAR` while stopped) and in
   the live strip on every screen. The FUNC help's FUNC + KNOB OR PAD page lists it.
 - **Later, perhaps**: a song section field, so a chain entry can set the transpose as NRG sets
