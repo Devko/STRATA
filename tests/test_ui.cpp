@@ -4906,7 +4906,7 @@ TEST(ui_section_view_hold_ok_fills_from_what_plays) {
     CHECK_EQ(int(e.cap), 1);
     CHECK_EQ(int(e.mask), 0x04);
     CHECK_EQ(int(e.scene), int(project.settings.scene_b) + 1);
-    CHECK_EQ(int(e.morph), int(kSectionMorphNone));   // the morph at rest
+    CHECK_EQ(int(e.morph), int(kSectionMorphSnapA));  // the morph at rest
     CHECK_EQ(section_energy(e.energy), 24);
     CHECK_EQ(int(e.bpm), int(project.settings.tempo_centi_bpm));
     post_cmd(Cmd::set_energy, 0);

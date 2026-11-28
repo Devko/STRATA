@@ -430,7 +430,7 @@ a CHAIN entry opens its SECTION view; the list's own keys are unchanged.
 - **The fields.** MUT `--`, M1-M8 or **CAP** (an exact mute mask the entry stores; turned to CAP
   it takes the mutes as they stand). SCN `--` or 1-16: that scene goes on morph side B. MRP `--`,
   **SNAP** (the morph jumps to B), **RIDE** (it rides to B over the whole entry), **BACK** (it
-  rides to A over the whole entry). NRG `--` or -64..+64: ENERGY on the boundary. BPM `--` or
+  rides to A over the whole entry), **SNAP A** (it jumps to A). NRG `--` or -64..+64: ENERGY on the boundary. BPM `--` or
   20-300, a whole BPM a click: the tempo on the boundary.
 - `--` leaves that thing as it is, so an entry with every field `--` plays exactly as a chain
   entry always has. NRG and BPM leave `--` on any turn, at ENERGY 0 and the tempo playing.
@@ -440,7 +440,7 @@ a CHAIN entry opens its SECTION view; the list's own keys are unchanged.
   transport; the song follows the outside clock. A section's tempo becomes the project's, as a
   turn of VALUE does.
 - **Quick fill** (hold OK): MUT CAP with the mutes as they stand, SCN the scene on side B, MRP
-  SNAP when the morph is past half way to B (else `--`), NRG the ENERGY, BPM the tempo. Dial the
+  SNAP when the morph is past half way to B, else SNAP A, NRG the ENERGY, BPM the tempo. Dial the
   breakdown in by ear, then hold OK.
 - **The list** marks an entry with fields of its own: under its mute state on the lane, `S4`
   (its scene) or `+` for any other field; the cursor's entry lists them under MUTES.

@@ -253,10 +253,11 @@ reads anything it does not understand as `--`. `chain_insert`, `chain_remove` an
 `chain_normalize` move the extras with their entries.
 
 `Engine::chain_entry_started` applies the fields on the audio side as an entry starts: the mute
-recall or CAP mask, the scene on side B, the morph (SNAP at once; RIDE and BACK through
+recall or CAP mask, the scene on side B, the morph (SNAP and SNAP A at once; RIDE and BACK through
 `morph_ride_*`, a rate worked out once and stepped in `resolve_tick`, since the C674x has no
 integer divide), the energy. A BPM goes to the main context through `Status::tempo_due`,
 because only it may call `clock::set_tempo`; under an outside clock the UI skips it and says so
 once a run. Every edit is a `ChainEdit` the audio side applies as a delta to the authoritative
-record. Quick fill (hold OK) can only write SNAP or `--` for the morph: there is no "snap to A".
+record. Quick fill (hold OK) writes SNAP or SNAP A, the morph's nearer side, so a filled section
+brings the morph back after one that moved it.
 `tests/scenario_sections.sh` drives the view and a section in the emulator.

@@ -1031,7 +1031,7 @@ void fill_sections(Project &project) {
             project.chain[i].mutes = uint8_t(i % 3 == 1 ? 1 + i % 8 : 0);
         }
         e.scene = uint8_t(i % 17);
-        e.morph = uint8_t(i % 4);
+        e.morph = uint8_t(i % 5);
         e.energy = uint8_t((i * 7) % 130);
         e.bpm = i % 5 == 0 ? uint16_t(0) : uint16_t(kTempoCentiMin + i * 400);
     }
@@ -1114,7 +1114,7 @@ TEST(project_a_damaged_song_section_reads_as_left_alone) {
     g_project[at + 8 + 0] = 2;      // CAP neither 0 nor 1
     g_project[at + 8 + 1] = 0x55;   // and so no mask
     g_project[at + 8 + 2] = 17;     // SCN past 16
-    g_project[at + 8 + 3] = 4;      // MRP past BACK
+    g_project[at + 8 + 3] = 5;      // MRP past SNAP A
     g_project[at + 8 + 4] = 130;    // NRG past +64
     poke_u16(g_project, at + 8 + 5, uint16_t(kTempoCentiMax + 1));
     // Entry 2: a BPM under the clock's range; entry 3 (CAP) with a recall in section 5 too.

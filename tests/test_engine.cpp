@@ -1851,6 +1851,24 @@ TEST(engine_an_entry_with_no_section_fields_plays_as_it_always_did) {
     section_chain_done();
 }
 
+TEST(engine_a_section_snaps_the_morph_to_either_side) {
+    SectionExtra first;
+    first.morph = kSectionMorphSnap;
+    SectionExtra second;
+    second.morph = kSectionMorphSnapA;
+    Engine &engine = section_chain(first, second);
+    FakeHost::the().set_running(true);
+    tick_at(0);
+    post(Cmd::set_chain, 0, 0, 1);
+    pump();
+    CHECK_EQ(int(engine.morph()), int(kMorphScale));
+    tick_at(1);
+    tick_at(1536);                                    // the second entry: back to A at once
+    CHECK_EQ(int(engine.morph()), 0);
+    CHECK_EQ(int(engine.status().morph_riding.load()), 0);
+    section_chain_done();
+}
+
 TEST(engine_a_section_rides_the_morph_over_its_whole_entry) {
     SectionExtra first;
     first.morph = kSectionMorphSnap;
@@ -1984,11 +2002,11 @@ TEST(engine_section_edits_copy_and_quick_fill) {
     CHECK_EQ(int(f.morph), int(kSectionMorphSnap));
     CHECK_EQ(section_energy(f.energy), 20);
     CHECK_EQ(int(f.bpm), int(engine.project().settings.tempo_centi_bpm));
-    // The morph at rest fills `--`, not a SNAP.
+    // The morph at rest fills SNAP A, so the section brings it home after one that moved it.
     post(Cmd::set_morph, 0, 0, 0, 0, 0);
     pump();
     chain_op(ChainEdit::fill, 2);
-    CHECK_EQ(int(engine.project().chain_extra[2].morph), int(kSectionMorphNone));
+    CHECK_EQ(int(engine.project().chain_extra[2].morph), int(kSectionMorphSnapA));
     section_chain_done();
 }
 

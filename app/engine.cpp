@@ -1988,8 +1988,9 @@ bool Engine::apply_arrangement(const Command &command, int, int) {
                     extra.cap = 1;
                     extra.mask = mute_state_capture(muted_);
                     extra.scene = uint8_t(scene_b_ + 1);
+                    // The morph where it sits, to the nearer side: SNAP to B or SNAP A.
                     extra.morph = morph_ * 2u > kMorphScale ? kSectionMorphSnap
-                                                            : kSectionMorphNone;
+                                                            : kSectionMorphSnapA;
                     extra.energy = section_energy_byte(perform_.energy);
                     const uint16_t tempo = project_.settings.tempo_centi_bpm;
                     extra.bpm = tempo < kTempoCentiMin ? uint16_t(kTempoCentiMin)
@@ -3112,8 +3113,8 @@ void Engine::chain_entry_started() {
         project_.settings.scene_b = scene_b_;
         perform_dirty_ = true;
     }
-    if (section->morph == kSectionMorphSnap) {
-        morph_ = kMorphScale;
+    if (section->morph == kSectionMorphSnap || section->morph == kSectionMorphSnapA) {
+        morph_ = section->morph == kSectionMorphSnap ? kMorphScale : 0;
         perform_dirty_ = true;
     } else if (section->morph == kSectionMorphRide || section->morph == kSectionMorphBack) {
         // Over the whole entry: its repeats times the pattern's pass, from where the morph is.

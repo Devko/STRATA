@@ -229,8 +229,8 @@ the chain); VALUE also sets repeats; OK adds a copy after the cursor (the playin
 empty), up to 64 entries. CLR twice within 2 s removes the entry under the cursor (`AGAIN TO REMOVE`, then `ENTRY REMOVED`; not undoable); on an empty chain CLR goes back. B recalls a mute state as the entry starts. The FUNC menu's CHAIN turns the chain on and off, and CHAIN END
 switches SONG (play the chain once and stop, `SONG END`) and LOOP. Chain edits are not undoable.
 **SECTION (push A on CHAIN):** the entry's fields applied as it starts. MUT --/M1-M8/CAP (an
-exact mute mask), SCN --/1-16 (scene on side B), MRP --/SNAP/RIDE/BACK (morph to B at once, to B
-over the entry, to A over the entry), NRG --/-64..+64 (ENERGY), BPM --/20-300 (skipped under an
+exact mute mask), SCN --/1-16 (scene on side B), MRP --/SNAP/RIDE/BACK/SNAP A (morph to B at once,
+to B over the entry, to A over the entry, to A at once), NRG --/-64..+64 (ENERGY), BPM --/20-300 (skipped under an
 outside clock: `EXT CLOCK: BPM SKIPPED`). Push a knob: `--`. Hold OK: `SECTION FILLED` from what
 plays. The hands win until the next entry.
 **PATTERN:** VALUE also changes the field under `>`. LEN is the master length that a queued change
@@ -338,7 +338,7 @@ MNO VA mono · PLY VA poly · WMN wavetable mono · WPL wavetable poly · FM4 fo
 
 **FM4 pages:** ENV = ATK SUS REL ISU (index sustain). OSC = DET `OFF`/`D1`-`D25` the second pair sharp · FIN fine ratio, `0` at 64 · BRT index keytrack · CAR carrier ratio 1 0.5 2 3 4.
 
-**SECTION (CHAIN, push A):** SECT = PAT pattern · REP repeats · MUT mute state (`--`, M1-M8, CAP an exact mask) · SCN scene on side B. MOVE = MRP morph move (SNAP, RIDE, BACK) · NRG ENERGY · BPM tempo.
+**SECTION (CHAIN, push A):** SECT = PAT pattern · REP repeats · MUT mute state (`--`, M1-M8, CAP an exact mask) · SCN scene on side B. MOVE = MRP morph move (SNAP, RIDE, BACK, SNAP A) · NRG ENERGY · BPM tempo.
 
 **ARP page:** MOD OFF UP DN U/D ORD RND · RAT `1/4` to `1/32T` · OCT `X1`-`X4` · GAT note length, `50%`-`99%` of the spacing. On, a step plays a run for its length (PLY: through its chord); in KEYS, held keys are arpeggiated. Lockable and scene-able. Push A VAR (CONV DIVG THUMB PINKY), push B RHYTHM (rests; a rest holds the note), push C ACCENT (patterns, CYC), push D RATCHET (2:4 2:8 3:8 4:16 2ALL RND2 RND3): kit settings, not lockable. OK: ARPS, 14 factory arps.
 

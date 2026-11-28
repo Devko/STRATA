@@ -315,7 +315,7 @@ constexpr Text kSection = {"SECTION:", {
     "OK OR CLR  BACK",
     "MUT --/M1-M8/CAP",
     "SCN  SCENE ON SIDE B",
-    "MRP SNAP/RIDE/BACK",
+    "MRP SNAP/RIDE/BACK/A",
     "NRG ENERGY  BPM TEMPO",
 }};
 

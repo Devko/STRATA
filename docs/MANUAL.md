@@ -1155,13 +1155,13 @@ C BPM). Every field reads `--` until you turn it, and `--` leaves that thing as 
 | --- | --- | --- |
 | MUT | `--`, M1-M8, CAP | M1-M8 recall a stored mute state; CAP sets the exact mutes the entry stores (turned to CAP, it takes the mutes as they stand) |
 | SCN | `--`, 1-16 | that scene goes on morph side B |
-| MRP | `--`, SNAP, RIDE, BACK | SNAP jumps the morph to B; RIDE rides it to B over the whole entry; BACK rides it to A |
+| MRP | `--`, SNAP, RIDE, BACK, SNAP A | SNAP jumps the morph to B; RIDE rides it to B over the whole entry; BACK rides it to A; SNAP A jumps it to A |
 | NRG | `--`, -64 to +64 | ENERGY jumps there |
 | BPM | `--`, 20-300 | the tempo changes there, a whole BPM a click |
 
 A push on a knob puts its field back to `--`. UP/DOWN go to the previous or next entry without
 leaving the view, and OK or CLR go back to the list. **Hold OK** to fill the fields from what
-plays: the mutes as CAP, the scene on side B, SNAP if the morph is past half way, the ENERGY and
+plays: the mutes as CAP, the scene on side B, SNAP if the morph is past half way (else SNAP A), the ENERGY and
 the tempo. So a breakdown is set by ear: dial it in, hold OK.
 
 Your hands win until the next entry: a mute, the morph or ENERGY changed during a section takes

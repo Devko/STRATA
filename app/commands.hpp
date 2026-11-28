@@ -467,8 +467,8 @@ enum class ChainEdit : uint8_t {
     //   section: the fields whole. b CAP flag, c mask, d SCN, e MRP, u: NRG in bits 0-7 and
     //            BPM (centi) in bits 8-23. Refused whole when a field is out of range.
     //   copy:    a copy of entry `step`, section fields and all, inserted after it (OK).
-    //   fill:    the fields from what plays now: the mutes as CAP, side B's scene, SNAP when the
-    //            morph is past half way to B, ENERGY and the tempo (hold OK on the section view).
+    //   fill:    the fields from what plays now: the mutes as CAP, side B's scene, SNAP or SNAP A
+    //            to the morph's nearer side, ENERGY and the tempo (hold OK on the section view).
     //   section_delta: b a SectionField, c its turn as an int8 (core/queue.hpp, section_step).
     //   section_clear: b a SectionField, back to `--` (a knob's push).
     section, copy, fill, section_delta, section_clear

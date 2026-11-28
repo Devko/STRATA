@@ -9,8 +9,8 @@ the project file format or the controls.
 ### Added
 
 - **Song sections on the chain.** Push A on a CHAIN entry opens its SECTION view: besides the
-  pattern, repeats and mute state, an entry can put a scene on morph side B (SCN), jump or ride the
-  morph to B or back to A over the whole entry (MRP SNAP, RIDE, BACK), set ENERGY (NRG) and the
+  pattern, repeats and mute state, an entry can put a scene on morph side B (SCN), jump the morph to
+  B or A, or ride it there over the whole entry (MRP SNAP, SNAP A, RIDE, BACK), set ENERGY (NRG) and the
   tempo (BPM) as it starts, and store an exact mute mask (MUT CAP). `--` leaves each one as it is,
   and the hands take over until the next entry. Hold OK in the view to fill the fields from what
   plays. A BPM is skipped under an outside clock (`EXT CLOCK: BPM SKIPPED`). Saved in PROJECT.BIN

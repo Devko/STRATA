@@ -67,7 +67,7 @@
                 else append_number(out, uint32_t(e.scene));
                 break;
             case int(SectionField::mrp): {
-                static const char *const kMoves[] = {"--", "SNAP", "RIDE", "BACK"};
+                static const char *const kMoves[] = {"--", "SNAP", "RIDE", "BACK", "SNAP A"};
                 append(out, kMoves[e.morph <= kSectionMorphMax ? e.morph : 0]);
                 break;
             }
@@ -311,7 +311,7 @@
             append_number(out, uint32_t(e.scene));
         }
         if (e.morph != kSectionMorphNone && e.morph <= kSectionMorphMax) {
-            static const char *const kMoves[] = {"", "SNAP", "RIDE", "BACK"};
+            static const char *const kMoves[] = {"", "SNAP", "RIDE", "BACK", "SNAP A"};
             gap();
             append(out, kMoves[e.morph]);
         }

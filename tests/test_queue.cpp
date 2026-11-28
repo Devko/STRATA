@@ -1615,8 +1615,10 @@ TEST(chain_section_step_walks_each_field_and_clear_puts_it_back) {
     CHECK_EQ(int(e.scene), 16);
     CHECK(section_step(g_project, 0, SectionField::mrp, 2, 0, 13000));
     CHECK_EQ(int(e.morph), int(kSectionMorphRide));
-    CHECK(section_step(g_project, 0, SectionField::mrp, 9, 0, 13000));
+    CHECK(section_step(g_project, 0, SectionField::mrp, 1, 0, 13000));
     CHECK_EQ(int(e.morph), int(kSectionMorphBack));
+    CHECK(section_step(g_project, 0, SectionField::mrp, 9, 0, 13000));
+    CHECK_EQ(int(e.morph), int(kSectionMorphSnapA));
     // NRG and BPM leave `--` for 0 and the tempo playing on any turn, then walk.
     CHECK(section_step(g_project, 0, SectionField::nrg, -5, 0, 13000));
     CHECK_EQ(section_energy(e.energy), 0);

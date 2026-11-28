@@ -484,7 +484,8 @@ constexpr uint8_t kSectionMorphNone = 0;
 constexpr uint8_t kSectionMorphSnap = 1;   // the morph jumps to B on the boundary
 constexpr uint8_t kSectionMorphRide = 2;   // it rides to B over the whole entry
 constexpr uint8_t kSectionMorphBack = 3;   // it rides back to A over the whole entry
-constexpr uint8_t kSectionMorphMax = kSectionMorphBack;
+constexpr uint8_t kSectionMorphSnapA = 4;  // the morph jumps to A on the boundary
+constexpr uint8_t kSectionMorphMax = kSectionMorphSnapA;
 constexpr uint8_t kSectionScenesMax = 16;
 // NRG's byte for ENERGY 0, and its highest (+64).
 constexpr uint8_t kSectionEnergyZero = 65;

@@ -231,7 +231,7 @@ enum class SectionField : uint8_t { mut = 0, scn, mrp, nrg, bpm, count };
 
 // One knob turn of `field` on entry `at`, `delta` clicks:
 //   MUT walks --, M1-M8, CAP; arriving on CAP stores `live_mutes` as its mask.
-//   SCN walks --, 1-16 and MRP --, SNAP, RIDE, BACK, stopping at the ends.
+//   SCN walks --, 1-16 and MRP --, SNAP, RIDE, BACK, SNAP A, stopping at the ends.
 //   NRG and BPM leave `--` for a value on any turn (ENERGY 0; `tempo_centi`, the tempo playing),
 //   then walk -64..+64 and 20-300 BPM a whole BPM a click. Back to `--` is `section_clear`.
 // False for an index outside the chain or a field past the five.
