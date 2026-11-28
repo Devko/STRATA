@@ -115,6 +115,8 @@ void FakeHost::reset() {
     stream_read_limit_ = 0;
     stream_opens_ = 0;
     last_stream_offset_ = 0;
+    record_room_ = 4u << 20;
+    records_made_ = 0;
     pending_ = 0;
 
     card_ = true;
@@ -706,7 +708,7 @@ int32_t FakeHost::t_file_list(const char *path, enaga_file_entry_t entry, enaga_
 
 const char *FakeHost::t_file_data_folder() { return "/ENAGA/DATA/STRATA"; }
 
-// Streams. Playback reads the card's file; recording is refused (STRATA records with save).
+// Streams. Playback reads the card's file; recording writes one (JAM REC).
 int FakeHost::streams_open() const {
     int n = 0;
     for (int i = 0; i < kStreams; i++) n += streams_[i].open ? 1 : 0;
@@ -729,15 +731,38 @@ int32_t FakeHost::t_stream_open(const char *path, uint32_t offset, void *ring,
     if (entry < 0 || h.files_[entry].folder) return ENAGA_FILE_NOT_FOUND;
     for (int i = 0; i < kStreams; i++) {
         if (h.streams_[i].open) continue;
-        h.streams_[i] = FakeStream{true, entry, offset, offset, h.stream_fill_polls_};
+        h.streams_[i] = FakeStream{true, entry, offset, offset, h.stream_fill_polls_, false, 0};
         h.stream_opens_++;
         h.last_stream_offset_ = offset;
         return int32_t(i);
     }
     return ENAGA_FILE_TOO_MANY;
 }
-int32_t FakeHost::t_stream_create(const char *, uint32_t, void *, uint32_t) {
-    return ENAGA_FILE_DENIED;
+int32_t FakeHost::t_stream_create(const char *path, uint32_t reserve, void *ring,
+                                  uint32_t ring_bytes) {
+    FakeHost &h = the();
+    const int32_t card = h.card_check();
+    if (card != ENAGA_FILE_OK) return card;
+    const int32_t bad = h.path_check(path);
+    if (bad != ENAGA_FILE_OK) return bad;
+    const int32_t denied = h.write_check(path);
+    if (denied != ENAGA_FILE_OK) return denied;
+    if (ring == nullptr || ring_bytes < ENAGA_STREAM_RING_MIN ||
+        (ring_bytes & (ring_bytes - 1u)) != 0u) {
+        return ENAGA_FILE_BAD_HANDLE;
+    }
+    if (h.full_ || reserve > h.record_room_) return ENAGA_FILE_FULL;
+    int slot = -1;
+    for (int i = 0; i < kStreams && slot < 0; i++) slot = h.streams_[i].open ? -1 : i;
+    if (slot < 0) return ENAGA_FILE_TOO_MANY;
+    // The whole room up front, so the arena never moves under a write; then cut to the header.
+    if (h.create_file(path, h.record_room_) == nullptr) return ENAGA_FILE_FULL;
+    const int entry = h.find(path);
+    std::memset(h.arena_ + h.files_[entry].offset, 0, reserve);
+    h.files_[entry].bytes = reserve;
+    h.streams_[slot] = FakeStream{true, entry, reserve, reserve, 0, true, 0};
+    h.records_made_++;
+    return int32_t(slot);
 }
 uint32_t FakeHost::t_stream_read(int32_t stream, void *out, uint32_t bytes) {
     FakeHost &h = the();
@@ -753,14 +778,30 @@ uint32_t FakeHost::t_stream_read(int32_t stream, void *out, uint32_t bytes) {
     st.position += n;
     return n;
 }
-uint32_t FakeHost::t_stream_write(int32_t, const void *, uint32_t) { return 0; }
+uint32_t FakeHost::t_stream_write(int32_t stream, const void *data, uint32_t bytes) {
+    FakeHost &h = the();
+    if (stream < 0 || stream >= kStreams || !h.streams_[stream].open) return 0;
+    FakeStream &st = h.streams_[stream];
+    if (!st.record || st.error != 0 || !h.card_ || h.stream_stall_) return 0;
+    Entry &e = h.files_[st.entry];
+    const uint32_t room = e.capacity - st.position;
+    const uint32_t n = bytes < room ? bytes : room;
+    std::memcpy(h.arena_ + e.offset + st.position, data, n);
+    st.position += n;
+    e.bytes = st.position;
+    if (n < bytes) st.error = ENAGA_FILE_FULL;
+    return n;
+}
 int32_t FakeHost::t_stream_status(int32_t stream, enaga_stream_status_t *status) {
     FakeHost &h = the();
     if (stream < 0 || stream >= kStreams || !h.streams_[stream].open) return ENAGA_FILE_BAD_HANDLE;
     FakeStream &st = h.streams_[stream];
     *status = enaga_stream_status_t{};
     status->position = st.position - st.offset;
-    if (!h.card_) {
+    if (st.record) {
+        status->state = !h.card_ ? int32_t(ENAGA_FILE_NO_CARD)
+                        : st.error != 0 ? st.error : int32_t(ENAGA_STREAM_RUNNING);
+    } else if (!h.card_) {
         status->state = ENAGA_FILE_NO_CARD;
     } else if (st.fill_polls > 0) {
         st.fill_polls--;
@@ -772,10 +813,17 @@ int32_t FakeHost::t_stream_status(int32_t stream, enaga_stream_status_t *status)
     }
     return ENAGA_FILE_OK;
 }
-int32_t FakeHost::t_stream_close(int32_t stream, const void *, uint32_t) {
+int32_t FakeHost::t_stream_close(int32_t stream, const void *header, uint32_t header_bytes) {
     FakeHost &h = the();
     if (stream < 0 || stream >= kStreams || !h.streams_[stream].open) return ENAGA_FILE_BAD_HANDLE;
-    h.streams_[stream].open = false;
+    FakeStream &st = h.streams_[stream];
+    st.open = false;
+    if (!st.record) return ENAGA_FILE_OK;
+    // A card gone takes the header with it: the file keeps what was written, its start zeros.
+    if (!h.card_) return ENAGA_FILE_NO_CARD;
+    if (header != nullptr && header_bytes <= st.offset) {
+        std::memcpy(h.arena_ + h.files_[st.entry].offset, header, header_bytes);
+    }
     return ENAGA_FILE_OK;
 }
 

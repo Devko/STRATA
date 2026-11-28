@@ -2219,6 +2219,20 @@ bool Engine::apply_samples(const Command &command, int track, int) {
             audition_.stop();
             break;
 
+        case Cmd::jam_start:
+            // The card side has created the writer; from this block on it gets the master.
+            jam_on_ = true;
+            break;
+
+        case Cmd::jam_stop:
+            // Stop writing FIRST, then say so: the card side closes the file the moment it sees
+            // the epoch move. Bumped even when nothing was being written, so a stop the card side
+            // is waiting on always ends.
+            jam_on_ = false;
+            jam_epoch_ = uint8_t(jam_epoch_ + 1u);
+            status_.jam_epoch.store(jam_epoch_, std::memory_order_release);
+            break;
+
         default:
             return false;
     }
@@ -4117,6 +4131,12 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     const float *input = in != nullptr ? in : (frames <= ENAGA_BLOCK_FRAMES ? kSilence : nullptr);
     if (capture_.channels() == 1) capture_.process_mono(tapped >= 0 ? capture_tap_ : nullptr, int(frames));
     else capture_.process(capture_input_ ? input : out, int(frames));
+
+    // JAM REC: the same finished master, every block, into the jam's file (app/storage.hpp, "jam
+    // recording"). Before the audition and the click, so neither is ever on it. The writer turns
+    // the floats into 24-bit PCM and hands them to Enaga's ring, which never waits; a block the
+    // ring has no room for is dropped whole and counted (Writer::frames_lost), not waited for.
+    if (jam_on_) jam_.write(out, frames);
 
     // The input's level, every block, for the RESAMPLE screen's meter: one pass of the master's
     // own peak loop over the interleaved buffer (L and R alike, so one plane of 2n samples).

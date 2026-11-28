@@ -139,7 +139,8 @@ HOME "system", PLAY "◀◀", STOP "▶▶", MIXER "fx", EDIT "rec src".
 A list over whatever screen was up. UP/DOWN or A scroll, OK runs the row, LEFT/RIGHT or B change
 a setting row, CLR or FUNC + HOME closes it and returns to the screen it opened over. STEP
 keys, screen keys and pad-row keys do nothing in it. FUNC + CLR / OK stay undo and redo.
-The cursor starts on SAVE every time, so **FUNC + HOME, OK saves**.
+The cursor starts on SAVE every time, so **FUNC + HOME, OK saves**, and the list wraps, so
+**FUNC + HOME, UP, OK starts or stops JAM REC**.
 
 | Row | What OK does | Value (LEFT/RIGHT, B, or OK steps) |
 | --- | --- | --- |
@@ -164,6 +165,7 @@ The cursor starts on SAVE every time, so **FUNC + HOME, OK saves**.
 | FREEZE | freeze the selected track (its loop from the next bar line), or unfreeze it | `T3 1 BAR` (1 2 4 8), `T3 WAIT` / `REC` while recording, `T3 ON` frozen |
 | LOOP LEN | | the performance mixer's looper: `4 BAR` (1 2 4 8), what push VALUE + STEP 16 records |
 | LOAD DEMO | OK twice within 2 s: the factory demo project (the boot beat), under a new name | |
+| JAM REC | starts recording the finished master to `/RECORD/JAM_<n>.WAV` and closes the menu (`JAM REC JAM 3`); OK again stops it (`JAM STOPPING`, then `SAVED JAM 3` once the file is closed). The last row: FUNC + HOME, UP, OK | `OFF`, or how long it has run, `4:07`, `1:02:33` |
 
 Moved here from: FUNC + PROJECT twice (save), PROJECT's FUNC + UP/DOWN/LEFT/RIGHT (chain,
 sample reload, reload, new), PROJECTS' FUNC + DOWN (save as, still there too), CHAIN's FUNC +
@@ -463,7 +465,7 @@ strip first, pictures per page later). A screen draws only inside it.
 
 | Rows | What | Example |
 | --- | --- | --- |
-| 0-7 | Top bar (the mockups' since the live-visuals rebuild): the live pattern as a lit badge, **bar.beat**, then in the small font the tempo (`MIDI` or `SYNC` under an outside clock) with `>` while playing, the load in whole percent and the LOCK mark (`L`, `L+`); the selected track as a lit badge at the right | `[A01] 3.2 130.0 > 24% L [T1]` |
+| 0-7 | Top bar (the mockups' since the live-visuals rebuild): the live pattern as a lit badge, **bar.beat**, then in the small font the tempo (`MIDI` or `SYNC` under an outside clock) with `>` while playing, the load in whole percent (a lit dot before it while JAM REC records, blinking once a second, steady while its file closes) and the LOCK mark (`L`, `L+`); the selected track as a lit badge at the right | `[A01] 3.2 130.0 > 24% L [T1]` |
 | 8 | Progress: one pixel across the pattern's pass (its master length), its head brightest, on a dim track with the beats (dim) and bars (brighter) still to come marked; empty while stopped | |
 | 9-17 | A notice, LEARN or the MUTATE verdict as a lit **toast** while there is one; else, only while something is off rest, the **live strip** in the small font; else nothing (`CLOCK REFUSED` the same way) | `K:L FX4 S40 M:AB` |
 | 18-117 | The screen's own content | |

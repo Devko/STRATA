@@ -5,7 +5,7 @@ On a unit that still runs Enaga 0.3.0, update it to 0.4.0 first and do **the Ena
 most likely to break only on the hardware. If it passes, the walkthrough is worth its two hours;
 if an item fails, report that first.
 
-Then **the walkthrough** (W1-W61, about 200 minutes): everything merged since v0.1.0,
+Then **the walkthrough** (W1-W63, about 210 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -239,7 +239,7 @@ quickly: `KEYS`, on track 7.
   PLAY: the snare stays muted. FUNC + pad 2 again.
 - **NEW is empty, LOAD DEMO.** FUNC+HOME, NEW PROJECT, OK, OK: GRID shows no steps, every pad
   still plays its sound, centred (headphones: kick, hats and perc all in the middle).
-  FUNC+HOME, UP (`LOAD DEMO`), OK, OK: `DEMO PROJECT`, and the demo beat is back.
+  FUNC+HOME, UP, UP (`LOAD DEMO`), OK, OK: `DEMO PROJECT`, and the demo beat is back.
 
 **W13. Play modes (#148, 3 min).** PLAY A01, lower pad 3 (hats).
 - FUNC+HOME, DOWN to `TRACK PLAY` (under TRACK SPEED): `T3 FWD`. RIGHT: `T3 PLAY REV`, the hats
@@ -829,6 +829,21 @@ with all starter projects, the sample pack and the quick start ticked, copied on
 - `ENERGY -30`, hold FUNC + MUTATE (a lock), turn it back to 0, tap FUNC + MUTATE: the
   breakdown is back; tap again: rest again. `____`
 - MAX at `+64` against the default beat at 0: `________ %`
+
+**W63. JAM REC, the whole jam to the card (6 min).** Beat playing, A01, a card with a few GB
+free.
+- FUNC+HOME, UP: `JAM REC` with `OFF`. OK: the menu closes, `JAM REC JAM n`, and a dot blinks
+  in the top bar before the load. The top line reads `____ %` (compare with the beat alone,
+  `____ %`). `____`
+- Play for three minutes: change patterns, throw a scene, open a sample and audition it (push A
+  in SAMPLES), switch CLICK on for a bar. FUNC+HOME, UP: the row counts, `3:0x`. No
+  `JAM: CARD TOO SLOW` on the way. `____`
+- OK: `JAM STOPPING`, then `SAVED JAM n` within a second. On the PC, `/RECORD/JAM_n.WAV` opens
+  as 48 kHz 24-bit stereo of about 3 minutes, sounds as heard, and holds no click and no
+  audition. `____`
+- Start another, let it run 30 s with four streamed samples playing if you have them, then
+  power off with it running. On the PC the second file has the next number and plays to the
+  end. `____`
 
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.

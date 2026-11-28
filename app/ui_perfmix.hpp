@@ -14,7 +14,7 @@
 
     enum class MenuItem : uint8_t { save, save_as, open, fresh, reload, clear, kits, sample,
                                     speed, play, chain, song, autofill, quantize, rec_mode, click,
-                                    count_in, glide, freeze, loop_len, demo, count };
+                                    count_in, glide, freeze, loop_len, demo, jam, count };
     static constexpr int kMenuItems = int(MenuItem::count);
     static constexpr int kMenuRows = 9;
 
@@ -41,6 +41,7 @@
             case MenuItem::loop_len: return "LOOP LEN";
             case MenuItem::glide:    return "FX GLIDE";
             case MenuItem::demo:     return "LOAD DEMO";
+            case MenuItem::jam:      return "JAM REC";
             default:                 return "?";
         }
     }
@@ -112,10 +113,47 @@
                 // How long a button's jump in the performance mixer rides (core/perffx.hpp).
                 append(out, perf_glide_name(perf_glide_));
                 break;
+            case MenuItem::jam:
+                // OFF, or how long the jam has run, as a clock: 4:07, 1:02:33.
+                if (storage_.jam_running()) append_clock(out, storage_.jam_seconds());
+                else append(out, "OFF");
+                break;
             default:
                 break;
         }
         *out = 0;
+    }
+
+    // Seconds as M:SS, or H:MM:SS from an hour.
+    static void append_clock(char *&out, uint32_t seconds) {
+        const uint32_t hours = seconds / 3600u, minutes = seconds / 60u % 60u, secs = seconds % 60u;
+        if (hours > 0u) {
+            append_number(out, hours);
+            *out++ = ':';
+            append_padded(out, minutes, 2);
+        } else {
+            append_number(out, minutes);
+        }
+        *out++ = ':';
+        append_padded(out, secs, 2);
+    }
+
+    // JAM REC's OK: start the jam, or stop it. The menu closes on a start, so the music is back on
+    // the screen with the REC dot in the top bar; a stop's SAVED comes once the file is closed.
+    void toggle_jam() {
+        if (storage_.jam_running()) {
+            storage_.request_jam_stop();
+            notice_logged("JAM STOPPING");
+            return;
+        }
+        if (!storage_.request_jam_start()) return;     // the reason comes as a jam message
+        close_menu(false);
+        char *out = notice_buffer_;
+        append(out, "JAM REC ");
+        const char *name = storage_.jam_name();
+        for (; *name != '\0' && *name != '.'; name++) *out++ = *name == '_' ? ' ' : *name;   // no _ in the font
+        *out = 0;
+        notice_logged(notice_buffer_);
     }
 
     bool frozen(int track) const {
@@ -773,6 +811,9 @@
             case MenuItem::freeze:
                 toggle_freeze();
                 close_menu(false);
+                break;
+            case MenuItem::jam:
+                toggle_jam();
                 break;
             default:
                 menu_value(+1, true);
