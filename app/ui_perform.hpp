@@ -245,6 +245,16 @@
         notice_logged(notice_buffer_);
     }
 
+    // ENERGY's notice, logged so a scenario can follow it: `ENERGY -12`, `ENERGY +40`, and at
+    // rest `ENERGY 0`.
+    void energy_notice() {
+        char *out = notice_buffer_;
+        append(out, "ENERGY ");
+        append_signed(out, energy_);
+        *out = 0;
+        notice_logged(notice_buffer_);
+    }
+
     // LIVE RND's notice, logged so a scenario can follow it: `LIVE RND4 8 TRK` (the unit and how
     // many tracks it moves), `LIVE RND OFF` at rest.
     void live_rnd_notice() {
@@ -349,6 +359,10 @@
             if (throwing == 2) append(out, " REV");
             if (note_repeat_mode_) append(out, " NRPT");
             if (engine_.delay_frozen()) append(out, " FRZ");
+            if (engine_.energy() != 0) {
+                append(out, " EN");
+                append_signed(out, engine_.energy());
+            }
             *out = 0;
             paint::small_text(px, 16, 52, line, 9);
             if (engine_.rel_all() != 0 || engine_.len_all() != 0) {
@@ -401,12 +415,17 @@
             } else {
                 canvas.text(0, 66, "AUTOFILL: FUNC MENU", 7);
             }
-            // The bar and the held modes: "BAR 1000 NRPT FRZ" is 17 characters.
+            // The bar, ENERGY away from rest and the held modes: "BAR 1000 EN-64 NRPT" is 19
+            // characters, and FRZ goes on only while it fits the line.
             out = line;
             append(out, "BAR ");
             append_number(out, engine_.bar() % 1000u + 1u);
+            if (engine_.energy() != 0) {
+                append(out, " EN");
+                append_signed(out, engine_.energy());
+            }
             if (note_repeat_mode_) append(out, " NRPT");
-            if (engine_.delay_frozen()) append(out, " FRZ");
+            if (engine_.delay_frozen() && out - line + 4 <= kLineChars) append(out, " FRZ");
             *out = 0;
             canvas.text(0, 75, line, 9);
         }

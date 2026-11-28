@@ -35,6 +35,7 @@
 #include "arp.hpp"          // the ARP page's names and clicks
 #include "engine.hpp"
 #include "help.hpp"         // the FUNC help's pages, one set per screen
+#include "energy.hpp"       // ENERGY: FUNC + C in PERFORM
 #include "liverand.hpp"     // LIVE RND: FUNC + D in PERFORM
 #include "paint.hpp"        // the drawing kit: lines, arcs, the small font, afterglow
 #include "spectrum.hpp"     // the output's spectrum for MIXER's master pages
@@ -697,6 +698,8 @@ private:
     int selected_ = 0;
     int shown_bank_ = 0;                        // PROJECT mode browses a bank without switching
     QueueMode queue_mode_ = QueueMode::end_of_pattern;
+    uint32_t jam_lost_seen_ = 0;                // JAM REC's dropped frames last said
+    uint32_t jam_lost_ms_ = 0;
     char notice_buffer_[24] = {};               // notice() keeps the pointer, so dynamic text
                                                 // needs somewhere of its own to live
 
@@ -814,6 +817,9 @@ private:
     // armed. Posted absolute, like REL ALL, and read back from the engine after a LOCK jump.
     uint8_t rnd_unit_ = kLiveRndOff;
     uint8_t rnd_armed_ = kLiveRndAllTracks;
+    // ENERGY (core/energy.hpp): where FUNC + C left it, posted absolute like REL ALL and read
+    // back from the engine after a LOCK jump.
+    int8_t energy_ = 0;
     uint16_t morph_ = 0;
     bool repeat_held_ = false;
     RepeatLength repeat_length_ = RepeatLength::sixteenth;
@@ -913,6 +919,10 @@ private:
     char sample_seek_name_[SampleList::kEntryNameBytes] = {};
     Mode samples_return_ = Mode::edit;          // where CLR at the top goes back to
     int audition_row_ = -1;                     // SAMPLES: the entry being heard (push A), or -1
+    // SAMPLES with the transport running: push A once on this entry; the second within
+    // kSaveArmMs hears it.
+    int audition_armed_ = -1;
+    uint32_t audition_armed_at_ms_ = 0;
     bool audition_sounding_seen_ = false;       // Storage::audition_sounding() as update() saw it
     int sound_cursor_ = 0;                      // SOUNDS: 0 is AS WAS, then the presets
     int sound_track_ = -1;                      // the track whose sound the engine remembers

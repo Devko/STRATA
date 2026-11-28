@@ -5,7 +5,7 @@ On a unit that still runs Enaga 0.3.0, update it to 0.4.0 first and do **the Ena
 most likely to break only on the hardware. If it passes, the walkthrough is worth its two hours;
 if an item fails, report that first.
 
-Then **the walkthrough** (W1-W61, about 200 minutes): everything merged since v0.1.0,
+Then **the walkthrough** (W1-W63, about 210 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -239,7 +239,7 @@ quickly: `KEYS`, on track 7.
   PLAY: the snare stays muted. FUNC + pad 2 again.
 - **NEW is empty, LOAD DEMO.** FUNC+HOME, NEW PROJECT, OK, OK: GRID shows no steps, every pad
   still plays its sound, centred (headphones: kick, hats and perc all in the middle).
-  FUNC+HOME, UP (`LOAD DEMO`), OK, OK: `DEMO PROJECT`, and the demo beat is back.
+  FUNC+HOME, UP, UP (`LOAD DEMO`), OK, OK: `DEMO PROJECT`, and the demo beat is back.
 
 **W13. Play modes (#148, 3 min).** PLAY A01, lower pad 3 (hats).
 - FUNC+HOME, DOWN to `TRACK PLAY` (under TRACK SPEED): `T3 FWD`. RIGHT: `T3 PLAY REV`, the hats
@@ -579,7 +579,10 @@ hit, a 44.1 kHz loop and a long stem (a minute or more). Beat stopped, A01.
   Push A: `STOPPED`, a short fade. `____`
 - The long stem, push A: how long before it sounds? `________` (it should be as quick as the
   hit). Let it run 20 s: no dropouts, `HEARING 20/..S`. `____`
-- PLAY the beat, and hear files over it: the audition sits about 6 dB under full scale, not
+- PLAY the beat, push A once on a file: `A AGAIN TO HEAR` and nothing is heard. Wait 3 s,
+  push A once: the same toast again. Push A twice quickly: now it plays. While it plays, DOWN
+  hears the next file without asking again. STOP the beat: one push hears a file again. `____`
+- With the beat playing and a file heard, the audition sits about 6 dB under full scale, not
   through the master effects or beat repeat. Too loud or too quiet against A01? `________`
 - While one plays: OK loads it into track 8 (`LOADING`) and the audition stops; CLR, a folder,
   or HOME stop it too. FUNC + push A is still the kill EQ. `____`
@@ -803,7 +806,7 @@ to reach `GUARD4` here at a 40-60% top line.
   cycle, open: WID is kept. `____`
 
 **W61. Starter content from the card builder (6 min).** A card built at strata.einblick.dev
-with all starter projects, the sample pack and the quick start ticked, copied onto the card.
+with "Include starter and demo files" ticked, copied onto the card.
 - PROJECT, SELECT_RIGHT four times: PROJECTS lists TECHNO, DEEP, DUB, DRIFT, ELECTRO, NIGHT,
   BREAKS, STEEL, SMASH and CHAOS. Open DEEP (OK twice): it opens on A01 at 122 BPM, PLAY plays
   it and the chain walks on through its patterns. Open CHAOS and DRIFT the same way: both
@@ -814,6 +817,34 @@ with all starter projects, the sample pack and the quick start ticked, copied on
   or take a few dB. `____`
 - `STRATA-QUICKSTART.txt` at the card root opens on a PC and every gesture it names does what
   it says on the unit (sections 1-7). `____`
+
+**W62. ENERGY in PERFORM (4 min).** Beat playing, A01.
+- PERFORM (FUNC + MIXER). FUNC + turn C down one click at a time: `ENERGY -2` .. `-64`. The hats
+  thin first, then the percussion and snare, the bass, the pads; the kick holds until about -40
+  and is gone at -64, where only the pads and textures remain. The live strip shows `EN-`, the
+  status line `EN-..`. Does the order and the breakdown at the bottom sound right? `____`
+- Turn back up: it stops on `ENERGY 0`, and the beat is exactly A01 again, no stumble. Each hit
+  comes back where it was. GRID: no step changed, CLR's undo has nothing new. `____`
+- FUNC + turn C up to `+64`: ghost hits on the off-beats, hats busiest, the kick only now and
+  then; a probability step plays every pass. Musical, or too busy for techno? `____`
+- `ENERGY -30`, hold FUNC + MUTATE (a lock), turn it back to 0, tap FUNC + MUTATE: the
+  breakdown is back; tap again: rest again. `____`
+- MAX at `+64` against the default beat at 0: `________ %`
+
+**W63. JAM REC, the whole jam to the card (6 min).** Beat playing, A01, a card with a few GB
+free.
+- FUNC+HOME, UP: `JAM REC` with `OFF`. OK: the menu closes, `JAM REC JAM n`, and a dot blinks
+  in the top bar before the load. The top line reads `____ %` (compare with the beat alone,
+  `____ %`). `____`
+- Play for three minutes: change patterns, throw a scene, open a sample and audition it (push A
+  in SAMPLES), switch CLICK on for a bar. FUNC+HOME, UP: the row counts, `3:0x`. No
+  `JAM: CARD TOO SLOW` on the way. `____`
+- OK: `JAM STOPPING`, then `SAVED JAM n` within a second. On the PC, `/RECORD/JAM_n.WAV` opens
+  as 48 kHz 24-bit stereo of about 3 minutes, sounds as heard, and holds no click and no
+  audition. `____`
+- Start another, let it run 30 s with four streamed samples playing if you have them, then
+  power off with it running. On the PC the second file has the next number and plays to the
+  end. `____`
 
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.

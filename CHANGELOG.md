@@ -11,11 +11,26 @@ the project file format or the controls.
 - **Two reminders on the screen.** A quick tap of FUNC alone says `HOLD FUNC: HELP`, and a tap of
   OK in GRID says `HOLD OK: TRACK MENU`. Both keys did nothing visible on their own, and nothing
   on the panel pointed at the FUNC help or the GEN and EVOLVE menu. Neither covers another notice.
+- **JAM REC: the whole jam to the card.** The FUNC menu's last row (FUNC+HOME, UP, OK) records
+  everything STRATA plays to `/RECORD/JAM_<n>.WAV` until OK again: 48 kHz 24-bit stereo, about
+  1 GB an hour, up to 3 h 51 min. The finished master as RESAMPLE hears it, never the click or
+  the sample audition. A dot blinks in the top bar while it runs and the row counts the time. A
+  full card or the length limit closes the file cleanly and says so; switching off closes it
+  too. RESAMPLE, freeze and the looper still work meanwhile. Every FUNC menu row counted
+  upwards from SAVE is one further on (LOAD DEMO is UP twice now). New emulator scenario
+  `jamrec`.
+- **ENERGY, one knob from breakdown to peak.** In PERFORM, FUNC + turn C (-64 .. +64, rest at 0
+  with a detent). Down, every track drops its weakest hits first, in an order: hats at once, then
+  percussion, snare and samples, the lines, the pads (which keep their strongest hits), and the
+  kick last. Up, empty off-beats get quiet ghosts with the sound of the hit before them (hats most,
+  the kick only near the top, pads never) and probabilities lift towards 100. Each position plays
+  the same groove every bar; the pattern is never written, and a LOCK holds it. New emulator
+  scenario `energy`.
 - **Starter content in the card builder.** strata.einblick.dev can now put something to play on
   the card with STRATA: ten starter projects to open and jam on (TECHNO, DEEP, DUB, DRIFT,
   ELECTRO, NIGHT, BREAKS, STEEL, SMASH, CHAOS; for 0.5.0 and newer), a sample pack of 105
   one-shots and chords rendered by STRATA's own machines in `/SAMPLES/STRATA`, and a one-page
-  quick start, `STRATA-QUICKSTART.txt`. Each is a tick box; nothing in the app changed. The
+  quick start, `STRATA-QUICKSTART.txt`, all behind one tick box; nothing in the app changed. The
   projects live in `content/starter/` and a host test opens every one on each build.
 - **Nine showcase projects beyond techno** (`tools/showcases/`): DEEP (deep house), DUB (dub
   techno), DRIFT (ambient), ELECTRO, BREAKS, CHAOS, SMASH, NIGHT (breakbeat over synthwave) and
@@ -53,6 +68,10 @@ the project file format or the controls.
 
 ### Changed
 
+- **Sample audition with the beat playing takes two pushes.** In SAMPLES, push A while the
+  transport runs only says `A AGAIN TO HEAR`; a second push on the same file within 2 s plays
+  it. The SmplTrek has no cue output, so the audition goes out with the beat, and one bump of
+  the knob in a set should not put a file into the room. Stopped, one push hears it as before.
 - **The clap sounds like a clap.** Its noise moved from 5-10 kHz down to about 2-3 kHz, and each
   of its bursts now rings until the next one strikes instead of dying after a third of the gap,
   so the flutter is as loud as the tail rather than 10-18 dB under it. The factory kit's CLAP and

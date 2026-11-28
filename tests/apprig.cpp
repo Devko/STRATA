@@ -230,6 +230,7 @@ Engine &fresh() {
     post(Cmd::set_move_all, 0, 0, 0, 0);                    // REL ALL to rest
     post(Cmd::set_move_all, 0, 0, 1, 0);                    // LEN ALL to rest
     post(Cmd::set_live_rnd, 0, 0, 0, kLiveRndAllTracks);    // LIVE RND off, every track armed
+    post(Cmd::set_energy, 0, 0, 0);                         // ENERGY to rest
     post(Cmd::step_stutter);                                // b = 0: let go
     post(Cmd::set_click, 0, 0, 0);                         // the metronome off: it is the
                                                             // engine's, not the project's

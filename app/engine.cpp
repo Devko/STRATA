@@ -3,6 +3,7 @@
 #include "arp.hpp"       // the arpeggiator's notes; the engine schedules them
 #include "factory.hpp"
 #include "liverand.hpp"    // LIVE RND: the unit held to its range
+#include "energy.hpp"      // ENERGY: the amount held to its range, the tiers
 #include "chainloops.h"    // strata_choke_fade, a choke group's fade
 #include "masterloops.h"   // strata_master_peak, for the input meter
 #include "pcm.hpp"         // a streamed file's bytes to int16, in top_up_streams
@@ -1071,6 +1072,11 @@ bool Engine::apply_perform(const Command &command, int track, int step) {
             // at the next slot, and OFF puts every slot back on its own step.
             perform_.rnd_unit = live_rnd_turn(command.a, 0);          // held to OFF .. RND16
             perform_.rnd_armed = command.b;
+            break;
+
+        case Cmd::set_energy:
+            // Read by the scheduler on the next tick: a thinned hit drops, a ghost comes in.
+            perform_.energy = energy_turn(int8_t(command.a), 0);    // held to the range
             break;
 
         case Cmd::set_macro:
@@ -2213,6 +2219,20 @@ bool Engine::apply_samples(const Command &command, int track, int) {
             audition_.stop();
             break;
 
+        case Cmd::jam_start:
+            // The card side has created the writer; from this block on it gets the master.
+            jam_on_ = true;
+            break;
+
+        case Cmd::jam_stop:
+            // Stop writing FIRST, then say so: the card side closes the file the moment it sees
+            // the epoch move. Bumped even when nothing was being written, so a stop the card side
+            // is waiting on always ends.
+            jam_on_ = false;
+            jam_epoch_ = uint8_t(jam_epoch_ + 1u);
+            status_.jam_epoch.store(jam_epoch_, std::memory_order_release);
+            break;
+
         default:
             return false;
     }
@@ -2894,6 +2914,14 @@ void Engine::resolve_tick(uint32_t tick, uint32_t frame) {
 
     // A finished song is silent until the transport stops or starts again.
     if (song_over_) return;
+
+    // ENERGY's tiers follow the machines (core/energy.hpp), looked up only while it is away from
+    // rest: at 0 the scheduler reads none of them.
+    if (perform_.energy != 0) {
+        for (int t = 0; t < kTracks; t++) {
+            perform_.energy_tier[t] = uint8_t(energy_tier(machine_id_[t]));
+        }
+    }
 
     // The pattern's own tick: steps, passes and conditions all count from where it started.
     const int count =
@@ -4104,6 +4132,12 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     if (capture_.channels() == 1) capture_.process_mono(tapped >= 0 ? capture_tap_ : nullptr, int(frames));
     else capture_.process(capture_input_ ? input : out, int(frames));
 
+    // JAM REC: the same finished master, every block, into the jam's file (app/storage.hpp, "jam
+    // recording"). Before the audition and the click, so neither is ever on it. The writer turns
+    // the floats into 24-bit PCM and hands them to Enaga's ring, which never waits; a block the
+    // ring has no room for is dropped whole and counted (Writer::frames_lost), not waited for.
+    if (jam_on_) jam_.write(out, frames);
+
     // The input's level, every block, for the RESAMPLE screen's meter: one pass of the master's
     // own peak loop over the interleaved buffer (L and R alike, so one plane of 2n samples).
     if (in != nullptr) {
@@ -4399,6 +4433,7 @@ void Engine::capture_live(LiveState &state) const {
     state.len_all = len_all_;
     state.rnd_unit = perform_.rnd_unit;
     state.rnd_armed = perform_.rnd_armed;
+    state.energy = perform_.energy;
 }
 
 // At once (D3): the next step plays from the restored pattern, and the sound is heard in this
@@ -4428,6 +4463,7 @@ void Engine::apply_live(const LiveState &state) {
     len_all_ = state.len_all;
     perform_.rnd_unit = state.rnd_unit;
     perform_.rnd_armed = state.rnd_armed;
+    perform_.energy = energy_turn(state.energy, 0);
     perform_dirty_ = true;
     reconfigure();
 }
