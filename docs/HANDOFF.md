@@ -240,7 +240,8 @@ file-scope, never locals), `fresh()`, `pump()`, `pump_until_idle()`, `settle()`,
   protocol is in section 6 above.
 
 - **Test order.** The host suite passes in registration order, with `--only` on any one test,
-  as contiguous shards (`--shard K/N`, what `make -C host test JOBS=N` and CI run), and since
+  as contiguous shards (`--shard K/N`, what `make -C host test JOBS=N` and CI run; cut by
+  weight, so a test of seconds is `TEST_WEIGHTED`, tests/check.hpp), and since
   2026-11-26 in shuffled orders: 37 seeds clean with `tools/test_shuffle.sh BIN [SEEDS...]`,
   where they had failed 28-55 checks each. What leaked, now fixed: the scenes and macros (they
   load beside `Project`, so `project_init` left them), every UI cursor and page, the take

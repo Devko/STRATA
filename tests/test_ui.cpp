@@ -7810,36 +7810,70 @@ bool is_rule(const char *why) {
 
 }  // namespace
 
-TEST(ui_audit_every_input_in_every_screen_shows_it_did_something) {
-    // First, that the screens hold still with no input at all: otherwise a meter or a clock
-    // moving would pass for an answer and the audit would prove nothing.
+// The control audit: every probe on every screen, plain and with FUNC. It was one test of 40% of
+// the suite's time; it is one test per screen, each weighted (TEST_WEIGHTED) so the shards spread
+// them, and each probe starts from fresh() anyway.
+TEST(ui_audit_every_screen_holds_still_with_no_input) {
+    // That the screens hold still with no input at all: otherwise a meter or a clock moving
+    // would pass for an answer and the audit would prove nothing.
     for (int s = 0; s < s_count; s++) {
         const Probe nothing = {in_none, 0, "nothing"};
         for (int func = 0; func < 2; func++) {
             const bool moved = visible(s, nothing, func != 0);
-            if (moved) std::printf("    %s%s moves with no input\n", func ? "FUNC+" : "", screen_name(s));
+            if (moved) {
+                std::printf("    %s%s moves with no input\n", func ? "FUNC+" : "", screen_name(s));
+            }
             CHECK(!moved);
         }
     }
+}
+
+namespace {
+
+void audit_screen(int s) {
     for (int func = 0; func < 2; func++) {
-        for (int s = 0; s < s_count; s++) {
-            for (const Probe &p : kProbes) {
-                const bool shows = visible(s, p, func != 0);
-                const char *why = quiet_reason(s, p, func != 0);
-                if (why != nullptr && is_rule(why) && shows) continue;
-                if (!shows && why == nullptr) {
-                    std::printf("    %s: %s%s changes nothing on screen or LEDs\n",
-                                screen_name(s), func ? "FUNC+" : "", p.name);
-                }
-                if (shows && why != nullptr) {
-                    std::printf("    %s: %s%s now shows something: drop it from the list\n",
-                                screen_name(s), func ? "FUNC+" : "", p.name);
-                }
-                CHECK(shows == (why == nullptr));
+        for (const Probe &p : kProbes) {
+            const bool shows = visible(s, p, func != 0);
+            const char *why = quiet_reason(s, p, func != 0);
+            if (why != nullptr && is_rule(why) && shows) continue;
+            if (!shows && why == nullptr) {
+                std::printf("    %s: %s%s changes nothing on screen or LEDs\n",
+                            screen_name(s), func ? "FUNC+" : "", p.name);
             }
+            if (shows && why != nullptr) {
+                std::printf("    %s: %s%s now shows something: drop it from the list\n",
+                            screen_name(s), func ? "FUNC+" : "", p.name);
+            }
+            CHECK(shows == (why == nullptr));
         }
     }
 }
+
+}  // namespace
+
+// About 2 s each under ASan, against about 15 ms for a typical test.
+#define STRATA_AUDIT(screen)                                                              \
+    TEST_WEIGHTED(ui_audit_every_input_shows_it_did_something_on_##screen, 120) {         \
+        audit_screen(screen);                                                             \
+    }
+STRATA_AUDIT(s_grid)
+STRATA_AUDIT(s_keys)
+STRATA_AUDIT(s_edit)
+STRATA_AUDIT(s_machine)
+STRATA_AUDIT(s_kit)
+STRATA_AUDIT(s_mixer)
+STRATA_AUDIT(s_perform)
+STRATA_AUDIT(s_project)
+STRATA_AUDIT(s_chain)
+STRATA_AUDIT(s_pattern)
+STRATA_AUDIT(s_setup)
+STRATA_AUDIT(s_projects)
+STRATA_AUDIT(s_resample)
+STRATA_AUDIT(s_menu)
+STRATA_AUDIT(s_sounds)
+#undef STRATA_AUDIT
+// One audit per screen: a screen added to the enum needs its line above.
+static_assert(s_count == 15, "a new screen needs its STRATA_AUDIT line");
 
 // --- MUTATE on the unit: upper pad 7 "did nothing" ------------------------------------------
 
