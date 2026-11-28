@@ -177,8 +177,9 @@ constexpr MixerPage kMixerPages[] = {
                     int8_t(SendField::reverb_high_pass_hz), int8_t(SendField::reverb_level)}},
     {"REV+", false, {int8_t(SendField::reverb_mode), int8_t(SendField::reverb_size),
                      int8_t(SendField::reverb_mod), int8_t(SendField::reverb_shimmer)}},
+    // RDK, the reverb's return under the kit's duck, in the slot ROUTE had spare.
     {"ROUTE", false, {int8_t(SendField::delay_ping_pong), int8_t(SendField::delay_to_reverb),
-                      int8_t(SendField::delay_low_cut_hz), -1}},
+                      int8_t(SendField::delay_low_cut_hz), int8_t(SendField::reverb_duck)}},
     // The chorus, send C: how much of each track goes to it, four at a time (kit bytes, handled
     // on their own like the duck's depths), then the chorus itself.
     {"CHO 1-4", false, {-1, -1, -1, -1}},

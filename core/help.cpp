@@ -491,7 +491,7 @@ constexpr Text kMixer[kHelpMixerPages] = {
     {"MIXER REV+:", {"A TYP ROOM OR HALL", "B SIZ SIZE", "C MOD SWEEP", "D SHM SHIMMER",
                      "PUSH A  FLIPS TYP", nullptr}},
     {"MIXER ROUTE:", {"A PNG PING-PONG", "B D>R DELAY TO REVERB", "C LCT LONG LOW CUT",
-                      "D ---", nullptr}},
+                      "D RDK REVERB DUCK", "RUMBLE: KICK IN REV", nullptr}},
     {"MIXER CHO 1-4:", {"A-D  CHORUS SEND 1-4", "PUSH  OFF OR HALF", "RATE DEPTH ON CHO",
                         "SAVED IN THE KIT", nullptr}},
     {"MIXER CHO 5-8:", {"A-D  CHORUS SEND 5-8", "PUSH  OFF OR HALF", "RATE DEPTH ON CHO",

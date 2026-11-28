@@ -3657,7 +3657,7 @@ TEST(ui_a_knob_on_the_delay_page_changes_the_delay) {
     CHECK_EQ(delay_division_index(engine.project().settings.sends[0]), 0);
 }
 
-TEST(ui_an_empty_slot_on_the_routing_page_does_nothing) {
+TEST(ui_the_routing_pages_d_is_the_reverbs_duck) {
     Strata &app = fresh();
     Engine &engine = app_engine();
     mixer_page(app, kMixerHallPage + 1);  // ROUTE
@@ -3671,19 +3671,25 @@ TEST(ui_an_empty_slot_on_the_routing_page_does_nothing) {
     pump(2);
     CHECK(engine.sends().delay_ping_pong);
 
-    // D is empty -- nineteen send fields do not divide into four. Turning it changes nothing
-    // and, in particular, does not fall through to the track faders below.
+    // D was empty until RDK, the reverb's return under the duck, took it. Turning it writes that
+    // byte alone and does not fall through to the track faders below.
     const uint32_t refused_before = engine.status().refused.load(std::memory_order_relaxed);
     const float level_before = engine.level(0);
     uint8_t sends_before[kSendFields];
     for (int i = 0; i < kSendFields; i++) sends_before[i] = engine.project().settings.sends[i];
+    CHECK_EQ(int(sends_before[int(SendField::reverb_duck)]), 0);
     app.on_encoder(3, +5);
     pump(2);
     CHECK_NEAR(engine.level(0), level_before, 1e-6);
     CHECK_EQ(int(engine.status().refused.load(std::memory_order_relaxed) - refused_before), 0);
     for (int i = 0; i < kSendFields; i++) {
-        CHECK_EQ(int(engine.project().settings.sends[i]), int(sends_before[i]));
+        if (i == int(SendField::reverb_duck)) {
+            CHECK(engine.project().settings.sends[i] > 0);
+        } else {
+            CHECK_EQ(int(engine.project().settings.sends[i]), int(sends_before[i]));
+        }
     }
+    CHECK(engine.sends().reverb_duck > 0.0f);
 }
 
 namespace {

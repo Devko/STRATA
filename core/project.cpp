@@ -324,10 +324,12 @@ constexpr uint32_t kProjectChainBytes = uint32_t(kChainEntries) * 3;
 // It grew again with the ambient modes (2026-11-22): their nine send bytes go AFTER the switches,
 // not after the first ten send bytes, so that every byte an older build knows stays where it was.
 // And with the chorus, send C (2026-11-27): its four bytes after the ambient modes', for the same
-// reason. A section that stops before them is a file from before the chorus.
+// reason. A section that stops before them is a file from before the chorus. And with the
+// reverb's duck (RDK, 2026-11-28): one byte after the chorus's.
 constexpr uint32_t kProjectMixerBytesV2 =
     uint32_t(kSendFieldsV1) + uint32_t(kMasterFields) + 1;
 constexpr uint32_t kProjectMixerBytesV3 = kProjectMixerBytesV2 + uint32_t(kSendFieldsV2 - kSendFieldsV1);
+constexpr uint32_t kProjectMixerBytesV4 = kProjectMixerBytesV2 + uint32_t(kSendFieldsV3 - kSendFieldsV1);
 constexpr uint32_t kProjectMixerBytes = kProjectMixerBytesV2 + uint32_t(kSendFields - kSendFieldsV1);
 constexpr uint32_t kProjectMixerBytesV1 = uint32_t(kSendFieldsV1) + uint32_t(kMasterFieldsV1);
 constexpr uint32_t kProjectTableBytes = kProjectSections * kSectionEntryBytes;
@@ -753,7 +755,8 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
         // reason as above.
         const bool has_eq = length[2] >= kProjectMixerBytesV2;
         const bool has_ambient = length[2] >= kProjectMixerBytesV3;
-        const bool has_chorus = length[2] >= kProjectMixerBytes;
+        const bool has_chorus = length[2] >= kProjectMixerBytesV4;
+        const bool has_reverb_duck = length[2] >= kProjectMixerBytes;
         const ProjectSettings defaults;
         const int master_fields = has_eq ? kMasterFields : kMasterFieldsV1;
         for (int i = 0; i < master_fields; i++) s.master[i] = clamp_u8(r.u8(), 0, 127);
@@ -768,8 +771,12 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
         }
         // The chorus, after them; an older file has the chorus at its defaults, which no track
         // sends to.
-        for (int i = kSendFieldsV2; i < kSendFields; i++) {
+        for (int i = kSendFieldsV2; i < kSendFieldsV3; i++) {
             s.sends[i] = has_chorus ? clamp_u8(r.u8(), 0, 127) : defaults.sends[i];
+        }
+        // The reverb's duck, after them; an older file's reverb is never ducked.
+        for (int i = kSendFieldsV3; i < kSendFields; i++) {
+            s.sends[i] = has_reverb_duck ? clamp_u8(r.u8(), 0, 127) : defaults.sends[i];
         }
         if (!r.ok()) return refuse(SerializeResult::truncated);
     }

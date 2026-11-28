@@ -128,6 +128,9 @@ bool send_field_set(SendSettings &settings, uint8_t field, float value) {
         case SendField::chorus_to_reverb:
             settings.chorus_to_reverb = clamp_to(value, 0.0f, 1.0f);
             return true;
+        case SendField::reverb_duck:
+            settings.reverb_duck = clamp_to(value, 0.0f, 1.0f);
+            return true;
         default:
             return false;
     }
@@ -158,6 +161,7 @@ float send_field_get(const SendSettings &settings, uint8_t field) {
         case SendField::chorus_depth:        return settings.chorus_depth;
         case SendField::chorus_level:        return settings.chorus_level;
         case SendField::chorus_to_reverb:    return settings.chorus_to_reverb;
+        case SendField::reverb_duck:         return settings.reverb_duck;
         default:                             return 0.0f;
     }
 }
@@ -166,7 +170,7 @@ const char *send_field_name(uint8_t field) {
     static const char *const names[] = {"TIM", "FBK", "TON", "PNG", "LVL", "D>R", "DEC",
                                         "DMP", "HPF", "LVL", "TYP", "MUL", "WOW", "DIF",
                                         "LCT", "TYP", "SIZ", "MOD", "SHM", "RAT", "DEP",
-                                        "LVL", "C>R"};
+                                        "LVL", "C>R", "RDK"};
     static_assert(sizeof(names) / sizeof(names[0]) == std::size_t(SendField::count),
                   "a send field without a name");
     return field < uint8_t(SendField::count) ? names[field] : "---";
@@ -383,6 +387,7 @@ float send_value_from_byte(uint8_t field, uint8_t byte, float beat_seconds) {
         case SendField::chorus_depth:    return byte_unit(byte);
         case SendField::chorus_level:    return byte_unit(byte);
         case SendField::chorus_to_reverb: return byte_unit(byte);
+        case SendField::reverb_duck:     return byte_unit(byte);
         default:                         return 0.0f;
     }
 }
@@ -566,6 +571,7 @@ void Mixer::resolve_sends(const SendSettings &sends) {
                 ed::clamp(sends.chorus_depth, 0.0f, 1.0f));
     chorus_level_ = ed::clamp(sends.chorus_level, 0.0f, 1.0f);
     chorus_to_reverb_ = ed::clamp(sends.chorus_to_reverb, 0.0f, 1.0f);
+    reverb_duck_ = ed::clamp(sends.reverb_duck, 0.0f, 1.0f);
 
     // --- send B: the reverb and the high-pass on its input -----------------------------------
     reverb_.set(sends.reverb_decay_s, sends.reverb_damping);
@@ -815,15 +821,29 @@ void Mixer::finish_block(float *out, int frames) {
     if (n > 0 && fed_b) {
         strata_biquad_inplace(&reverb_high_pass_.state_, &reverb_high_pass_coefficients_, send_b_, n);
     }
+    // RDK: with the duck running, the return is rendered aside and added under 1 - RDK x duck,
+    // the curve every ducked track rides (dsp/chain.hpp). RDK 0, or the duck idle, adds straight
+    // into the mix as before: no extra pass.
+    const bool duck_return = reverb_duck_ > 0.0f && duck_active_;
+    float *rev_l = duck_return ? wet_l_ : mix_l_;
+    float *rev_r = duck_return ? wet_r_ : mix_r_;
+    if (duck_return && n > 0 && (reverb_tail_ > 0 || hall_tail_ > 0)) {
+        enaga_clear(wet_l_, n);
+        enaga_clear(wet_r_, n);
+    }
     if (n > 0 && reverb_tail_ > 0) {
         reverb_tail_--;
-        reverb_.process(hall_mode_ ? kSilence : send_b_, kSilence, mix_l_, mix_r_, n,
+        reverb_.process(hall_mode_ ? kSilence : send_b_, kSilence, rev_l, rev_r, n,
                         reverb_level_ * 2.0f);
     }
     // --- send B's HALL mode -------------------------------------------------------------------
     if (n > 0 && hall_tail_ > 0) {
         hall_tail_--;
-        hall_.process(hall_mode_ ? send_b_ : kSilence, mix_l_, mix_r_, n, reverb_level_);
+        hall_.process(hall_mode_ ? send_b_ : kSilence, rev_l, rev_r, n, reverb_level_);
+    }
+    if (duck_return && n > 0) {
+        strata_duck_mix(mix_l_, wet_l_, duck_curve_, reverb_duck_, n);
+        strata_duck_mix(mix_r_, wet_r_, duck_curve_, reverb_duck_, n);
     }
 
     // --- master ------------------------------------------------------------------------------

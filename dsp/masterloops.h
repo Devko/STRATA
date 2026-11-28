@@ -50,6 +50,10 @@ void strata_kill_eq(float *left, float *right, int n, float *state_l, float *sta
 /* The planes into audio()'s interleaved L R L R buffer, and silence in any frames past n. */
 void strata_interleave(float *out, const float *left, const float *right, int n, int frames);
 
+/* dst[i] += src[i] * (1 - depth * duck[i]): a return ducked by the sidechain curve (0 open,
+ * 1 fully down), as the reverb's RDK uses it (dsp/buses.cpp). */
+void strata_duck_mix(float *dst, const float *src, const float *duck, float depth, int n);
+
 #ifdef __cplusplus
 }
 #endif

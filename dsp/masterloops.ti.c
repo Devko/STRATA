@@ -133,3 +133,9 @@ void strata_kill_eq(float *restrict left, float *restrict right, int n, float *r
         state_r[i] = r[i];
     }
 }
+
+void strata_duck_mix(float *restrict dst, const float *restrict src, const float *restrict duck,
+                     float depth, int n) {
+    int i;
+    for (i = 0; i < n; i++) dst[i] += src[i] * (1.0f - depth * duck[i]);
+}

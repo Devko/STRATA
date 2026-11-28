@@ -552,11 +552,13 @@ constexpr uint16_t kTempoCentiMax = 30000;    // 300.00 BPM
 // dsp/buses.hpp's enums because core/ cannot include dsp/ -- dsp/buses.hpp reaches Enaga and
 // CLAUDE.md says core/ never does. dsp/buses.hpp static_asserts that the two agree, so the day
 // a field is added the build stops here rather than writing a short section.
-constexpr int kSendFields = 23;
+constexpr int kSendFields = 24;
 // What a PROJECT.BIN written before the ambient modes holds; the other nine follow the master's.
 constexpr int kSendFieldsV1 = 10;
 // And before the chorus (send C): the ambient modes' nine after the master's, no chorus bytes.
 constexpr int kSendFieldsV2 = 19;
+// And before the reverb's duck (RDK, 2026-11-28): the chorus's four were the last.
+constexpr int kSendFieldsV3 = 23;
 constexpr int kMasterFields = 7;
 // What a PROJECT.BIN written before the kill EQ holds: the DJ filter, compressor, limiter and
 // level. The three EQ bands were appended after them, so a short mixer section is an older file.
@@ -705,7 +707,9 @@ struct ProjectSettings {
                                   // The chorus (send C): a 0.6 Hz sweep, half depth, full
                                   // return, none of it into the reverb. Nothing sounds until a
                                   // track sends to it (KitTrack::chorus), which no track does.
-                                  69, 64, 127, 0};
+                                  69, 64, 127, 0,
+                                  // The reverb's return never ducked (RDK 0).
+                                  0};
     // Centre (flat) DJ filter, the glue compressor at 0.3, the limiter at 0.8, unity out, and the
     // kill EQ's three bands at their flat (bypassed) centre.
     uint8_t master[kMasterFields] = {64, 38, 101, 127, 64, 64, 64};

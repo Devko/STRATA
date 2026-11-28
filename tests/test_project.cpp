@@ -46,8 +46,9 @@ using namespace strata;
 // end of the mixer section. 450 since Track Launch: an eighth entry (12) and its 9 bytes. 472 since
 // the line input: a ninth entry (12) and its 10 bytes. 997 since the song sections: a tenth entry
 // (12), a layout byte and 8 bytes per chain entry (513). 998 since PROG CHG OUT:
-// one byte on the end of the MIDI section.
-constexpr uint32_t kProjectFileBytes = 998;
+// one byte on the end of the MIDI section. 999 since the reverb's duck: one send byte on the end
+// of the mixer section.
+constexpr uint32_t kProjectFileBytes = 999;
 constexpr uint32_t kKitFileBytes = 1550;   // 1506 before the SCN page (12 + 32), 1486 before the widths (12 + 8), 1466 before the chorus sends (12 + 8), 1453 before the LFO layout (12 + 1), 1409 before the arp settings (12 + 32), 1389 before the choke groups (12 + 8), 1329 before the mod slots (12 + 48), 1309 before LFO TRIG (12 + 8), 1296 before the filter layout (12 + 1), 1076 before the LFO and arp (12 + 8 x 4 each), 1164 before SLC AUTO (12 + 8), 1184 before ASR (12 + 32), 1228 before the duck (12 + 12), 1252 before OSC (12 + 32)
 
 // Room past the end of every file, filled with a sentinel, so that a writer going one byte long
@@ -1328,6 +1329,29 @@ TEST(project_a_mixer_section_from_before_the_chorus_loads_the_chorus_defaults) {
     for (int i = kSendFieldsV2; i < kSendFields; i++) {
         CHECK_EQ(int(g_loaded.settings.sends[i]), int(defaults.sends[i]));
     }
+}
+
+// The reverb's duck (RDK) grew it by one more byte. A file from before it keeps the chorus and
+// opens with the reverb never ducked.
+TEST(project_a_mixer_section_from_before_the_reverb_duck_loads_it_off) {
+    fill_project(g_source, 0);
+    for (int i = kSendFieldsV2; i < kSendFields; i++) g_source.settings.sends[i] = uint8_t(10 + i);
+    uint32_t written = 0;
+    CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
+             int(SerializeResult::ok));
+    project_init(g_loaded);
+    CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::ok));
+    CHECK_EQ(int(g_loaded.settings.sends[int(kSendFieldsV3)]), 10 + kSendFieldsV3);
+    poke_u32(g_project, kHeaderBytes + 2 * kSectionEntryBytes + 8,
+             uint32_t(kSendFieldsV3 + kMasterFields + 1));
+    refresh_crc(g_project);
+    project_init(g_loaded);
+    g_loaded.settings.sends[kSendFieldsV3] = 99;
+    CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::ok));
+    for (int i = 0; i < kSendFieldsV3; i++) {
+        CHECK_EQ(int(g_loaded.settings.sends[i]), int(g_source.settings.sends[i]));
+    }
+    CHECK_EQ(int(g_loaded.settings.sends[kSendFieldsV3]), 0);
 }
 
 // And the new bytes sit after the switches, where an older build never looks.

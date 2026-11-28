@@ -85,6 +85,9 @@ struct SendSettings {
     float chorus_depth = 0.5f;        // 0 to 1: up to +-5 ms around the 8 ms delay
     float chorus_level = 1.0f;        // the chorus's return into the mix
     float chorus_to_reverb = 0.0f;    // the chorus feeding the reverb
+    // The reverb's return ducked by the kit's sidechain duck, 0 (never, as before) to 1: the
+    // rumble-techno move, a kick into a long dark reverb that breathes with the kick.
+    float reverb_duck = 0.0f;
 
     bool operator==(const SendSettings &) const = default;
 };
@@ -122,6 +125,8 @@ enum class SendField : uint8_t {
     chorus_depth,
     chorus_level,
     chorus_to_reverb,
+    // The reverb return's duck, appended (2026-11-28), after the chorus's bytes in PROJECT.BIN.
+    reverb_duck,
     count
 };
 
@@ -415,6 +420,7 @@ private:
     float wet_l_[kMaxFrames] = {};
     float wet_r_[kMaxFrames] = {};
     float duck_curve_[kMaxFrames] = {};
+    float reverb_duck_ = 0.0f;   // SendSettings::reverb_duck, clamped
     float scratch_[kMaxFrames] = {};
     float scratch_r_[kMaxFrames] = {};
 };
