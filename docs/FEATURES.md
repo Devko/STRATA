@@ -215,14 +215,14 @@ FM4 and GRAIN machines.
 | Feature | Since | Unit | Known limits / notes |
 | --- | --- | --- | --- |
 | Follows the unit's clock: internal, MIDI clock, SYNC IN; refuses tempo/transport under external clock | v0.1.0 | ○ (M7) | STRATA cannot set CLOCK SRC (Enaga has no setter). SYNC polarity not selectable (Enaga) |
-| Tap tempo on VALUE, nudge on FUNC + VALUE | Unreleased | ○ (W68) | Internal clock only; the nudge is 4% for 250 ms a detent |
+| Tap tempo on VALUE, nudge on FUNC + VALUE | Unreleased | ○ (W69) | Internal clock only; the nudge is 4% for 250 ms a detent |
 | MIDI OUT per track (OFF/1-16): steps, chords, ratchets, arp, note repeat, pads, KEYS, MIDI IN | v0.1.0 | ○ (8d) | **On Enaga 0.2.0 (v0.1.0-v0.3.1):** with USB connected to a computer not reading, DIN out stalls; unplug USB. Fixed in Enaga 0.3.0, which `main` needs |
 | Every note gets its note-off; second STOP sends All Notes Off | v0.1.0 | ○ (8d) | Slide is not sent as legato |
 | MIDI IN notes (ch 1-8 = tracks, others = selected), held to note-off | v0.1.0 | ○ (8d) | No pitch bend or aftertouch |
 | MIDI IN CC 16-31 = track parameters, CC 120/123 release | v0.1.0 | ○ (8d) | |
 | MIDI IN program change queues a pattern | v0.1.0 | ○ (8d) | |
-| MIDI IN song position pointer: chain entry and pass, or the pattern from the top | Unreleased | ○ (W68) | MIDI clock only; Enaga takes an SPP only while stopped |
-| PROG CHG OUT: each pattern change sends a program change on MIDI CH | Unreleased | ○ (W68) | Off by default; saved with the project |
+| MIDI IN song position pointer: chain entry and pass, or the pattern from the top | Unreleased | ○ (W69) | MIDI clock only; Enaga takes an SPP only while stopped |
+| PROG CHG OUT: each pattern change sends a program change on MIDI CH | Unreleased | ○ (W69) | Off by default; saved with the project |
 | Sending MIDI clock | — | — | Enaga's CLOCK OUT does it, not STRATA |
 
 ## Storage, projects and kits
@@ -241,6 +241,7 @@ FM4 and GRAIN machines.
 | **Starter content in the card builder** (web/, `content/starter/`): ten starter projects (0.5.0 and newer), a 105-file sample pack rendered by STRATA (`host/starter.cpp`) in `/SAMPLES/STRATA`, and `STRATA-QUICKSTART.txt`, behind one tick box (#230) | #223 | ○ W61 | `tests/test_starter.cpp` opens every project through Storage; web tests check the pack and the manifest. No emulator scenario: nothing in the app changed |
 | Factory pattern A05 PAD: held VA POLY chords from the ENV page, in the pattern's locks | #100 | ○ (13k) | The kit's chord stays A01's SUS 0 stab |
 | Factory sounds: SOUNDS (OK in EDIT or MACHINE) loads one of 116 ready-made sounds (KCK 10, SNR 10, HAT 11, PRC 12, MNO 14, PLY 12, WMN 12, WPL 12, FM4 12, GRN 11) into one track, AS WAS puts it back | #102, #118, #122, #126, #134, #184 | ○ (15e) | Leaves FX, LFO, ARP, fader and HAT's choke group; not undoable except by AS WAS |
+| **Your own sounds**: in SOUNDS, FUNC+DOWN saves the track's sound by name (16 per machine, on the card in `SOUNDS/<MCH>.BIN`, shared by every project), OK loads it on any track with that machine, push B renames, push C deletes; FUNC+UP copies a track's sound and the PASTE row puts it on any track, switching the machine if needed, AS WAS takes it back | WIP | ○ (W68) | Same pages as a factory sound (not FX, LFO, ARP); SMP and MID have none; the copy is lost at power-off |
 
 ---
 

@@ -400,13 +400,15 @@ constexpr Text kSamples = {"SAMPLES:", {
 
 constexpr Text kSounds = {"SOUNDS:", {
     "UP/DOWN/A  SOUND",
-    "LEFT/RIGHT FIRST/LAST",
     "SCREEN KEYS TRACK",
     "OK  LOAD INTO TRACK",
     "AS WAS  YOURS BACK",
+    "FUNC+DOWN  SAVE YOURS",
+    "FUNC+UP    COPY",
+    "PASTE ROW  ANY TRACK",
+    "PUSH B  RENAME YOURS",
+    "PUSH C  DELETE YOURS",
     "CLR        BACK",
-    "ONE TRACK ONLY",
-    nullptr, nullptr, nullptr,
 }};
 
 constexpr Text kResample = {"RESAMPLE:", {

@@ -633,6 +633,8 @@ private:
     // switching makes that an assumption rather than a fact, so it is re-derived on every
     // change: a closed hat chokes an open one only while both tracks still host a Hat.
     void rewire_machines();
+    // Cmd::set_machine's work: silence, switch, load the machine's default sound.
+    void switch_machine(int track, uint8_t id);
 
     Machine *machines_[kTracks] = {};
 
@@ -684,6 +686,7 @@ private:
     // its AS WAS row can put it back. -1 when nothing is remembered.
     TrackParams sound_back_ = {};
     int sound_back_track_ = -1;
+    uint8_t sound_back_machine_ = 0;   // and its machine, which a paste may have switched
     // And `Cmd::arp_preset`'s: the ARP bytes and the arp's kit settings when ARPS opened.
     uint8_t arp_back_[kArpBytes] = {};
     KitArp arp_back_ext_ = {};

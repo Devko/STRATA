@@ -226,4 +226,31 @@ MIDI, because under the internal clock LOCATE is STRATA's own restart (`locate(0
 and the start of the run of entries on the same pattern, since `chain_advance` keeps the origin
 across a repeated pattern), sets `origin_` and every lane origin to it and `tick_` to the
 position, so `resolve_tick` sees no jump. A pending queue lands at once (no chain) or is dropped
-(chain). The emulator cannot send MIDI in, so only the host suite and the unit (W68) cover it.
+(chain). The emulator cannot send MIDI in, so only the host suite and the unit (W69) cover it.
+
+## Your own sounds and copy / paste in SOUNDS
+
+`core/usersounds.hpp` has the design and the file's bytes; `app/storage.hpp` ("your own sounds")
+the protocol. The decisions behind it:
+
+- **One file per machine, not per sound**: `SOUNDS/<MCH>.BIN`, sixteen slots, read when SOUNDS
+  opens on that machine and written whole after each save, rename or delete (a few hundred bytes,
+  one pass, through files::save's .TMP). One read per list, and no scan of sixteen files.
+- **Beside the projects, never in them**, like the kit library: every project file is unchanged,
+  so every older project opens as it did, and a sound saved once is in every project.
+- **Versioned like every STRATA file**: the container's version, and in the record its own length
+  and parameter count, so a later build can save more per sound (the WAVE scan page's bytes) and
+  this one still reads it, and a record with fewer bytes takes the machine's defaults for the rest.
+  A file this build cannot read is never written over (`failed`), so nothing a newer build or a
+  damaged card holds is lost by saving.
+- **The whole kKitParams bytes are kept; loading writes what a factory sound writes**
+  (`user_sound_owns` = `sound_preset_writes`), so the FX page, LFO and ARP stay the track's, as
+  Roland chose for the factory sounds. Kept whole so a later build may choose to load more.
+- **Loading goes as bytes, not a preset index**: `Cmd::sound_bytes` carries eight a command (b-e
+  and `u`), four commands a sound, posted together so they land in one block. No shared buffer
+  between the contexts is needed.
+- **Copy is a clipboard row, not a target picker**: FUNC+UP takes the track's sound into the UI's
+  clipboard and OK on the PASTE row loads it, so "paste" is the list's own OK. Pasting onto
+  another machine posts `Cmd::set_machine` first; `Cmd::sound_preset`'s AS WAS remembers the
+  machine too and switches it back (`Engine::switch_machine`).
+- `tests/scenario_usersounds.sh` walks save, load, copy, paste and AS WAS; UNIT_CHECKLIST W68.

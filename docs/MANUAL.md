@@ -479,6 +479,7 @@ you, with starter projects, a sample pack and a quick start unless you untick th
                                   /BANK_A.BIN ... BANK_H.BIN   16 patterns each
 /ENAGA/DATA/STRATA/AUTOSAVE/                   the working copy, same files
 /ENAGA/DATA/STRATA/KITS/KIT_01.BIN ... KIT_16.BIN   the kit library
+/ENAGA/DATA/STRATA/SOUNDS/KCK.BIN ... FM4.BIN      your own sounds, one file per machine
 /RECORD/STRATA_<n>.WAV                         resampled takes
 /RECORD/JAM_<n>.WAV                            JAM REC recordings
 /SAMPLES/STRATA/                               the starter sample pack, if the card builder added it
@@ -988,6 +989,32 @@ Most lists are longer than the screen: they scroll as the cursor moves. PAD, STR
 FAT, REESE, ACID, SYNC, LEAD and DRONE sustain (the ENV page's SUS is up), so their notes last as long as
 each step's LEN: give the steps long LENs, or hear PAD on A05. A loaded sound is a change to the
 kit like turning knobs: it is saved with the project, and FUNC+CLR does not undo it (AS WAS does).
+
+### Your own sounds, and copying a sound to another track
+
+A sound you made on a track can join its machine's SOUNDS list, so every project can load it.
+In SOUNDS, **FUNC+DOWN saves** the track's sound: name it (eight characters; A or LEFT/RIGHT move,
+B, VALUE or UP/DOWN pick the character) and press OK. It is listed after the factory sounds with
+a `+` in front (`+KCK 1`), and loads with OK like any other, on any track with the same machine.
+FUNC+DOWN on one of your own sounds replaces it with what the track has now, under the same name
+or a new one. **Push B** renames the sound under the cursor and **push C** deletes it (OK twice).
+The factory sounds cannot be renamed or deleted. Each machine keeps up to 16 of your sounds.
+
+A saved sound holds the same pages a factory sound sets, and leaves the FX page, the LFO, the
+ARP, HAT's choke group and GRAIN's POS and PIT to the track it is loaded into. SMP and MID have no
+SOUNDS list and so no saved sounds.
+
+**FUNC+UP copies** the track's sound. A **PASTE** row then sits under AS WAS on every track
+(`PASTE T1 KCK`): OK on it gives the selected track the copied sound. On a track with another
+machine it switches the machine first (`SWITCHES MACHINE` under the bars), the way MACHINE does,
+and then sets the sound; the track keeps its mix, LFO and ARP. AS WAS takes a paste back, the
+machine included. The copy lasts until the next FUNC+UP or until STRATA is switched off.
+
+Saved sounds live on the card in `ENAGA/DATA/STRATA/SOUNDS/`, one file per machine (`KCK.BIN`,
+`MNO.BIN` and so on), beside the projects and the kit library. They are not part of a project:
+copying that folder to another card takes them along, and projects open exactly as they did. A
+file that cannot be read shows `SOUND FILE` and the reason on the list's top line, and is never
+written over, so nothing in it is lost.
 
 ---
 

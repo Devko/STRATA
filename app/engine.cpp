@@ -8,6 +8,7 @@
 #include "masterloops.h"   // strata_master_peak, for the input meter
 #include "pcm.hpp"         // a streamed file's bytes to int16, in top_up_streams
 #include "sounds.hpp"      // Cmd::sound_preset: the factory sounds
+#include "usersounds.hpp"  // Cmd::sound_bytes: saved and copied sounds
 #include "arppresets.hpp"  // Cmd::arp_preset: the factory arps
 #include "stepnotes.hpp"   // a step's played-in extra notes, as locks
 #include "tuning.hpp"      // a knob click in NOTE view: tune_step
@@ -313,6 +314,41 @@ void Engine::build_placeholder_sample() {
 
 // --- commands -------------------------------------------------------------
 
+// Cmd::set_machine's work, and AS WAS's when a paste had switched the machine (Cmd::sound_preset).
+void Engine::switch_machine(int track, uint8_t id) {
+    // The machine being LEFT is silenced first. It will not be rendered again, so it
+    // cannot release its own tail -- and a voice left sounding in an object nothing
+    // calls is a note that never ends and never ends up in the voice count either.
+    silence_track(track);
+
+    machine_id_[track] = id;
+    project_.kit.tracks[track].machine = id;
+    cc_known_[track] = false;     // a MID track's CCs start from what they are now
+    rewire_machines();
+
+    // The new machine reads this track's parameters, which mean different things to it:
+    // slot 10 is GLD on VA MONO and DET on VA POLY, and the FLTR page is the insert
+    // chain's on both. Until 2026-11-23 the knobs kept their positions across a switch.
+    //
+    // Since then (Roland) a switch loads the new machine's default sound
+    // (core/sounds.hpp, machine_defaults_apply) into its sound pages, so nothing the old
+    // machine left there leaks into the new one: a VA's knobs made a new SAMPLE start
+    // half way into the file, sliced, and fade early. The mix, LFO and ARP stay. A lock on
+    // the current step still wins until the next step, as for a knob or a preset.
+    if (machine_defaults_apply(id, params_[track].v)) {
+        const uint64_t locked = locked_[track];
+        for (int p = 0; p < kTrackParams; p++) {
+            if ((locked >> p & 1u) == 0) effective_[track].v[p] = params_[track].v[p];
+        }
+    }
+    if (machines_[track] != nullptr) machines_[track]->prepare(effective_[track]);
+
+    // And the sample, if the new machine plays one. The loader's path is in the kit; a
+    // track switched to SAMPLE or GRAIN before any card has been read falls back to the
+    // placeholder every machine in the pool was given at init.
+    perform_dirty_ = true;
+}
+
 void Engine::apply_commands() {
     Command command;
     // The spec's limit: a burst of edits must not be able to break the deadline.
@@ -554,7 +590,19 @@ bool Engine::apply_sound(const Command &command, int track, int) {
             if (command.b == kSoundPresetKeep) {
                 sound_back_ = params_[track];
                 sound_back_track_ = track;
+                sound_back_machine_ = machine_id_[track];
                 break;
+            }
+            if (command.b == kSoundPresetBack && sound_back_track_ == track &&
+                machine_id_[track] != sound_back_machine_) {
+                // A paste switched the machine since the list opened: switch it back, then put
+                // back every sound page the switch wrote. The FX page, LFO and ARP were not
+                // touched by either, and stay as they are.
+                switch_machine(track, sound_back_machine_);
+                for (int p = 0; p < kTrackParams; p++) {
+                    const bool sound_page = p < kUserSoundFxFirst || (p >= kSoundAsrFirst && p < kKitParams);
+                    if (sound_page) params_[track].v[p] = sound_back_.v[p];
+                }
             }
             const uint8_t machine = machine_id_[track];
             uint8_t *bytes = params_[track].v;
@@ -563,9 +611,8 @@ bool Engine::apply_sound(const Command &command, int track, int) {
                     status_.bump_refused();
                     break;
                 }
-                const uint32_t mask = sound_preset_writes(machine);
                 for (int p = 0; p < kTrackParams; p++) {
-                    if ((mask >> p) & 1u) bytes[p] = sound_back_.v[p];
+                    if (user_sound_owns(machine, p)) bytes[p] = sound_back_.v[p];
                 }
             } else if (command.a != machine || !sound_preset_apply(machine, command.b, bytes)) {
                 // Picked for a machine the track no longer hosts, or no such preset.
@@ -576,6 +623,30 @@ bool Engine::apply_sound(const Command &command, int track, int) {
             for (int p = 0; p < kTrackParams; p++) {
                 // A lock on the current step still wins until the next step, as for a knob.
                 if ((locked >> p & 1u) == 0) effective_[track].v[p] = bytes[p];
+            }
+            perform_dirty_ = true;
+            break;
+        }
+
+        case Cmd::sound_bytes: {
+            // core/usersounds.hpp: a saved or copied sound, eight bytes at a time, written as
+            // sound_preset writes a factory one -- the bytes a sound owns, into the kit and,
+            // where no lock holds them, effective_.
+            const uint8_t machine = machine_id_[track];
+            if (command.a != machine || !user_sounds_supported(machine)) {
+                status_.bump_refused();
+                break;
+            }
+            const uint8_t bytes[8] = {command.b, command.c, command.d, command.e,
+                                      uint8_t(command.u), uint8_t(command.u >> 8),
+                                      uint8_t(command.u >> 16), uint8_t(command.u >> 24)};
+            const uint64_t locked = locked_[track];
+            for (int i = 0; i < 8; i++) {
+                const int p = int(command.step) + i;
+                if (p >= kTrackParams || !user_sound_owns(machine, p)) continue;
+                const uint8_t top = kit_param_max(p);
+                params_[track].v[p] = bytes[i] > top ? top : bytes[i];
+                if ((locked >> p & 1u) == 0) effective_[track].v[p] = params_[track].v[p];
             }
             perform_dirty_ = true;
             break;
@@ -684,38 +755,7 @@ bool Engine::apply_sound(const Command &command, int track, int) {
                 break;
             }
             if (machine_id_[track] == command.a) break;      // already hosting it
-
-            // The machine being LEFT is silenced first. It will not be rendered again, so it
-            // cannot release its own tail -- and a voice left sounding in an object nothing
-            // calls is a note that never ends and never ends up in the voice count either.
-            silence_track(track);
-
-            machine_id_[track] = command.a;
-            project_.kit.tracks[track].machine = command.a;
-            cc_known_[track] = false;     // a MID track's CCs start from what they are now
-            rewire_machines();
-
-            // The new machine reads this track's parameters, which mean different things to it:
-            // slot 10 is GLD on VA MONO and DET on VA POLY, and the FLTR page is the insert
-            // chain's on both. Until 2026-11-23 the knobs kept their positions across a switch.
-            //
-            // Since then (Roland) a switch loads the new machine's default sound
-            // (core/sounds.hpp, machine_defaults_apply) into its sound pages, so nothing the old
-            // machine left there leaks into the new one: a VA's knobs made a new SAMPLE start
-            // half way into the file, sliced, and fade early. The mix, LFO and ARP stay. A lock on
-            // the current step still wins until the next step, as for a knob or a preset.
-            if (machine_defaults_apply(command.a, params_[track].v)) {
-                const uint64_t locked = locked_[track];
-                for (int p = 0; p < kTrackParams; p++) {
-                    if ((locked >> p & 1u) == 0) effective_[track].v[p] = params_[track].v[p];
-                }
-            }
-            if (machines_[track] != nullptr) machines_[track]->prepare(effective_[track]);
-
-            // And the sample, if the new machine plays one. The loader's path is in the kit; a
-            // track switched to SAMPLE or GRAIN before any card has been read falls back to the
-            // placeholder every machine in the pool was given at init.
-            perform_dirty_ = true;
+            switch_machine(track, command.a);
             break;
         }
 

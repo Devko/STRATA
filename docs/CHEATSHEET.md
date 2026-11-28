@@ -43,7 +43,7 @@ pads and the performance mixer.
 | MACHINE | FUNC+EDIT | Pick the machine on each track, and its MIDI OUT channel |
 | KIT | FUNC+EDIT twice, or the menu's KITS | Save and recall whole kits: 16 slots on the card, shared by all projects |
 | SAMPLES | FUNC+PROJECT ("pool"), or OK in EDIT or MACHINE on a SMP track, OK in MACHINE on a GRN track | Pick the track's WAV from `/SAMPLES` or `/RECORD` |
-| SOUNDS | OK in EDIT or MACHINE on a drum, VA, WAVE or FM4 track; OK in EDIT on a GRN track | Load a factory sound into that track only; AS WAS puts yours back |
+| SOUNDS | OK in EDIT or MACHINE on a drum, VA, WAVE or FM4 track; OK in EDIT on a GRN track | Load a factory sound or one of your own into that track only; AS WAS puts yours back. FUNC+DOWN saves the track's sound as your own, FUNC+UP copies it for the PASTE row |
 | MIXER | MIXER | Levels, the sidechain duck, stereo width, delay, reverb, routing, chorus, master, kill EQ |
 | PERFORM | FUNC+MIXER | Scenes, morph, macros, mutation |
 | Track menu | **Hold OK** in GRID or KEYS (a tap says `HOLD OK: TRACK MENU`) | The selected track's rows: GENERATE a drum or melodic part (DENSITY, RANGE, LEAP, WHAT); EVOLVE every 1-8 loops (mutation MIX: a different one each turn), ORBIT or DRIFT, KEEP or HOME, saved with the project; SPEED, PLAY, FREEZE, RELOAD SAMPLE |
@@ -185,7 +185,7 @@ Page 1 NOTE VEL LEN MICR, page 2 PROB COND RTCH RAMP, page 3 ACNT SLID CHRD.
 | KIT | Slot | Page of 8 slots | Page of 8 slots | — | A: slot | Recall (twice) / back to MACHINE | DOWN: save here, UP: read the card again |
 | MIXER | Group of pages: TRK DCK WID DLY REV CHO MST | Page (17) | Page | Step page | Levels or page fields; on EQ, push A-C kills a band; on DLY+ and REV+, push A flips the mode; on WID and CHO 1-4 / 5-8, push A-D steps that track's width or send (OFF, 48, 96 / OFF, 64) | — / clear | Copy / paste |
 | SAMPLES | Entry | Page of 8 | Page of 8 | — | A: entry; push A: hear the file (twice while playing) / stop | Load file or open folder / up a folder (at the top: back) | UP: read the folder again |
-| SOUNDS | Entry | First / last entry | Track | — | A: entry | Load into the track (AS WAS: put yours back) / back | — |
+| SOUNDS | Entry | First / last entry | Track | — | A: entry; push B / C: rename / delete your own | Load into the track (AS WAS: put yours back; PASTE: the copied sound) / back | Copy the sound / save it as your own |
 | RESAMPLE | Bars 1/2/4/8 | Destination FILE, TRK 1-8 | Destination | Step page | A: bars, B: source, C: input level | Arm / cancel | Copy / paste |
 | PROJECT | Slot cursor by row | Slot cursor | Page: PROJECT CHAIN PATTERN SETUP PROJECTS | Bank A-H | A: queue mode, B: key, C: scale | Queue slot / cancel queue | — (FUNC menu) |
 | CHAIN | Entry | Entry's pattern -/+ | Page | Bank A-H | A: repeats X1-X16, B: mute recall --/M1-M8 | Add entry / remove entry (twice; empty: back) | — (FUNC menu) |

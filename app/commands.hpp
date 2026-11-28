@@ -357,6 +357,15 @@ enum class Cmd : uint8_t {
     // Only the bytes a preset writes are touched either way, so the mix stays the user's.
     sound_preset,
 
+    // A saved sound (core/usersounds.hpp) or a copied one into one track: eight parameter bytes
+    // a command, from parameter `step`: b c d e, then u's four bytes low first. track, a: the
+    // MachineId the bytes are for -- refused if the track hosts another machine by the time it
+    // lands. Only the bytes a sound owns (user_sound_owns) are written, as for sound_preset, so
+    // the mix stays the user's. A whole sound is kKitParams / 8 of these, posted together, so
+    // they land in one block. AS WAS (sound_preset with kSoundPresetBack) puts back what was
+    // there, the machine included when a paste switched it.
+    sound_bytes,
+
     // A factory arp (core/arppresets.hpp) into one track: the ARPS list (OK on the ARP page).
     // track, b: the preset's index, or kSoundPresetKeep / kSoundPresetBack as for sound_preset.
     // Writes the four ARP bytes and the kit's arp settings (KitTrack::arp), nothing else.
