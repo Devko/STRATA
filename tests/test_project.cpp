@@ -41,14 +41,14 @@ using namespace strata;
 // 296 since the kill EQ grew the mixer section by its three band bytes and the kill switches.
 // 373 since song mode: a fifth table entry (12) and its 65 bytes, optional like the others.
 // 393 since MIDI OUT: a sixth entry (12) and one channel per track (8). 402 since the sends'
-// ambient modes: nine bytes on the end of the mixer section. 425 since EVOLVE: a seventh entry
+// ambient modes: nine bytes on the end of the mixer section. 1000 since PSH, the master's push into the limiter: one byte after it. 425 since EVOLVE: a seventh entry
 // (12) and its 11 bytes, optional like the others. 429 since the chorus: its four send bytes on the
 // end of the mixer section. 450 since Track Launch: an eighth entry (12) and its 9 bytes. 472 since
 // the line input: a ninth entry (12) and its 10 bytes. 997 since the song sections: a tenth entry
 // (12), a layout byte and 8 bytes per chain entry (513). 998 since PROG CHG OUT:
 // one byte on the end of the MIDI section. 999 since the reverb's duck: one send byte on the end
 // of the mixer section.
-constexpr uint32_t kProjectFileBytes = 999;
+constexpr uint32_t kProjectFileBytes = 1000;
 constexpr uint32_t kKitFileBytes = 1550;   // 1506 before the SCN page (12 + 32), 1486 before the widths (12 + 8), 1466 before the chorus sends (12 + 8), 1453 before the LFO layout (12 + 1), 1409 before the arp settings (12 + 32), 1389 before the choke groups (12 + 8), 1329 before the mod slots (12 + 48), 1309 before LFO TRIG (12 + 8), 1296 before the filter layout (12 + 1), 1076 before the LFO and arp (12 + 8 x 4 each), 1164 before SLC AUTO (12 + 8), 1184 before ASR (12 + 32), 1228 before the duck (12 + 12), 1252 before OSC (12 + 32)
 
 // Room past the end of every file, filled with a sentinel, so that a writer going one byte long
@@ -552,7 +552,7 @@ TEST(project_round_trips_every_settings_field) {
     CHECK_EQ(int(b.sends[0]), 3);
     CHECK_EQ(int(b.master[kMasterFieldsV1 - 1]), 99);
     // The kill EQ's bands and switches, which grew the section.
-    CHECK_EQ(int(b.master[kMasterFields - 1]), 78);
+    CHECK_EQ(int(b.master[kMasterFieldsV2 - 1]), 78);
     // The switches are live only (Roland, 2026-11-22): set in RAM, every band is back in the file.
     CHECK_EQ(int(a.eq_kills), 0x5);
     CHECK_EQ(int(b.eq_kills), 0);
@@ -1262,9 +1262,10 @@ TEST(project_a_mixer_section_from_before_the_kill_eq_loads_flat) {
     for (int i = 0; i < kMasterFieldsV1; i++) {
         CHECK_EQ(int(g_loaded.settings.master[i]), int(g_source.settings.master[i]));
     }
-    for (int i = kMasterFieldsV1; i < kMasterFields; i++) {
+    for (int i = kMasterFieldsV1; i < kMasterFieldsV2; i++) {
         CHECK_EQ(int(g_loaded.settings.master[i]), 64);
     }
+    CHECK_EQ(int(g_loaded.settings.master[kMasterFieldsV2]), 0);   // PSH: none
     CHECK_EQ(int(g_loaded.settings.eq_kills), 0);
     // And the live section, found by id, is still read whole.
     CHECK_EQ(int(g_loaded.settings.live_mutes), int(g_source.settings.live_mutes));
@@ -1279,7 +1280,7 @@ TEST(project_a_mixer_section_from_before_the_ambient_modes_loads_classic) {
     CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
              int(SerializeResult::ok));
     poke_u32(g_project, kHeaderBytes + 2 * kSectionEntryBytes + 8,
-             uint32_t(kSendFieldsV1 + kMasterFields + 1));
+             uint32_t(kSendFieldsV1 + kMasterFieldsV2 + 1));
     refresh_crc(g_project);
 
     project_init(g_loaded);
@@ -1288,9 +1289,10 @@ TEST(project_a_mixer_section_from_before_the_ambient_modes_loads_classic) {
     for (int i = 0; i < kSendFieldsV1; i++) {
         CHECK_EQ(int(g_loaded.settings.sends[i]), int(g_source.settings.sends[i]));
     }
-    for (int i = 0; i < kMasterFields; i++) {
+    for (int i = 0; i < kMasterFieldsV2; i++) {
         CHECK_EQ(int(g_loaded.settings.master[i]), int(g_source.settings.master[i]));
     }
+    CHECK_EQ(int(g_loaded.settings.master[kMasterFieldsV2]), 0);   // PSH: an older file pushes nothing
     CHECK_EQ(int(g_loaded.settings.eq_kills), 0);
     const ProjectSettings defaults;
     for (int i = kSendFieldsV1; i < kSendFields; i++) {
@@ -1317,7 +1319,7 @@ TEST(project_a_mixer_section_from_before_the_chorus_loads_the_chorus_defaults) {
     }
     // Then cut to what the writer before the chorus declared.
     poke_u32(g_project, kHeaderBytes + 2 * kSectionEntryBytes + 8,
-             uint32_t(kSendFieldsV2 + kMasterFields + 1));
+             uint32_t(kSendFieldsV2 + kMasterFieldsV2 + 1));
     refresh_crc(g_project);
     project_init(g_loaded);
     for (int i = kSendFieldsV2; i < kSendFields; i++) g_loaded.settings.sends[i] = 99;
@@ -1343,7 +1345,7 @@ TEST(project_a_mixer_section_from_before_the_reverb_duck_loads_it_off) {
     CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::ok));
     CHECK_EQ(int(g_loaded.settings.sends[int(kSendFieldsV3)]), 10 + kSendFieldsV3);
     poke_u32(g_project, kHeaderBytes + 2 * kSectionEntryBytes + 8,
-             uint32_t(kSendFieldsV3 + kMasterFields + 1));
+             uint32_t(kSendFieldsV3 + kMasterFieldsV2 + 1));
     refresh_crc(g_project);
     project_init(g_loaded);
     g_loaded.settings.sends[kSendFieldsV3] = 99;
@@ -1352,6 +1354,32 @@ TEST(project_a_mixer_section_from_before_the_reverb_duck_loads_it_off) {
         CHECK_EQ(int(g_loaded.settings.sends[i]), int(g_source.settings.sends[i]));
     }
     CHECK_EQ(int(g_loaded.settings.sends[kSendFieldsV3]), 0);
+}
+
+// PSH, the master's push into the limiter, is the mixer section's last byte. A file from before
+// it opens with no push; the rest of the section is where it was.
+TEST(project_a_mixer_section_from_before_the_push_loads_none) {
+    fill_project(g_source, 0);
+    g_source.settings.master[kMasterFieldsV2] = 77;
+    uint32_t written = 0;
+    CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
+             int(SerializeResult::ok));
+    project_init(g_loaded);
+    CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::ok));
+    CHECK_EQ(int(g_loaded.settings.master[kMasterFieldsV2]), 77);
+    poke_u32(g_project, kHeaderBytes + 2 * kSectionEntryBytes + 8,
+             uint32_t(kSendFields + kMasterFieldsV2 + 1));
+    refresh_crc(g_project);
+    project_init(g_loaded);
+    g_loaded.settings.master[kMasterFieldsV2] = 99;
+    CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::ok));
+    for (int i = 0; i < kSendFields; i++) {
+        CHECK_EQ(int(g_loaded.settings.sends[i]), int(g_source.settings.sends[i]));
+    }
+    for (int i = 0; i < kMasterFieldsV2; i++) {
+        CHECK_EQ(int(g_loaded.settings.master[i]), int(g_source.settings.master[i]));
+    }
+    CHECK_EQ(int(g_loaded.settings.master[kMasterFieldsV2]), 0);
 }
 
 // And the new bytes sit after the switches, where an older build never looks.
@@ -1364,9 +1392,9 @@ TEST(project_the_ambient_bytes_follow_the_kill_switches) {
     for (int i = 0; i < kSendFieldsV1; i++) {
         CHECK_EQ(int(g_project[mixer + uint32_t(i)]), int(g_source.settings.sends[i]));
     }
-    CHECK_EQ(int(g_project[mixer + uint32_t(kSendFieldsV1 + kMasterFields)]), 0);
+    CHECK_EQ(int(g_project[mixer + uint32_t(kSendFieldsV1 + kMasterFieldsV2)]), 0);
     for (int i = kSendFieldsV1; i < kSendFields; i++) {
-        CHECK_EQ(int(g_project[mixer + uint32_t(kMasterFields + 1 + i)]),
+        CHECK_EQ(int(g_project[mixer + uint32_t(kMasterFieldsV2 + 1 + i)]),
                  int(g_source.settings.sends[i]));
     }
 }
@@ -1379,7 +1407,7 @@ TEST(project_ignores_a_saved_kill_switch_byte) {
     CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
              int(SerializeResult::ok));
     const uint32_t mixer = section_at(g_project, kSectionProjectMixer);
-    g_project[mixer + uint32_t(kSendFieldsV1 + kMasterFields)] = 0x07;
+    g_project[mixer + uint32_t(kSendFieldsV1 + kMasterFieldsV2)] = 0x07;
     refresh_crc(g_project);
     project_init(g_loaded);
     g_loaded.settings.eq_kills = 0x5;                  // and never "left alone" from before

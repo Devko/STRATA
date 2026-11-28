@@ -1649,7 +1649,7 @@ The master has a DJ-style **kill EQ** (an isolator) after the DJ filter: three b
   D in PERFORM too, so LIVE RND's tracks are picked with FUNC + a lower pad instead.
 - **The knobs**: MIXER, then the screen keys (or LEFT/RIGHT) to the last page, `EQ`. A, B and
   C are LOW, MID and HI: centre (`0`) is flat, down to `KILL` at the bottom, up to +6 dB at the
-  top (`+63`). D is empty.
+  top (`+63`). D is **PSH**, below.
 
 A kill takes its band down by 30-50 dB within about 10 ms and comes back as fast, with no click.
 Coming back puts the band where its knob is. While all three bands are flat and no switch is on,
@@ -1658,6 +1658,12 @@ switches itself off again a few milliseconds after everything is flat. The knobs
 the project; the switches are a performance move and are not: a project always opens with every
 band in. A knob turned to the bottom is saved, so a project saved that way reopens with the band
 out: look for `KILL` on the EQ page.
+
+**PSH** (EQ page, D: `+0DB` to `+12DB`) pushes the whole mix into the limiter. Commercial techno
+is mastered dense: about 8 dB between its peaks and its average, where a STRATA mix sits near
+12, and LVL stops at unity, so nothing else drives the limiter. A few dB (`+2DB` to `+4DB`) brings
+a mix to that density and loudness; more starts to squash the kick. At `+0DB`, where every
+project starts and every older project opens, the master is exactly as it was.
 
 ### Tape stop and delay freeze
 

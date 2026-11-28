@@ -196,7 +196,7 @@ constexpr MixerPage kMixerPages[] = {
     // The kill EQ, next to the master it sits in. Push A, B or C to throw that band's kill
     // switch; FUNC + push does the same from any mode.
     {"EQ", true, {int8_t(MasterField::eq_low), int8_t(MasterField::eq_mid),
-                  int8_t(MasterField::eq_high), -1}},
+                  int8_t(MasterField::eq_high), int8_t(MasterField::push)}},
 };
 
 

@@ -327,10 +327,12 @@ constexpr uint32_t kProjectChainBytes = uint32_t(kChainEntries) * 3;
 // reason. A section that stops before them is a file from before the chorus. And with the
 // reverb's duck (RDK, 2026-11-28): one byte after the chorus's.
 constexpr uint32_t kProjectMixerBytesV2 =
-    uint32_t(kSendFieldsV1) + uint32_t(kMasterFields) + 1;
+    uint32_t(kSendFieldsV1) + uint32_t(kMasterFieldsV2) + 1;
 constexpr uint32_t kProjectMixerBytesV3 = kProjectMixerBytesV2 + uint32_t(kSendFieldsV2 - kSendFieldsV1);
 constexpr uint32_t kProjectMixerBytesV4 = kProjectMixerBytesV2 + uint32_t(kSendFieldsV3 - kSendFieldsV1);
-constexpr uint32_t kProjectMixerBytes = kProjectMixerBytesV2 + uint32_t(kSendFields - kSendFieldsV1);
+constexpr uint32_t kProjectMixerBytesV5 = kProjectMixerBytesV2 + uint32_t(kSendFields - kSendFieldsV1);
+// And PSH (2026-11-28): the master's eighth byte, after every send byte.
+constexpr uint32_t kProjectMixerBytes = kProjectMixerBytesV5 + uint32_t(kMasterFields - kMasterFieldsV2);
 constexpr uint32_t kProjectMixerBytesV1 = uint32_t(kSendFieldsV1) + uint32_t(kMasterFieldsV1);
 constexpr uint32_t kProjectTableBytes = kProjectSections * kSectionEntryBytes;
 constexpr uint32_t kProjectSettingsOffset = kProjectTableBytes;
@@ -555,12 +557,13 @@ SerializeResult project_write(const Project &project, uint8_t *buffer, uint32_t 
 
     // The sends and the master, as the encoder bytes they are everywhere but inside the mixer.
     for (int i = 0; i < kSendFieldsV1; i++) w.u8(s.sends[i]);
-    for (int i = 0; i < kMasterFields; i++) w.u8(s.master[i]);
+    for (int i = 0; i < kMasterFieldsV2; i++) w.u8(s.master[i]);
     // The kill switches are a performance move and are NOT saved (Roland, 2026-11-22): a
     // project saved or autosaved with LOW killed came back with no bass. The byte stays, as 0,
     // so the layout an older build reads is unchanged.
     w.u8(0);
     for (int i = kSendFieldsV1; i < kSendFields; i++) w.u8(s.sends[i]);
+    for (int i = kMasterFieldsV2; i < kMasterFields; i++) w.u8(s.master[i]);
 
     w.u8(s.live_mutes);
     w.u8(s.scene_a);
@@ -756,9 +759,10 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
         const bool has_eq = length[2] >= kProjectMixerBytesV2;
         const bool has_ambient = length[2] >= kProjectMixerBytesV3;
         const bool has_chorus = length[2] >= kProjectMixerBytesV4;
-        const bool has_reverb_duck = length[2] >= kProjectMixerBytes;
+        const bool has_reverb_duck = length[2] >= kProjectMixerBytesV5;
+        const bool has_push = length[2] >= kProjectMixerBytes;
         const ProjectSettings defaults;
-        const int master_fields = has_eq ? kMasterFields : kMasterFieldsV1;
+        const int master_fields = has_eq ? kMasterFieldsV2 : kMasterFieldsV1;
         for (int i = 0; i < master_fields; i++) s.master[i] = clamp_u8(r.u8(), 0, 127);
         for (int i = master_fields; i < kMasterFields; i++) s.master[i] = defaults.master[i];
         // The switch byte is skipped: kills are not saved, and a file from before that decision
@@ -777,6 +781,10 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
         // The reverb's duck, after them; an older file's reverb is never ducked.
         for (int i = kSendFieldsV3; i < kSendFields; i++) {
             s.sends[i] = has_reverb_duck ? clamp_u8(r.u8(), 0, 127) : defaults.sends[i];
+        }
+        // PSH, last; an older file pushes nothing.
+        for (int i = kMasterFieldsV2; i < kMasterFields; i++) {
+            s.master[i] = has_push ? clamp_u8(r.u8(), 0, 127) : defaults.master[i];
         }
         if (!r.ok()) return refuse(SerializeResult::truncated);
     }

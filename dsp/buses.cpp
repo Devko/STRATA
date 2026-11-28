@@ -202,6 +202,9 @@ bool master_field_set(MasterSettings &settings, uint8_t field, float value) {
         case MasterField::eq_high:
             settings.eq_high = clamp_to(value, 0.0f, 2.0f);
             return true;
+        case MasterField::push:
+            settings.push = clamp_to(value, 1.0f, 4.0f);
+            return true;
         default:
             return false;
     }
@@ -216,12 +219,13 @@ float master_field_get(const MasterSettings &settings, uint8_t field) {
         case MasterField::eq_low:     return settings.eq_low;
         case MasterField::eq_mid:     return settings.eq_mid;
         case MasterField::eq_high:    return settings.eq_high;
+        case MasterField::push:       return settings.push;
         default:                      return 0.0f;
     }
 }
 
 const char *master_field_name(uint8_t field) {
-    static const char *const names[] = {"DJ", "CMP", "LIM", "LVL", "LOW", "MID", "HI"};
+    static const char *const names[] = {"DJ", "CMP", "LIM", "LVL", "LOW", "MID", "HI", "PSH"};
     return field < uint8_t(MasterField::count) ? names[field] : "---";
 }
 
@@ -412,6 +416,8 @@ float master_value_from_byte(uint8_t field, uint8_t byte) {
             const float u = float(byte) * (1.0f / 64.0f);
             return u * u;
         }
+        // 0 to +12 dB in equal dB steps: 2^(2 * byte / 127), so 0 is exactly unity.
+        case MasterField::push:       return enaga::dsp::exp2(2.0f * float(byte > 127 ? 127 : byte) * (1.0f / 127.0f));
         default:                      return 0.0f;
     }
 }
@@ -647,6 +653,7 @@ void Mixer::resolve_master(const MasterSettings &master_settings) {
     limit_headroom_ = 1.0f - limit_threshold_;
     limit_inv_headroom_ = ed::reciprocal(limit_headroom_);
     out_level_ = ed::clamp(master_settings.level, 0.0f, 1.0f);
+    push_ = ed::clamp(master_settings.push, 1.0f, 4.0f);
 
     // --- master: the kill EQ's targets, with the switches over the knobs ----------------------
     const float knobs[kKillBands] = {master_settings.eq_low, master_settings.eq_mid,
@@ -896,7 +903,7 @@ void Mixer::master(int n) {
 
     // --- that gain and the output level, as one ramped pass ------------------------------------
     const float from = master_gain_;
-    const float to = compressor_gain_ * out_level_;
+    const float to = compressor_gain_ * out_level_ * push_;
     if (from != 1.0f || to != 1.0f) {
         if (n != ramp_frames_) {
             ramp_frames_ = n;

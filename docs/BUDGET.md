@@ -83,7 +83,7 @@ The image grew: with cl6x payload 1,691,888 bytes and bss 1,670,656 (2026-11-25:
 emulator's default 4 MiB card that no longer fits, which is why `scenario_projects` failed CARD
 FULL with cl6x only; it runs on an 8 MiB card since.
 
-### KICK's PNCH page and the reverb duck RDK (2026-11-28, emulator, Enaga v0.4.0)
+### KICK's PNCH page, the reverb duck RDK and the master push PSH (2026-11-28, emulator, Enaga v0.4.0)
 
 PNCH (dsp/kick.hpp) adds work only while a kick with it up sounds: KNK runs a second body loop
 with one more envelope (two multiplies and an add a sample), TCK a noise block, a band-pass and
@@ -98,6 +98,10 @@ up, so its peak includes them.
 | `factory` | 23.84% | 23.87% | 45.57% |
 | `m3` | | 22.90% | 40.77% |
 | `m7` | | 23.87% | 45.57% |
+
+PSH, the master push into the limiter, adds no pass: it is one more factor in the gain ramp
+the master already runs. With it up the limiter runs on more blocks, which `factory` already
+covers at its peak (the kick hits the limiter there).
 
 RDK (dsp/buses.cpp) is not in any scenario: no scenario turns MIXER ROUTE's D. At 0, or with
 the duck idle, it adds one compare a block; turned up, two clears and two multiply-add passes

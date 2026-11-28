@@ -161,6 +161,10 @@ struct MasterSettings {
     // The kill switches, bit 0 LOW, bit 1 MID, bit 2 HIGH. A switched band is silent whatever
     // its knob says, and coming back puts it where the knob is.
     uint8_t kills = 0;
+    // PSH: gain into the limiter, linear, 1 (0 dB, as before) to 4 (+12 dB). The mastered
+    // density commercial techno has (crest about 8 dB where a STRATA mix sits near 12): LVL tops
+    // out at unity and the glue compressor has no make-up, so nothing else drives the limiter.
+    float push = 1.0f;
 
     bool operator==(const MasterSettings &) const = default;
 };
@@ -168,7 +172,7 @@ struct MasterSettings {
 // Which field `Cmd::set_master` is carrying. Permanent, and on disk, for the same reason as
 // SendField above: the kill EQ's bands were added at the END.
 enum class MasterField : uint8_t {
-    dj = 0, compressor, limit, level, eq_low, eq_mid, eq_high, count
+    dj = 0, compressor, limit, level, eq_low, eq_mid, eq_high, push, count
 };
 
 // The kill EQ's bands, in `MasterSettings::kills` bit order and MasterField order.
@@ -421,6 +425,7 @@ private:
     float wet_r_[kMaxFrames] = {};
     float duck_curve_[kMaxFrames] = {};
     float reverb_duck_ = 0.0f;   // SendSettings::reverb_duck, clamped
+    float push_ = 1.0f;          // MasterSettings::push, clamped
     float scratch_[kMaxFrames] = {};
     float scratch_r_[kMaxFrames] = {};
 };

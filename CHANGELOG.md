@@ -22,9 +22,14 @@ the project file format or the controls.
   TUN of up to an octave. The benchmark found the 909's first 20 ms 11-25 dB under techno kicks
   from 250 Hz to 4 kHz. All four at 0 is the old kick, bit for bit, so saved projects are
   unchanged.
+- **PSH, the master push** (MIXER EQ, D): 0-12 dB of gain into the limiter. Measured against
+  mastered techno, a STRATA mix sits about 4 dB less dense (crest near 12 dB against 8) and LVL
+  stops at unity; FORGE at +2.5 dB reaches the reference track's loudness (-9.7 against -9.1
+  LUFS). One more byte at the end of PROJECT.BIN's mixer section (1000 bytes); older projects
+  open at 0, unchanged.
 - **RDK, the reverb duck** (MIXER ROUTE, D): the reverb's return rides the kit's sidechain duck,
   0-100%, for the rumble-techno kick into a long dark reverb. One new byte in PROJECT.BIN (999
-  bytes); an older project opens with RDK 0.
+  bytes before PSH); an older project opens with RDK 0.
 
 ### Changed
 

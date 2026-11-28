@@ -504,7 +504,7 @@ constexpr Text kMixer[kHelpMixerPages] = {
                     "PUSH A  IN ON OR OFF", "PUSH D  GAIN", "SAVED IN THE PROJECT", nullptr}},
     {"MIXER MST:", {"A DJ  DJ FILTER", "B CMP COMPRESSOR", "C LIM LIMITER", "D LVL LEVEL",
                     nullptr}},
-    {"MIXER EQ:", {"A LOW BELOW 250 HZ", "B MID MIDDLE", "C HI  ABOVE 2.5 KHZ", "D ---",
+    {"MIXER EQ:", {"A LOW BELOW 250 HZ", "B MID MIDDLE", "C HI  ABOVE 2.5 KHZ", "D PSH INTO LIMITER",
                    "PUSH A-C   KILL BAND", "MIDDLE = FLAT", "BOTTOM = KILL", nullptr}},
 };
 

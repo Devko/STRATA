@@ -292,6 +292,13 @@
             }
             return;
         }
+        if (kMixerPages[page].master && field == int8_t(MasterField::push)) {
+            // PSH in whole dB into the limiter: 0 to +12.
+            append(out, "+");
+            append_number(out, uint32_t((int(byte) * 12 + 63) / 127));
+            append(out, "DB");
+            return;
+        }
         if (kMixerPages[page].master && field >= int8_t(MasterField::eq_low) &&
             field <= int8_t(MasterField::eq_high)) {
             // Centred like the DJ filter: 0 is flat, and a switched band or a knob at the

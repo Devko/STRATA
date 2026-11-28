@@ -559,10 +559,14 @@ constexpr int kSendFieldsV1 = 10;
 constexpr int kSendFieldsV2 = 19;
 // And before the reverb's duck (RDK, 2026-11-28): the chorus's four were the last.
 constexpr int kSendFieldsV3 = 23;
-constexpr int kMasterFields = 7;
+constexpr int kMasterFields = 8;
 // What a PROJECT.BIN written before the kill EQ holds: the DJ filter, compressor, limiter and
 // level. The three EQ bands were appended after them, so a short mixer section is an older file.
 constexpr int kMasterFieldsV1 = 4;
+// And before PSH, the push into the limiter (2026-11-28): the kill EQ's three were the last. The
+// eighth byte is written at the END of the mixer section, after the sends, so that every byte an
+// older build reads stays where it was (core/project.cpp).
+constexpr int kMasterFieldsV2 = 7;
 
 // The delay's default division: dotted 1/8, index 5 of dsp/buses.hpp's table, as the byte an
 // encoder at that position produces. Named here because `ProjectSettings` needs it as an
@@ -712,7 +716,7 @@ struct ProjectSettings {
                                   0};
     // Centre (flat) DJ filter, the glue compressor at 0.3, the limiter at 0.8, unity out, and the
     // kill EQ's three bands at their flat (bypassed) centre.
-    uint8_t master[kMasterFields] = {64, 38, 101, 127, 64, 64, 64};
+    uint8_t master[kMasterFields] = {64, 38, 101, 127, 64, 64, 64, 0};
     // The kill EQ's kill switches, bit 0 LOW, bit 1 MID, bit 2 HIGH. Live only: PROJECT.BIN
     // keeps their byte, after the master bytes, but writes it as 0 and ignores it on read
     // (Roland, 2026-11-22), so a project never opens with a band killed.

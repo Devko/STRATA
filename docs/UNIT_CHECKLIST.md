@@ -1162,6 +1162,9 @@ A01 at 130.0, no chain.
 - MIXER ROUTE, D (RDK) to 100; the kick's SNB up to about 40; REV: HPF low, DMP high, DEC long.
   The reverb tail drops away under each kick and swells back between them; RDK 0: a steady
   wash. MAX stays where it was (within a point). `____`
+- MIXER EQ, D (PSH) from `+0DB` to `+4DB` with the beat playing: louder and denser, the peaks
+  held at the ceiling, no crackle; at `+12DB` it squashes but never clips harshly. Back at
+  `+0DB` it is as before. `____`
 
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
