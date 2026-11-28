@@ -6,6 +6,16 @@ the project file format or the controls.
 
 ## [Unreleased]
 
+### Added
+
+- **A MIDI importer for project generators** (`tools/midi_import/`, Python, stdlib only).
+  `midi2strata.py info|show|emit` reads Standard MIDI Files and writes STRATA steps for a
+  generator like those in `tools/showcases/`: a 16th grid with the rest kept as micro-timing,
+  lengths from the note-length table, one note a step for mono machines, chords as POLY chord
+  bytes (type and inversion), and drum notes mapped to tracks. `grid.py` is the shared core
+  another front end (an Ableton set) feeds. CI checks its copies of the length and chord tables
+  against `core/`. The MIDI itself, and anything made from third-party MIDI, stays out of git.
+
 ### Fixed
 
 - **Docs brought up to 0.6.0.** README and OVERVIEW list the arrangement (song sections, ARR REC,
