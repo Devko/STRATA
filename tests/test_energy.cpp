@@ -598,3 +598,62 @@ TEST(energy_ghost_lights_nothing_and_plays_one_note_with_the_arp_on) {
         CHECK(strata::test::settle());
     }
 }
+
+// Track Launch (core/launch.hpp): a launched lane plays its own pattern, and ENERGY's draws are
+// that pattern's, as the probability roll's are. The lane's events with a different master are
+// the events of its own pattern played whole, thinned and filled alike.
+TEST(energy_draws_from_a_launched_lanes_own_seed) {
+    static Pattern master;
+    static Pattern part;
+    full(master);
+    master.seed = 0x1111u;
+    full(part);
+    part.seed = 0x7A5Eu;
+    for (int s = 1; s < 16; s += 2) part.tracks[2].steps[s].flags = 0;   // room for ghosts
+    const Pattern *lanes[kTracks] = {};
+    lanes[2] = &part;
+    uint32_t ticks[kTracks] = {};
+
+    constexpr int kAmounts[] = {-30, 40};
+    for (int e : kAmounts) {
+        PerformState perform;
+        tiers(perform, EnergyTier::hats);
+        perform.energy = int8_t(e);
+        static Log alone;
+        run(part, perform, 2, alone);   // the part as the whole pattern
+        static Log launched;
+        launched.clear();
+        Scheduler sched;
+        sched.configure(master, lanes, 100.0f);
+        sched.reset();
+        for (uint32_t tick = 0; tick < 2u * 16u * kStepTicks; tick++) {
+            for (int t = 0; t < kTracks; t++) ticks[t] = tick;
+            StepEvent events[kMaxEventsPerTick];
+            const int n = sched.tick(ticks, 0, master, lanes, perform, events, kMaxEventsPerTick);
+            for (int i = 0; i < n && launched.count < Log::kMax; i++) {
+                launched.events[launched.count] = events[i];
+                launched.ticks[launched.count] = tick;
+                launched.count++;
+            }
+        }
+        CHECK_EQ(launched.on_track(2), alone.on_track(2));
+        CHECK_EQ(launched.steps_sounded(2), alone.steps_sounded(2));
+        int ghosts_alone = 0, ghosts_launched = 0;
+        for (int i = 0; i < alone.count; i++) {
+            if (alone.events[i].track == 2 && alone.events[i].ghost) ghosts_alone++;
+        }
+        for (int i = 0; i < launched.count; i++) {
+            if (launched.events[i].track == 2 && launched.events[i].ghost) ghosts_launched++;
+        }
+        CHECK_EQ(ghosts_launched, ghosts_alone);
+        if (e > 0) CHECK(ghosts_alone > 0);
+        // And the master's seed would have drawn differently: the test can tell them apart.
+        static Log other;
+        static Pattern reseeded;
+        reseeded = part;
+        reseeded.seed = master.seed;
+        run(reseeded, perform, 2, other);
+        CHECK(other.steps_sounded(2) != alone.steps_sounded(2) ||
+              other.on_track(2) != alone.on_track(2));
+    }
+}
