@@ -69,7 +69,7 @@ UNIT_CHECKLIST.md's ~550 boxes, 4 are ticked.
 | HOME = GRID, HOME twice = KEYS | v0.1.0 | ◐ | |
 | Lit, self-naming performance pads; mode keys green/red by screen | v0.1.0 | ○ (W8, W20c) | Upper pads are printed TRK 1-7 but are performance pads (Roland's choice) |
 | Arrow-key navigation model (UP/DOWN rows, LEFT/RIGHT sideways, OK picks, CLR back) | v0.1.0 | ○ (5, "Arrow keys") | |
-| Screens: GRID, step page, EDIT (6 pages, 8 on the VA, WAVE, FM4 and GRAIN machines), MACHINE, KIT, SOUNDS, KEYS, MIXER (12 pages), PERFORM, PROJECT (5 pages), SAMPLES, RESAMPLE, menu | v0.1.0 | ◐ (4) | |
+| Screens: GRID, step page, EDIT (6 pages, 8 on the VA, WAVE, FM4 and GRAIN machines), MACHINE, KIT, SOUNDS, KEYS, MIXER (17 pages; UP/DOWN jump a group), PERFORM, PROJECT (5 pages), SAMPLES, RESAMPLE, menu | v0.1.0 | ◐ (4) | |
 | Fixes: the FUNC menu never shows a MUTATE verdict OK would not give; OK in RESAMPLE no longer retargets a take being written | #84 | ○ | |
 
 ## Engines (machines)
@@ -159,7 +159,7 @@ FM4 and GRAIN machines.
 | Pad pressure bends macro A | v0.1.0 | ○ ("Pad feel") | |
 | THROW to delay or reverb | v0.1.0 | ◐ | |
 | MUTATE (rotate, density, velocity, micro, chance, notes), OK keeps, CLR reverts | v0.1.0 | ○ (10) | |
-| **GEN and EVOLVE** (hold OK in GRID): a new drum or melodic part in the key (DENSITY, RANGE, LEAP, WHAT); a track mutating on its own every 1-8 loops, ORBIT or DRIFT, KEEP or HOME | #195, #200 | ○ (W52, W53) | The mutation and amount are PERFORM's MUTATE setting; MIX draws one each turn. Saved in PROJECT.BIN (section 7); HOME is not |
+| **GEN and EVOLVE** (hold OK in GRID or KEYS): a new drum or melodic part in the key (DENSITY, RANGE, LEAP, WHAT); a track mutating on its own every 1-8 loops, ORBIT or DRIFT, KEEP or HOME | #195, #200 | ○ (W52, W53) | The mutation and amount are PERFORM's MUTATE setting; MIX draws one each turn. Saved in PROJECT.BIN (section 7); HOME is not |
 | Note repeat on the pads, pressure as velocity | v0.1.0 | ○ (13f) | Recorded with REC as a roll over LEN (P3, #187; not at 1/4T) |
 | Step stutter: hold REPEAT + STEP loops that step on every track (FUNC: one track) | #151 | ○ (W11) | Sequencer, not audio: sounds stay live. Host-tested; the emulator cannot press pads |
 | Roll rate on LEFT/RIGHT under REPEAT or a rolling pad, on the live strip | #151 | ○ (W11) | |
@@ -176,7 +176,7 @@ FM4 and GRAIN machines.
 | --- | --- | --- | --- |
 | Insert chain per track: drive, filter (LP/BP/HP 12/24), lo-fi, amp, duck, pan, level | v0.1.0 | ◐ (W54) | Off stages cost nothing. A DC blocker follows the drive since #191 |
 | **Sidechain duck**, editable: depth per track, source track, attack/hold/release | v0.1.0, editable since #89 | ○ (13l) | MIXER pages DCK 1-4, DCK 5-8, DUCK. Saved in the kit (KIT.BIN section 6; older kits open with the v0.1.0 duck: track 1, 35%, 3/40/120 ms). Not p-lockable, not in scenes or macros: a lock slot would change the pattern and scene file layouts |
-| **JAM REC**: the whole jam to `/RECORD/JAM_<n>.WAV`, FUNC menu's last row, a REC dot in the top bar | #226 | ○ (W63) | The finished master (as RESAMPLE's MASTER take), never the click or the audition. 48 kHz 24-bit stereo through an Enaga recording stream, 1 MiB ring; stops cleanly on a full card, at 3 h 51 min, at shutdown; a pulled card leaves the file without its header. Card speed beside four sample streams unmeasured |
+| **JAM REC**: the whole jam to `/RECORD/JAM_<n>.WAV`, FUNC+REC twice (RESAMPLE, then again) or the FUNC menu's last row; a REC dot in the top bar and a dim red blink on REC | #226, this PR | ○ (W63, W64) | The finished master (as RESAMPLE's MASTER take), never the click or the audition. 48 kHz 24-bit stereo through an Enaga recording stream, 1 MiB ring; stops cleanly on a full card, at 3 h 51 min, at shutdown; a pulled card leaves the file without its header. Card speed beside four sample streams unmeasured |
 | **CLICK and COUNT-IN**: a metronome, and 1 or 2 bars clicked before a PLAY with REC on (CyDrums S6) | #182 | ○ (W47) | FUNC menu rows. STRATA's own click (Enaga has none), 1 kHz / 1.6 kHz on a bar, after RESAMPLE's tap, so never recorded. A count-in starts the clock at once and holds the sequencer, rolls, stutter and arps for its bars. Internal clock only. Not saved |
 | **Choke groups** 1-4 for any track: a note cuts the other tracks of its group (CyDrums S4) | #181 | ○ (W46) | Push A-D on MIXER's TRK pages; `C1`-`C4` on the strip. A 64-frame fade on the track's output, then its voices are cut. Two notes of a group on the same frame both sound (a block renders whole). Saved in the kit (KIT.BIN section 11; older kits have no groups) |
 | Send A: tempo-synced ping-pong delay | v0.1.0 | ◐ (13c / U4) | |

@@ -5,7 +5,7 @@ On a unit that still runs Enaga 0.3.0, update it to 0.4.0 first and do **the Ena
 most likely to break only on the hardware. If it passes, the walkthrough is worth its two hours;
 if an item fails, report that first.
 
-Then **the walkthrough** (W1-W63, about 210 minutes): everything merged since v0.1.0,
+Then **the walkthrough** (W1-W64, about 215 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -849,6 +849,18 @@ free.
 - Start another, let it run 30 s with four streamed samples playing if you have them, then
   power off with it running. On the PC the second file has the next number and plays to the
   end. `____`
+
+**W64. Usability quick wins: MIXER groups, the KEYS track menu, JAM REC on FUNC+REC (5 min).**
+Beat playing, A01, a card with some space.
+- MIXER, then DOWN: `DCK 1-4`; DOWN again `WID 1-4`, then `DLY`, `REV`, `CHO 1-4`, `MST` and
+  round to `TRK 1-4`. UP from `TRK 1-4` is `MST`. LEFT/RIGHT still go one page. `____`
+- HOME twice for KEYS, hold OK half a second: the track menu (`TRACK T1`, `>GENERATE`). The pads
+  still play notes; UP/DOWN move the menu's row, not the track; OK on GENERATE writes a part.
+  CLR: `KEYS`, the keyboard back. `____`
+- FUNC+REC: RESAMPLE, the last line reads `LEFT RIGHT: WHERE TO` and `JAM OFF`. FUNC+REC again:
+  `JAM REC JAM n`, the REC key blinks a dim red with the top bar's dot, and the last line reads
+  `FUNC+REC: STOP JAM` with the time counting. FUNC+REC again: `JAM STOPPING`, `SAVED JAM n`,
+  REC dark. `____`
 
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
