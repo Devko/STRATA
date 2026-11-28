@@ -1622,7 +1622,7 @@ the project. A project or kit from before the chorus opens with no track sending
 
 CPU is the SmplTrek's tight resource and memory is not, so a track can be **frozen**: it plays
 a loop of itself from RAM instead of computing its sound. FUNC+HOME opens the menu; **FREEZE** is
-near the end (UP three times from SAVE, since the list wraps). The row shows the selected track and the loop's length, `T7 1 BAR`;
+near the end (UP four times from SAVE, since the list wraps). The row shows the selected track and the loop's length, `T7 1 BAR`;
 LEFT/RIGHT or B pick 1, 2, 4 or 8 bars. OK arms it (`FREEZE ARMED`, or `ARMED: PRESS PLAY`
 when stopped): from the next bar line the track's machine is recorded for that many bars, and
 then the screen says `FROZEN` and the track plays the recording.
