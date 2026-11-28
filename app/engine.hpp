@@ -791,6 +791,9 @@ private:
     // machine hands the new one the current value, so none keeps a stale offset.
     float pitch_mod_[kTracks] = {};
     Machine *pitch_mod_machine_[kTracks] = {};
+    // The tempo as each track's machine last heard it (Machine::set_tick_frames).
+    float tick_frames_sent_[kTracks] = {};
+    Machine *tick_frames_machine_[kTracks] = {};
     // What the machine was last handed: the LFO's semitones plus VariSpeed's.
     float sent_pitch_[kTracks] = {};
     // VariSpeed (Cmd::set_varispeed): the amount, its semitones for the machines, and the ratio

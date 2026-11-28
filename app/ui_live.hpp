@@ -188,6 +188,8 @@
         }
     }
 
+    static constexpr int kEditTabsShown = 8;   // EDIT's tabs that fit beside the meter
+
     int draw_tab(enaga::Canvas &canvas, int x, const char *text, bool on, int grey = 8) {
         const int w = paint::small_width(text);
         if (on) canvas.rect(x, 121, w + 4, 7, 15);
@@ -215,14 +217,27 @@
                 }
                 break;
             }
-            case Mode::edit:
+            case Mode::edit: {
+                // A page this machine does not have is drawn faint: the keys step over it. The
+                // hole between OSC and SCAN is never drawn, and SCAN only where it is live (the
+                // WAVE pair), so every other machine keeps its eight tabs. Eight is what fits:
+                // on SCAN the strip starts one page later, SRC scrolling off the left.
+                int shown[kEditPages];
+                int count = 0, at = 0;
                 for (int p = 0; p < kEditPages; p++) {
+                    if (edit_page_hole(p) || (Page(p) == Page::scn && !page_live(p))) continue;
+                    if (p == param_page_) at = count;
+                    shown[count++] = p;
+                }
+                const int first = at >= kEditTabsShown ? at - kEditTabsShown + 1 : 0;
+                for (int i = first; i < count && i < first + kEditTabsShown; i++) {
+                    const int p = shown[i];
                     const Page page = Page(p);
-                    // A page this machine does not have is drawn faint: the keys step over it.
                     x = draw_tab(canvas, x, page == Page::fltr ? "FLT" : page_name(page),
                                  p == param_page_, page_live(p) ? 8 : 3);
                 }
                 break;
+            }
             case Mode::mixer: {
                 const int first = mixer_bank_ > 0 ? mixer_bank_ - 1 : 0;
                 for (int p = first; p < kMixerPageCount && p <= first + 2; p++) {

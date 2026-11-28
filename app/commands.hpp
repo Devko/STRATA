@@ -367,7 +367,7 @@ enum class Cmd : uint8_t {
     // a command, from parameter `step`: b c d e, then u's four bytes low first. track, a: the
     // MachineId the bytes are for -- refused if the track hosts another machine by the time it
     // lands. Only the bytes a sound owns (user_sound_owns) are written, as for sound_preset, so
-    // the mix stays the user's. A whole sound is kKitParams / 8 of these, posted together, so
+    // the mix stays the user's. A whole sound is (kKitParams + 7) / 8 of these, posted together, so
     // they land in one block. AS WAS (sound_preset with kSoundPresetBack) puts back what was
     // there, the machine included when a paste switched it.
     sound_bytes,

@@ -352,19 +352,23 @@ TEST(usersounds_a_damaged_name_keeps_the_sound) {
 
 namespace {
 
+// As app/ui_browsers.hpp posts them: eight a command, the last one short (kKitParams is 44).
+constexpr int kSoundCommands = (kKitParams + 7) / 8;
+
 void post_sound(int track, uint8_t machine, const uint8_t *params) {
     for (int first = 0; first < kKitParams; first += 8) {
+        uint8_t b[8] = {};
+        for (int i = 0; i < 8 && first + i < kKitParams; i++) b[i] = params[first + i];
         Command command;
         command.cmd = Cmd::sound_bytes;
         command.track = uint8_t(track);
         command.step = uint8_t(first);
         command.a = machine;
-        command.b = params[first];
-        command.c = params[first + 1];
-        command.d = params[first + 2];
-        command.e = params[first + 3];
-        command.u = uint32_t(params[first + 4]) | uint32_t(params[first + 5]) << 8 |
-                    uint32_t(params[first + 6]) << 16 | uint32_t(params[first + 7]) << 24;
+        command.b = b[0];
+        command.c = b[1];
+        command.d = b[2];
+        command.e = b[3];
+        command.u = uint32_t(b[4]) | uint32_t(b[5]) << 8 | uint32_t(b[6]) << 16 | uint32_t(b[7]) << 24;
         test::engine().commands().post(command);
     }
 }
@@ -397,7 +401,7 @@ TEST(usersounds_the_command_writes_a_sounds_bytes_into_one_track_and_no_others) 
     post_sound(0, uint8_t(machine == kMono ? kKick : kMono), sound);
     pump(2);
     CHECK(std::memcmp(e.params(0).v, now.v, kTrackParams) == 0);
-    CHECK_EQ(int(e.status().refused.load(std::memory_order_relaxed) - refused), kKitParams / 8);
+    CHECK_EQ(int(e.status().refused.load(std::memory_order_relaxed) - refused), kSoundCommands);
 }
 
 TEST(usersounds_as_was_takes_back_a_paste_that_switched_the_machine) {

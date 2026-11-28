@@ -67,9 +67,23 @@ constexpr int kAsrFirst = kArpFirst + kArpParams;
 // core/project.hpp's kKitOscLegacy: a saw with the old fixed sub under it.
 constexpr int kOscParams = 4;
 constexpr int kOscFirst = kAsrFirst + kAsrParams;
-constexpr int kTrackParams = kOscFirst + kOscParams;
+constexpr int kOscEnd = kOscFirst + kOscParams;
+// And a ninth, at 40 rather than 32: SCN, the WAVE machines' wavetable scan -- MOD SPD END CRV
+// (dsp/va.cpp). Sound, so the prepare memo compares it too. Ids 32-39 are a HOLE: a parameter's
+// index is its lock id, and lock ids 32-36 were already a chord's extra notes
+// (core/stepnotes.hpp) when SCN came. TrackParams carries the hole's eight bytes so every index
+// stays an index; nothing reads or writes them, and `track_param_real` tells them apart.
+constexpr int kScnParams = 4;
+constexpr int kScnFirst = 40;
+constexpr int kTrackParams = kScnFirst + kScnParams;
 
-enum class Page : uint8_t { src = 0, fltr = 1, amp = 2, fx = 3, lfo = 4, arp = 5, asr = 6, osc = 7 };
+constexpr bool track_param_real(int index) {
+    return (index >= 0 && index < kOscEnd) || (index >= kScnFirst && index < kTrackParams);
+}
+
+enum class Page : uint8_t {
+    src = 0, fltr = 1, amp = 2, fx = 3, lfo = 4, arp = 5, asr = 6, osc = 7, scn = 10
+};
 
 constexpr int page_first(Page page) { return int(page) * kParamsPerPage; }
 static_assert(page_first(Page::lfo) == kParams, "the LFO page is the four bytes after the sound");
@@ -80,10 +94,13 @@ static_assert(page_first(Page::asr) == kAsrFirst, "the ASR page is the four byte
 static_assert(kAsrParams == kParamsPerPage, "ASR is one page of four");
 static_assert(page_first(Page::osc) == kOscFirst, "the OSC page is the four bytes after ASR");
 static_assert(kOscParams == kParamsPerPage, "OSC is one page of four");
+static_assert(page_first(Page::scn) == kScnFirst, "the SCN page is the four bytes after the hole");
+static_assert(kScnParams == kParamsPerPage, "SCN is one page of four");
 
-// All 32 of a track's parameters, as stored in a kit and overridden by locks. Values are 0-127;
+// All of a track's parameters (32, the hole, then SCN's 4), as stored in a kit and overridden by
+// locks. Values are 0-127;
 // each machine and the chain map them to physical units themselves, so the sequencer never
-// needs to know what a parameter means. Machines read v[0..kParams), the ASR page and the OSC page only.
+// needs to know what a parameter means. Machines read v[0..kParams), the ASR, OSC and SCN pages only.
 struct TrackParams {
     uint8_t v[kTrackParams];
 
@@ -199,6 +216,11 @@ public:
     }
     // That ratio, for tests (1 at rest; a synth overriding set_pitch_mod leaves it at 1).
     float pitch_mod_ratio() const { return pitch_mod_ratio_; }
+
+    // Frames a clock tick (96 PPQN) at the tempo now: what a machine with a tempo-synced setting
+    // of its own (the WAVE pair's SCN SPD) times itself by. The engine calls it whenever the tempo
+    // changes and when a track takes the machine; control rate. Most machines ignore it.
+    virtual void set_tick_frames(float frames) { (void)frames; }
 
     // Add this block's mono output into out[0..frames).
     virtual void render_add(float *out, int frames) = 0;

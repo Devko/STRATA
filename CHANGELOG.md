@@ -8,6 +8,14 @@ the project file format or the controls.
 
 ### Added
 
+- **WAVE scan modes: the SCAN page.** WAVE MONO and WAVE POLY have a ninth EDIT page, SCAN:
+  MOD moves the wavetable position from POS towards END with each note (OFF, FWD, REV, LOOP,
+  LREV, PING, RET, SINE, RAND, DRFT), SPD sets the speed free or synced like the LFO's RAT, END
+  where it heads and CRV the curve. The page draws the path. A slid note carries on its scan; a
+  chord scans together. Locks, scenes and macros reach it; LFOs and mod slots do not. SOUNDS gains
+  SCANLD and WOBBLE (WAVE MONO) and DRIFT and SWIRL (WAVE POLY). Projects saved before it load
+  with MOD OFF and sound as they did; the kit and the performance files gain an optional section.
+  New emulator scenario `wavescan`.
 - **Tap tempo and nudge.** Tap VALUE in time, twice or more, wherever VALUE turns the tempo
   (`TAP 128.0`); the tempo follows the last four taps. FUNC + push VALUE + turn nudges: 4% faster
   or slower for a quarter of a second a detent, then back to the set tempo, to line STRATA up by

@@ -203,6 +203,24 @@ seed, track, step, pass and parameter. The scheduler looks ahead for a slid step
 before the LFOs. Hold STEP + FUNC + push no longer clears a lock: it toggles the slide.
 `scenario_locks` walks both gestures; UNIT_CHECKLIST W37.
 
+## WAVE scan (the SCAN page)
+
+CyDrums' S1. The page is MOD SPD END CRV at parameter ids **40-43**, not 32-35: ids 32-36 are
+taken as lock ids by a step's extra chord notes (core/stepnotes.hpp), and a lock id is a
+parameter index, so 32-39 is a hole that no parameter, scene bit, macro target or file byte uses
+(`track_param_real`, `kit_param_real`; kTrackParams and kKitParams are 44, kKitRealParams 36).
+The EDIT pages follow: `Page::scn` is 10, pages 8 and 9 are skipped like any dead page. The KIT
+section (16) and the PERFORM section (9) hold only the four real bytes; an older file loads MOD
+OFF. MOD is a number 0-9 (format decision C), clamped on the way in.
+
+The scan is per voice, restarted in `gate_on` unless the note slid, and runs at control rate: the
+shape (mode, then CRV as u^c) is worked out every fourth control step and ramped between, which
+took its cost from 12-24% of a WAVE voice to 2-6% on the host (the power and the cosine were the
+cost, not the reader). SPD is the LFO's RAT; a synced SPD needs the tempo, which reaches the
+machine through `Machine::set_tick_frames` (Engine::run_lfos sends it when it or the machine
+changes). RAND and DRFT draw from their own LCG, so the noise stream and the golden renders are
+unchanged. The SCN bytes are not LFO or mod-slot destinations (those stop at OSC).
+
 ## Track Launch
 
 `core/launch.hpp` has the design and Roland's decisions (2026-11-27). The scheduler plays each

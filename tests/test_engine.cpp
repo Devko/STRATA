@@ -2455,7 +2455,7 @@ TEST(engine_a_scene_capture_takes_the_knob_and_not_the_stored_kit) {
     post(Cmd::scene_erase, 0, 0, 5);
     post(Cmd::scene_capture, kMono, 0, 5, 1);
     pump();
-    CHECK_EQ(scene_count(engine.scenes().scenes[5]), kKitParams);
+    CHECK_EQ(scene_count(engine.scenes().scenes[5]), kKitRealParams);
     CHECK(scene_has(engine.scenes().scenes[5], kMono, kLvl));
     CHECK(!scene_has(engine.scenes().scenes[5], kPoly, kLvl));
 

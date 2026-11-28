@@ -971,11 +971,6 @@ filters closed, scene 4 open and wet; something different in A02.
 - Save, power cycle, open: the sections are still there and play the same. Open a project saved
   by v0.5.0: its chain plays as it did, every field `--`. `____`
 
-**Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
-`W14: MAX 61.2`.
-
----
-
 **W72. Tap tempo, the nudge, PROG CHG OUT and the song position (8 min).** Beat playing on
 GRID, CLOCK SRC INTERNAL. For the last two, a computer or a second unit on MIDI.
 - Tap VALUE four times at about 120: `TAP TEMPO`, then `TAP 120.x`, and the beat follows from the
@@ -991,6 +986,24 @@ GRID, CLOCK SRC INTERNAL. For the last two, a computer or a second unit on MIDI.
 - CLOCK SRC MIDI, a DAW sending clock with the chain on (three entries). Stop the DAW, move its
   playhead into the second entry's bars, play: STRATA comes in on that entry, on the beat. Back
   to bar 1 and play: entry 1. Chain off: the pattern's steps line up with the DAW's bars. `____`
+
+**W73. WAVE scan modes: the SCAN page (4 min).** Beat playing, A01.
+- Lower pad 6, FUNC+EDIT (MACHINE), DOWN three times: `WMN`. EDIT, then SELECT_LEFT from SRC:
+  the SCAN tab, `MOD OFF`, `SCAN OFF: TURN MOD`. On a drum track SCAN never comes up. `____`
+- OK (SOUNDS): WOBBLE (the growl opens and closes once a beat, on the beat), SCANLD (each note
+  brightens over a beat). Back on SCAN: the picture shows the path between the dotted POS and END
+  lines. Turn A through all ten modes: each sounds different, RAND jumps, DRFT glides. `____`
+- B (SPD) below 64 runs free (28 is 1 Hz), from 64 it follows the tempo: change the tempo and
+  WOBBLE stays on the beat. END on POS: `END = POS: NO TRAVEL`, the sound stops moving. `____`
+- Track 7, MACHINE: `WPL`, OK: DRIFT and SWIRL, held chords: all notes move together, no clicks
+  or zipper on the sweeps. 30 s with WOBBLE on track 6 and DRIFT on track 7: **MAX `____ %`**
+  (against W23's). FUNC+HOME, RELOAD PROJECT puts the beat back.
+
+**Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
+`W14: MAX 61.2`.
+
+---
+
 # The full walkthrough (first written 2026-11-22)
 
 Written for the v0.1.0 card and kept up to date section by section since. Sections 0-13 are
@@ -1996,6 +2009,8 @@ Enaga's menu and start STRATA6.
 | U12 MAX with a MIN11 chord on OS2 sync, DRV and SUB up, over A01 (13p) | |
 | E14 WAVE, `scenario_wave.sh` vs `scenario_factory.sh`; boot cycles before/after, cl6x / GCC (PC) | |
 | U13 MAX with WMN GROWL and WPL PAD, over A01 (W23) | |
+| E18 WAVE scan, `scenario_wavescan.sh` vs `scenario_wave.sh`, cl6x / GCC (PC) | |
+| U15 MAX with WMN WOBBLE and WPL DRIFT, over A01 (W73) | |
 | E15 FM4, `scenario_fm.sh` vs `scenario_factory.sh`; `ti_loops.py` FM loops, cl6x / GCC (PC) | |
 | U14 MAX with FM4 PAD on track 7, over A01 (W24) | |
 | MAX straight after a kit recall (15) | |

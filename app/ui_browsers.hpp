@@ -176,21 +176,23 @@
     }
 
     // A sound's bytes into a track: eight a command, all posted together so they land in one
-    // block (Cmd::sound_bytes). Only the bytes a sound owns are written on the audio side.
+    // block (Cmd::sound_bytes). Only the bytes a sound owns are written on the audio side. The
+    // last command is short (44 is not a multiple of eight): its spare bytes go as 0, past every
+    // parameter, and the engine skips them.
     void post_sound_bytes(int track, uint8_t machine, const uint8_t *params) {
-        static_assert(kKitParams % 8 == 0, "eight bytes a command");
         for (int first = 0; first < kKitParams; first += 8) {
+            uint8_t b[8] = {};
+            for (int i = 0; i < 8 && first + i < kKitParams; i++) b[i] = params[first + i];
             Command command;
             command.cmd = Cmd::sound_bytes;
             command.track = uint8_t(track);
             command.step = uint8_t(first);
             command.a = machine;
-            command.b = params[first];
-            command.c = params[first + 1];
-            command.d = params[first + 2];
-            command.e = params[first + 3];
-            command.u = uint32_t(params[first + 4]) | uint32_t(params[first + 5]) << 8 |
-                        uint32_t(params[first + 6]) << 16 | uint32_t(params[first + 7]) << 24;
+            command.b = b[0];
+            command.c = b[1];
+            command.d = b[2];
+            command.e = b[3];
+            command.u = uint32_t(b[4]) | uint32_t(b[5]) << 8 | uint32_t(b[6]) << 16 | uint32_t(b[7]) << 24;
             post_command(command);
         }
     }

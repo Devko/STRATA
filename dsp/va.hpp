@@ -102,6 +102,38 @@ float va_wave_position(uint8_t value);       // POS: the frame, 0-15, fractional
 float va_wave_motion(uint8_t value);         // MOT: frames the filter envelope adds, -15 to +15
 float va_wave_detune_cents(uint8_t value);   // DET: the spread between the two readers, 0 is OFF
 
+// SCN, the WAVE pair's wavetable scan (va.cpp, "SCN"): each note moves its position from POS to
+// END by itself, in one of these modes. The numbers are what MOD stores (format decision C), so
+// PERMANENT: a new mode goes on the end.
+enum class ScanMode : uint8_t {
+    off = 0,    // no scan: POS, and MOT on the filter envelope, as without the page
+    fwd,        // POS to END once, then holds at END
+    rev,        // END to POS once, then holds at POS
+    loop,       // POS to END, again and again
+    loop_rev,   // END to POS, again and again
+    ping,       // POS to END and back, again and again
+    ret,        // POS to END and back once, then holds at POS
+    sine,       // POS to END and back on a sine, again and again
+    random,     // a new frame between POS and END each cycle, held
+    drift,      // a new frame each cycle, glided to: smooth random
+    count
+};
+constexpr int kScanModes = int(ScanMode::count);
+// A byte past the last mode (a damaged file, a macro's sweep) reads as the last.
+constexpr ScanMode va_scan_mode(uint8_t value) {
+    return value < uint8_t(kScanModes) ? ScanMode(value) : ScanMode(kScanModes - 1);
+}
+const char *va_scan_mode_name(ScanMode mode);   // "OFF" "FWD" ... at most four characters
+float va_scan_end(uint8_t value);               // END: the frame, 0-15, as POS
+// CRV as the exponent the scan's 0-1 travel is raised to: 1 at 64 (straight), 1/8 at 0 (fast,
+// then slow), 8 at 127 (slow, then fast).
+float va_scan_curve(uint8_t value);
+// SPD is the LFO's RAT (dsp/lfo.hpp): 0-63 free, lfo_free_hz; 64-127 synced, lfo_sync_ticks.
+// The travel, 0-1, `phase` cycles into a note: the voice's own arithmetic for every mode but the
+// two random ones, which draw as they go; for those this gives a fixed pattern of the same kind,
+// for the screen. CRV's exponent applied.
+float va_scan_travel(ScanMode mode, float phase, float curve);
+
 // --- the control-rate block -----------------------------------------------
 
 // Everything the parameters decide, made once per block by `make` and read by every voice that
@@ -167,6 +199,15 @@ struct VaSettings {
     // How much faster than the note the bent cycle's steeper half plays (the larger of k1 and
     // k2; 1 unbent): the mip level is picked for that speed, or a high note with WRP up aliases.
     float warp_speed = 1.0f;
+
+    // SCN (va.cpp): where each note's position travels by itself. `scan_inc` is cycles per frame,
+    // set by make_wave for a free SPD and by the MACHINE for a synced one (`scan_sync_ticks` not
+    // 0), because only the machine knows the tempo (Machine::set_tick_frames).
+    ScanMode scan = ScanMode::off;
+    float scan_end = 0.0f;             // END, in frames
+    float scan_curve = 1.0f;           // CRV's exponent; exactly 1 skips the curve
+    float scan_inc = 0.0f;
+    uint32_t scan_sync_ticks = 0;
 
     // The pitch slew per control step, as a one-pole coefficient; 1 means arrive at once. The
     // MACHINE sets these, because glide is monophonic: VA MONO from GLD and from its slide
@@ -277,6 +318,8 @@ public:
     void seed(uint32_t value) { rng_ = enaga::dsp::Random(value); }
 
     void set_note(float velocity, bool accent, bool slide);
+    // The scan's 0-1 travel as of the last slice, for tests and the screen.
+    float scan_travel() const { return scan_u_; }
     void set_pitch(float note) { pitch_ = note; }
     // Tests: drop the cached oscillator increments, so the next control step computes them.
     // A voice copied and then made to forget must render the same bits as the original.
@@ -360,7 +403,27 @@ private:
     void render_wave(const VaSettings &s, float *work, int n, float fenv, float level2);
     uint32_t wave_phase1_ = 0, wave_phase2_ = 0;
     float wave_pos_ = -1.0f;
+
+    // SCN: the cycles run since the note started (gate_on restarts it unless the note slid), the
+    // travel the last slice ended on, and the random modes' two frames and their generator.
+    float scan_travel_step(const VaSettings &s, int n);
+    float scan_shape(const VaSettings &s, float phase);
+    float scan_advance(const VaSettings &s, float phase, float by) const;
+    // The shape is worked out once every kScanEvery control steps (one block of 64 frames) and
+    // ramped in between: CRV's power and SINE's cosine are the scan's only real cost.
+    static constexpr int kScanEvery = 4;
+    float scan_phase_ = 0.0f;
+    float scan_u_ = 0.0f;
+    float scan_key_ = 0.0f, scan_slope_ = 0.0f;   // this stretch's start and its change a step
+    int scan_left_ = 0;                           // steps left in it; 0 starts the next
+    float scan_from_ = 0.0f, scan_to_ = 0.0f;
+    float scan_cycle_ = 0.0f;           // the cycle scan_to_ was drawn for
+    uint32_t scan_seed_ = 0x6D2B79F5u;
 };
+
+// SPD as cycles per frame: a free byte's rate over the sample rate, or a synced byte's note
+// length at `tick_frames` frames a clock tick. 0 for a synced byte before the tempo is known.
+float va_scan_increment(uint8_t value, float inv_rate, float tick_frames);
 
 // --- the machine ----------------------------------------------------------
 
@@ -382,6 +445,7 @@ public:
         pitch_mod_ = semis;
         settings_.pitch_mod = semis;
     }
+    void set_tick_frames(float frames) override;
 
     // --- for the UI, and for tests that need to pin a mapping rather than guess at it -------
 
@@ -395,6 +459,8 @@ public:
     float target_pitch() const { return voice_.target_pitch(); }
     // The amplitude envelope's level: what a slide must not reset.
     float amp_level() const { return voice_.amp_level(); }
+    // SCN's travel, 0-1, as of the last control step (tests).
+    float scan_travel() const { return voice_.scan_travel(); }
     // The voice's envelope, for EDIT's dot (Machine::envelope_now).
     bool envelope_now(uint8_t &stage, float &level) const override {
         if (!active_) return false;
@@ -429,6 +495,7 @@ private:
 
     float glide_s_ = 0.0f;              // GLD, for the accessor
     float pitch_mod_ = 0.0f;            // the LFO on TUN, kept across prepare
+    float tick_frames_ = 0.0f;          // frames a clock tick, for a synced SCN SPD
     bool wave_ = false;                 // WAVE MONO
     bool first_note_ = true;            // nothing to glide from yet
     bool active_ = false;

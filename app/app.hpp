@@ -535,6 +535,7 @@ const char *page_name(Page page) {
         case Page::arp:  return "ARP";
         case Page::asr:  return "ENV";      // the whole envelope (Roland, 2026-11-26)
         case Page::osc:  return "OSC";
+        case Page::scn:  return "SCAN";
         default:         return "?";
     }
 }
@@ -544,12 +545,18 @@ const char *page_name(Page page) {
 constexpr const char *kAsrNames[kAsrParams] = {"ATK", "SUS", "REL", "FSU"};
 // And their OSC page's (dsp/va.cpp): OSC 1's wave, what OSC 2 does, the sub, the drive.
 constexpr const char *kOscNames[kOscParams] = {"WAV", "OS2", "SUB", "DRV"};
+// And the WAVE pair's SCN page (dsp/va.cpp): the scan's mode, speed, end frame and curve.
+constexpr const char *kScnNames[kScnParams] = {"MOD", "SPD", "END", "CRV"};
 
 // EDIT's pages: the four of sound, then the track's LFO (dsp/lfo.hpp), its arpeggiator
-// (core/arp.hpp), the VA machines' note envelope, ASR, and their oscillators, OSC (dsp/va.cpp).
-// The selection keys walk all eight; everywhere else a page is still four encoders over four
+// (core/arp.hpp), the VA machines' note envelope, ASR, and their oscillators, OSC (dsp/va.cpp),
+// then the WAVE pair's scan, SCAN. Pages 8 and 9 are the hole between OSC and SCN
+// (dsp/track.hpp): no knob on them is live on any machine, so the selection keys step over them
+// as they step over a drum's ENV. Everywhere else a page is still four encoders over four
 // parameters.
-constexpr int kEditPages = kPages + 4;
+constexpr int kEditPages = int(Page::scn) + 1;
+constexpr bool edit_page_hole(int page) { return page * kParamsPerPage >= kOscEnd &&
+                                                 page * kParamsPerPage < kScnFirst; }
 
 // Encoder counts per click: one zone on the arp's MOD RAT OCT, one shape or destination on the
 // LFO's WAV and DST, one count everywhere else (ASR and OSC included).
