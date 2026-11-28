@@ -230,6 +230,7 @@ FM4 and GRAIN machines.
 | Kit library: 16 kits on the card, recall while playing, store | v0.1.0 | ○ (15, W54) | Recall is not undoable. Since #184 and #188 a recall brings every kit setting (SLC AUTO, LFO TRIG, MOD slots, choke group, arp) |
 | Damaged files refused, never crash | v0.1.0 | ○ (M4) | Card pulled mid-save not tried on the unit |
 | Factory (demo) project: 130 BPM C minor kit, A01-A05, chain, 3 scenes, 3 macros, 8 mute states; a first start and LOAD DEMO | v0.1.0 | ✔ A01 plays; ◐ the rest (3b) | Track 8 plays a placeholder until given a sample |
+| **Showcase projects** (`tools/showcases/`): nine generators for DEEP (deep house), DUB (dub techno), DRIFT (ambient), ELECTRO, BREAKS, CHAOS, SMASH, NIGHT (breakbeat x synthwave) and STEEL; factory sounds only, chain on; `build.sh --starter` copies them to `content/starter/projects/` | WIP | ○ | Generators link against the host build; not part of the device build. Emulator peaks 24.5-41.2% (cl6x, `runtest.sh`) |
 | Factory pattern A05 PAD: held VA POLY chords from the ENV page, in the pattern's locks | #100 | ○ (13k) | The kit's chord stays A01's SUS 0 stab |
 | Factory sounds: SOUNDS (OK in EDIT or MACHINE) loads one of 116 ready-made sounds (KCK 10, SNR 10, HAT 11, PRC 12, MNO 14, PLY 12, WMN 12, WPL 12, FM4 12, GRN 11) into one track, AS WAS puts it back | #102, #118, #122, #126, #134, #184 | ○ (15e) | Leaves FX, LFO, ARP, fader and HAT's choke group; not undoable except by AS WAS |
 
