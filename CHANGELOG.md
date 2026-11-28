@@ -181,6 +181,21 @@ the project file format or the controls.
   before it whatever its condition or probability, so a FILL-only crash, a 1:4 hit or a step at 0%
   played every bar once ENERGY was up. A ghost passes over those to the nearest trig that plays
   every pass.
+- **A song no longer rewrites the project's tempo.** A section's BPM plays and shows on the
+  screen, but a save during or after the song keeps the tempo the project was set to.
+- **ARR REC writes a BPM only where the tempo changed.** A take at one tempo has no BPM in any
+  entry, so VALUE moves the whole recorded song instead of lasting until the next entry. A tempo
+  change in a take writes the new BPM there and the starting tempo on the take's first entry.
+- **The clock no longer jumps back to the old tempo** for a moment after a section's BPM, a turn
+  of VALUE or a tap, and a fast turn of VALUE keeps every click.
+- **A fast turn with VALUE pushed keeps every detent.** Swing (push + turn) and the nudge
+  (FUNC + push + turn) lost detents: every pass wrote the STEP keys twice, once for the step and
+  once for the performance slots over them, which slowed the main loop past a quick turn. The
+  LAUNCH page wrote them twice too.
+- **Tap tempo needs three taps that agree.** Two stray taps of VALUE used to set and save a tempo
+  (1.2 s apart gave 50 BPM); nothing is set until two gaps agree within a quarter.
+- **VariSpeed held back by a fast tempo says so and comes back.** Near 300 BPM it is held to what
+  fits (`VARISPEED HELD +3.0`), and the amount set returns at a slower tempo.
 - **A knob in PERFORM keeps its layer while it turns.** Letting go of FUNC with C still turning
   gave the last clicks to macro C, so ENERGY moved the macro too, and turning ENERGY back to 0
   left the macro moved. A turn of A-D stays on the layer it started on (the macro, or REL ALL,

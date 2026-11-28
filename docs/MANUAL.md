@@ -1200,8 +1200,10 @@ the tempo. So a breakdown is set by ear: dial it in, hold OK.
 
 Your hands win until the next entry: a mute, the morph or ENERGY changed during a section takes
 over at once and stops a RIDE where it is. The next entry applies its own fields. A section's
-tempo becomes the project's tempo, as a turn of VALUE would; under an outside clock it is skipped
-and STRATA says `EXT CLOCK: BPM SKIPPED` once. On the list, `+` under an entry marks fields of its
+tempo plays and shows on the screen, but the project keeps its own saved tempo, so a save during
+or after the song stores the tempo the project was set to. A turn of VALUE goes on from the tempo
+playing and is saved as usual. Under an outside clock a section's tempo is skipped and STRATA
+says `EXT CLOCK: BPM SKIPPED` once. On the list, `+` under an entry marks fields of its
 own, `C` a CAP, and the cursor's entry lists them under MUTES (`S4 SNAP E-40 132BPM`). OK copies
 an entry with its fields. A project from before sections opens with every field `--`.
 
@@ -1242,6 +1244,11 @@ ended a pass nearer to; set RIDE or BACK on the entry for a sweep. **ARR UNDO** 
 under CHAIN END) swaps the chain from before the take back in (`ARR UNDONE`), and OK again brings
 the take back (`ARR REDONE`). It keeps one chain until the next take or until a project is
 opened. Under an outside clock the sections carry no BPM, and the song follows the clock.
+
+ARR REC writes a BPM only where the tempo changed. A take played at one tempo has no BPM in any
+entry, so the song plays at the project's tempo and VALUE moves the whole song. When you change
+the tempo during a take, the entry where it changed holds the new BPM and the first entry holds
+the tempo the take started at, so the song comes back to it when it loops.
 
 ### Track Launch: one track from another pattern
 
@@ -1347,9 +1354,11 @@ The seven upper pads are the same in every mode:
 
 ### Tap tempo and nudge
 
-**Tap VALUE** in time, at least twice, to set the tempo (`TAP TEMPO` on the first tap, then
-`TAP 128.0`). The tempo follows the last four taps, so one early or late tap moves it a little;
-a pause of more than two seconds, or a tap at half or twice the pace, starts a new count. It
+**Tap VALUE** in time, at least three times, to set the tempo (`TAP TEMPO` on the first two
+taps, then `TAP 128.0`). Nothing changes until two gaps agree to within a quarter, so two stray
+taps leave the tempo alone. The tempo then follows the last four taps, so one early or late tap
+moves it a little; a pause of more than two seconds, or a tap at half or twice the pace, starts a
+new count. It
 works wherever VALUE turns the tempo: not in PERFORM (where a VALUE tap resets the morph), not on
 PROJECT's CHAIN and PATTERN pages, and not with an effect picked on VALUE. The tapped tempo is set
 and saved as a turn of VALUE sets it.
@@ -1527,7 +1536,10 @@ Rest is a detent: turning back stops on 0, the project's own tempo and pitch. **
 snaps straight back to it when no performance effect is picked (with one picked, the tap cuts the
 effect, as above). The project keeps its tempo underneath, so a save stores the tempo the song was
 written at, and VALUE on its own still turns that tempo with VariSpeed riding on top. Near the
-ends of the clock's 20-300 BPM the turn stops where the tempo still fits.
+ends of the clock's 20-300 BPM the turn stops where the tempo still fits. When a faster tempo (a
+turn of VALUE or a song section's BPM) would take the clock past 300, VariSpeed is held back to
+what fits and STRATA says so (`VARISPEED HELD +3.0`); back at a slower tempo, the amount you set
+returns (`VARISPEED +5.0 135.0`).
 
 Envelope times stay as they are, and MID tracks send their notes unmoved. VariSpeed needs the
 internal clock: under MIDI or SYNC it says `EXT CLOCK`, and it goes back to rest when CLOCK SRC

@@ -4,9 +4,12 @@
 // ## Tap tempo
 //
 // A tap of VALUE while VALUE is on the tempo (nothing picked, not in PERFORM, not on PROJECT's
-// CHAIN or PATTERN page) is a beat. The first tap only starts the count; from the second on, the
-// tempo is the average of the last few intervals, so one early or late tap moves it a little
-// rather than throwing it. A gap longer than kTapTimeoutMs starts a new count, as does a tap
+// CHAIN or PATTERN page) is a beat. Nothing is set until three taps agree: the first starts the
+// count, the second gives one interval, and the third sets the tempo only when its interval is
+// within kTapAgreePercent of the second's. Two stray taps (a hand letting go of VALUE twice) set
+// and save nothing. A third tap that does not agree keeps only its own interval, so the next tap
+// can agree with it. From then on the tempo is the average of the last few intervals, so one
+// early or late tap moves it a little rather than throwing it. A gap longer than kTapTimeoutMs starts a new count, as does a tap
 // that is less than half or more than twice the running average: that is a hand starting again
 // at another tempo, and averaging it in would land between the two.
 //
@@ -15,7 +18,7 @@
 //
 // ## The nudge
 //
-// FUNC + turn VALUE bends the tempo for a moment and lets it go back, as a DJ pushes a record
+// FUNC + push VALUE + turn bends the tempo for a moment and lets it go back, as a DJ pushes a record
 // to bring it in line with another: each detent holds the tempo kNudgePermille above or below
 // the set tempo for kNudgeMs from the last detent. Nothing is saved and the set tempo does not
 // move, so the beat ends up a little earlier or later and the tempo is where it was. It is the
@@ -28,6 +31,7 @@ namespace strata {
 
 constexpr uint32_t kTapTimeoutMs = 2000;      // a longer gap starts a new count (30 BPM)
 constexpr int kTapIntervals = 4;              // the average is over at most this many
+constexpr uint32_t kTapAgreePercent = 25;     // the first two intervals agree within this
 constexpr uint32_t kTempoTenthsMin = 200;     // Enaga's clock: 20-300 BPM
 constexpr uint32_t kTempoTenthsMax = 3000;
 
@@ -39,8 +43,8 @@ struct TapTempo {
     bool started = false;   // a first tap has been seen
 };
 
-// A tap at `now_ms`. Returns the tempo in tenths of a BPM once there are two taps or more in
-// this count, 0 for a tap that only (re)starts one.
+// A tap at `now_ms`. Returns the tempo in tenths of a BPM once three taps in this count agree
+// (above), 0 for a tap that only starts or builds one.
 uint32_t tap_tempo(TapTempo &tap, uint32_t now_ms);
 
 // Forget the count: the next tap is a first tap again.

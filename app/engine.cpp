@@ -1917,6 +1917,8 @@ bool Engine::apply_transport(const Command &command, int, int) {
                 project_.settings.tempo_centi_bpm =
                     sane ? uint16_t(rounded) : project_.settings.tempo_centi_bpm;
                 if (!sane) status_.bump_refused();
+                // The hand on VALUE wins over a section's BPM until the next one.
+                if (sane) section_tempo_centi_ = 0;
             }
             apply_mixer_bytes();
             break;
@@ -2036,7 +2038,7 @@ bool Engine::apply_arrangement(const Command &command, int, int) {
                 case ChainEdit::section_delta:
                     done = section_step(project_, at, SectionField(command.b),
                                         int(int8_t(command.c)), mute_state_capture(muted_),
-                                        project_.settings.tempo_centi_bpm);
+                                        playing_tempo_centi());
                     break;
                 case ChainEdit::section_clear:
                     done = section_clear(project_, at, SectionField(command.b));
@@ -2051,11 +2053,7 @@ bool Engine::apply_arrangement(const Command &command, int, int) {
                     extra.morph = morph_ * 2u > kMorphScale ? kSectionMorphSnap
                                                             : kSectionMorphSnapA;
                     extra.energy = section_energy_byte(perform_.energy);
-                    const uint16_t tempo = project_.settings.tempo_centi_bpm;
-                    extra.bpm = tempo < kTempoCentiMin ? uint16_t(kTempoCentiMin)
-                                                       : (tempo > kTempoCentiMax
-                                                              ? uint16_t(kTempoCentiMax)
-                                                              : tempo);
+                    extra.bpm = playing_tempo_centi();
                     done = chain_set_section(project_, at, extra);
                     break;
                 }
@@ -2407,6 +2405,7 @@ bool Engine::apply_project(const Command &command, int, int) {
             for (int t = 0; t < kTracks; t++) locked_[t] = 0;
             clear_slides();
             reconfigure();
+            section_tempo_centi_ = 0;        // a section of the project just left
             // The sends and the master, which arrived with the file as fourteen bytes. Without
             // this the mixer would keep running the PREVIOUS project's delay and reverb while
             // the screen drew the new project's numbers.
@@ -2425,6 +2424,7 @@ bool Engine::apply_project(const Command &command, int, int) {
                 project_.settings.scene_a = scene_a_;
                 project_.settings.scene_b = scene_b_;
             }
+            // Last: the UI reads the loaded project's tempo when it sees this.
             status_.bump_project_loads();
             break;
 
@@ -2740,17 +2740,22 @@ void Engine::kit_from_params() {
     }
 }
 
+// The tempo that plays, before VariSpeed: a section's BPM while one is in force, else the
+// project's. Clamped to the clock's range.
+uint16_t Engine::playing_tempo_centi() const {
+    const uint16_t tempo =
+        section_tempo_centi_ != 0 ? section_tempo_centi_ : project_.settings.tempo_centi_bpm;
+    return tempo < kTempoCentiMin ? uint16_t(kTempoCentiMin)
+                                  : (tempo > kTempoCentiMax ? uint16_t(kTempoCentiMax) : tempo);
+}
+
 void Engine::apply_mixer_bytes() {
     // 60 / BPM, the length of a beat, which is all dsp/buses.cpp needs to turn the delay's
     // division into a time. The tempo is in centi-BPM, so this is 6000 / centi -- one divide at
     // control rate, through `reciprocal` rather than `/` because that is the rule for every
     // divide in this layer and a knob move is not the place to make an exception.
     const ProjectSettings &settings = project_.settings;
-    const uint16_t centi = settings.tempo_centi_bpm < kTempoCentiMin
-                               ? uint16_t(kTempoCentiMin)
-                               : (settings.tempo_centi_bpm > kTempoCentiMax
-                                      ? uint16_t(kTempoCentiMax)
-                                      : settings.tempo_centi_bpm);
+    const uint16_t centi = playing_tempo_centi();
     // VariSpeed runs the clock at the project's tempo times its ratio, so the beat is shorter by
     // the same ratio (exactly 1 at rest).
     const float beat_seconds = 6000.0f * enaga::dsp::reciprocal(float(centi)) * vari_inv_ratio_;
@@ -3256,7 +3261,15 @@ void Engine::chain_entry_started() {
     }
     if (section->energy != 0) perform_.energy = energy_turn(int8_t(section_energy(section->energy)), 0);
     // Only the main context may set Enaga's clock: ask, and the UI sets it or says it was refused.
-    if (section->bpm != 0) status_.bump_tempo_due(section->bpm);
+    // The delay follows here, at once; the project's saved tempo is left alone (the review's M1).
+    // Under an outside clock the BPM is skipped, so nothing here changes either.
+    if (section->bpm != 0) {
+        status_.bump_tempo_due(section->bpm);
+        if (enaga::clock::source() == ENAGA_CLOCK_INTERNAL) {
+            section_tempo_centi_ = section->bpm;
+            apply_mixer_bytes();
+        }
+    }
     status_.bump_section_event();
 }
 
@@ -3305,7 +3318,7 @@ void Engine::morph_ride_tick(uint32_t tick) {
 // What plays now, as a section holds it.
 ArrState Engine::arr_now() const {
     ArrState state = arr_state(project_.bank, project_.slot, mute_state_capture(muted_), scene_b_,
-                               morph_, int(perform_.energy), project_.settings.tempo_centi_bpm,
+                               morph_, int(perform_.energy), playing_tempo_centi(),
                                enaga::clock::source() != ENAGA_CLOCK_INTERNAL);
     arr_state_lanes(state, project_);
     return state;
