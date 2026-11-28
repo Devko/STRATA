@@ -18,8 +18,7 @@
 #   turn B +1, push B           -> NRG --
 #   turn A +1                   -> MRP SNAP
 #   CLR                         -> CHAIN
-#   FUNC + HOME, DOWN x11, OK   -> CHAIN ON: SECTION 2 S3 SNAP (CHAIN is the 12th row, under
-#                                  LOOP LEN, since the TRANSPOSE row came in)
+#   FUNC + HOME, DOWN to CHAIN, OK -> CHAIN ON: SECTION 2 S3 SNAP
 #
 # Keys (third_party/enaga/include/enaga/abi.h): F5 = 22, F3 = 20, SELECT_RIGHT = 9, OK = 23,
 # push A = 1, push B = 0, CLR = 30, F1 = 19, F4 = 27, DOWN = 25. Encoders: A 0, B 1, D 3. A chord
@@ -56,10 +55,13 @@ keys=(--key 22@300000000 --key 20@380000000 --key 9@440000000 --key 23@500000000
 keys+=(--key 1@560000000 --turn 3:3@620000000 --key 9@680000000)
 keys+=(--turn 1:1@740000000 --key 0@800000000 --turn 0:1@860000000 --key 30@920000000)
 keys+=(--key 19@1000000000 --key 27@1005000000)
-for i in 0 1 2 3 4 5 6 7 8 9 10; do
+# DOWN from SAVE to CHAIN, counted from the FUNC menu's own order (app/ui_perfmix.hpp, MenuItem;
+# tools/menu_rows.py), so a row added above it does not move the walk off CHAIN.
+downs=$(python3 -B tools/menu_rows.py app/ui_perfmix.hpp MenuItem chain)
+for ((i = 0; i < downs; i++)); do
     keys+=(--key "25@$((1060000000 + i * 40000000))")
 done
-keys+=(--key 23@1500000000)
+keys+=(--key "23@$((1060000000 + downs * 40000000 + 20000000))")
 
 echo "running the emulator for $CYCLES cycles: a section's fields, then the chain plays it ..."
 python3 -B tools/enaga_cached.py emulate "$STAGE" --cycles "$CYCLES" "${keys[@]}" \

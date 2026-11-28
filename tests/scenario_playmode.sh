@@ -7,7 +7,8 @@
 # longer than emulate.py's --key holds, so this drives the emulator through tools/emu_drive.py.
 #
 #   PLAY                        -> the factory beat, track 1 selected, on GRID
-#   hold OK, UP x3              -> the track menu, round from GENERATE to PLAY (under SPEED)
+#   hold OK, UP to PLAY         -> the track menu, round from GENERATE past CAPTURE, RELOAD
+#                                  SAMPLE and FREEZE to PLAY
 #   RIGHT x5                    -> T1 PLAY REV, PING, RND1, RND2, RND4: logged, u1 .. u5
 #   CLR, FUNC + HOME, OK        -> a save, the beat still running in RND4
 set -euo pipefail
@@ -34,7 +35,7 @@ rc=0
 python3 -B - "$STAGE" > "$LOG" 2>&1 <<'PY' || rc=$?
 import sys
 sys.path.insert(0, "tools")
-from emu_drive import Drive, M, PLAY, OK, CLR, UP, RIGHT, F1, F4  # noqa: E402
+from emu_drive import Drive, M, PLAY, OK, CLR, UP, RIGHT, F1, F4, track_menu_up  # noqa: E402
 
 d = Drive(sys.argv[1])
 d.go(300 * M)
@@ -42,7 +43,7 @@ d.tap(PLAY)
 d.go(100 * M)
 d.track_menu()
 d.check(d.index("TRACK T1") >= 0, "a held OK in GRID opened the track menu", f"log={d.log[-12:]}")
-for _ in range(3):
+for _ in range(track_menu_up("play")):   # round past CAPTURE, RELOAD SAMPLE and FREEZE
     d.tap(UP)
 for _ in range(5):
     d.tap(RIGHT)

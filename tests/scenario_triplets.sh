@@ -8,7 +8,7 @@
 # so this drives the emulator through tools/emu_drive.py.
 #
 #   PLAY                        -> the factory beat, track 1 selected, on GRID
-#   hold OK, UP x4              -> the track menu, round from GENERATE to SPEED
+#   hold OK, UP to SPEED        -> the track menu, round from GENERATE past CAPTURE to SPEED
 #   LEFT, LEFT, RIGHT           -> T1 SPEED 3/2, 2, 3/2: logged, u1 .. u3
 #   CLR, FUNC + HOME, OK        -> a save, the kick still running in triplets
 set -euo pipefail
@@ -35,7 +35,7 @@ rc=0
 python3 -B - "$STAGE" > "$LOG" 2>&1 <<'PY' || rc=$?
 import sys
 sys.path.insert(0, "tools")
-from emu_drive import Drive, M, PLAY, OK, CLR, UP, LEFT, RIGHT, F1, F4  # noqa: E402
+from emu_drive import Drive, M, PLAY, OK, CLR, UP, LEFT, RIGHT, F1, F4, track_menu_up  # noqa: E402
 
 d = Drive(sys.argv[1])
 d.go(300 * M)
@@ -43,7 +43,7 @@ d.tap(PLAY)
 d.go(100 * M)
 d.track_menu()
 d.check(d.index("TRACK T1") >= 0, "a held OK in GRID opened the track menu", f"log={d.log[-12:]}")
-for _ in range(4):
+for _ in range(track_menu_up("speed")):   # round past CAPTURE .. PLAY
     d.tap(UP)
 d.tap(LEFT)
 d.go(30 * M)

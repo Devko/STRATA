@@ -28,7 +28,7 @@ the top of `docs/UNIT_CHECKLIST.md` is the next pass.
 | `make -C host test` | **4,876,128 checks, 0 failures** on this branch after the 2026-11-28 review fixes: `core/`, `dsp/` and all of `app/`. The same under ASan and UBSan, with `ASAN_OPTIONS=detect_leaks=0` |
 | CI | `.github/workflows/ci.yml` on every PR: the suite with GCC, again under ASan and UBSan at -O1, the layout check, the screenshots, and the repo checks (`audit_commands.sh`, `check_rules.sh`, `enaga_check.sh`, `check_scripts.sh`, the packaging and build-cache scripts' tests, the card builder's tests). A docs-only PR skips the test jobs. `tools/ci_local.sh` runs the same lanes in WSL. `enaga-upstream.yml` reports new Enaga releases weekly. No device build or scenario runs in CI |
 | `tools/build.sh` | links. Last measured image (cl6x, 2026-11-28): payload 1,833,672 bytes, bss 1,684,400 (at `af72cfa`); no BOOT / MCU / SPI sections. `tests/test_memory.cpp` reads these two figures from here, so update both together |
-| `tools/scenarios.sh` | every emulator scenario, run on Roland's PC only; each full pass and its worst peak is in `docs/SCENARIO_LOG.md`, what each change cost in `docs/BUDGET.md`. `tools/profile_guest.py` gives a scenario's guest profile by function |
+| `tools/scenarios.sh` | `--changed` is a PR's set (CLAUDE.md, "The check loop"); with no names, every emulator scenario, run on Roland's PC only; each full pass and its worst peak is in `docs/SCENARIO_LOG.md`, what each change cost in `docs/BUDGET.md`. `tools/profile_guest.py` gives a scenario's guest profile by function |
 | unit | v0.3.1 and builds from `main` boot and play. Load on the top line (2026-11-27, main after #208): A01 15-28%, GENERATE on all tracks 40-60%, so the unit reads about 1.2-1.8x the emulator on a light beat and 2.0-2.4x on dense parts (`docs/BUDGET.md`, "GENERATE on every track"). MAX readings from SETUP are still owed |
 | memory | init takes **97.32 MiB of a 120 MiB heap**: 22.68 MiB spare against an 8 MiB headroom rule. `tests/test_memory.cpp` itemises it. Never checked on the unit |
 | milestones | M0–M7 code-complete; every load and feel exit criterion waits for the unit (`docs/PLAN.md`) |
@@ -117,7 +117,10 @@ turns reach: that every page **draws** on the C674x with the real font, which ma
 draw off the canvas is a hard fault on the unit and a silent pass on the host. `app/ui_lights.hpp`
 logs `scr <MODE> <PAGE>` on each screen change for this, and `notice_logged` puts a notice in the
 log; on the unit the first tells "wedged" from "on a page I did not expect". Enaga's log ring
-keeps 16 lines, so a scenario that logs more loses its first lines.
+keeps 32 lines and emulate.py reports 16, but `tools/enaga_cached.py` reads the ring after every
+1 M-cycle slice, so a scenario's report holds every line since boot (`log_lost` counts any a
+slice overran). Its turns hold each encoder phase until Enaga's decoder has seen it, so a slow
+main-loop pass no longer drops detents. Menus are walked by row name (`tools/menu_rows.py`).
 
 ### 3. Why the unit may read higher than the emulator
 
