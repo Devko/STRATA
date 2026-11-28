@@ -138,8 +138,9 @@ ArrPass arr_pass_end(Project &project, ArrRec &rec, uint32_t tick) {
     const int length = chain_length(project);
     if (known && rec.extending && length > 0) {
         ChainEntry &last = project.chain[length - 1];
-        if (last.bank == bank && last.slot == slot && last.mutes == 0 &&
-            same_fields(project.chain_extra[length - 1], rec.pass.fields) &&
+        // Against the pass the entry was written from: the entry itself may hold BPM `--`.
+        if (last.bank == bank && last.slot == slot && last.mutes == 0 && rec.last_known &&
+            same_fields(rec.last.fields, rec.pass.fields) &&
             int(last.repeats) < kChainRepeatsMax) {
             last.repeats = uint8_t(last.repeats + 1);
             return ArrPass::extended;
@@ -157,9 +158,23 @@ ArrPass arr_pass_end(Project &project, ArrRec &rec, uint32_t tick) {
             launch = ArrLaunch::lost;
         }
     }
+    // The BPM only where the tempo changed (header, "The tempo").
+    SectionExtra fields = rec.pass.fields;
+    const bool first = rec.written == 0;
+    const bool changed = !first && rec.last_known && fields.bpm != rec.last.fields.bpm;
+    if (!changed) fields.bpm = 0;
     // A pattern that cannot exist (damage) is not written; nothing else is refused.
-    if (!chain_insert(project, length, bank, slot, 1, 0, &rec.pass.fields)) {
+    if (!chain_insert(project, length, bank, slot, 1, 0, &fields)) {
         return ArrPass::dropped;
+    }
+    if (first) {
+        rec.first_entry = length;
+        rec.start_bpm = rec.pass.fields.bpm;
+    } else if (changed && !rec.tempo_written) {
+        rec.tempo_written = true;
+        if (rec.first_entry >= 0 && rec.first_entry < length && rec.start_bpm != 0) {
+            project.chain_extra[rec.first_entry].bpm = rec.start_bpm;
+        }
     }
     rec.extending = true;
     rec.written = uint8_t(rec.written + 1);
@@ -173,7 +188,10 @@ ArrPass arr_pass_end(Project &project, ArrRec &rec, uint32_t tick) {
     return ArrPass::added;
 }
 
-void arr_chain_edited(ArrRec &rec) { rec.extending = false; }
+void arr_chain_edited(ArrRec &rec) {
+    rec.extending = false;
+    rec.first_entry = -1;
+}
 
 int arr_finish(Project &project, ArrRec &rec, ArrBackup &backup, uint32_t tick) {
     if (!rec.on) return 0;

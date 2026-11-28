@@ -673,8 +673,8 @@
     }
 
     // Tap tempo (core/taptempo.hpp): a VALUE tap where VALUE turns the tempo is a beat, stamped
-    // at its press. The first tap starts the count; from the second the tempo follows the taps,
-    // set and saved as a turn of VALUE sets it. Refused under an outside clock, as the turn is.
+    // at its press. Three taps that agree set the tempo; from then the tempo follows the taps,
+    // set and saved as a turn of VALUE sets it. Two stray taps set nothing. Refused under an outside clock, as the turn is.
     void tap_value_tempo() {
         if (enaga::clock::source() != ENAGA_CLOCK_INTERNAL) {
             clock_refused_ = true;
@@ -687,7 +687,6 @@
             return;
         }
         tempo_tenths_ = tenths;
-        adopted_tempo_centi_ = uint16_t(tenths * 10);
         clock_refused_ = !set_clock_tempo(tenths * 10u);      // times VariSpeed's
         post_tempo(float(tenths) * 0.1f);
         char *out = notice_buffer_;
