@@ -801,6 +801,19 @@ to reach `GUARD4` here at a 40-60% top line.
 - With T7 in unison, the top line reads `____ %`; MAX after a minute `____ %`. Save, power
   cycle, open: WID is kept. `____`
 
+**W61. ENERGY in PERFORM (4 min).** Beat playing, A01.
+- PERFORM (FUNC + MIXER). FUNC + turn C down one click at a time: `ENERGY -2` .. `-64`. The hats
+  thin first, then the percussion and snare, the bass, the pads; the kick holds until about -40
+  and is gone at -64, where only the pads and textures remain. The live strip shows `EN-`, the
+  status line `EN-..`. Does the order and the breakdown at the bottom sound right? `____`
+- Turn back up: it stops on `ENERGY 0`, and the beat is exactly A01 again, no stumble. Each hit
+  comes back where it was. GRID: no step changed, CLR's undo has nothing new. `____`
+- FUNC + turn C up to `+64`: ghost hits on the off-beats, hats busiest, the kick only now and
+  then; a probability step plays every pass. Musical, or too busy for techno? `____`
+- `ENERGY -30`, hold FUNC + MUTATE (a lock), turn it back to 0, tap FUNC + MUTATE: the
+  breakdown is back; tap again: rest again. `____`
+- MAX at `+64` against the default beat at 0: `________ %`
+
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
 

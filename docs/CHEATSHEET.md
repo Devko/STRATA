@@ -186,7 +186,7 @@ Page 1 NOTE VEL LEN MICR, page 2 PROB COND RTCH RAMP, page 3 ACNT SLID CHRD.
 | PROJECT | Slot cursor by row | Slot cursor | Page: PROJECT CHAIN PATTERN SETUP PROJECTS | Bank A-H | A: queue mode, B: key, C: scale | Queue slot / cancel queue | — (FUNC menu) |
 | CHAIN | Entry | Entry's pattern -/+ | Page | Bank A-H | A: repeats X1-X16, B: mute recall --/M1-M8 | Add entry / remove entry (twice; empty: back) | — (FUNC menu) |
 | PATTERN | Change field -/+ | Field LEN / SWG / FEEL / track 1-8 swing | Page | Bank A-H | A: LEN 1-64, B: SWG, C: track swing (PAT, 50-75), D: FEEL (OFF, DRIFT 1-6, WAVE 1-6) | — / back | — |
-| PERFORM | Mutation type | Macro A-D | Mutate amount (±10) | Step page | Macros A-D (push: MACRO LEARN; FUNC + A: REL ALL, FUNC + B: LEN ALL, FUNC + D: LIVE RND, FUNC + push D: track in/out) | Capture scene / clear macro | — (auto-fill: FUNC menu) |
+| PERFORM | Mutation type | Macro A-D | Mutate amount (±10) | Step page | Macros A-D (push: MACRO LEARN; FUNC + A: REL ALL, FUNC + B: LEN ALL, FUNC + C: ENERGY, FUNC + D: LIVE RND, FUNC + push D: track in/out) | Capture scene / clear macro | — (auto-fill: FUNC menu) |
 | FUNC menu | Row | Change a setting row | — | — | A: row, B: change | Run the row / close | — |
 
 **STEP lights:** a trig is green as bright as its velocity (soft, medium, loud, accent), blinks with a condition or probability, is amber with locks; red = trigless, bright red = the playhead.
@@ -228,6 +228,9 @@ note's length (`LEN ALL 71%`, 25-400%). 0 is rest and a detent; not saved; a LOC
 **LIVE RND:** in PERFORM, FUNC + turn D shuffles every armed track in random blocks of 1, 2, 4, 8
 or 16 steps (`LIVE RND4 8 TRK`), OFF puts the programmed order back at once; FUNC + push D takes
 the selected track out or back in (all eight at start). Pattern untouched; not saved; in a LOCK.
+**ENERGY:** in PERFORM, FUNC + turn C from a breakdown (-64: drums and lines out, pads keep their
+strongest hits; hats go first, kick last) to the peak (+64: quiet ghosts on empty off-beats, hats
+most, probabilities towards 100). `ENERGY -20`; 0 is rest and a detent; pattern untouched; in a LOCK.
 **MACRO LEARN:** in PERFORM push a macro's knob (A-D): EDIT opens with `LEARN B n/4`; **turn** any EDIT knob (any page, the LFO's included, any track), or LOW, MID and HI on MIXER's EQ page (the kill EQ), to where the macro's top should be; OK, CLR, HOME or any screen but EDIT and MIXER ends it (`B: 3 PARAMS`) and the knobs snap back, so the macro at 0 is the old sound and at 127 the one you dialled. A push takes a parameter the macro holds off it; a fifth knob says `FULL`. An EDIT knob on a parameter a turned-up macro holds says `HELD BY MACRO x`.
 **PERFORM:** macros are set by MACRO LEARN (above); the STEP keys are steps, as in GRID;
 FUNC+STEP a trigless step, as in GRID. OK's whole capture also stores the
@@ -267,7 +270,7 @@ CC 120/123 let go of held notes. Program change 1-128 on your MIDI CH queues pat
 | --- | --- | --- |
 | Top line | `A01 3.2 130.0 > 24%  L  T1` | Live bank+slot (lit), bar.beat, tempo (`MIDI` / `SYNC` under an outside clock), `>` playing / `.` stopped, audio load, `L` / `L+` a LOCK, the selected track (lit) |
 | Under it | a 1 px line | How far the pattern is through its pass |
-| Under it | `K:L FX4 S40 M:AB RL- RN4 LP` | Live strip, small: what is off rest (kills, perf effect, morph %, macros, REL ALL, LEN ALL, LIVE RND, looper); not drawn at rest |
+| Under it | `K:L FX4 S40 M:AB RL- EN+ RN4 LP` | Live strip, small: what is off rest (kills, perf effect, morph %, macros, REL ALL, LEN ALL, ENERGY, LIVE RND, looper); not drawn at rest |
 | Under it | a lit toast: `LOCK A01 STORED`, `SCENE A: STEP PICKS`, `CLOCK REFUSED` | A notice, LEARN, a scene or the MUTATE verdict, for a moment over the screen |
 | Right edge | 2 px column | Master meter: level, held peak dot, top pixel = limiter |
 | Bottom line | `SRC FLTR AMP ...`, `DROP 2`, `GUARD1` | The screen's pages as tabs, the one showing lit (the screen keys turn them); at the right DROP = edits lost to a full command ring, GUARD = the CPU guard shedding voices |
