@@ -107,6 +107,20 @@ TEST(lockstore_an_unattached_store_holds_nothing) {
     CHECK(!store.has(kProjectPatterns));
 }
 
+// Attaching starts empty, and an index past the patterns is never stored or reported, attached.
+TEST(lockstore_attach_starts_empty_and_the_ends_hold_nothing) {
+    g_store.attach(g_states);
+    g_store.stored(3);
+    CHECK(g_store.has(3));
+    g_store.attach(g_states);
+    CHECK(!g_store.has(3));
+    g_store.stored(kProjectPatterns);
+    g_store.stored(-1);
+    CHECK(!g_store.has(kProjectPatterns));
+    CHECK(!g_store.has(-1));
+    for (int i = 0; i < kProjectPatterns; i++) CHECK(!g_store.has(i));
+}
+
 TEST(lockstore_two_states_compare_by_every_field) {
     LiveState &a = g_states[0];
     LiveState &b = g_states[1];
@@ -120,6 +134,9 @@ TEST(lockstore_two_states_compare_by_every_field) {
     CHECK(!live_state_same(a, b));
     __builtin_memcpy(&b, &a, sizeof a);
     b.level[3] = 0.5f;
+    CHECK(!live_state_same(a, b));
+    __builtin_memcpy(&b, &a, sizeof a);
+    b.level[0] = 0.5f;                                // the first track's fader too
     CHECK(!live_state_same(a, b));
     __builtin_memcpy(&b, &a, sizeof a);
     b.sends[kSendFields - 1] = 9;
