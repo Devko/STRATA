@@ -88,7 +88,8 @@ log = report.get("log", [])
 check(report.get("app_status") == "APP RUNNING", "app is running",
       f'status={report.get("app_status")!r}')
 check(not report.get("crash_reason"), "no crash", f'reason={report.get("crash_reason")!r}')
-check("run int" in log, "the transport started", f"log={log}")
+# Not "run int": Enaga's log ring keeps 16 lines and this run logs 16 after PLAY, which pushes it
+# out (HANDOFF, section 2). "the beat was sounding" below proves the transport ran.
 
 def index(line, after=-1):
     for i in range(after + 1, len(log)):
