@@ -242,3 +242,18 @@ the protocol. The decisions behind it:
   another machine posts `Cmd::set_machine` first; `Cmd::sound_preset`'s AS WAS remembers the
   machine too and switches it back (`Engine::switch_machine`).
 - `tests/scenario_usersounds.sh` walks save, load, copy, paste and AS WAS; UNIT_CHECKLIST W68.
+
+## Line input as a mixer strip
+
+The jam review's idea 4. `ProjectSettings::input` holds the strip (`InputField` order, PROJECT.BIN's
+optional section 9, which grows on the end: a short section reads what it has). It is a project
+setting, not a kit one, for MIDI OUT's reason: it is cabling. `Engine::run_input` runs after the
+tracks, through `Mixer::add_input`, a ninth `InsertChain` prepared in TON mode (no drive), so the
+strip has a fader (square law, 100 = 0 dB), PAN, the three sends, the kit's duck and TON. The MUTE
+BUS scales its fader as it does the tracks'; the send raise and the bounce tap do not reach it.
+Turning it on resets the chain so its gain ramps from 0; off, it runs one more block prepared at
+level 0. The codec route is set by the UI (`service_input_route`, main context only), whenever the
+strip is on and its jack or gain differs from what was last applied; RESAMPLE's own input sources
+invalidate that and win while RESAMPLE is up. The IN pages sit before MST so the scenarios that go
+round to MST and EQ still count the same; CHO moved two pages further (scenario_chorus, m7).
+UNIT_CHECKLIST W69.

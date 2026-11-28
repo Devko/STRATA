@@ -978,6 +978,7 @@
         if (source < 0) return;
         input_result_ = enaga::system::input(source, take_level_);
         input_applied_ = input_result_ == 0;
+        input_route_applied_ = -1;      // the strip's route is no longer the codec's (service_input_route)
         notice(input_result_ == 0 ? kTakeSources[take_source_].name : "INPUT REFUSED");
     }
 

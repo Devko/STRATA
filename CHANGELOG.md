@@ -17,6 +17,14 @@ the project file format or the controls.
   and FUNC + tap VALUE (with no effect picked) snaps back. Internal clock only: refused with
   `EXT CLOCK`, and back to rest when CLOCK SRC changes. The live strip says `VS+` or `VS-`. FUNC
   + VALUE used to say `DJ FILTER: SLOT 1/2`. New emulator scenario `varispeed`.
+- **Line input as a mixer channel.** MIXER's new IN and IN+ pages, after CHO, play whatever is
+  on the INPUT jacks through STRATA's mix: LVL, PAN, the delay, reverb and chorus sends, a duck
+  depth, a tone knob, the jack (LINE, LINE L, MIC, DYN MIC, HI-Z, USB) and its gain on push D.
+  Push A turns it on and off with a short fade. It goes through the master, so the kill EQ, the
+  performance mixer, the looper, REPEAT and JAM REC take it too. Off in new and older projects;
+  saved in PROJECT.BIN's new optional section 9, which older builds ignore. The pages the
+  scenarios count to from the end (MST, EQ) stay where they were; CHO is two pages further. New
+  emulator scenario `linein`.
 - **Your own sounds in SOUNDS.** FUNC+DOWN saves the track's sound under a name of up to eight
   characters; it is listed after the factory sounds as `+NAME` and loads with OK on any track with
   the same machine, in every project. FUNC+DOWN on one of your own replaces it, push B renames and

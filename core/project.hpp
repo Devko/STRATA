@@ -498,6 +498,46 @@ constexpr uint8_t kEvolveKindDefault = 4;
 constexpr uint8_t kEvolveKindMax = 8;
 constexpr uint8_t kEvolvePeriodMax = 4;
 
+// --- the line input ---------------------------------------------------------
+//
+// The audio input as a mixer strip of its own (the jam review's idea 4): whatever is plugged into
+// INPUT, an outboard synth or drum machine, plays through STRATA's mix with a fader, pan, the
+// three sends, a duck depth and a tone knob, and so reaches the master effects, the looper,
+// REPEAT and JAM REC. A PROJECT setting, not a kit one, for MIDI OUT's reason: it is cabling,
+// and recalling a kit must not cut the synth on stage. PROJECT.BIN's optional section 9.
+//
+// One byte per field, in this order, which reaches the file: new fields go on the END.
+enum class InputField : uint8_t {
+    on = 0,     // 0 off (the strip costs nothing and the input is not heard), 1 on
+    level,      // the fader, 0-127; kInputLevelUnity is 0 dB
+    pan,        // 0-127, 64 centre, as a track's PAN
+    delay,      // send A, 0-127, post-fader
+    reverb,     // send B, 0-127, post-fader
+    chorus,     // send C, 0-127, post-fader
+    duck,       // how far the kit's duck takes it down, 0-100 percent as a track's DCK
+    tone,       // TON (D8): 64 flat, below a low-pass, above a high-pass
+    source,     // which jack: kInputSources' index
+    gain,       // the source's front-end level: 0 LOW, 1 NORMAL, 2 HIGH (enaga_input_level)
+    count
+};
+constexpr int kInputFields = int(InputField::count);
+constexpr uint8_t kInputLevelUnity = 100;
+// The sources, in the order SRC walks them: LINE (stereo), LINE L (mono), MIC, DYN MIC, HI-Z, USB.
+// STRATA's own numbering, so the file does not depend on Enaga's enum; app/ maps it.
+constexpr uint8_t kInputSources = 6;
+constexpr uint8_t kInputGains = 3;
+constexpr uint8_t kInputGainNormal = 1;
+
+// One field's byte, clamped to that field's domain; the reader and the engine both use it, so a
+// damaged file and a stray command land on the same legal value.
+constexpr uint8_t input_field_sanitized(int field, uint8_t byte) {
+    return field == int(InputField::on)       ? uint8_t(byte != 0 ? 1 : 0)
+           : field == int(InputField::duck)   ? uint8_t(byte > kDuckDepthMax ? kDuckDepthMax : byte)
+           : field == int(InputField::source) ? uint8_t(byte < kInputSources ? byte : 0)
+           : field == int(InputField::gain)   ? uint8_t(byte < kInputGains ? byte : kInputGainNormal)
+                                              : uint8_t(byte > 127 ? 127 : byte);
+}
+
 // Settings that belong to the project rather than to a pattern.
 struct ProjectSettings {
     uint16_t tempo_centi_bpm = 13000;    // 130.00 BPM; Enaga's clock takes BPM x 100
@@ -587,6 +627,11 @@ struct ProjectSettings {
     // keeps their byte, after the master bytes, but writes it as 0 and ignores it on read
     // (Roland, 2026-11-22), so a project never opens with a band killed.
     uint8_t eq_kills = 0;
+
+    // The line input's strip (InputField order): off, the fader at 0 dB, centred, no sends, no
+    // duck, the tone flat, stereo LINE at NORMAL. Off by default, so a project from before it,
+    // and a new one, sound exactly as they did and the input is never heard by surprise.
+    uint8_t input[kInputFields] = {0, kInputLevelUnity, 64, 0, 0, 0, 0, 64, 0, kInputGainNormal};
 };
 
 struct Project {
@@ -672,6 +717,11 @@ constexpr uint16_t kSectionProjectEvolve = 7;
 // the ones above: an older file has every lane on its own part, which is how it played; an older
 // build ignores the section and plays the playing pattern whole.
 constexpr uint16_t kSectionProjectLaunch = 8;
+// The line input's strip (ProjectSettings::input): kInputFields bytes. Optional on read like the
+// ones above: an older file has the strip off, which is how it played; an older build ignores the
+// section and never hears the input. A shorter section is a file from before a field was added,
+// and the missing fields take their defaults.
+constexpr uint16_t kSectionProjectInput = 9;
 
 constexpr uint16_t kKitVersion = 1;
 constexpr uint16_t kSectionKitTracks = 1;

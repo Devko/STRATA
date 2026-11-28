@@ -877,6 +877,15 @@ private:
 
     void prepare_machine(int track);
     void prepare_chain(int track);
+    // The line input's strip (ProjectSettings::input), between the tracks and the sends: fades in
+    // when turned on, plays one block down to silence when turned off, and costs nothing while
+    // off. `in` is audio()'s input buffer, nullptr where the host gives none.
+    void run_input(const float *in, uint32_t frames);
+    void prepare_input(bool on);
+    bool input_live_ = false;                    // the chain is running (on, or its last block)
+    uint8_t input_prepared_[kInputFields] = {};
+    float input_prepared_scale_ = -1.0f;         // the MUTE BUS's fader scale it was prepared at
+    bool input_prepared_on_ = false;
     void forget_prepared();
     TrackParams machine_prepared_[kTracks] = {};
     const Machine *machine_prepared_for_[kTracks] = {};
