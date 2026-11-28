@@ -305,7 +305,10 @@ namespace {
 // treat `length` as the truth. Returns the length.
 int chain_normalize(Project &project) {
     const int length = chain_length(project);
-    for (int i = length; i < kChainEntries; i++) project.chain[i] = ChainEntry{};
+    for (int i = length; i < kChainEntries; i++) {
+        project.chain[i] = ChainEntry{};
+        project.chain_extra[i] = SectionExtra{};
+    }
     project.settings.chain_length = uint8_t(length);
     return length;
 }
@@ -324,17 +327,33 @@ bool chain_set(Project &project, int at, uint8_t bank, uint8_t slot, uint8_t rep
     if (at < 0 || at >= chain_length(project)) return false;
     chain_normalize(project);
     project.chain[at] = ChainEntry{bank, slot, repeats, mutes};
+    // A mute recall replaces a CAP: the two are one field, MUT, on the screen.
+    if (mutes != 0) {
+        project.chain_extra[at].cap = 0;
+        project.chain_extra[at].mask = 0;
+    }
     return true;
 }
 
 bool chain_insert(Project &project, int at, uint8_t bank, uint8_t slot, uint8_t repeats,
-                  uint8_t mutes) {
+                  uint8_t mutes, const SectionExtra *extra) {
     if (!chain_entry_valid(bank, slot, repeats, mutes)) return false;
+    if (extra != nullptr && !section_valid(*extra)) return false;
     const int usable = chain_length(project);
     if (at < 0 || at > usable || usable >= kChainEntries) return false;
+    // Read before the shift: `extra` may point into the chain itself (a copy of an entry).
+    SectionExtra fields = extra != nullptr ? *extra : SectionExtra{};
+    if (mutes != 0) {
+        fields.cap = 0;
+        fields.mask = 0;
+    }
     const int length = chain_normalize(project);
-    for (int i = length; i > at; i--) project.chain[i] = project.chain[i - 1];
+    for (int i = length; i > at; i--) {
+        project.chain[i] = project.chain[i - 1];
+        project.chain_extra[i] = project.chain_extra[i - 1];
+    }
     project.chain[at] = ChainEntry{bank, slot, repeats, mutes};
+    project.chain_extra[at] = fields;
     project.settings.chain_length = uint8_t(length + 1);
     return true;
 }
@@ -342,8 +361,12 @@ bool chain_insert(Project &project, int at, uint8_t bank, uint8_t slot, uint8_t 
 bool chain_remove(Project &project, int at) {
     if (at < 0 || at >= chain_length(project)) return false;
     const int length = chain_normalize(project);
-    for (int i = at; i + 1 < length; i++) project.chain[i] = project.chain[i + 1];
+    for (int i = at; i + 1 < length; i++) {
+        project.chain[i] = project.chain[i + 1];
+        project.chain_extra[i] = project.chain_extra[i + 1];
+    }
     project.chain[length - 1] = ChainEntry{};
+    project.chain_extra[length - 1] = SectionExtra{};
     project.settings.chain_length = uint8_t(length - 1);
     return true;
 }
@@ -378,6 +401,33 @@ void chain_player_removed(ChainPlayer &player, int at) {
         player.orphaned = true;
         player.played = 0;
     }
+}
+
+
+bool section_valid(const SectionExtra &extra) {
+    return extra.cap <= 1 && (extra.cap != 0 || extra.mask == 0) &&
+           extra.scene <= kSectionScenesMax && extra.morph <= kSectionMorphMax &&
+           extra.energy <= kSectionEnergyMax &&
+           (extra.bpm == 0 || (extra.bpm >= kTempoCentiMin && extra.bpm <= kTempoCentiMax));
+}
+
+bool chain_set_section(Project &project, int at, const SectionExtra &extra) {
+    if (!section_valid(extra)) return false;
+    if (at < 0 || at >= chain_length(project)) return false;
+    chain_normalize(project);
+    SectionExtra fields = extra;
+    fields.reserved = 0;
+    project.chain_extra[at] = fields;
+    // CAP replaces a mute recall: one field, MUT, on the screen and in the file.
+    if (fields.cap != 0) project.chain[at].mutes = 0;
+    return true;
+}
+
+const SectionExtra *chain_entry_section(const Project &project, const ChainPlayer &player) {
+    if (!player.active || player.orphaned) return nullptr;
+    const ChainCursor cursor = chain_cursor(project, player);
+    if (cursor.length <= 0) return nullptr;
+    return &project.chain_extra[cursor.entry];
 }
 
 }  // namespace strata
