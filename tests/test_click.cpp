@@ -109,7 +109,52 @@ TEST(click_starts_on_its_frame_decays_and_ends) {
     std::memset(beat, 0, sizeof beat);
     click.trigger(9999, false);
     click.render_add(beat, 64);
-    CHECK(energy(beat, 0, 4) > 0.0f);
+    CHECK(beat[0] != 0.0f);
+    // So does one exactly at the block's end.
+    click.stop();
+    std::memset(beat, 0, sizeof beat);
+    click.trigger(64, false);
+    click.render_add(beat, 64);
+    CHECK(beat[0] != 0.0f);
+}
+
+// In 64-frame blocks, as audio() renders it: a click sounds on exactly kFrames frames from its
+// own, wherever in a block it starts (frame 33 leaves the last block a single frame), and a new
+// one cuts the ringing one off on its frame.
+TEST(click_lasts_exactly_its_frames_in_blocks_and_a_new_one_cuts_the_old) {
+    static float out[2 * 4096];
+    static Click click;
+    click.init(48000.0f);
+    const int starts[] = {0, 1, 33, 63};
+    for (int start : starts) {
+        click.stop();
+        std::memset(out, 0, sizeof out);
+        click.trigger(uint32_t(start), true);
+        for (int at = 0; at < 2048; at += 64) click.render_add(out + 2 * at, 64);
+        int first = -1, last = -1;
+        for (int i = 0; i < 2048; i++) {
+            if (out[2 * i] != 0.0f) {
+                first = first < 0 ? i : first;
+                last = i;
+            }
+        }
+        CHECK_EQ(first, start);
+        CHECK_EQ(last, start + Click::kFrames - 1);
+    }
+    // A beat at frame 10, a bar replacing it at frame 600 (block 9, frame 24): the first is cut
+    // there, and the bar's first sample is its own sine's first, sin(w) at full bar gain.
+    click.stop();
+    std::memset(out, 0, sizeof out);
+    for (int at = 0; at < 2048; at += 64) {
+        if (at == 0) click.trigger(10, false);
+        if (at == 576) click.trigger(24, true);
+        click.render_add(out + 2 * at, 64);
+    }
+    const float w = 2.0f * 3.14159265f * Click::kFreqBar / 48000.0f;
+    CHECK(out[2 * 600] > 0.9f * Click::kGainBar * w && out[2 * 600] < 1.1f * Click::kGainBar * w);
+    int last = -1;
+    for (int i = 0; i < 2048; i++) last = out[2 * i] != 0.0f ? i : last;
+    CHECK_EQ(last, 600 + Click::kFrames - 1);
 }
 
 TEST(click_over_a_loud_mix_stays_inside_full_scale) {
