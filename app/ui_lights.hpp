@@ -747,7 +747,14 @@
             }
         }
 
-        for (int i = 0; i < 16; i++) {
+        // Each STEP key is written once a pass. LedShadow skips only a write equal to the last one,
+        // so a colour put here and then painted over by an overlay (both cover all 16 keys) went
+        // out twice every pass: 32 blocking UART sends, about 10 ms of update(), and the encoder
+        // phases a fast turn passes through were missed. While VALUE was pushed that lost the
+        // detents of swing (push + turn) and the nudge (FUNC + push + turn).
+        const bool perf_overlay = value_pushed_ && !mute_mode_ && mode_ != Mode::menu;
+        const bool launch_overlay = launch_page() && !value_pushed_;
+        for (int i = 0; i < 16 && !perf_overlay && !launch_overlay; i++) {
             const int step = i + page_ * 16;
             const Step &s = pattern.tracks[selected_].steps[step];
             const bool trig = (s.flags & kStepTrig) != 0;
@@ -779,8 +786,8 @@
             if (step == playhead && status.running.load(std::memory_order_relaxed)) red = 10;
             leds_.step(i, red, green);
         }
-        if (launch_page() && !value_pushed_) light_launch_steps();
-        if (value_pushed_ && !mute_mode_ && mode_ != Mode::menu) light_perf_steps();
+        if (launch_overlay) light_launch_steps();
+        if (perf_overlay) light_perf_steps();
 
         for (int t = 0; t < kTracks && mode_ != Mode::keys; t++) {
             const Rgb colour = kTrackColour[t];

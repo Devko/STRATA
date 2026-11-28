@@ -13931,6 +13931,33 @@ uint8_t triggered_on(int track) {
 
 }  // namespace
 
+// A pass with nothing changed writes no LED. With VALUE pushed (the perf slots over the STEP keys)
+// and on LAUNCH (the slots over them), each key was written twice a pass, the step's colour and
+// then the overlay's: 32 blocking sends on the unit, which made update() slow enough to miss a
+// fast encoder turn while VALUE was held (the nudge in scenario_tempo).
+TEST(ui_a_steady_pass_writes_no_led_with_value_pushed_or_on_launch) {
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    pump(4);
+    int before = host.leds_set();
+    app.update(g_ms);
+    CHECK_EQ(host.leds_set() - before, 0);
+    app.on_key(ENAGA_KEY_PUSH_VALUE, true);
+    pump(4);
+    before = host.leds_set();
+    app.update(g_ms);
+    app.update(g_ms);
+    CHECK_EQ(host.leds_set() - before, 0);
+    app.on_key(ENAGA_KEY_PUSH_VALUE, false);
+    pump(4);
+    to_launch_page(app);
+    pump(4);
+    before = host.leds_set();
+    app.update(g_ms);
+    app.update(g_ms);
+    CHECK_EQ(host.leds_set() - before, 0);
+}
+
 TEST(ui_launch_project_twice_opens_launch_and_a_slow_second_press_does_not) {
     Strata &app = fresh();
     to_launch_page(app);

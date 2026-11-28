@@ -180,6 +180,10 @@ the project file format or the controls.
   change in a take writes the new BPM there and the starting tempo on the take's first entry.
 - **The clock no longer jumps back to the old tempo** for a moment after a section's BPM, a turn
   of VALUE or a tap, and a fast turn of VALUE keeps every click.
+- **A fast turn with VALUE pushed keeps every detent.** Swing (push + turn) and the nudge
+  (FUNC + push + turn) lost detents: every pass wrote the STEP keys twice, once for the step and
+  once for the performance slots over them, which slowed the main loop past a quick turn. The
+  LAUNCH page wrote them twice too.
 - **Tap tempo needs three taps that agree.** Two stray taps of VALUE used to set and save a tempo
   (1.2 s apart gave 50 BPM); nothing is set until two gaps agree within a quarter.
 - **VariSpeed held back by a fast tempo says so and comes back.** Near 300 BPM it is held to what

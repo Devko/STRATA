@@ -1087,6 +1087,8 @@ A01 at 130.0, no chain.
   section's. `____`
 - Record a take at one tempo only: no entry has a BPM, and VALUE during playback holds for the
   whole song. `____`
+- Push VALUE and flick it fast for swing, then FUNC + push VALUE + flick for the nudge: every
+  detent counts (swing moves by each click, `NUDGE FASTER` every time). `____`
 - FUNC + turn VALUE to +5.0 at 130. Give a chain entry BPM 280: as it plays, `VARISPEED HELD`
   and a smaller amount; at the next entry with a slower BPM, `VARISPEED +5.0 ...` again.
   FUNC + tap VALUE. `____`
