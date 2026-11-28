@@ -8,6 +8,14 @@ the project file format or the controls.
 
 ### Added
 
+- **TRANSPOSE: FUNC + the screen keys, on every screen.** The melodic tracks a semitone down
+  (SEL<) or up (SEL>), an octave either way; both screen keys together go back to 0. The tracks
+  that move are the ones that fold into the scale (VA MONO and POLY, WAVE MONO and POLY, FM4,
+  GRAIN, SAMPLE while unsliced); drums, sliced samples and MID stay. The key moves with the notes,
+  so lines and chords keep their shape, and the notice names it in sharps (`TRANSPOSE +3 C`).
+  Steps, chords, the arp, pads, KEYS, MIDI IN notes and MIDI OUT all follow; a held key lets go
+  at the pitch it started. Nothing is written or saved; a LOCK holds it. PERFORM and the live
+  strip show `TR+3`. New emulator scenario `transpose`.
 - **WAVE scan modes: the SCAN page.** WAVE MONO and WAVE POLY have a ninth EDIT page, SCAN:
   MOD moves the wavetable position from POS towards END with each note (OFF, FWD, REV, LOOP,
   LREV, PING, RET, SINE, RAND, DRFT), SPD sets the speed free or synced like the LFO's RAT, END
@@ -145,6 +153,8 @@ the project file format or the controls.
 
 ### Changed
 
+- **The FUNC help turns its pages on LEFT/RIGHT only.** FUNC + a screen key is TRANSPOSE (above),
+  so holding FUNC a moment too long can never turn a transpose into a page of help.
 - **A slimmer FUNC menu.** FUNC+HOME holds the project-wide rows only, in the order a jam reaches
   for them: SAVE, JAM REC, CLICK, COUNT-IN, REC MODE, QUANTIZE, AUTO-FILL, FX GLIDE, LOOP LEN,
   CHAIN, CHAIN END, then the file rows from SAVE AS down to LOAD DEMO (UP once from SAVE). The
