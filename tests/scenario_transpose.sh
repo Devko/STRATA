@@ -1,18 +1,21 @@
 #!/usr/bin/env bash
 # TRANSPOSE in the emulator (core/transpose.hpp; docs/CONTROLS.md, "TRANSPOSE"): FUNC + the screen
-# keys move the melodic tracks a semitone a press, and both screen keys together put them back.
-# The emulator holds a key for 20 M cycles, so a FUNC press with a screen key 2 M cycles later is
-# FUNC + that key, and a second screen key 4 M cycles in lands while the first is still down: the
-# both-at-once reset. The notices are logged (app/ui_perform.hpp, transpose_key). Which tracks
+# keys move the melodic tracks a scale step a press (the default; the FUNC menu's row makes it
+# semitones), and both screen keys together put them back.
+# The emulator holds a key for 20 M cycles, so a FUNC press with a screen key 5 M cycles later is
+# FUNC + that key, and a second screen key 10 M cycles in lands while the first is still down: the
+# both-at-once reset. Not closer: Enaga hands over the keys one poll found down in key order, and
+# the screen keys (8, 9) come before FUNC (19), so a screen key 2 M cycles after FUNC arrived
+# first, without FUNC, whenever one poll caught both (seen on the cl6x build, 2026-11-28). The notices are logged (app/ui_perform.hpp, transpose_key). Which tracks
 # move and how is tests/test_transpose.cpp's, the gesture's every screen tests/test_ui.cpp's; this
 # proves the path runs on the C674x with the default beat playing transposed, under the load
-# target, and that the notice names a key in sharps.
+# target.
 #
 #   PLAY
-#   FUNC + SEL>  three times    -> "TRANSPOSE +1 <key>", "+2", "+3"
+#   FUNC + SEL>  three times    -> "TRANSPOSE +1 IN KEY", "+2", "+3"
 #   FUNC + SEL<                 -> "+2"
 #   FUNC + SEL< then SEL> held  -> "+1", then "TRANSPOSE 0": both screen keys are rest
-#   FUNC + SEL<                 -> "TRANSPOSE -1 <key>", held there to the end: the load
+#   FUNC + SEL<                 -> "TRANSPOSE -1 IN KEY", held there to the end: the load
 #
 # Keys (third_party/enaga/include/enaga/abi.h): F5 = 22, F1 = 19, SELECT_LEFT = 8,
 # SELECT_RIGHT = 9. The first press must come LATE (tests/scenario_m1.sh).
@@ -45,12 +48,12 @@ LOG="$ENAGA_BUILD/scenario_transpose.log"
 echo "running the emulator: TRANSPOSE up, down and back to rest ..."
 python3 -B tools/enaga_cached.py emulate "$STAGE" --cycles "$CYCLES" \
     --key 22@300000000 \
-    --key 19@400000000 --key 9@402000000 \
-    --key 19@440000000 --key 9@442000000 \
-    --key 19@480000000 --key 9@482000000 \
-    --key 19@520000000 --key 8@522000000 \
-    --key 19@560000000 --key 8@562000000 --key 9@564000000 \
-    --key 19@620000000 --key 8@622000000 \
+    --key 19@400000000 --key 9@405000000 \
+    --key 19@440000000 --key 9@445000000 \
+    --key 19@480000000 --key 9@485000000 \
+    --key 19@520000000 --key 8@525000000 \
+    --key 19@560000000 --key 8@565000000 --key 9@570000000 \
+    --key 19@620000000 --key 8@625000000 \
     > "$LOG" 2>&1 || {
     echo "FAIL: emulate.py exited non-zero" >&2
     tail -30 "$LOG" >&2
@@ -62,8 +65,6 @@ python3 - "$LOG" <<'PY' || rc=$?
 import json, os, re, sys
 
 CYCLES_PER_BLOCK = 496_000
-NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
-
 failures = []
 
 def check(ok, label, detail=""):
@@ -90,18 +91,14 @@ check(report.get("audio_overruns", -1) == 0, "no audio overruns",
 # Every TRANSPOSE notice, in order: the amount and the key it names.
 seen = []
 for line in log:
-    m = re.fullmatch(r"TRANSPOSE (0|[+-]\d+)(?: ([A-G]#?))?", line)
+    m = re.fullmatch(r"TRANSPOSE (0|[+-]\d+)(?: (IN KEY))?", line)
     if m:
         seen.append((int(m.group(1)), m.group(2)))
 amounts = [a for a, _ in seen]
 check(amounts == [1, 2, 3, 2, 1, 0, -1], "the presses walked +1 +2 +3 +2 +1, rest, -1",
       f"seen={seen}")
-check(all((a == 0) == (k is None) for a, k in seen), "a key is named away from rest only",
-      f"seen={seen}")
-# One project key under all of them: each named key is that root moved by the amount.
-roots = {(NAMES.index(k) - a) % 12 for a, k in seen if k is not None}
-check(len(roots) == 1, "every key named is the project's root moved by the amount",
-      f"seen={seen}")
+check(all((a == 0) == (k is None) for a, k in seen),
+      "IN KEY away from rest (scale steps at every start), nothing at rest", f"seen={seen}")
 
 peak = report.get("audio_cycles_peak", 0)
 percent = 100.0 * peak / CYCLES_PER_BLOCK
