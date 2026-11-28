@@ -123,20 +123,13 @@
             return;
         }
 
-        // FUNC + push D was the held tape stop until 2026-11-25 (backlog D5): one home per job,
-        // and the tape stop's is the mixer's slot 8. The chord says where it went rather than
-        // falling through to a page's push, which would do something nobody meant. Not while a
+        // FUNC + push D is the kill EQ's fourth switch on every screen (Roland, 2026-11-28, D2):
+        // all three bands out, or all back. It was the held tape stop until 2026-11-25, then
+        // LIVE RND's track toggle in PERFORM, which is FUNC + lower pad there now. Not while a
         // STEP is held: then FUNC + push D toggles the slide of that step's D lock, as FUNC +
         // push A-C do theirs -- every push with a step held is the step's.
-        //
-        // In PERFORM it is LIVE RND's other half (core/liverand.hpp): the selected track in or out
-        // of the armed set, heard at once while a unit is on.
-        if (key == ENAGA_KEY_PUSH_D && shift_ && held_step_ < 0 && mode_ == Mode::perform) {
-            if (down) live_rnd_arm(selected_);
-            return;
-        }
         if (key == ENAGA_KEY_PUSH_D && shift_ && held_step_ < 0) {
-            if (down) notice_logged("TAPE STOP: SLOT 8");
+            if (down) toggle_kill_all();
             return;
         }
 

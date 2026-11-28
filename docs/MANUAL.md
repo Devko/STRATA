@@ -537,7 +537,7 @@ Clear the whole track with **CLR**, and get it back with **FUNC+CLR** (undo). FU
 There are 16 levels.
 
 To start from an empty pattern, clear all eight tracks at once: **FUNC+HOME**, DOWN to **CLEAR
-PATTERN**, then **OK** twice within 2 seconds (`OK AGAIN TO CLEAR`, then `CLEARED FUNC+CLR UNDO`).
+PATTERN**, then **OK** twice within 2 seconds (`OK AGAIN: CLEAR`, then `CLEARED FUNC+CLR UNDO`).
 Every trig and lock goes; the sounds, and each track's length, speed and swing, stay. FUNC+CLR
 brings the whole pattern back in one undo.
 
@@ -1458,14 +1458,18 @@ a LOCK holds them, so a jump puts them back where they were.
 ### LIVE RND: shuffle the beat from PERFORM
 
 **FUNC + turn D in PERFORM is LIVE RND**: OFF, then RND 1, 2, 4, 8 and 16, a click each, stopping
-at both ends (`LIVE RND4 8 TRK`). While it is on, every armed track plays its pattern in random
+at both ends (`LIVE RND4 7 TRK`). While it is on, every armed track plays its pattern in random
 blocks of that many steps, picked afresh every pass: RND 1 scatters single hits, RND 4 shuffles
 the beats of a bar, RND 16 shuffles whole bars of a long track. Inside a block the steps keep their
 order, so the groove stays on the grid and a hat still sits on its offbeat.
 
-**FUNC + push D takes the selected track out of LIVE RND**, or puts it back (`T1 RND OUT 7 TRK`).
-All eight are in at the start. The usual move: select the kick (lower pad 1), FUNC + push D, and
-the four-on-the-floor holds while everything else jumps around it.
+**FUNC + a lower pad takes that track out of LIVE RND**, or puts it back (`T2 RND OUT 6 TRK`).
+LIVE RND comes on with every track in but the kick, so the four-on-the-floor holds while
+everything else jumps around it; FUNC + lower pad 1 puts the kick in too. Once you have chosen
+the tracks, LIVE RND keeps your choice.
+
+**Hold FUNC in PERFORM to see these four**: while it is down the gauges read `REL`, `LEN`, `NRG`
+and `RND` with where each is, and the macros come back when you let go.
 
 It is the same shuffle as the track menu's PLAY row (RND1-RND16), but for many tracks at
 once and only while it is on: the pattern is never changed, so **turning back to OFF puts every
@@ -1626,8 +1630,8 @@ Two held master moves, both in the performance mixer (below) since backlog D1 (#
 
 Neither is saved or undone; both cost nothing until used. With the delay in its LONG mode
 (below) the freeze is the LONG delay's own: the whole wash holds exactly as it is, whatever its
-length. FUNC + hold push D only says where the tape stop is (`TAPE STOP: SLOT 8`), and
-FUNC + MUTATE is LOCK (below); "Gestures that moved" in CHANGELOG.md lists older gestures.
+length. FUNC + push D takes every band of the kill EQ out at once (`KILL ALL`), and again brings
+them back (`ALL BANDS BACK`); FUNC + MUTATE is LOCK (below); "Gestures that moved" in CHANGELOG.md lists older gestures.
 
 ### LOCK: store a moment, jump back to it
 
@@ -2025,12 +2029,12 @@ screen frame", has the details.
 
 In the FUNC menu (FUNC+HOME), each with OK twice within 2 s:
 
-- RELOAD PROJECT (`OK AGAIN TO RELOAD`): read the project back from its last save, throwing away
+- RELOAD PROJECT (`OK AGAIN: RELOAD`): read the project back from its last save, throwing away
   what is unsaved.
-- NEW PROJECT (`OK AGAIN FOR NEW`): a new, empty project named `NEWn`: the factory sounds and
+- NEW PROJECT (`OK AGAIN: NEW`): a new, empty project named `NEWn`: the factory sounds and
   mixer with every pan centred, but no steps, chain, scenes, macros or mute states. Nothing is
   written until you save it, so the old project is untouched.
-- LOAD DEMO (`OK AGAIN FOR DEMO`): the factory demo project, the beat a first start plays, under
+- LOAD DEMO (`OK AGAIN: DEMO`): the factory demo project, the beat a first start plays, under
   a new name. Again nothing is written until you save.
 
 All three stop the transport.
@@ -2043,7 +2047,7 @@ PROJECT, then screen key RIGHT four times (or the FUNC menu's OPEN PROJECT), is 
 with `NOW` and the open one's name at the top. UP/DOWN or A move the cursor, LEFT/RIGHT go a page
 of eight at a time.
 
-- **Open:** OK on a project, then OK again within 2 s (`AGAIN TO OPEN`). What is unsaved in the
+- **Open:** OK on a project, then OK again within 2 s (`OK AGAIN: OPEN`). What is unsaved in the
   open project is thrown away and the transport stops, as with a reload. STRATA starts with that
   project from now on.
 - **Save as:** `FUNC+DOWN` here, or the FUNC menu's SAVE AS, opens a name entry starting from the current name. A or LEFT/RIGHT
@@ -2056,8 +2060,8 @@ of eight at a time.
   project has is refused (`NAME TAKEN`). The open project can be renamed too: it carries on under
   the new name, and STRATA starts with it. Unsaved work stays unsaved; the rename moves what is
   on the card.
-- **Delete:** push C on a project asks `DELETE? OK TWICE`; OK, then OK again within 2 s
-  (`OK AGAIN TO DELETE`), deletes its folder and everything in it (`DELETING`). CLR, or any other
+- **Delete:** push C on a project asks `OK TWICE: DELETE`; OK, then OK again within 2 s
+  (`OK AGAIN: DELETE`), deletes its folder and everything in it (`DELETING`). CLR, or any other
   key, keeps it. The open project cannot be deleted (`PROJECT IS OPEN`): open another one first.
   A delete cannot be undone.
 - `FUNC+UP` reads the card again. CLR goes back to the slots.
@@ -2104,11 +2108,11 @@ minor seventh chords.
 `UNREADABLE` or `...` (not read yet), and the kit under the cursor is listed as its eight
 machines. UP/DOWN, A or the STEP keys move the cursor (they never load).
 
-- **Recall:** OK, then OK again within 2 s (`OK AGAIN TO LOAD`). The transport keeps playing; only
+- **Recall:** OK, then OK again within 2 s (`OK AGAIN: LOAD`). The transport keeps playing; only
   tracks whose sample changed reload theirs. Everything the kit holds comes back, MOD slots,
   choke groups and arp settings included. A recall is **not undoable**.
 - **Store:** `FUNC+DOWN` stores the current kit; over a stored kit it needs a second press
-  (`AGAIN TO OVERWRITE`).
+  (`DOWN AGAIN: REPLACE`).
 - `FUNC+UP` reads the card again. CLR goes back to MACHINE.
 
 A recalled kit makes the project UNSAVED until you save it.
@@ -2162,7 +2166,7 @@ browser opens in the folder of the file the track plays, with the cursor on it, 
 - **Push A to hear a file first.** It plays the file under the cursor, whole and from its
   start, straight to the output at about -6 dB, without loading it: the track and the kit stay
   as they were. Push A again to stop. **With the beat playing it takes two pushes**: the
-  first only says `A AGAIN TO HEAR`, and a second push on the same file within 2 s plays it.
+  first only says `A AGAIN: HEAR`, and a second push on the same file within 2 s plays it.
   The SmplTrek has no separate cue output, so the audition goes out with the beat, and a single
   bump of the knob in a set should not put a file into the room. While a file is heard, UP/DOWN (or turning A, or a page)
   hears the next file the cursor lands on, so you can listen down a folder and press OK on the

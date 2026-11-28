@@ -300,6 +300,7 @@
             len_all_ = engine_.len_all();
             rnd_unit_ = engine_.live_rnd_unit();
             rnd_armed_ = engine_.live_rnd_armed();
+            rnd_armed_chosen_ = true;              // the lock's set, kept as chosen
             energy_ = engine_.energy();
             transpose_ = engine_.transpose();
             // The mixer to rest over FX GLIDE (a lock holds no effect); a loop plays on.
@@ -900,7 +901,7 @@
                 leave_mode();
                 project_page_ = ProjectPage::files;
                 list_projects();
-                notice("OK TWICE OPENS");
+                notice("OK TWICE: OPEN");
                 break;
             case MenuItem::fresh:
             case MenuItem::demo:
@@ -1027,7 +1028,7 @@
                     storage_.request_kit_load(kit_cursor_);
                     notice("LOADING KIT");
                 } else {
-                    notice("OK AGAIN TO LOAD");
+                    notice("OK AGAIN: LOAD");
                 }
                 return true;
             }
@@ -1058,7 +1059,7 @@
                         storage_.request_kit_save(kit_cursor_);
                         notice("SAVING KIT");
                     } else {
-                        notice("AGAIN TO OVERWRITE");
+                        notice("DOWN AGAIN: REPLACE");
                     }
                 }
                 return true;

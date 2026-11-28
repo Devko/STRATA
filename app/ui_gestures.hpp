@@ -212,7 +212,19 @@
         // FUNC + turn D in PERFORM: LIVE RND (core/liverand.hpp), the unit for every armed track,
         // OFF 1 2 4 8 16 and stopping at both ends.
         if (mode_ == Mode::perform && shift_ && encoder == 3) {
+            const uint8_t was = rnd_unit_;
             rnd_unit_ = live_rnd_turn(rnd_unit_, delta);
+            // LIVE RND starts with the kick out (Roland, 2026-11-28, D3): a kick drawn out of
+            // order takes the floor away. Every track but those playing KICK, each time it comes
+            // on from OFF, until a FUNC + lower pad (or a LOCK) has chosen the set by hand.
+            if (was == kLiveRndOff && rnd_unit_ != kLiveRndOff && !rnd_armed_chosen_) {
+                rnd_armed_ = kLiveRndAllTracks;
+                for (int t = 0; t < kTracks; t++) {
+                    if (engine_.machine_id(t) == uint8_t(MachineId::kick)) {
+                        rnd_armed_ = uint8_t(rnd_armed_ & ~(1u << t));
+                    }
+                }
+            }
             post(Cmd::set_live_rnd, 0, 0, rnd_unit_, rnd_armed_);
             live_rnd_notice();
             return;
@@ -633,6 +645,14 @@
         if (track < 0 || track >= kTracks) return;
         // LAUNCH: the pad picks the lane, silently (app/ui_launch.hpp).
         if (launch_pad(track, true)) return;
+
+        // FUNC + lower pad in PERFORM: that track in or out of LIVE RND (core/liverand.hpp),
+        // heard at once while a unit is on (Roland, 2026-11-28, D2: FUNC + push D is the kill EQ's
+        // on every screen). MUTE mode keeps the pads mutes.
+        if (shift_ && mode_ == Mode::perform && !mute_mode_) {
+            live_rnd_arm(track);
+            return;
+        }
 
         // F1 + pad mutes in any mode, and MUTE mode makes the lower pads mutes outright. With
         // F1 the mute waits for the bar: a held F1 is the performer asking for it to land in

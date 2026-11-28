@@ -799,8 +799,25 @@ private:
     // like nothing happened.
     void notice(const char *text) {
         notice_ = text;
+        notice_alt_ = nullptr;
         notice_at_ms_ = last_ms_;
         notice_screen_ = screen_key();
+    }
+
+    // A notice that takes turns with a second line, three-quarters of a second each, for twice
+    // as long: what was refused, then what to do about it ("T3 B07 READ ONLY", "HOLD OK:
+    // CAPTURE"). The log and UiProbe::notice see `text`.
+    void notice_alternating(const char *text, const char *alt) {
+        notice(text);
+        notice_alt_ = alt;
+    }
+
+    // The line a notice shows now: its text, or its second line on the alternate turns.
+    const char *notice_shown() const {
+        if (notice_alt_ != nullptr && (uint32_t(last_ms_ - notice_at_ms_) / 750u) % 2u == 1u) {
+            return notice_alt_;
+        }
+        return notice_;
     }
 
     // Which screen and page is up, as one number: a notice's toast belongs to the screen it was
@@ -820,7 +837,8 @@ private:
     }
 
     bool notice_showing() const {
-        return notice_ != nullptr && uint32_t(last_ms_ - notice_at_ms_) < 1500u;
+        return notice_ != nullptr &&
+               uint32_t(last_ms_ - notice_at_ms_) < (notice_alt_ != nullptr ? 3000u : 1500u);
     }
 
     Engine engine_;
@@ -971,10 +989,12 @@ private:
     // macro, and read back from the engine after a LOCK jump.
     int8_t rel_all_ = 0;
     int8_t len_all_ = 0;
-    // LIVE RND (core/liverand.hpp): the unit FUNC + D left (0 OFF) and the tracks FUNC + push D
-    // armed. Posted absolute, like REL ALL, and read back from the engine after a LOCK jump.
+    // LIVE RND (core/liverand.hpp): the unit FUNC + D left (0 OFF) and the tracks FUNC + lower
+    // pad armed. Posted absolute, like REL ALL, and read back from the engine after a LOCK jump.
+    // Until the set is chosen by hand, turning LIVE RND on arms every track but the kicks (D3).
     uint8_t rnd_unit_ = kLiveRndOff;
     uint8_t rnd_armed_ = kLiveRndAllTracks;
+    bool rnd_armed_chosen_ = false;
     // ENERGY (core/energy.hpp): where FUNC + C left it, posted absolute like REL ALL and read
     // back from the engine after a LOCK jump.
     int8_t energy_ = 0;
@@ -1026,6 +1046,7 @@ private:
     // the last Status::launch_event said, and the lane sources and live pattern last seen, so a
     // landed launch is said once.
     uint8_t launch_held_ = 0;
+    bool launch_pad_said_ = false;   // PADS PICK LANES said on this visit to LAUNCH
     bool launch_ok_held_ = false;
     uint32_t launch_ok_down_ms_ = 0;
     uint8_t launch_landed_seen_ = 0;
@@ -1235,6 +1256,7 @@ private:
     bool tune_notes_ = true;
 
     const char *notice_ = nullptr;
+    const char *notice_alt_ = nullptr;   // notice_alternating's second line, or none
     uint32_t notice_at_ms_ = 0;
     uint32_t notice_screen_ = 0;    // screen_key() when the notice was said
     static constexpr uint32_t kWaveSliceMs = 2;   // the WAVE build's share of a pass (update)

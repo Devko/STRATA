@@ -91,13 +91,14 @@
         };
         if (func_help_showing()) {
             // The help's title takes this line (draw_func_help).
-        } else if ((step_page_ || mode_ != Mode::grid) && notice_showing() &&
+        } else if ((step_page_ || mode_ != Mode::grid || track_menu_) && notice_showing() &&
                    notice_screen_ == screen_key()) {
+            // (GRID's track menu draws over GRID's own notice line, so it takes the toast too.)
             // What just happened. GRID shows it in its edit-state line; every other screen had
             // nowhere for it, so a gesture there (F1 + F3's "again to save", an octave, a scene
             // captured) answered with nothing at all.
             out = line;
-            append_shown(out, notice_, kLineChars - 1);
+            append_shown(out, notice_shown(), kLineChars - 1);
             *out = 0;
             toast(line);
         } else if ((step_page_ || mode_ != Mode::grid) && macro_learn_ >= 0) {
@@ -452,7 +453,7 @@
         return place;
     }
 
-    // Title on the second line, ten rows, and the page line: "SCREEN KEYS: PAGE 1/7", which is
+    // Title on the second line, ten rows, and the page line: "LEFT/RIGHT: PAGE 1/7", which is
     // also how anyone finds out there is more than one page.
     void draw_func_help(enaga::Canvas &canvas) {
         canvas.rect(0, 9, 128, 110, 0);
@@ -472,10 +473,12 @@
         }
         char line[40];
         char *out = line;
-        append(out, pages < 10 ? "SCREEN KEYS: PAGE " : "PAGE ");
+        append(out, "LEFT/RIGHT: PAGE ");      // the screen keys are TRANSPOSE (2026-11-28)
         append_number(out, uint32_t(help_page_ % pages + 1));
         *out++ = '/';
         append_number(out, uint32_t(pages));
+        // The pages go round: on the first, LEFT is the way to the last (the VALUE FX steps).
+        if (help_page_ % pages == 0 && pages > 1) append(out, "  < LAST");
         *out = 0;
         paint::small_text(canvas.data(), 0, 113, line, 8);
     }
@@ -639,7 +642,7 @@
             // Cut to the line: a notice is built in places all over this file, and one that ran
             // off the edge would lose its end, which is usually the part that says what to do.
             out = line;
-            append_shown(out, notice_, kLineChars);
+            append_shown(out, notice_shown(), kLineChars);
             *out = 0;
             canvas.text(0, y, line, 15);
             return;

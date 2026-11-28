@@ -47,7 +47,7 @@
                 if (!shift_) {
                     move_slot_cursor(key == ENAGA_KEY_UP ? -4 : +4);
                 } else if (project_page_ == ProjectPage::slots) {
-                    if (key == ENAGA_KEY_UP) slot_copy(); else slot_paste();
+                    if (key == ENAGA_KEY_UP) slot_copy(); else slot_paste("DOWN");
                 }
                 return true;
 
@@ -56,7 +56,7 @@
                 if (!shift_) {
                     move_slot_cursor(key == ENAGA_KEY_LEFT ? -1 : +1);
                 } else if (key == ENAGA_KEY_LEFT && project_page_ == ProjectPage::slots) {
-                    slot_clear();
+                    slot_clear("LEFT");
                 }
                 return true;
 
@@ -89,10 +89,10 @@
         }
         card_armed_ = action;
         card_armed_at_ms_ = last_ms_;
-        notice(action == CardAction::reload  ? "OK AGAIN TO RELOAD"
-               : action == CardAction::clear ? "OK AGAIN TO CLEAR"
-               : action == CardAction::demo  ? "OK AGAIN FOR DEMO"
-                                             : "OK AGAIN FOR NEW");
+        notice(action == CardAction::reload  ? "OK AGAIN: RELOAD"
+               : action == CardAction::clear ? "OK AGAIN: CLEAR"
+               : action == CardAction::demo  ? "OK AGAIN: DEMO"
+                                             : "OK AGAIN: NEW");
         return false;
     }
 
@@ -128,6 +128,20 @@
         return again;
     }
 
+    // The first press's notice, as every two-press confirmation words it (U3): "OK AGAIN: CLEAR
+    // A03", the key, AGAIN, what the second press does; the slot only while the toast holds it.
+    void again_notice(char *&out, const char *key, const char *what) {
+        const char *start = out;
+        append(out, key);
+        append(out, " AGAIN: ");
+        append(out, what);
+        if (out - start + 3 <= kLineChars - 1) {
+            append_slot_name(out, shown_bank_, slot_cursor_);
+        } else {
+            out--;                                      // the space left for the slot
+        }
+    }
+
     void slot_copy() {
         clip_bank_ = shown_bank_;
         clip_slot_ = slot_cursor_;
@@ -139,7 +153,7 @@
     }
 
     // True when it is finished (the second press, or nothing to do), so the menu can close.
-    bool slot_paste() {
+    bool slot_paste(const char *key = "OK") {
         if (clip_slot_ < 0) {
             notice("COPY A PATTERN FIRST");
             return true;
@@ -151,8 +165,7 @@
         char *out = notice_buffer_;
         const bool run = arm_slot_action(SlotAction::paste);
         if (!run) {
-            append(out, "AGAIN: PASTE TO ");
-            append_slot_name(out, shown_bank_, slot_cursor_);
+            again_notice(out, key, "PASTE ");
         } else {
             Command command;
             command.cmd = Cmd::pattern_copy;
@@ -170,12 +183,11 @@
         return run;
     }
 
-    bool slot_clear() {
+    bool slot_clear(const char *key = "OK") {
         char *out = notice_buffer_;
         const bool run = arm_slot_action(SlotAction::clear);
         if (!run) {
-            append(out, "AGAIN: CLEAR ");
-            append_slot_name(out, shown_bank_, slot_cursor_);
+            again_notice(out, key, "CLEAR ");
         } else {
             post(Cmd::pattern_clear, uint8_t(shown_bank_), uint8_t(slot_cursor_));
             append_slot_name(out, shown_bank_, slot_cursor_);
@@ -191,8 +203,7 @@
         char *out = notice_buffer_;
         const bool run = arm_slot_action(SlotAction::twice);
         if (!run) {
-            append(out, "AGAIN: DOUBLE ");
-            append_slot_name(out, shown_bank_, slot_cursor_);
+            again_notice(out, "OK", "DOUBLE ");
         } else {
             post(Cmd::pattern_double, uint8_t(shown_bank_), uint8_t(slot_cursor_));
             append_slot_name(out, shown_bank_, slot_cursor_);
@@ -439,7 +450,7 @@
                     uint32_t(last_ms_ - chain_remove_armed_at_ms_) >= kSaveArmMs) {
                     chain_remove_armed_ = chain_cursor_;
                     chain_remove_armed_at_ms_ = last_ms_;
-                    notice("AGAIN TO REMOVE");
+                    notice("CLR AGAIN: REMOVE");
                     return true;
                 }
                 chain_remove_armed_ = -1;

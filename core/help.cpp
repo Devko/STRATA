@@ -40,7 +40,7 @@ constexpr Text kFuncKeys = {"FUNC + KEY:", {
 }};
 
 constexpr Text kFuncKnobs = {"FUNC + KNOB OR PAD:", {
-    "PUSH A-C   KILL L/M/H",
+    "PUSH A-D KILL LMH ALL",
     "LOWER PAD  BAR MUTE",
     "STEP       TRIGLESS",
     "TURN A-C  EUCLID GRID",
@@ -264,19 +264,21 @@ constexpr Text kPerform2 = {"PERFORM MORE:", {
     "MUTATE PAD  TRY IT",
     "OK KEEPS CLR REVERTS",
     "AUTO-FILL  FUNC MENU",
-    "FUNC+A/B REL/LEN ALL",
+    "FUNC+PUSH D KILL ALL",
 }};
 
+// Second, after the screen's own page: the layer FUNC + turn reaches, which the gauges name
+// while FUNC is held (U1).
 constexpr Text kPerform3 = {"PERFORM LIVE:", {
     "FUNC+A     REL ALL",
     "FUNC+B     LEN ALL",
     "FUNC+C     ENERGY",
     "  - THINS  + FILLS",
     "FUNC+D     LIVE RND",
-    "  OFF 1 2 4 8 16",
-    "FUNC+PUSH D  TRACK",
+    "  1-16  KICK STAYS",
+    "FUNC+LOWER PAD TRACK",
     "  IN OR OUT OF RND",
-    "PATTERN NOT CHANGED",
+    "HELD FUNC SHOWS THEM",
     "LOCK HOLDS THEM ALL",
 }};
 
@@ -728,8 +730,8 @@ constexpr Text kTrackMenu = {"HOLD OK: TRACK MENU", {
     "PLAY FWD REV PING RND",
     "FREEZE  LOOP IN RAM",
     "RELOAD SAMPLE",
+    "CAPTURE  LAUNCHED MIX",
     "UP/DN A ROW  LR B SET",
-    "OK RUN  CLR CLOSE",
 }};
 
 bool own_page(const HelpPlace &place, int page, char title[kHelpChars + 1],
@@ -773,8 +775,8 @@ bool own_page(const HelpPlace &place, int page, char title[kHelpChars + 1],
         case HelpScreen::mixer:     knobs = true; break;
         case HelpScreen::perform:
             list[listed++] = &kPerform;
-            list[listed++] = &kPerform2;
             list[listed++] = &kPerform3;
+            list[listed++] = &kPerform2;
             break;
         case HelpScreen::project:   list[listed++] = &kProject; break;
         case HelpScreen::launch:    list[listed++] = &kLaunch; break;

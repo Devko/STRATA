@@ -432,7 +432,7 @@
                     }
                     sound_delete_oks_ = 1;
                     sound_delete_ok_at_ms_ = last_ms_;
-                    notice("OK AGAIN TO DELETE");
+                    notice("OK AGAIN: DELETE");
                     return true;
                 }
                 sound_delete_armed_ = -1;
@@ -466,7 +466,7 @@
                 } else {
                     sound_delete_armed_ = index;
                     sound_delete_oks_ = 0;
-                    notice("DELETE? OK TWICE");
+                    notice("OK TWICE: DELETE");
                 }
                 return true;
             }
@@ -821,7 +821,7 @@
                     // is the kill EQ's, so FUNC cannot be the way past.)
                     audition_armed_ = sample_cursor_;
                     audition_armed_at_ms_ = last_ms_;
-                    notice_logged("A AGAIN TO HEAR");   // tests/scenario_auditionplay.sh
+                    notice_logged("A AGAIN: HEAR");   // tests/scenario_auditionplay.sh
                 } else if (audition_cursor()) {
                     audition_armed_ = -1;
                     notice("HEARING");
@@ -893,7 +893,7 @@
                 }
                 delete_oks_ = 1;
                 delete_ok_at_ms_ = last_ms_;
-                notice("OK AGAIN TO DELETE");
+                notice("OK AGAIN: DELETE");
                 return true;
             }
             delete_armed_ = -1;
@@ -934,7 +934,7 @@
                     delete_armed_ = project_cursor_;
                     delete_oks_ = 0;
                     open_armed_ = -1;
-                    notice("DELETE? OK TWICE");
+                    notice("OK TWICE: DELETE");
                 }
                 return true;
             }
@@ -966,7 +966,7 @@
                 }
                 open_armed_ = project_cursor_;
                 open_armed_at_ms_ = last_ms_;
-                notice("AGAIN TO OPEN");
+                notice("OK AGAIN: OPEN");
                 return true;
             }
             case ENAGA_KEY_UP:
@@ -1128,7 +1128,7 @@
         const int chars = (room + 1) / paint::kSmallAdvance;
         const bool asking = delete_armed_ >= 0;
         if (asking) {
-            append(out, delete_oks_ > 0 ? "OK AGAIN: DELETE" : "DELETE? OK TWICE");
+            append(out, delete_oks_ > 0 ? "OK AGAIN: DELETE" : "OK TWICE: DELETE");
         } else if (storage_.browsing()) {
             append(out, "READING CARD");
         } else if (storage_.browse_error() != nullptr) {

@@ -9,8 +9,9 @@
 // cursor is SLOT's. STEP launches the selected lane, or every lane whose pad is held, from that
 // slot of the shown bank at the queue mode; the same STEP again while it is queued drops it. OK
 // launches the cell under the cursor, a held OK CAPTUREs what plays into the first free slot of
-// the shown bank. CLR queues the lane back to its own part, or goes back to SLOT when it plays
-// its own already. Push B pins the lane. FUNC + STEP is a whole-pattern change, as STEP on SLOT.
+// the shown bank. CLR queues the lane back to its own part, and only that (U2: it no longer
+// doubles as "back"; the screen keys leave). Push B pins the lane. FUNC + STEP is a
+// whole-pattern change, as STEP on SLOT.
 //
 // The audio side arms and lands every launch (Engine, Cmd::launch); this side posts, shows and
 // says. It reads the lane sources from the project and the queues from the engine, as SLOT
@@ -93,12 +94,17 @@
         launch_lanes(lanes, source);
     }
 
-    // CLR: the lane back to its own part, or back to SLOT when it already plays it.
+    // CLR: the lane back to its own part. Only that (U2, 2026-11-28): a CLR that left for SLOT
+    // when the lane already played its own took the page away from a hand pressing it twice.
     void launch_clear() {
         const bool queued = engine_.lane_queue(selected_).queue.pending;
         if (!lane_borrowed(engine_.project(), selected_) && !queued) {
-            project_page_ = ProjectPage::slots;
-            notice("PROJECT");
+            char *out = notice_buffer_;
+            *out++ = 'T';
+            append_number(out, uint32_t(selected_) + 1);
+            append(out, " PLAYS ITS OWN");
+            *out = 0;
+            notice(notice_buffer_);
             return;
         }
         if (!lane_borrowed(engine_.project(), selected_)) {
@@ -190,6 +196,11 @@
         if (down) {
             if (!launch_page() || shift_ || mute_mode_) return false;
             launch_held_ = uint8_t(launch_held_ | (1u << track));
+            // The first pad on a visit says why it made no sound (U2).
+            if (!launch_pad_said_) {
+                launch_pad_said_ = true;
+                notice("PADS PICK LANES");
+            }
             if (track != selected_) {
                 end_gesture();
                 drop_range();
@@ -209,7 +220,10 @@
             launch_ok_held_ = false;
             launch_capture();
         }
-        if (!launch_page()) launch_held_ = 0;
+        if (!launch_page()) {
+            launch_held_ = 0;
+            launch_pad_said_ = false;
+        }
 
         const Status &status = engine_.status();
         const uint8_t event = status.launch_event.load(std::memory_order_acquire);
@@ -217,6 +231,7 @@
             launch_event_seen_ = event;
             const LaunchEvent last = LaunchEvent(status.launch_last.load(std::memory_order_relaxed));
             const int arg = int(status.launch_arg.load(std::memory_order_relaxed));
+            bool say_event = true;    // false: the case said it itself
             char *out = notice_buffer_;
             switch (last) {
                 case LaunchEvent::read_only:
@@ -225,6 +240,14 @@
                     *out++ = ' ';                    // "T3 B07 READ ONLY": 16 of the 23
                     append_source(out, engine_.project().settings.lane_source[arg & 7]);
                     append(out, " READ ONLY");
+                    // And the way to edit it (U2): on GRID and KEYS the track menu's CAPTURE
+                    // makes what plays a pattern of its own.
+                    if (track_menu_screen()) {
+                        *out = 0;
+                        notice_alternating(notice_buffer_, "HOLD OK: CAPTURE");
+                        enaga::log(notice_buffer_);
+                        say_event = false;
+                    }
                     break;
                 case LaunchEvent::frozen:
                     *out++ = 'T';
@@ -244,7 +267,7 @@
                     break;
             }
             *out = 0;
-            notice_logged(notice_buffer_);
+            if (say_event) notice_logged(notice_buffer_);
         }
 
         // A launch that landed: a lane's source moved while the playing pattern did not (a
