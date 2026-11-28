@@ -46,6 +46,8 @@ bool in_font(const char *text) {
 }
 
 // A loud stereo block: a saw on the left, its negative on the right.
+float test_value(int frame) { return float(frame % 37) * (1.6f / 37.0f) - 0.8f; }
+
 void test_block(float *io, int frames, int offset = 0) {
     for (int i = 0; i < frames; i++) {
         const float x = float((i + offset) % 37) * (1.6f / 37.0f) - 0.8f;
@@ -426,6 +428,159 @@ TEST(looper_a_take_armed_from_idle_is_silent_until_it_plays) {
     for (float &x : io) x = 0.5f;
     g_looper.process(io, kBlk, 1.0f, true);
     for (int i = 0; i < 2 * kBlk; i++) CHECK_EQ(io[i], 0.5f);
+    g_looper.clear();
+}
+
+namespace {
+
+// A block against the crossfade law, sample by sample: live `in` + m (loop - in), with m ramping
+// from `from` to `to` over the block and the loop read from `pos` (wrapping at `frames`) in the
+// buffer the take was recorded into.
+int crossfade_misses(const float *out, const float *in, uint32_t pos, uint32_t frames, float from,
+                     float to) {
+    int wrong = 0;
+    for (int i = 0; i < kBlk; i++) {
+        const float m = from + (to - from) * float(i) / float(kBlk);
+        const uint32_t at = (pos + uint32_t(i)) % frames;
+        for (int c = 0; c < 2; c++) {
+            const float loop = float(g_loop_buffer[2 * at + uint32_t(c)]) / 32768.0f;
+            const float want = in[2 * i + c] + m * (loop - in[2 * i + c]);
+            wrong += std::fabs(out[2 * i + c] - want) > 2e-6f ? 1 : 0;
+        }
+    }
+    return wrong;
+}
+
+// Records a one-bar take of `frames` (a multiple of the block) from the test saw, leaving it
+// playing at mix 0 at position 0.
+void record_take(uint32_t frames) {
+    g_looper.attach(g_loop_buffer, kLoopCapacity);
+    CHECK(g_looper.arm(frames, 1));
+    g_looper.on_bar(1, 0);
+    float io[2 * kBlk];
+    for (uint32_t b = 0; b < frames / kBlk; b++) {
+        test_block(io, kBlk, int(b) * kBlk);
+        g_looper.process(io, kBlk, 0.0f, true);
+    }
+    CHECK(g_looper.playing());
+}
+
+}  // namespace
+
+// Mix up from 0 across the loop's end, steady, and the stop's fade back down: each block on the
+// crossfade law, sample by sample, with a live input under it.
+TEST(looper_every_ramp_is_the_crossfade_law_across_the_loops_end) {
+    record_take(640);
+    float io[2 * kBlk], in[2 * kBlk];
+    // Walk to 40 frames before the end, in blocks that keep the loop's place.
+    for (int b = 0; b < 9; b++) g_looper.process(io, kBlk, 0.0f, true);
+    g_looper.process(io, 600 - 9 * kBlk, 0.0f, true);
+    CHECK_EQ(g_looper.position(), 600u);
+    const float steps[][2] = {{0.0f, 0.8f}, {0.8f, 0.8f}, {0.8f, 0.3f}};
+    uint32_t pos = 600;
+    for (const auto &st : steps) {
+        test_block(in, kBlk, 11);
+        for (int i = 0; i < 2 * kBlk; i++) io[i] = in[i] * 0.5f;
+        for (int i = 0; i < 2 * kBlk; i++) in[i] = io[i];
+        g_looper.process(io, kBlk, st[1], true);
+        CHECK_EQ(crossfade_misses(io, in, pos, 640, st[0], st[1]), 0);
+        pos = (pos + kBlk) % 640;
+    }
+    CHECK_EQ(g_looper.position(), pos);
+    // Stopped: down from 0.3 to nothing over one block, then live and untouched.
+    test_block(in, kBlk, 5);
+    for (int i = 0; i < 2 * kBlk; i++) io[i] = in[i];
+    g_looper.process(io, kBlk, 0.3f, false);
+    CHECK_EQ(crossfade_misses(io, in, pos, 640, 0.3f, 0.0f), 0);
+    CHECK_EQ(g_looper.mix(), 0.0f);
+    g_looper.clear();
+}
+
+// The loop a new take replaces fades out over the take's first block from where it was, not
+// from its start: sample by sample, at its mix, over the live input.
+TEST(looper_the_outgoing_loop_fades_from_its_own_place) {
+    record_take(640);
+    float io[2 * kBlk], in[2 * kBlk];
+    for (int b = 0; b < 9; b++) {
+        for (float &x : io) x = 0.0f;
+        g_looper.process(io, kBlk, 0.6f, true);
+    }
+    CHECK_EQ(g_looper.position(), 576u);
+    CHECK(g_looper.arm(1280, 2));
+    CHECK_EQ(g_looper.recorded(), 0u);
+    // Arming again before the bar keeps the old loop outgoing.
+    CHECK(g_looper.arm(1280, 2));
+    for (float &x : io) x = 0.0f;
+    g_looper.process(io, 24, 0.6f, true);             // to 40 frames before the old loop's end
+    CHECK_EQ(g_looper.position(), 600u);
+    g_looper.on_bar(7, 10);                           // the bar line 10 frames into the block
+    CHECK(g_looper.state() == Looper::State::recording);
+    CHECK_EQ(g_looper.position(), 0u);
+    // A take cannot be armed over one recording.
+    CHECK(!g_looper.arm(640, 1));
+    CHECK(g_looper.state() == Looper::State::recording);
+    test_block(in, kBlk, 3);
+    for (int i = 0; i < 2 * kBlk; i++) io[i] = in[i];
+    // The fade reads the old loop before the take's block lands on the buffer's front, so the
+    // reference is taken from a copy made before the block.
+    static int16_t before[2 * 640];
+    for (int i = 0; i < 2 * 640; i++) before[i] = g_loop_buffer[i];
+    g_looper.process(io, kBlk, 0.6f, true);
+    int wrong = 0;
+    for (int i = 0; i < kBlk; i++) {
+        const float m = 0.6f - 0.6f * float(i) / float(kBlk);
+        for (int c = 0; c < 2; c++) {
+            const float loop = float(before[2 * ((600 + i) % 640) + c]) / 32768.0f;
+            const float want = in[2 * i + c] + m * (loop - in[2 * i + c]);
+            wrong += std::fabs(io[2 * i + c] - want) > 2e-6f ? 1 : 0;
+        }
+    }
+    CHECK_EQ(wrong, 0);
+    // The rest of the take; then its own bar line, at the block's start, is loop frame 10.
+    for (int b = 1; b < 20; b++) g_looper.process(io, kBlk, 0.6f, true);
+    CHECK(g_looper.playing());
+    g_looper.on_bar(9, 0);
+    CHECK_EQ(g_looper.position(), 10u);
+    for (float &x : io) x = 0.0f;
+    g_looper.process(io, kBlk, 0.6f, true);
+    CHECK(g_looper.position() != 0u && g_looper.mix() != 0.0f);
+    g_looper.clear();
+    CHECK_EQ(g_looper.frames(), 0u);
+    CHECK_EQ(g_looper.recorded(), 0u);
+    CHECK_EQ(g_looper.position(), 0u);
+    CHECK_EQ(g_looper.mix(), 0.0f);
+
+    // From idle, arming twice and running a block leaves the output alone (no loop to play).
+    CHECK(g_looper.arm(640, 1));
+    CHECK(g_looper.arm(640, 1));
+    for (float &x : io) x = 0.5f;
+    g_looper.process(io, kBlk, 1.0f, true);
+    for (int i = 0; i < 2 * kBlk; i++) CHECK_EQ(io[i], 0.5f);
+    g_looper.clear();
+    // A buffer attached (a project load hands it over again) starts with nothing held.
+    record_take(640);
+    g_looper.attach(g_loop_buffer, kLoopCapacity);
+    CHECK(!g_looper.holding());
+    CHECK_EQ(g_looper.frames(), 0u);
+}
+
+// A take that is not a whole number of blocks (a bar at most tempos is not): the last block
+// records only what is left, and the loop plays on from where that leaves it in the block.
+TEST(looper_a_take_ends_mid_block_and_plays_on_from_there) {
+    g_looper.attach(g_loop_buffer, kLoopCapacity);
+    for (int i = 0; i < 2 * 700; i++) g_loop_buffer[i] = 1234;    // marks past the take's end
+    CHECK(g_looper.arm(650, 1));
+    g_looper.on_bar(1, 0);
+    float io[2 * kBlk];
+    for (int b = 0; b < 11; b++) {
+        test_block(io, kBlk, b * kBlk);
+        g_looper.process(io, kBlk, 0.0f, true);
+    }
+    CHECK(g_looper.playing());
+    CHECK_EQ(g_looper.recorded(), 650u);
+    CHECK_EQ(g_looper.position(), 11u * kBlk - 650u);              // 54 frames into the loop
+    CHECK_EQ(g_loop_buffer[2 * 650], int16_t(1234));               // nothing written past it
+    CHECK_EQ(g_loop_buffer[2 * 649], int16_t(test_value(649) * 32767.0f));
     g_looper.clear();
 }
 
