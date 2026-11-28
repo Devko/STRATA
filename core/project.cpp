@@ -586,8 +586,8 @@ SerializeResult project_write(const Project &project, uint8_t *buffer, uint32_t 
     return finish_container(w, buffer, kProjectTotalBytes, written);
 }
 
-// `-fno-unroll-loops` for THIS FUNCTION ONLY, and it is a compiler bug rather than anything
-// about the code.
+// Lower optimisation for THIS FUNCTION ONLY (first `-fno-unroll-loops`, now `-O1`), and it is a
+// compiler bug rather than anything about the code.
 //
 // GCC 13.3.0 for tic6x-elf crashes compiling this function with `-O2 -funroll-loops`, which is
 // what Enaga's build_app.py passes: an internal compiler error in the instruction scheduler,
@@ -602,10 +602,21 @@ SerializeResult project_write(const Project &project, uint8_t *buffer, uint32_t 
 // the cost is that the chain and track loops in a project LOAD are not unrolled -- a load, in
 // the main context, once per project.
 //
+// Now `-O1` for this function, because the song sections (PROJECT.BIN section 10) grew it and
+// it crashed again with unrolling already off, this time in the C6x delay-slot pass after
+// scheduling: "in reorg_emit_nops, at config/c6x/c6x.cc:5088", "in emit_nop_after" at :4706, or
+// a segfault. The message changes from run to run; the failure does not (5 of 5, 2026-11-28).
+// Tried and still crashing: the new read loop moved into a noinline function, the refuse
+// lambda's two loops merged, its body made a noinline function, and
+// `optimize("no-schedule-insns2")` (that one works on the command line but not as a pragma:
+// the C6x backend reads the flag once for the whole file). `-O1` compiles 5 of 5: no scheduler
+// runs, so it also stays clear of the haifa-sched crash above. The cost is a less optimised
+// project LOAD, the same once-per-project path in the main context.
+//
 // To be reported upstream with this file as the failing case. If a later toolchain fixes it,
 // delete the pragma and this comment together.
 #pragma GCC push_options
-#pragma GCC optimize("no-unroll-loops")
+#pragma GCC optimize("O1")
 SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t size) {
     // Every refusal goes through here, so a refused load leaves the defaults rather than half a
     // file -- but only of what PROJECT.BIN owns. The patterns are deliberately untouched: they
