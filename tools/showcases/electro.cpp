@@ -44,6 +44,7 @@ void kit(Kit &kit) {
     kit.tracks[kCowbell].params[kSna] = 30;
     // BASS: VA MONO's RUBBER, short and bouncy.
     preset(kit.tracks[kBass], MachineId::va_mono, "RUBBER");
+    kit.tracks[kBass].params[kAmp3] = 112;    // LVL as heard (RUBBER's was 112 before the preset review)
     kit.tracks[kBass].params[kSrc2] = 36;
     kit.tracks[kBass].params[kAmp0] = 34;
     kit.tracks[kBass].level = 1.2f;

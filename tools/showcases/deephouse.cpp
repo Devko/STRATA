@@ -103,6 +103,7 @@ void deep_kit(Kit &kit) {
 
     // CLAP: the classic clap, a touch longer, into the reverb.
     apply(kit.tracks[kClap], SN, preset_index(SN, "CLAP"));
+    kit.tracks[kClap].params[kSrc2] = 64;      // TON as heard (CLAP's was 64 before the preset review)
     kit.tracks[kClap].params[kAmp0] = 60;
     kit.tracks[kClap].params[kAmp3] = 84;
     kit.tracks[kClap].params[kSnb] = 52;
@@ -140,6 +141,11 @@ void deep_kit(Kit &kit) {
     // KEYS: FM4's EPIANO, the deep house Rhodes. A synced sine on PAN (a half note) is the
     // electric piano's tremolo, gentle; a little delay and reverb.
     apply(kit.tracks[kKeys], FM, preset_index(FM, "EPIANO"));
+    // EPIANO as heard: IDX FBK and IEN VEL from before the preset review.
+    kit.tracks[kKeys].params[kSrc2] = 50;
+    kit.tracks[kKeys].params[kSrc3] = 0;
+    kit.tracks[kKeys].params[kAmp1] = 100;
+    kit.tracks[kKeys].params[kAmp2] = 90;
     kit.tracks[kKeys].params[kAmp0] = 84;      // DEC: shorter, so a chord is gone before the next
     kit.tracks[kKeys].params[kSna] = 44;
     kit.tracks[kKeys].params[kSnb] = 56;
