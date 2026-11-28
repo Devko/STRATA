@@ -65,7 +65,7 @@ UNIT_CHECKLIST.md's ~550 boxes, 4 are ticked.
 | FUNC menu (FUNC+HOME): save, save as, open, new, reload, kits, sample reload, track speed, chain, song/loop, auto-fill, quantize, REC MODE; freeze (#109), loop length (#116), load demo (#140), track play (#148), FX glide (#149) | v0.1.0 | ◐ (14, W12, W13, W20c) | |
 | NEW PROJECT is empty (factory sounds and mixer, pans centred, no steps, scenes or macros); LOAD DEMO loads the factory demo | #140 | ○ (W12) | |
 | **CLEAR PATTERN** in the FUNC menu: every track in one press, OK twice, one undo | #86 | ○ (W16) | Keeps sounds, lengths, speeds and swing |
-| **Help for the screen that is up**: its knobs in words and its gestures, every screen and EDIT/MIXER page, then five shared pages (FUNC + key, FUNC + knob or pad, upper pads, the performance mixer); screen keys turn its pages while FUNC is held | #107 | ○ (W19) | Text only; it says what the build does, so a changed gesture changes `core/help.cpp` too |
+| **Help for the screen that is up**: its knobs in words and its gestures, every screen and EDIT/MIXER page, then five shared pages (FUNC + key, FUNC + knob or pad, upper pads, the performance mixer); screen keys turn its pages while FUNC is held; a quick FUNC tap says `HOLD FUNC: HELP`, an OK tap in GRID `HOLD OK: TRACK MENU` | #107, WIP | ○ (W19, W52) | Text only; it says what the build does, so a changed gesture changes `core/help.cpp` too |
 | HOME = GRID, HOME twice = KEYS | v0.1.0 | ◐ | |
 | Lit, self-naming performance pads; mode keys green/red by screen | v0.1.0 | ○ (W8, W20c) | Upper pads are printed TRK 1-7 but are performance pads (Roland's choice) |
 | Arrow-key navigation model (UP/DOWN rows, LEFT/RIGHT sideways, OK picks, CLR back) | v0.1.0 | ○ (5, "Arrow keys") | |
