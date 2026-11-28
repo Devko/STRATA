@@ -6,6 +6,46 @@ the project file format or the controls.
 
 ## [Unreleased]
 
+## [0.6.0] - {{RELEASE_DATE}}
+
+Everything merged since 0.5.0 (#211 to #262). 0.5.0 was planned as the release candidate for
+1.0; on 2026-11-28 the feature freeze was lifted, and 0.6.0 is the features that came after it:
+the arrangement (song sections, ARR REC, Track Launch with CAPTURE), the live layer (ENERGY,
+TRANSPOSE, VariSpeed, tap tempo, PERFORM's FUNC layer), JAM REC, the line input on the mixer,
+your own sounds, WAVE's scan modes, stereo width, a chorus and 16th-note triplets, with the
+CPU guard fix and the fixes from the 2026-11-28 review. It runs on **Enaga 0.4.0**, as 0.5.0
+did, so an update is the app alone. The features below have not been through the unit
+walkthrough (docs/UNIT_CHECKLIST.md) yet.
+Release notes: [docs/release/v0.6.0.md](docs/release/v0.6.0.md).
+
+### Upgrading from 0.5.0
+
+- **Same firmware: Enaga 0.4.0.** Replace `/ENAGA/APPS/STRATA/APP.ENA` and nothing else.
+- **Your projects and kits open as they are.** Every new setting went where 0.5.0 does not
+  look: Track Launch, the line input and song sections in new optional PROJECT.BIN sections
+  (8, 9 and 10), a section's TRN in a byte 0.5.0 wrote 0, PROG CHG OUT on the end of the MIDI
+  section, the chorus's knobs on the end of the mixer section, WAVE's SCAN page, stereo width and
+  the chorus sends in new optional kit (and performance file) sections,
+  your own sounds in their own files (`ENAGA/DATA/STRATA/SOUNDS/`). Older projects open with all
+  of them off or `--`.
+- **Opening 0.6.0's projects in 0.5.0** works and loses only the new settings: no launched
+  lanes, no line input, the chain without its section fields, WAVE without its scan, every POLY
+  track mono, nothing sent to the chorus, and a 3/2 track at 1x.
+- **What sounds different in a saved project:** accented notes on VA MONO, VA POLY and the WAVE
+  machines open the filter less (no tick on resonant patches such as ACID), and a clap keeps its
+  knobs but gets livelier bursts. The new clap band, the rebalanced factory kit and the new
+  preset levels apply to new projects and to sounds loaded from SOUNDS, not to saved kits.
+- **Gestures that moved:**
+  - FUNC + turn VALUE is VariSpeed (it only said `DJ FILTER: SLOT 1/2`).
+  - FUNC + SEL< / SEL> is TRANSPOSE; the FUNC help turns its pages on LEFT/RIGHT only.
+  - FUNC + push D in PERFORM kills all three bands; LIVE RND's tracks are picked with FUNC +
+    lower pad.
+  - The FUNC menu holds the project-wide rows only: TRACK SPEED, TRACK PLAY, FREEZE and RELOAD
+    SAMPLE are in GRID's track menu (hold OK).
+  - MIXER has new pages (WID, CHO, IN), so DLY to EQ are further on; UP/DOWN jump a group.
+  - PROJECT opens when its key comes up (hold PROJECT + STEP n queues a pattern instead).
+  - With the beat playing, a sample audition in SAMPLES takes two pushes of A.
+
 ### Added
 
 - **TRN: a song section sets TRANSPOSE.** The SECTION view's MOVE page has TRN on D (`--`,
@@ -18,7 +58,6 @@ the project file format or the controls.
 - New emulator scenario `stack`: generated parts on all eight tracks with the line input on, REL
   ALL, LEN ALL and ENERGY at the top, VariSpeed +12.0, TRANSPOSE and JAM REC running, the
   features of 2026-11-28 measured together (`docs/BUDGET.md`, "Everything turned up").
-
 - **PERFORM shows its FUNC layer.** While FUNC is held in PERFORM the four gauges read `REL`,
   `LEN`, `NRG` and `RND` with where REL ALL, LEN ALL, ENERGY and LIVE RND are, so the turn you are
   about to make is on the screen. The FUNC help's second PERFORM page is PERFORM LIVE, and its
@@ -29,7 +68,6 @@ the project file format or the controls.
   plays, launched lanes and all, into the first free slot of the playing bank. An edit refused on
   a launched lane says `T3 B07 READ ONLY` and then `HOLD OK: CAPTURE`, taking turns. The first
   lower pad on LAUNCH says `PADS PICK LANES`, since it makes no sound there.
-
 - **TRANSPOSE: FUNC + the screen keys, on every screen.** The melodic tracks a step of the scale
   down (SEL<) or up (SEL>), 12 steps either way, staying in the key (`TRANSPOSE +2 IN KEY`); both
   screen keys together go back to 0. The FUNC menu's new TRANSPOSE row switches to semitones
@@ -197,7 +235,6 @@ the project file format or the controls.
   take cannot be brought back with a second ARR UNDO.
 - Docs: the FUNC menu table in CONTROLS lists PROG CHG OUT, and the CHEATSHEET's mode table lists
   TRANSPOSE.
-
 - **A project opens at rest.** ENERGY, TRANSPOSE, VariSpeed, REL ALL, LEN ALL and LIVE RND carried
   over into the next project on an OPEN, a reload, NEW or LOAD DEMO, while the LOCKs were cleared:
   a project could open nearly silent (ENERGY -64) or an octave up (VariSpeed +12.0). All six go
@@ -292,6 +329,22 @@ the project file format or the controls.
 - **FM4 EPIANO has a strike.** It was a mellow, organ-like tone with almost nothing above 1 kHz
   even in its attack; now it is bright as it is struck, barks when hit hard, and mellows as it
   rings (IDX 95, IEN 127, VEL 120, FBK 10). It is also what a track switched to FM4 starts with.
+
+### Known limits
+
+- Tested on one SmplTrek, with the {{BUILD}} build. {{UNIT_LOAD}} Nothing added since 0.5.0 is
+  checked on the unit yet. Every other load figure comes from the emulator, which models no
+  caches.
+- **Enaga 0.4.0 exactly.** Enaga's loader checks only the ABI number, which 0.2.0, 0.3.0 and
+  0.4.0 share, so 0.6.0 on older firmware loads and may misbehave.
+- **Projects saved by 0.5.0 and later play their LFOs wrong on 0.4.0** and earlier (0.5.0's
+  format decision C).
+- The 12 POLY voices shared by VA POLY, WAVE POLY and FM4 (unison counts two a note) and the
+  CPU guard's thresholds are provisional until the unit's readings; ENERGY, TRANSPOSE,
+  VariSpeed, the performance mixer, the looper, LOCK and LIVE RND are not saved (a project opens
+  at rest); CAPTURE is not undoable; the looper borrows RESAMPLE's buffer; streamed samples play
+  forward only; FREEZE is not saved; MIDI clock, SYNC, song position and USB MIDI are lightly
+  tested.
 
 ## [0.5.0] - 2026-11-27
 
