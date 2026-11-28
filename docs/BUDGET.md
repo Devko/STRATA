@@ -1871,3 +1871,39 @@ count the staging at all.
 | Patterns, kit, scenes, 16 undo levels | 2 MiB | **~148 KiB** so far: 17 whole-pattern undo snapshots (~140 KiB) plus the live pattern and the clipboard. In bss, not the heap |
 | Recording ring and stream buffers | 1 MiB | **1.13 MiB**: four 256 KiB `files::Stream` rings from the heap (streaming, 2026-11-22), plus eight 16 KiB frame fifos in the engine (bss). The take is not here: it is `Capture`'s own 5.49 MiB. `tests/test_memory.cpp`: init is now **102.2 MiB** of the heap, 17.8 MiB spare |
 | App image, voice pools, UI | 4 MiB | **396 KiB** of text, 52 bytes of data and **1.21 MiB of bss** in the linked ELF (`tic6x-elf-size`). The bss is mostly the live Project at 1.03 MiB plus the undo stack; the 85 MiB above is heap, taken in init() and not in the image |
+
+## Build and check times
+
+Where a PR's wall time goes on Roland's PC (16 threads, WSL, worktree on `D:`), measured
+2026-11-28 while other threads were building (load 6-14), so read them as typical, not best:
+
+| Step | Time | Note |
+| --- | --- | --- |
+| `make -C host build -j8`, fresh | 32-44 s | 29 s from a copy on WSL's own disk: the `/mnt/d` mount costs about 1.5x |
+| `make -C host test`, one process | 15.5 s | 4.4 s as 8 shards, the default since this change (`JOBS=1` for one process) |
+| `make -C host warn -j8`, fresh | 22-35 s | incremental after that |
+| `tools/build.sh`, cl6x, nothing cached | **138 s** | Enaga's build_app compiles every source one after the other |
+| `tools/build.sh`, GCC-only, nothing cached | 47 s | the same, without cl6x (35 s in a 4-core cloud session) |
+| `tools/build.sh`, whole-app cache hit | 2 s | |
+| one scenario, alone | 12-40 s | most of the 66; `visuals` 120-190 s, `gen`, `genload`, `freeze`, `ambient` 100-175 s |
+| one scenario, five runs at once | up to 226 s | `launch` took 49 s alone and 226 s when five threads ran scenarios at -j 4 |
+| full pass, `-j 4`, cl6x | about 15 min | sum of the scenario times about 3,000 s; twice that for both compilers |
+
+So the scenarios are the cost, then the uncached cl6x build. What the check loop does about it
+(CLAUDE.md, "The check loop"):
+
+- **A PR runs `tools/scenarios.sh --changed`**: the scenarios naming a changed file, the load set
+  after a DSP change and four smoke scenarios (`tools/scenario_pick.py`). A one-file core change
+  picks 5 of 66, a DSP file about 11, a change to the harness all of them. The full pass moved to
+  `main` after a batch of merges, before a card and before a release.
+- **Machine-wide emulator slots** (`STRATA_EMU_SLOTS`, the cores less two): scenario runs from
+  every worktree queue for the cores instead of all slowing down at once.
+- **The device build caches each object** (`~/strata-build/cache/obj`, keyed by the source, every
+  header beside it and in Enaga's `include/`, the compiler and its flags without the include
+  path), shared by every worktree, and compiles the misses side by side (`STRATA_BUILD_JOBS`,
+  default up to 8). A one-file change recompiles one object; a header change recompiles the app
+  in parallel. The package is byte-identical to a build without the cache (checked GCC-only in
+  the cloud and with cl6x on Roland's PC, see the PR).
+- **The Python-driven scenarios** (`gen`, `genload`, `shortcuts`, and `freeze`, `playmode`,
+  `triplets` through `tools/emu_drive.py`) get compiled blocks like the rest
+  (`enaga_cached.wrap_emulate`); they were the slowest scenarios after `visuals`.

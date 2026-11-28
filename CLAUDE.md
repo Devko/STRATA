@@ -61,11 +61,37 @@
 - core/ never includes Enaga headers. Every core change comes with a host test
   (`make -C host test`). tools/check_rules.sh holds the rules a grep can check.
 
+## The check loop: per PR, and the full pass
+
+Scenarios are where the time goes (a full pass is 66 emulator runs, a quarter of an hour of
+every core; docs/BUDGET.md, "Build and check times"), so a PR runs only what its change needs:
+
+1. `make -C host build -j8 && make -C host test` (shards on every core by default; `JOBS=1` runs
+   one process), and `make -C host warn -j8` before pushing C++.
+2. `tools/scenarios.sh --changed`, with cl6x: the scenarios that name a changed file, the load
+   set after a DSP change, and a smoke set (boot, the factory beat, the worst load, the live
+   screens). `tools/scenario_pick.py --why FILE...` shows why each is picked. Add your new or
+   changed scenario's file to the commit and it is picked too.
+3. After a DSP change, `ENAGA_TI_CGT=none ENAGA_BUILD=$HOME/strata-build-<name>-gcc
+   tools/scenarios.sh --changed` as well, for the GCC-only column in docs/BUDGET.md.
+
+The full pass, `tools/scenarios.sh` with both compilers, is not per PR: it runs on `main` after a
+batch of merges, before a card goes to the unit and before a release, from the thread doing that,
+and is logged in docs/SCENARIO_LOG.md. A change to the harness itself (tools/env.sh, build.sh,
+enaga_cached.py, emu_drive.py, scenarios.sh, Enaga) makes `--changed` pick every scenario.
+
+Scenarios queue for machine-wide emulator slots (`STRATA_EMU_SLOTS`, default the cores less two),
+so run them at any `-j` from any worktree: parallel threads take turns instead of slowing every
+run down. The device build caches each object by its inputs, shared by every worktree
+(`~/strata-build/cache/obj`), and compiles the rest in parallel; `STRATA_ENAGA_CACHE=off` builds
+from scratch.
+
 ## Every feature or fix
 
 - Host test, then an emulator scenario (scenarios call `python3 -B tools/enaga_cached.py
-  emulate`, never emulate.py), then a line in docs/UNIT_CHECKLIST.md, a row in docs/FEATURES.md
-  and an entry in CHANGELOG.md "Unreleased".
+  emulate`, never emulate.py; walk a menu with tools/menu_rows.py, never a press count), then a
+  line in docs/UNIT_CHECKLIST.md, a row in docs/FEATURES.md and an entry in CHANGELOG.md
+  "Unreleased".
 - UI: every screen passes the layout test in tests/test_ui.cpp (Enaga's 5x7 font, 21 characters
   a line, no '*', ',' or '_'). Every input must visibly do something (screen or LED): a key with
   no job on a screen goes in `quiet_reason` with a reason. Gestures follow docs/CONTROLS.md
@@ -104,8 +130,7 @@ MSYS2_ARG_CONV_EXCL='*' MSYS_NO_PATHCONV=1 wsl.exe -d Ubuntu -- \
   tests need WSL.
 - Several threads share `D:\DEV\STRATA`: never switch its branch. Work in your own worktree,
   made from WSL with `tools/wt.sh new <name> <your-branch>` (in `D:\DEV\STRATA-wt\<name>`, with
-  Enaga checked out; `tools/env.sh` there sets `ENAGA_BUILD=$HOME/strata-build-<name>`), and run
-  scenarios at `-j 4`. When its PR has merged, `tools/wt.sh rm <name>` removes it and its build
+  Enaga checked out; `tools/env.sh` there sets `ENAGA_BUILD=$HOME/strata-build-<name>`). When its PR has merged, `tools/wt.sh rm <name>` removes it and its build
   folder; it refuses uncommitted, unpushed or stray ignored files. Never remove another thread's
   worktree. Run other cleanup commands only from scripts with absolute paths. From WSL,
   `tools/env.sh` finds the main checkout's emulator and Windows' `git.exe`/`gh.exe` for it
