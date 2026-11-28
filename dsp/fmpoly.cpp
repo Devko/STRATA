@@ -17,7 +17,10 @@ void FmPoly::init(float sample_rate) {
     prepare(defaults);
 }
 
-void FmPoly::prepare(const TrackParams &params) { settings_ = FmSettings::make(params, rate_, inv_rate_); }
+void FmPoly::prepare(const TrackParams &params) {
+    settings_ = FmSettings::make(params, rate_, inv_rate_);
+    settings_.pitch_mod = pitch_mod_;
+}
 
 void FmPoly::begin(FmVoice &v, const Trig &t, int slot) {
     // Unison's tuning, 0 outside it (core/width.hpp).

@@ -181,6 +181,12 @@ public:
     void render_add(float *out, int frames) override;
     bool active() const override { return active_; }
     const char *param_name(int index) const override;
+    // VariSpeed (Machine::set_pitch_mod): the read step is built at control rate in prepare, so
+    // a change rebuilds it here; every grain spawned from then on reads at the new rate.
+    void set_pitch_mod(float semis) override {
+        Machine::set_pitch_mod(semis);
+        recompute_step();
+    }
 
     // Hand the machine already-resident PCM. See the ownership rules at the top of this file.
     // Passing nullptr (or frames < kMinFrames, or channels outside 1-2) leaves the track silent.
