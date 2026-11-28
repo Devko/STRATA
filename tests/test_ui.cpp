@@ -13418,6 +13418,61 @@ TEST(ui_arr_rec_records_the_jam_into_the_chain_from_the_menu) {
     pump(2);
 }
 
+// Track Launch under ARR REC: a pass with a borrowed lane is captured into a free slot, the toast
+// names it, and its bank is marked for the next save although no command wrote it.
+TEST(ui_arr_rec_names_the_slot_a_launched_lane_was_captured_into) {
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    key(ENAGA_KEY_F4);                                  // GRID
+    // A part to borrow on track 3 of H16, in another bank than the one playing.
+    Project &project = app_engine().project_for_load();
+    const int live_bank = int(project.bank);
+    pattern_init(project.patterns[7][15]);
+    project.patterns[7][15].tracks[2].steps[0].flags = kStepTrig;
+    save_and_clean();
+    const uint32_t pass = uint32_t(master_loop_ticks(app_engine().project().live()));
+    Command launch;
+    launch.cmd = Cmd::launch;
+    launch.a = 0x04;
+    launch.b = lane_source(7, 15);
+    launch.c = uint8_t(QueueMode::immediate);
+    app_engine().commands().post(launch);
+    pump(2);
+    CHECK(lane_borrowed(app_engine().project(), 2));
+
+    menu_to(kMenuArr);
+    key(ENAGA_KEY_OK);
+    pump(2);
+    host.set_running(true);
+    for (uint32_t t = 0; t <= pass; t += pass / 4) {
+        host.deliver_tick(t, 0);
+        pump();
+    }
+    pump(2);
+    CHECK_EQ(chain_length(app_engine().project()), 1);
+    const ChainEntry entry = app_engine().project().chain[0];
+    CHECK_EQ(int(entry.bank), live_bank);
+    CHECK(entry.slot != app_engine().project().slot);
+    char expected[24] = "LAUNCH IN A00";
+    expected[10] = char('A' + live_bank);
+    expected[11] = char('0' + (entry.slot + 1) / 10);
+    expected[12] = char('0' + (entry.slot + 1) % 10);
+    CHECK(std::strcmp(UiProbe::notice(app), expected) == 0);
+    check_layout(app, "ARR launch kept");
+    CHECK(app_storage().bank_dirty(live_bank));
+    CHECK(!app_storage().bank_dirty(7));
+
+    menu_to(kMenuArr);
+    key(ENAGA_KEY_OK);
+    pump(2);
+    key(ENAGA_KEY_CLR);
+    post_cmd(Cmd::launch, 0x04, kLaneOwn, uint8_t(QueueMode::immediate));
+    host.deliver_tick(0, 0);
+    pump();
+    host.set_running(false);
+    pump(2);
+}
+
 // A take turned on and off again before a pass was kept costs nothing: the old chain is back,
 // and there is nothing for ARR UNDO to swap.
 TEST(ui_arr_rec_on_and_off_at_once_keeps_the_chain) {

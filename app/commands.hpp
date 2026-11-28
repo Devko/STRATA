@@ -494,6 +494,8 @@ enum class ArrEvent : uint8_t {
     undone,        // ARR UNDO swapped in the chain from before the take: `ARR UNDONE`
     redone,        // and back again: `ARR REDONE`
     no_undo,       // ARR UNDO with nothing to swap, or during a take: `NO ARR TO UNDO`
+    launch_kept,   // a pass with a borrowed lane was captured; arg = bank * 16 + slot: `LAUNCH IN A05`
+    launch_lost,   // ...and could not be (no free slot, too many locks): `LAUNCH NOT KEPT`
 };
 
 enum class ChainEdit : uint8_t {
@@ -846,6 +848,11 @@ struct Status {
     std::atomic<uint8_t> arr_event{0};
     std::atomic<uint8_t> arr_last{0};
     std::atomic<uint8_t> arr_arg{0};
+    // Bumped for each pattern a take captures (Track Launch, core/arrrec.hpp), with the banks
+    // captured into since the take began in `arr_capture_banks` (bit b = bank b), written
+    // first: the UI marks those banks for the next save, since no command wrote them.
+    std::atomic<uint8_t> arr_captures{0};
+    std::atomic<uint8_t> arr_capture_banks{0};
 
     // Track Launch. Bumped by the audio side for each thing the UI says: `launch_last` is a
     // LaunchEvent, `launch_arg` its track or the slot CAPTURE wrote.

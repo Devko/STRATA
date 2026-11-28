@@ -203,6 +203,8 @@ public:
     void note_command(Cmd cmd, int live_bank, int target_bank = -1);
 
     bool dirty() const;
+    // Whether bank `bank` waits for the next save (false for an index that is no bank).
+    bool bank_dirty(int bank) const { return bank >= 0 && bank < kBanks && bank_dirty_[bank]; }
 
     // --- samples ----------------------------------------------------------
 

@@ -161,6 +161,16 @@
             storage_.note_command(Cmd::chain_edit,
                                   int(status.live_bank.load(std::memory_order_relaxed)));
         }
+        // A pass with a borrowed lane was captured into a slot (Track Launch): its bank is saved.
+        const uint8_t captures = status.arr_captures.load(std::memory_order_acquire);
+        if (captures != arr_captures_seen_) {
+            arr_captures_seen_ = captures;
+            const uint8_t banks = status.arr_capture_banks.load(std::memory_order_relaxed);
+            const int live = int(status.live_bank.load(std::memory_order_relaxed));
+            for (int b = 0; b < kBanks; b++) {
+                if ((banks >> b & 1u) != 0) storage_.note_command(Cmd::launch_capture, live, b);
+            }
+        }
         if (event == arr_event_seen_) return;
         arr_event_seen_ = event;
         const uint32_t count = status.arr_arg.load(std::memory_order_relaxed);
@@ -183,6 +193,12 @@
             case ArrEvent::undone:  append(out, "ARR UNDONE"); break;
             case ArrEvent::redone:  append(out, "ARR REDONE"); break;
             case ArrEvent::no_undo: append(out, "NO ARR TO UNDO"); break;
+            case ArrEvent::launch_kept:                  // "LAUNCH IN A05"
+                append(out, "LAUNCH IN ");
+                *out++ = bank_letter(int(count >> 4));
+                append_padded(out, (count & 15u) + 1, 2);
+                break;
+            case ArrEvent::launch_lost: append(out, "LAUNCH NOT KEPT"); break;
         }
         *out = 0;
         notice_logged(notice_buffer_);
