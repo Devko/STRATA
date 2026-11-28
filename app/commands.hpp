@@ -311,7 +311,8 @@ enum class Cmd : uint8_t {
     // the chaining state that 1ST and the conditions read.
     restart,
 
-    // PROJECT's CHAIN page. step: the entry index, a: ChainEdit, b: bank, c: slot, d: repeats.
+    // PROJECT's CHAIN page. step: the entry index, a: ChainEdit, b: bank, c: slot, d: repeats,
+    // e: mute recall; the section edits use the bytes as ChainEdit says.
     // core/queue.hpp's chain_set / chain_insert / chain_remove, which keep the chain a prefix.
     chain_edit,
 
@@ -477,7 +478,16 @@ enum class DuckField : uint8_t { depth, source, attack, hold, release, count };
 // so knob clicks applied a block late are not lost. `song` sets song mode, b = 0 or 1, and
 // ignores the entry.
 enum class ChainEdit : uint8_t {
-    set = 0, insert, remove, pattern_delta, repeats_delta, mutes_delta, song
+    set = 0, insert, remove, pattern_delta, repeats_delta, mutes_delta, song,
+    // Song sections (core/project.hpp, SectionExtra) on entry `step`:
+    //   section: the fields whole. b CAP flag, c mask, d SCN, e MRP, u: NRG in bits 0-7 and
+    //            BPM (centi) in bits 8-23. Refused whole when a field is out of range.
+    //   copy:    a copy of entry `step`, section fields and all, inserted after it (OK).
+    //   fill:    the fields from what plays now: the mutes as CAP, side B's scene, SNAP or SNAP A
+    //            to the morph's nearer side, ENERGY and the tempo (hold OK on the section view).
+    //   section_delta: b a SectionField, c its turn as an int8 (core/queue.hpp, section_step).
+    //   section_clear: b a SectionField, back to `--` (a knob's push).
+    section, copy, fill, section_delta, section_clear
 };
 
 // How a recorded hit meets the step it lands on (Cmd::record_hit's `d`). The UI decides, because
@@ -792,6 +802,18 @@ struct Status {
     // for the change and stops the transport, which only it can do (<enaga/clock.hpp>).
     std::atomic<uint8_t> song_end{0};
 
+    // Song sections (core/project.hpp, SectionExtra). `section_event` is bumped each time a chain
+    // entry starts and applies fields of its own, so the UI takes the morph and ENERGY back from
+    // the engine, as after a LOCK jump. `section_tempo` / `tempo_due`: the entry's BPM, in
+    // centi-BPM, and a bump that says it is due. Only the main context may set Enaga's clock
+    // (<enaga/clock.hpp>), so the audio side asks and the UI sets it on its next pass, or says
+    // it was refused under an outside clock. `morph_riding` is 1 while a section's MRP RIDE or
+    // BACK moves the morph, so the UI follows the engine's position rather than its own copy.
+    std::atomic<uint8_t> section_event{0};
+    std::atomic<uint16_t> section_tempo{0};
+    std::atomic<uint8_t> tempo_due{0};
+    std::atomic<uint8_t> morph_riding{0};
+
     // Track Launch. Bumped by the audio side for each thing the UI says: `launch_last` is a
     // LaunchEvent, `launch_arg` its track or the slot CAPTURE wrote.
     std::atomic<uint8_t> launch_event{0};
@@ -809,6 +831,20 @@ struct Status {
         launch_arg.store(arg, std::memory_order_relaxed);
         launch_event.store(uint8_t(launch_event.load(std::memory_order_relaxed) + 1),
                            std::memory_order_release);
+    }
+
+    // Audio context only, one writer: the tempo first, so a reader that sees the bump (with
+    // acquire) sees the tempo it is for.
+    void bump_tempo_due(uint16_t centi) {
+        section_tempo.store(centi, std::memory_order_relaxed);
+        tempo_due.store(uint8_t(tempo_due.load(std::memory_order_relaxed) + 1),
+                        std::memory_order_release);
+    }
+
+    // Audio context only, one writer, as bump_song_end.
+    void bump_section_event() {
+        section_event.store(uint8_t(section_event.load(std::memory_order_relaxed) + 1),
+                            std::memory_order_release);
     }
 
     // Audio context only, one writer, as bump_triggered.

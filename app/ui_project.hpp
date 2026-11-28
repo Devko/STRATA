@@ -418,10 +418,10 @@
                                status.live_slot.load(std::memory_order_relaxed), 1);
                     chain_cursor_ = 0;
                 } else {
+                    // A copy of the entry, its section fields and all, done on the audio side
+                    // from the authoritative record.
                     chain_clamp_cursor();
-                    const ChainEntry entry = engine_.project().chain[chain_cursor_];
-                    post_chain(ChainEdit::insert, chain_cursor_ + 1, entry.bank, entry.slot,
-                               entry.repeats, entry.mutes);
+                    post_chain(ChainEdit::copy, chain_cursor_);
                     chain_cursor_++;
                 }
                 notice("ENTRY ADDED");
@@ -618,7 +618,11 @@
             return;
         }
         if (project_page_ == ProjectPage::chain) {
-            draw_chain(canvas);
+            if (section_open_) {
+                draw_section(canvas);   // app/ui_section.hpp
+            } else {
+                draw_chain(canvas);
+            }
             return;
         }
         if (project_page_ == ProjectPage::pattern) {

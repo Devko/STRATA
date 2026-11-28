@@ -950,12 +950,33 @@ and R (line level), headphones on.
 - SETUP, CLOCK SRC to MIDI with VariSpeed up: `VARISPEED 0 EXT CLOCK`; FUNC + turn VALUE says
   `EXT CLOCK`. Back to INTERNAL: 130 again. `____`
 
+**W71. Song sections on the chain (6 min).** Beat playing, A01; scene 3 captured with the
+filters closed, scene 4 open and wet; something different in A02.
+- PROJECT, the screen key to CHAIN, OK twice: two entries of A01. UP to entry 1, push A:
+  `SECT 1/2`, the SECTION view with `PAT A01`, `REP X1`, `MUT --`, `SCN --`. Turn D to 3. The
+  screen key: MOVE, turn A to `SNAP`, B to `0` then `-40`. CLR: the list shows `+` on entry 1 and
+  `S3 SNAP E-40` under MUTES. `____`
+- DOWN to entry 2, push A, D to 4, the screen key, A to `RIDE`, C: the tempo playing, then +6.
+  Turn the entry's REP (B on SECT, or VALUE) to X4. `____`
+- FUNC menu CHAIN ON. Entry 1 starts on the closed scene 3 at full morph, thinner (ENERGY -40);
+  entry 2 starts at the new tempo and opens up from scene 3 to 4 over its four passes, smoothly,
+  with no step at the pass lines. Turn VALUE in PERFORM halfway through: the ride stops where your
+  hand is. The next round of entry 1 snaps back. `____`
+- Entry 1, push A, C (MUT) all the way up to `CAP` with tracks 1 and 2 muted by hand: the eight
+  boxes show them. Unmute by hand; at entry 1's next start they mute again. `____`
+- With the beat on the breakdown you want, entry 2's view, hold OK half a second: `SECTION
+  FILLED`; every field now reads what plays. `____`
+- CLOCK SRC MIDI with a running outside clock: at the entry with a BPM, `EXT CLOCK: BPM SKIPPED`
+  once, the outside tempo stays. Back to INTERNAL. `____`
+- Save, power cycle, open: the sections are still there and play the same. Open a project saved
+  by v0.5.0: its chain plays as it did, every field `--`. `____`
+
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
 
 ---
 
-**W71. Tap tempo, the nudge, PROG CHG OUT and the song position (8 min).** Beat playing on
+**W72. Tap tempo, the nudge, PROG CHG OUT and the song position (8 min).** Beat playing on
 GRID, CLOCK SRC INTERNAL. For the last two, a computer or a second unit on MIDI.
 - Tap VALUE four times at about 120: `TAP TEMPO`, then `TAP 120.x`, and the beat follows from the
   second tap. Taps at twice the pace start again rather than landing in between. In PERFORM a

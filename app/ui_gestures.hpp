@@ -324,6 +324,10 @@
         // settings" can mean.
         // CHAIN: A is the entry's repeat count. PATTERN: A is LEN, B is SWG and C the swing of
         // the track under the cursor (the selected track's, when the cursor is on LEN or SWG).
+        if (section_view()) {
+            section_turn(encoder, delta);         // app/ui_section.hpp
+            return;
+        }
         if (mode_ == Mode::project && project_page_ == ProjectPage::chain) {
             if (encoder == 0) chain_delta(ChainEdit::repeats_delta, delta);
             if (encoder == 1) chain_delta(ChainEdit::mutes_delta, delta);

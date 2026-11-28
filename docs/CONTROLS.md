@@ -443,6 +443,45 @@ pattern of the project. PROJECT pressed twice quickly opens LAUNCH, PROJECT's la
 - **Saved** in the project (PROJECT.BIN section 8): each lane's source and the pins. Not in the
   chain. A project from before this opens with every lane on its own part.
 
+## SECTION: a chain entry as a song section (push A on CHAIN)
+
+The arrangement concept, Roland's decisions of 2026-11-28, `core/queue.hpp` (`SectionExtra`,
+`section_step`), `app/ui_section.hpp`. A chain entry is a section: its pattern, repeats and mute
+state, plus a scene, a morph move, an ENERGY and a tempo applied as the entry starts. **Push A** on
+a CHAIN entry opens its SECTION view; the list's own keys are unchanged.
+
+| Key | Does | Says |
+| --- | --- | --- |
+| A-D | the page's four fields: **SECT** PAT REP MUT SCN, **MOVE** MRP NRG BPM (D free) | |
+| push A-D | the field back to `--` (PAT and REP have none) | `SCN --`, `PAT HAS NO --` |
+| Screen keys | SECT / MOVE | |
+| UP / DOWN | the previous / next entry, staying in the view | `SECT 3/8` |
+| LEFT / RIGHT | the entry's pattern, as on the list | |
+| STEP 1-16 | that slot of the shown bank into the entry, as on the list | |
+| VALUE | the entry's repeats, as on the list | |
+| OK | tap: back to the list. Hold (0.5 s): **quick fill** from what plays | `SECTION FILLED` |
+| CLR | back to the list | |
+
+- **The fields.** MUT `--`, M1-M8 or **CAP** (an exact mute mask the entry stores; turned to CAP
+  it takes the mutes as they stand). SCN `--` or 1-16: that scene goes on morph side B. MRP `--`,
+  **SNAP** (the morph jumps to B), **RIDE** (it rides to B over the whole entry), **BACK** (it
+  rides to A over the whole entry), **SNAP A** (it jumps to A). NRG `--` or -64..+64: ENERGY on the boundary. BPM `--` or
+  20-300, a whole BPM a click: the tempo on the boundary.
+- `--` leaves that thing as it is, so an entry with every field `--` plays exactly as a chain
+  entry always has. NRG and BPM leave `--` on any turn, at ENERGY 0 and the tempo playing.
+- **The hands win** until the next entry: a mute, the morph (VALUE in PERFORM, the mixer's slot)
+  or ENERGY turned during a section takes over at once, and ends a RIDE or BACK where it is.
+- **BPM under an outside clock** is skipped, with `EXT CLOCK: BPM SKIPPED` once per run of the
+  transport; the song follows the outside clock. A section's tempo becomes the project's, as a
+  turn of VALUE does.
+- **Quick fill** (hold OK): MUT CAP with the mutes as they stand, SCN the scene on side B, MRP
+  SNAP when the morph is past half way to B, else SNAP A, NRG the ENERGY, BPM the tempo. Dial the
+  breakdown in by ear, then hold OK.
+- **The list** marks an entry with fields of its own: under its mute state on the lane, `S4`
+  (its scene) or `+` for any other field; the cursor's entry lists them under MUTES.
+- **Saved** in PROJECT.BIN section 10. A project from before this opens with every field `--`; an
+  older build plays pattern, repeats and mute recall, and reads a CAP entry as `--`.
+
 ## The performance mixer (push VALUE + STEP)
 
 Roland, 2026-11-23, after modbang's Octatrack Performance Mixer: VALUE as a crossfader from the
@@ -759,6 +798,7 @@ The screens and their pages, from `core/help.cpp`:
 | MIXER | the page that is up (TRK, DCK, DUCK, WID, DLY, DLY+, REV, REV+, ROUTE, CHO, IN, IN+, MST, EQ) |
 | PERFORM | macros, LEARN, scenes, morph, mutate |
 | PROJECT, CHAIN, PATTERN, SETUP | one page each |
+| SECTION (push A on CHAIN) | one page |
 | LAUNCH | one page |
 | PROJECTS | open, rename, delete, save as; typing a name |
 | MACHINE, KIT, SAMPLES, SOUNDS, RESAMPLE, FUNC menu | one page each |

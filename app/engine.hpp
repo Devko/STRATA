@@ -678,6 +678,17 @@ private:
     // stops or starts again (`cross_boundary`).
     bool song_over_ = false;
     void chain_entry_started();
+    // A section's MRP RIDE / BACK (chain_entry_started): the morph from `ride_from_` to
+    // `ride_to_` over `ride_length_` ticks from `ride_start_`, `ride_rate_` a tick in 1/65536.
+    void morph_ride_start(uint16_t to, uint32_t length);
+    void morph_ride_stop();
+    void morph_ride_tick(uint32_t tick);
+    bool ride_on_ = false;
+    uint16_t ride_from_ = 0;
+    uint16_t ride_to_ = 0;
+    uint32_t ride_start_ = 0;
+    uint32_t ride_length_ = 1;
+    int32_t ride_rate_ = 0;
 
     // See `kit_for_recall`. Written by the main context, read by `Cmd::kit_recall` only.
     Kit kit_inbox_;

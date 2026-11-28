@@ -131,6 +131,8 @@ struct UiProbe {
     static int kit_cursor(const Strata &app) { return app.kit_cursor_; }
     static int sample_cursor(const Strata &app) { return app.sample_cursor_; }
     static int chain_cursor(const Strata &app) { return app.chain_cursor_; }
+    static bool section_view(const Strata &app) { return app.section_view(); }
+    static int8_t energy(const Strata &app) { return app.energy_; }
     static int pattern_field(const Strata &app) { return app.pattern_field_; }
     static int slot_cursor(const Strata &app) { return app.slot_cursor_; }
     static int macro_selected(const Strata &app) { return app.macro_selected_; }
@@ -217,6 +219,9 @@ struct UiProbe {
         app.mixer_bank_ = 0;
         app.project_page_ = Strata::ProjectPage::slots;
         app.chain_cursor_ = 0;
+        app.section_open_ = false;
+        app.section_page_ = 0;
+        app.section_ok_held_ = false;
         app.pattern_field_ = 0;
         app.project_cursor_ = 0;
         app.project_seek_ = false;
@@ -4883,6 +4888,221 @@ TEST(ui_layout_chain_and_pattern_pages) {
     key(ENAGA_KEY_F4);
 }
 
+// --- CHAIN's SECTION view (app/ui_section.hpp, docs/CONTROLS.md "SECTION") ------------------
+
+namespace {
+
+// CHAIN with `entries` copies of the playing pattern, the cursor on the first, the view open.
+void open_section_view(Strata &app, int entries) {
+    key(ENAGA_KEY_F3);
+    for (int i = 0; i < 6; i++) key(ENAGA_KEY_SELECT_LEFT);
+    key(ENAGA_KEY_SELECT_RIGHT);
+    CHECK_EQ(UiProbe::project_page(app), 1);
+    for (int i = 0; i < entries; i++) {
+        key(ENAGA_KEY_OK);
+        pump(2);
+    }
+    for (int i = 0; i < entries; i++) key(ENAGA_KEY_UP);
+    key(ENAGA_KEY_PUSH_A);
+    pump(2);
+}
+
+void close_section_view() {
+    key(ENAGA_KEY_CLR);                               // the view
+    pump(2);
+    for (int i = 0; i < kChainEntries && chain_length(app_engine().project()) > 0; i++) {
+        Command remove;
+        remove.cmd = Cmd::chain_edit;
+        remove.a = uint8_t(ChainEdit::remove);
+        app_engine().commands().post(remove);
+        pump(1);
+    }
+    key(ENAGA_KEY_F4);
+}
+
+}  // namespace
+
+TEST(ui_section_view_edits_an_entrys_section_fields) {
+    Strata &app = fresh();
+    const Project &project = app_engine().project();
+    open_section_view(app, 2);
+    CHECK(UiProbe::section_view(app));
+    CHECK_EQ(UiProbe::notice(app), "SECT 1/2");
+    check_layout(app, "SECTION, SECT, every field --");
+
+    // SECT: C walks MUT --, M1-M8, CAP; D walks SCN.
+    app.on_encoder(2, +2);
+    pump(2);
+    CHECK_EQ(int(project.chain[0].mutes), 2);
+    Command mute;                                     // track 5 muted: what CAP will store
+    mute.cmd = Cmd::set_mute;
+    mute.track = 4;
+    mute.a = 1;
+    CHECK(app_engine().commands().post(mute));
+    pump(2);
+    app.on_encoder(2, +20);
+    pump(2);
+    CHECK_EQ(int(project.chain_extra[0].cap), 1);
+    CHECK_EQ(int(project.chain[0].mutes), 0);
+    CHECK_EQ(int(project.chain_extra[0].mask), int(project.settings.live_mutes));
+    CHECK((project.chain_extra[0].mask >> 4 & 1u) != 0);
+    app.on_encoder(3, +4);
+    pump(2);
+    CHECK_EQ(int(project.chain_extra[0].scene), 4);
+    check_layout(app, "SECTION, SECT, CAP and a scene");
+    // A and B are the entry's pattern and repeats, as on the list.
+    app.on_encoder(0, +3);
+    app.on_encoder(1, +2);
+    pump(2);
+    CHECK_EQ(int(project.chain[0].slot), 3);
+    CHECK_EQ(int(project.chain[0].repeats), 3);
+
+    // MOVE on the screen keys: A MRP, B NRG, C BPM; D free.
+    key(ENAGA_KEY_SELECT_RIGHT);
+    CHECK_EQ(UiProbe::notice(app), "MOVE PAGE");
+    app.on_encoder(0, +2);
+    app.on_encoder(1, +1);                            // `--` to ENERGY 0 on any turn
+    app.on_encoder(1, -12);
+    app.on_encoder(2, -1);                            // `--` to the tempo playing
+    app.on_encoder(2, +5);
+    pump(2);
+    const SectionExtra &e = project.chain_extra[0];
+    CHECK_EQ(int(e.morph), int(kSectionMorphRide));
+    CHECK_EQ(section_energy(e.energy), -12);
+    CHECK_EQ(int(e.bpm), int(project.settings.tempo_centi_bpm) + 500);
+    check_layout(app, "SECTION, MOVE, every field set");
+    // Pushes put a field back to `--`.
+    key(ENAGA_KEY_PUSH_B);
+    pump(2);
+    CHECK_EQ(int(e.energy), 0);
+    CHECK_EQ(UiProbe::notice(app), "NRG --");
+    key(ENAGA_KEY_SELECT_LEFT);
+    key(ENAGA_KEY_PUSH_A);
+    CHECK_EQ(UiProbe::notice(app), "PAT HAS NO --");
+    key(ENAGA_KEY_PUSH_C);
+    pump(2);
+    CHECK_EQ(int(e.cap), 0);
+    CHECK_EQ(int(project.chain[0].mutes), 0);
+
+    // DOWN is the next entry, still in the view; the list marks the first and lists its fields.
+    key(ENAGA_KEY_DOWN);
+    CHECK_EQ(UiProbe::chain_cursor(app), 1);
+    CHECK_EQ(UiProbe::notice(app), "SECT 2/2");
+    key(ENAGA_KEY_UP);
+    key(ENAGA_KEY_OK);                                // a tap goes back to the list
+    pump(2);
+    CHECK(!UiProbe::section_view(app));
+    CHECK_EQ(UiProbe::project_page(app), 1);
+    check_layout(app, "CHAIN, an entry with section fields");
+    // OK on the list copies the entry with its fields.
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK_EQ(chain_length(project), 3);
+    CHECK_EQ(int(project.chain_extra[1].scene), 4);
+    CHECK_EQ(int(project.chain_extra[1].morph), int(kSectionMorphRide));
+    key(ENAGA_KEY_UP);
+    key(ENAGA_KEY_PUSH_A);
+    close_section_view();
+}
+
+TEST(ui_section_view_hold_ok_fills_from_what_plays) {
+    Strata &app = fresh();
+    const Project &project = app_engine().project();
+    open_section_view(app, 1);
+    Command mute;
+    mute.cmd = Cmd::set_mute;
+    mute.track = 2;
+    mute.a = 1;
+    CHECK(app_engine().commands().post(mute));
+    post_cmd(Cmd::set_energy, uint8_t(int8_t(24)));
+    pump(2);
+    app.on_key(ENAGA_KEY_OK, true);
+    pump(700);
+    CHECK_EQ(UiProbe::notice(app), "SECTION FILLED");
+    app.on_key(ENAGA_KEY_OK, false);                  // a hold's release does not go back
+    pump(2);
+    CHECK(UiProbe::section_view(app));
+    const SectionExtra &e = project.chain_extra[0];
+    CHECK_EQ(int(e.cap), 1);
+    CHECK_EQ(int(e.mask), 0x04);
+    CHECK_EQ(int(e.scene), int(project.settings.scene_b) + 1);
+    CHECK_EQ(int(e.morph), int(kSectionMorphSnapA));  // the morph at rest
+    CHECK_EQ(section_energy(e.energy), 24);
+    CHECK_EQ(int(e.bpm), int(project.settings.tempo_centi_bpm));
+    post_cmd(Cmd::set_energy, 0);
+    mute.a = 0;
+    CHECK(app_engine().commands().post(mute));
+    pump(2);
+    close_section_view();
+}
+
+TEST(ui_a_sections_tempo_is_set_here_or_skipped_under_an_outside_clock) {
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    Status &status = const_cast<Status &>(app_engine().status());
+    // Internal clock: the clock and the project take the section's tempo, as a turn of VALUE.
+    status.bump_tempo_due(14250);
+    pump(3);
+    CHECK_NEAR(host.tempo(), 142.5f, 0.01);
+    CHECK_EQ(int(app_engine().project().settings.tempo_centi_bpm), 14250);
+    CHECK(!UiProbe::clock_refused(app));
+    // Outside clock: skipped, said once for a run of the transport, and the tempo stays.
+    host.set_source(ENAGA_CLOCK_MIDI);
+    status.bump_tempo_due(9000);
+    pump(3);
+    CHECK_EQ(UiProbe::notice(app), "EXT CLOCK: BPM SKIPPED");
+    CHECK(UiProbe::clock_refused(app));
+    CHECK_EQ(int(app_engine().project().settings.tempo_centi_bpm), 14250);
+    g_ms += 4000;                                     // the notice fades
+    pump(2);
+    status.bump_tempo_due(9500);
+    pump(3);
+    CHECK(!UiProbe::notice_showing(app));             // once is enough
+    // A new run of the transport says it again.
+    host.set_running(true);
+    pump(3);
+    g_ms += 4000;
+    pump(2);
+    CHECK(!UiProbe::notice_showing(app));
+    status.bump_tempo_due(9500);
+    pump(3);
+    CHECK(UiProbe::notice_showing(app));
+    CHECK_EQ(UiProbe::notice(app), "EXT CLOCK: BPM SKIPPED");
+    host.set_running(false);
+    pump(3);
+    host.set_source(ENAGA_CLOCK_INTERNAL);
+    status.bump_tempo_due(13000);
+    pump(3);
+    CHECK_NEAR(host.tempo(), 130.0f, 0.01);
+}
+
+// The section's morph and ENERGY reach the knobs the UI shadows, so a turn takes over from where
+// the section put them rather than jumping back to where the hand last left them.
+TEST(ui_the_knobs_follow_a_section_that_moved_the_morph_and_energy) {
+    Strata &app = fresh();
+    Engine &engine = app_engine();
+    Project &incoming = engine.project_for_load();
+    incoming.settings.chain_length = 1;
+    incoming.chain[0] = ChainEntry{0, 0, 1, 0};
+    for (int i = 1; i < kChainEntries; i++) incoming.chain[i] = ChainEntry{};
+    for (int i = 0; i < kChainEntries; i++) incoming.chain_extra[i] = SectionExtra{};
+    incoming.chain_extra[0].morph = kSectionMorphSnap;
+    incoming.chain_extra[0].energy = section_energy_byte(-20);
+    post_cmd(Cmd::project_loaded);
+    pump(2);
+    post_cmd(Cmd::set_chain, 1);
+    pump(3);
+    CHECK_EQ(int(UiProbe::morph_knob(app)), int(kMorphScale));
+    CHECK_EQ(int(UiProbe::energy(app)), -20);
+    post_cmd(Cmd::set_chain, 0);
+    post_cmd(Cmd::set_energy, 0);
+    post_cmd(Cmd::set_morph);
+    incoming.chain[0] = ChainEntry{};
+    incoming.chain_extra[0] = SectionExtra{};
+    incoming.settings.chain_length = 0;
+    pump(3);
+}
+
 TEST(ui_the_chain_page_sets_mute_recalls_and_song_mode) {
     Strata &app = fresh();
     const Project &project = app_engine().project();
@@ -8030,12 +8250,13 @@ bool same(const Look &a, const Look &b) { return a.screen == b.screen && a.leds 
 
 
 enum Screen { s_grid, s_keys, s_edit, s_machine, s_kit, s_mixer, s_perform, s_project, s_chain,
-              s_pattern, s_setup, s_projects, s_resample, s_menu, s_sounds, s_launch, s_count };
+              s_pattern, s_setup, s_projects, s_resample, s_menu, s_sounds, s_launch, s_section,
+              s_count };
 
 const char *screen_name(int s) {
     static const char *names[] = {"GRID", "KEYS", "EDIT", "MACHINE", "KIT", "MIXER", "PERFORM",
                                   "PROJECT", "CHAIN", "PATTERN", "SETUP", "PROJECTS",
-                                  "RESAMPLE", "MENU", "SOUNDS", "LAUNCH"};
+                                  "RESAMPLE", "MENU", "SOUNDS", "LAUNCH", "SECTION"};
     return names[s];
 }
 
@@ -8068,6 +8289,12 @@ void enter(Strata &app, int s) {
             key(ENAGA_KEY_F4);
             key(ENAGA_KEY_F3);
             key(ENAGA_KEY_F3);
+            break;
+        case s_section:                        // CHAIN, OK for an entry, push A
+            enter(app, s_chain);
+            key(ENAGA_KEY_OK);
+            pump(2);
+            key(ENAGA_KEY_PUSH_A);
             break;
         default:
             key(ENAGA_KEY_F3);
@@ -8285,6 +8512,12 @@ const char *quiet_reason(int s, const Probe &p, bool func) {
         {s_sounds, false, "B+", "SOUNDS uses A"}, {s_sounds, false, "C+", "ditto"},
         {s_sounds, false, "D+", "ditto"}, {s_sounds, true, "B+", "ditto"},
         {s_sounds, true, "C+", "ditto"}, {s_sounds, true, "D+", "ditto"},
+        // SECTION opens on SECT over one entry of A01 X1: the bottom of PAT and REP.
+        {s_section, false, "LEFT", "the entry is on A01, the first pattern"},
+        {s_section, false, "A-", "ditto"}, {s_section, true, "A-", "ditto"},
+        {s_section, false, "VALUE-", "the entry plays X1, the fewest repeats"},
+        {s_section, true, "UP", "CHAIN on / off is in the FUNC menu"},
+        {s_section, true, "DOWN", "ditto"},
         {s_launch, false, "LEFT", "the slot cursor starts on slot 1"},
         {s_launch, false, "D+", "LAUNCH's knobs are A-C, as on the slots"},
         {s_launch, true, "D+", "ditto"},
@@ -8372,9 +8605,10 @@ STRATA_AUDIT(s_resample)
 STRATA_AUDIT(s_menu)
 STRATA_AUDIT(s_sounds)
 STRATA_AUDIT(s_launch)
+STRATA_AUDIT(s_section)
 #undef STRATA_AUDIT
 // One audit per screen: a screen added to the enum needs its line above.
-static_assert(s_count == 16, "a new screen needs its STRATA_AUDIT line");
+static_assert(s_count == 17, "a new screen needs its STRATA_AUDIT line");
 
 // --- MUTATE on the unit: upper pad 7 "did nothing" ------------------------------------------
 
@@ -9098,6 +9332,24 @@ TEST(ui_screenshots) {
         CHECK_EQ(UiProbe::project_page(app), p + 1);
         write_shot(folder, project_pages[p]);
     }
+
+    // SECTION: the cursor's entry with a mute recall and a scene, then a SNAP and an energy on
+    // the MOVE page.
+    for (int p = 0; p < 3; p++) key(ENAGA_KEY_SELECT_LEFT);
+    CHECK_EQ(UiProbe::project_page(app), 1);
+    key(ENAGA_KEY_PUSH_A);
+    CHECK(UiProbe::section_view(app));
+    app.on_encoder(3, +3);                      // SCN 3
+    pump(2);
+    key(ENAGA_KEY_SELECT_RIGHT);
+    app.on_encoder(0, +1);                      // MRP SNAP
+    app.on_encoder(1, +1);                      // NRG: the first turn takes the ENERGY playing
+    pump(2);
+    app.on_encoder(1, +12);
+    pump(2);
+    write_shot(folder, "section");
+    key(ENAGA_KEY_CLR);
+    for (int p = 0; p < 3; p++) key(ENAGA_KEY_SELECT_RIGHT);
 
     // The kit browser, with the factory kit stored in slot 1 so the screen has a kit to show.
     shift_key(ENAGA_KEY_F8);
