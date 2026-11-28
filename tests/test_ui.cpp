@@ -1155,9 +1155,7 @@ TEST(ui_func_fill_turns_note_repeat_on_and_a_held_pad_rolls) {
 TEST(ui_the_retired_chords_say_where_their_moves_went_and_do_nothing_else) {
     // Backlog D1 and D5 (2026-11-25): FUNC + VALUE (the DJ filter), FUNC + push D (the tape
     // stop) and FUNC + MUTATE (the delay freeze) retired for the mixer's slots 1-2, 8 and 5.
-    // FUNC + VALUE is the tempo nudge since 2026-11-28; the other two name their slot, and none
-    // falls through to a page's push or a mutation. The nudge moves neither the DJ filter nor
-    // the set tempo.
+    // Each names its slot, and none falls through to the tempo, a page's push or a mutation.
     Strata &app = fresh();
     pump(2);
     const uint8_t undo_before = undo_depth();
@@ -1168,7 +1166,7 @@ TEST(ui_the_retired_chords_say_where_their_moves_went_and_do_nothing_else) {
     pump(2);
     CHECK_EQ(int(app_engine().project().settings.master[int(MasterField::dj)]), 64);
     CHECK_EQ(UiProbe::tempo_tenths(app), tempo);
-    CHECK_EQ(UiProbe::notice(app), "NUDGE FASTER");
+    CHECK_EQ(UiProbe::notice(app), "DJ FILTER: SLOT 1/2");
 
     app.on_key(ENAGA_KEY_PUSH_D, true);
     pump(2);
@@ -13117,14 +13115,17 @@ TEST(ui_a_value_tap_in_perform_is_still_the_morphs_reset_not_a_tap) {
     key(ENAGA_KEY_F4);
 }
 
-TEST(ui_func_value_nudges_the_tempo_for_a_moment_and_lets_it_go) {
+TEST(ui_func_push_value_and_turn_nudges_the_tempo_for_a_moment_and_lets_it_go) {
     Strata &app = fresh();
     FakeHost &host = FakeHost::the();
     pump(2);
     const uint32_t tempo = UiProbe::tempo_tenths(app);
+    const uint8_t swing = app_engine().pattern().swing;
     const float set = float(tempo) * 0.1f;
     app.on_key(ENAGA_KEY_F1, true);
+    app.on_key(ENAGA_KEY_PUSH_VALUE, true);
     app.on_encoder(4, -1);
+    app.on_key(ENAGA_KEY_PUSH_VALUE, false);
     app.on_key(ENAGA_KEY_F1, false);
     CHECK_EQ(UiProbe::notice(app), "NUDGE SLOWER");
     CHECK_NEAR(host.tempo(), set * 0.96f, 0.01f);
@@ -13135,10 +13136,25 @@ TEST(ui_func_value_nudges_the_tempo_for_a_moment_and_lets_it_go) {
     CHECK_NEAR(host.tempo(), set, 0.01f);          // let go: the set tempo again
     CHECK_EQ(UiProbe::tempo_tenths(app), tempo);
     CHECK_EQ(int(app_engine().project().settings.tempo_centi_bpm), int(tempo * 10));
+    CHECK_EQ(int(app_engine().pattern().swing), int(swing));   // not the swing, nor a reset
+    CHECK(app_engine().perf_fx() == PerfFx::none);
+
+    // Push + turn without FUNC is still the swing.
+    app.on_key(ENAGA_KEY_PUSH_VALUE, true);
+    app.on_encoder(4, 2);
+    app.on_key(ENAGA_KEY_PUSH_VALUE, false);
+    pump(2);
+    CHECK(int(app_engine().pattern().swing) != int(swing));
+    app.on_key(ENAGA_KEY_PUSH_VALUE, true);
+    app.on_encoder(4, -2);
+    app.on_key(ENAGA_KEY_PUSH_VALUE, false);
+    pump(2);
 
     host.set_source(ENAGA_CLOCK_MIDI);             // not STRATA's tempo to bend
     app.on_key(ENAGA_KEY_F1, true);
+    app.on_key(ENAGA_KEY_PUSH_VALUE, true);
     app.on_encoder(4, 1);
+    app.on_key(ENAGA_KEY_PUSH_VALUE, false);
     app.on_key(ENAGA_KEY_F1, false);
     CHECK_EQ(UiProbe::notice(app), "EXT CLOCK");
     host.set_source(ENAGA_CLOCK_INTERNAL);

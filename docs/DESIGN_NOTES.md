@@ -207,9 +207,9 @@ The arithmetic is `core/taptempo.hpp` (taps, nudge) and `core/queue.hpp`'s `chai
 **Tap tempo** hangs off `value_reset`: a VALUE tap that resets nothing, where `value_on_tempo()`
 says VALUE turns the tempo, is a tap, stamped at the press (`value_down_ms_`). It sets the tempo
 the way a VALUE turn does (`set_tempo`, `post_tempo`, `adopted_tempo_centi_`). **The nudge** is
-main context only: FUNC + turn VALUE sets the clock to `nudged_bpm` and `update()` puts
+main context only: FUNC + push VALUE + turn sets the clock to `nudged_bpm` and `update()` puts
 `tempo_tenths_` back once `nudge_due`; nothing is posted, so the project's tempo and the
-tempo-synced delay never see it.
+tempo-synced delay never see it. FUNC + turn VALUE without the push is left free for VariSpeed.
 
 **PROG CHG OUT** is sent from `Engine::switch_pattern`, so every path that changes the live
 pattern sends it, a program change IN included (same channel, same number: a MIDI loop back into

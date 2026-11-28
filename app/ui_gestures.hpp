@@ -119,18 +119,12 @@
                 morph_set(int(morph_) + delta * (int(kMorphScale) / 64));
                 return;
             }
-            if (value_pushed_) {
-                // VALUE pushed and turned is the pattern's swing, as the spec's key table says.
-                mark(GestureKind::length, 0, 0);
-                post(Cmd::set_pattern_swing, 0, 0, 0, clamp_delta(delta), kDeltaFlag);
-                return;
-            }
-            if (shift_) {
-                // FUNC + VALUE is the tempo nudge (core/taptempo.hpp): each detent holds the
-                // tempo 4% faster or slower for a quarter of a second, then it goes back, so the
-                // beat moves against a source that sends no clock and the tempo stays where it
-                // was set. Not saved. (It was the master DJ filter until 2026-11-25, backlog D1;
-                // the filter lives in the mixer's slots 1 and 2.)
+            if (value_pushed_ && shift_) {
+                // FUNC + push VALUE + turn is the tempo nudge (core/taptempo.hpp): each detent
+                // holds the tempo 4% faster or slower for a quarter of a second, then it goes
+                // back, so the beat moves against a source that sends no clock and the tempo
+                // stays where it was set. Not saved. Beside swing (push + turn), the other
+                // timing move; FUNC + turn VALUE is left to VariSpeed (Roland, 2026-11-28).
                 if (enaga::clock::source() != ENAGA_CLOCK_INTERNAL) {
                     clock_refused_ = true;
                     notice("EXT CLOCK");
@@ -140,6 +134,20 @@
                 clock_refused_ =
                     !enaga::clock::set_tempo(nudged_bpm(tempo_tenths_, nudge_.direction));
                 notice_logged(nudge_.direction > 0 ? "NUDGE FASTER" : "NUDGE SLOWER");
+                return;
+            }
+            if (value_pushed_) {
+                // VALUE pushed and turned is the pattern's swing, as the spec's key table says.
+                mark(GestureKind::length, 0, 0);
+                post(Cmd::set_pattern_swing, 0, 0, 0, clamp_delta(delta), kDeltaFlag);
+                return;
+            }
+            if (shift_) {
+                // FUNC + VALUE was the master DJ filter until 2026-11-25 (backlog D1): the
+                // filter's live home is the mixer's slots 1 and 2, and its setting MIXER's MST
+                // page. Free for now, so it says where the filter went rather than turning the
+                // tempo.
+                notice_logged("DJ FILTER: SLOT 1/2");
                 return;
             }
             // REFUSED under an external clock, rather than moved and then ignored. docs/SPEC.md:

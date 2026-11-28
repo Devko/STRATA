@@ -9,9 +9,9 @@ the project file format or the controls.
 ### Added
 
 - **Tap tempo and nudge.** Tap VALUE in time, twice or more, wherever VALUE turns the tempo
-  (`TAP 128.0`); the tempo follows the last four taps. FUNC + turn VALUE nudges: 4% faster or
-  slower for a quarter of a second a detent, then back to the set tempo, to line STRATA up by ear
-  with something that sends no clock. FUNC + VALUE used to say `DJ FILTER: SLOT 1/2`.
+  (`TAP 128.0`); the tempo follows the last four taps. FUNC + push VALUE + turn nudges: 4% faster
+  or slower for a quarter of a second a detent, then back to the set tempo, to line STRATA up by
+  ear with something that sends no clock.
 - **MIDI song position pointer.** Under MIDI clock, a master that moves its song position while
   stopped puts STRATA's chain on the entry and pass that position falls in (with the chain off,
   the pattern runs from the top of the song), so a CONTINUE from the middle of a song plays the

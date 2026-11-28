@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Tap tempo and the nudge in the emulator (core/taptempo.hpp, docs/CONTROLS.md): four taps of
-# VALUE on GRID with the beat running, then FUNC + one detent of VALUE.
+# VALUE on GRID with the beat running, then FUNC + push VALUE + one detent.
 #
 # What it proves is what the host cannot: the tap path (VALUE's release, value_reset, the
 # clock's set_tempo from the main context) and the nudge's set_tempo and its timed return run on
@@ -13,7 +13,8 @@
 #
 # Keys (third_party/enaga/include/enaga/abi.h): F5 = 22 (PLAY), PUSH_VALUE = 4, F1 = 19. A press
 # is released 20 M cycles later (54 ms), well inside VALUE's 0.5 s tap. 186 M cycles is 500 ms
-# at 372 MHz: four taps 120 BPM apart. The turn lands 2 M cycles into F1's hold (FUNC + turn).
+# at 372 MHz: four taps 120 BPM apart. VALUE's push comes 2 M cycles into F1's hold and the turn
+# 2 M after that, inside both (FUNC + push VALUE + turn).
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -42,11 +43,11 @@ STAGE="$ENAGA_BUILD/stage/STRATA"
 mkdir -p "$ENAGA_BUILD"
 LOG="$ENAGA_BUILD/scenario_tempo.log"
 
-echo "running the emulator for $CYCLES cycles: play, four VALUE taps, FUNC + VALUE ..."
+echo "running the emulator for $CYCLES cycles: play, four VALUE taps, FUNC + push VALUE + turn ..."
 python3 -B tools/enaga_cached.py emulate "$STAGE" --cycles "$CYCLES" \
     --key 22@250000000 \
     --key 4@400000000 --key 4@586000000 --key 4@772000000 --key 4@958000000 \
-    --key 19@1050000000 --turn 4:1@1052000000 \
+    --key 19@1050000000 --key 4@1052000000 --turn 4:1@1054000000 \
     > "$LOG" 2>&1 || {
     echo "FAIL: emulate.py exited non-zero" >&2
     tail -30 "$LOG" >&2
@@ -87,7 +88,7 @@ if taps:
     # The keys are 500 ms apart in cycles; the emulator's millisecond clock may run a little off
     # real time, so the window is generous. A wrong stamp or a lost tap lands far outside it.
     check(100.0 <= bpm <= 140.0, "the taps give about 120 BPM", f"{bpm}")
-check("NUDGE FASTER" in log, "FUNC + VALUE nudged", f"log={log}")
+check("NUDGE FASTER" in log, "FUNC + push VALUE + turn nudged", f"log={log}")
 
 blocks = report.get("audio_blocks", 0)
 check(blocks > 1000, "audio ran throughout", f"blocks={blocks}")

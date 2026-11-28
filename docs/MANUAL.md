@@ -1256,7 +1256,7 @@ works wherever VALUE turns the tempo: not in PERFORM (where a VALUE tap resets t
 PROJECT's CHAIN and PATTERN pages, and not with an effect picked on VALUE. The tapped tempo is set
 and saved as a turn of VALUE sets it.
 
-**FUNC + turn VALUE** nudges: each detent plays 4% faster (`NUDGE FASTER`) or slower (`NUDGE
+**FUNC + push VALUE + turn** nudges: hold FUNC, push VALUE and turn it, and each detent plays 4% faster (`NUDGE FASTER`) or slower (`NUDGE
 SLOWER`) for a quarter of a second, then the tempo goes back to where it was set. The beat ends
 up a little earlier or later and the tempo stays put, which is how to line STRATA up by ear with
 a turntable or a band that sends no clock. Both are refused under an outside clock (`EXT CLOCK`).
@@ -1568,7 +1568,8 @@ effect still in (`MORPH 64` as you turn). Push VALUE + STEP 13 again lets go and
 morph where it is (`MORPH KEPT: VALUE TEMPO`). The looper (16) is the other slot like it.
 
 The stutter is the REPEAT pad's, and the master DJ filter is slots 1 and 2 (its saved setting
-is MIXER's MST page). FUNC + VALUE is the tempo nudge ("Tap tempo and nudge").
+is MIXER's MST page; FUNC + turn VALUE names them, `DJ FILTER: SLOT 1/2`). FUNC + push VALUE +
+turn is the tempo nudge ("Tap tempo and nudge").
 
 **The looper (STEP 16).** Push VALUE + STEP 16 with the beat running: from the next bar line the
 whole mix is recorded for 4 bars (`LOOP 4 BAR: NEXT BAR`; set 1, 2, 4 or 8 in the FUNC menu's

@@ -44,7 +44,7 @@ constexpr Text kFuncKnobs = {"FUNC + KNOB OR PAD:", {
     "LOWER PAD  BAR MUTE",
     "STEP       TRIGLESS",
     "TURN A-C  EUCLID GRID",
-    "TURN VALUE  NUDGE",
+    "PUSH+TURN VALUE NUDGE",
     "WITHOUT FUNC:",
     "VALUE  TURN/TAP TEMPO",
     "PUSH+TURN VALUE SWING",

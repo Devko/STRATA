@@ -215,7 +215,7 @@ FM4 and GRAIN machines.
 | Feature | Since | Unit | Known limits / notes |
 | --- | --- | --- | --- |
 | Follows the unit's clock: internal, MIDI clock, SYNC IN; refuses tempo/transport under external clock | v0.1.0 | ○ (M7) | STRATA cannot set CLOCK SRC (Enaga has no setter). SYNC polarity not selectable (Enaga) |
-| Tap tempo on VALUE, nudge on FUNC + VALUE | Unreleased | ○ (W69) | Internal clock only; the nudge is 4% for 250 ms a detent |
+| Tap tempo on VALUE, nudge on FUNC + push VALUE + turn | Unreleased | ○ (W69) | Internal clock only; the nudge is 4% for 250 ms a detent |
 | MIDI OUT per track (OFF/1-16): steps, chords, ratchets, arp, note repeat, pads, KEYS, MIDI IN | v0.1.0 | ○ (8d) | **On Enaga 0.2.0 (v0.1.0-v0.3.1):** with USB connected to a computer not reading, DIN out stalls; unplug USB. Fixed in Enaga 0.3.0, which `main` needs |
 | Every note gets its note-off; second STOP sends All Notes Off | v0.1.0 | ○ (8d) | Slide is not sent as legato |
 | MIDI IN notes (ch 1-8 = tracks, others = selected), held to note-off | v0.1.0 | ○ (8d) | No pitch bend or aftertouch |

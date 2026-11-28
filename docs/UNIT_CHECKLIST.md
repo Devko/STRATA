@@ -919,7 +919,7 @@ GRID, CLOCK SRC INTERNAL. For the last two, a computer or a second unit on MIDI.
 - Tap VALUE four times at about 120: `TAP TEMPO`, then `TAP 120.x`, and the beat follows from the
   second tap. Taps at twice the pace start again rather than landing in between. In PERFORM a
   VALUE tap is still `MORPH 0`. `____`
-- FUNC + turn VALUE one click right: `NUDGE FASTER`, the top line reads 4% more for a moment and
+- Hold FUNC, push VALUE and turn it one click right: `NUDGE FASTER`, the top line reads 4% more for a moment and
   comes back to the set tempo; a few clicks left pull the beat back. Easy to line up with a
   record playing beside it? `____`
 - FUNC menu, PROG CHG OUT, OK: `PROG OUT CH n` (your MIDI CH). With a MIDI monitor on MIDI OUT,

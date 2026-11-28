@@ -90,7 +90,7 @@ each line means.
 | VALUE turn | Tempo, 20-300 BPM in 0.1 steps (PERFORM: morph). With a performance effect picked: its amount (below) |
 | VALUE push + turn | Pattern swing |
 | Tap VALUE, twice or more | Tap tempo where VALUE turns the tempo (`TAP 128.0`), from the last four taps; a 2 s gap starts again |
-| FUNC + turn VALUE | Nudge: 4% faster or slower for 250 ms a detent, then back to the set tempo (`NUDGE FASTER`) |
+| FUNC + push VALUE + turn | Nudge: 4% faster or slower for 250 ms a detent, then back to the set tempo (`NUDGE FASTER`) |
 | Push VALUE + STEP, CLR, LEFT/RIGHT | The performance mixer (below) |
 | FUNC + push A / B / C | Master kill EQ: kill LOW / MID / HI, again to bring it back (`KILL LOW`, `LOW BACK`). Performance only: not saved, and a load brings every band back |
 | FUNC + pad-row L/R | Selected track's length (polymeter), on every screen but the menu; hold to repeat |
