@@ -38,6 +38,17 @@ ENAGA-LICENSE.txt            Enaga's licence
 STRATA-LICENSES.txt          STRATA's licence and every third-party notice
 ```
 
+One tick box, "Include starter and demo files" (ticked by default), adds starter content to the
+same zip; for releases before 0.5.0 it adds the sample pack only:
+
+```text
+ENAGA/DATA/STRATA/PROJECTS/<NAME>/   ten starter projects: TECHNO, DEEP, DUB, DRIFT, ELECTRO,
+                                     NIGHT, BREAKS, STEEL, SMASH and CHAOS
+SAMPLES/STRATA/                      a sample pack of 105 drums, basses, leads and chords,
+                                     rendered by STRATA's own machines
+STRATA-QUICKSTART.txt                one page: the first things to try
+```
+
 1. Do the [safety checks](#before-you-install) below first.
 2. Copy everything in the zip to the **root** of the SD card. If the card already has an
    `ENAGA` folder, merge it and replace the old `APP.ENA`.
@@ -123,6 +134,9 @@ card can stay in the unit for this step.
    A03 BREAK, A04 PEAK, A05 PAD) at 130 BPM in C minor. Press **PLAY**.
 3. In STRATA, hold **FUNC** to see what every key does where you are. **FUNC + HOME**, then
    **OK**, saves the project.
+4. With the starter projects on the card: **PROJECT**, then the screen key RIGHT four times
+   (PROJECTS), pick one with **A**, and press **OK** twice. Each opens with its arrangement on
+   the chain.
 
 The [user manual](MANUAL.md) starts with a first-beat tutorial, and the
 [cheatsheet](CHEATSHEET.md) has every control on one page.
@@ -143,7 +157,8 @@ with your projects as they were.
 ## Where STRATA keeps its files
 
 Projects, the autosave and the kit library live on the SD card under `/ENAGA/DATA/STRATA/`, and
-resampled takes go to `/RECORD`. Samples come from `/SAMPLES`, and the sample browser also reads
+resampled takes and JAM REC recordings go to `/RECORD`. Samples come from `/SAMPLES` (the starter sample pack is in
+`/SAMPLES/STRATA`), and the sample browser also reads
 the stock SmplTrek folders. [MANUAL.md](MANUAL.md), "On the card", has the full layout.
 
 ## Going back

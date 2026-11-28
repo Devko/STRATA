@@ -12,6 +12,9 @@ the project file format or the controls.
   queued (`A05 QUEUED END`) and the screen you play on stays up. PROJECT now opens when the key
   comes up, and not at all when a STEP was pressed while it was held. The FUNC help's FUNC + KNOB
   OR PAD page lists the chord in place of two lines for gestures retired on 2026-11-25.
+- **Two reminders on the screen.** A quick tap of FUNC alone says `HOLD FUNC: HELP`, and a tap of
+  OK in GRID says `HOLD OK: TRACK MENU`. Both keys did nothing visible on their own, and nothing
+  on the panel pointed at the FUNC help or the GEN and EVOLVE menu. Neither covers another notice.
 - **JAM REC: the whole jam to the card.** The FUNC menu's last row (FUNC+HOME, UP, OK) records
   everything STRATA plays to `/RECORD/JAM_<n>.WAV` until OK again: 48 kHz 24-bit stereo, about
   1 GB an hour, up to 3 h 51 min. The finished master as RESAMPLE hears it, never the click or
@@ -39,6 +42,14 @@ the project file format or the controls.
   sounds only, opening with the chain on. `tools/showcases/build.sh` makes the cards (and with
   `--render` the arrangement renders); `--starter` copies them into `content/starter/projects/`
   for the card builder.
+- **Track Launch: one track from another pattern.** PROJECT pressed twice opens LAUNCH: pick a
+  track (UP/DOWN or its lower pad, silent here) and press a STEP key, and that track plays the
+  same track's part of that pattern from the next boundary, from its own step 1, while the others
+  carry on. Hold several pads to launch on all of them; CLR sends a track home. A launched track
+  is read only; hold OK to CAPTURE what plays into the bank's first empty slot, which then edits
+  as ever. A pattern change sends tracks home unless pinned (push B). GRID marks launched tracks
+  and names their pattern (`<B07`). Saved in PROJECT.BIN, in a new optional section 8; older
+  projects open with every track on its own part. New emulator scenario `launch`; unit check W64.
 - **16th-note triplets as a track speed.** TRACK SPEED (FUNC menu) has a new **3/2** between 2
   and 1: a step every 16 ticks, six to the beat, so 24 steps make a bar. Set LEN 24 for a one-bar
   triplet hat. The arp, rolls over LEN and REPEAT already had 1/16T. No file change: a build from

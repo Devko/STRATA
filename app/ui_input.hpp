@@ -13,6 +13,14 @@
         // A held LEN key repeats until it, or FUNC, comes up (update).
         if (!down && key == len_repeat_key_) len_repeat_key_ = -1;
         if (key == ENAGA_KEY_F1) {
+            // A quick tap of FUNC alone said nothing, and nothing on the panel said the help
+            // exists (usability review, 2026-11-28): the tap names it. Never over another
+            // notice or a MUTATE waiting for OK or CLR, so it only fills a silence.
+            if (!down && shift_ && shift_alone_ && !name_entry_.active() &&
+                uint32_t(last_ms_ - shift_at_ms_) < kFuncHelpMs && !notice_showing() &&
+                !mutation_pending_) {
+                notice("HOLD FUNC: HELP");
+            }
             shift_ = down;
             if (!down) len_repeat_key_ = -1;
             if (down) slot_ok_held_ = false;    // FUNC + OK is redo, never a queue
@@ -37,6 +45,8 @@
             return;
         }
         if (down) shift_alone_ = false;
+        // Any other key between two PROJECT presses makes them two presses, not a double tap.
+        if (down && key != ENAGA_KEY_F3) project_tapped_ = false;
         // PROJECT opens on its RELEASE, so that a STEP pressed while it is held can queue a
         // pattern instead, on whatever screen is up (on_project_hold). `project_open_` is set by
         // the press below, where every guard a press of PROJECT has always had still applies.
@@ -90,6 +100,8 @@
         if (on_track_menu_key(key, down)) return;
         // PROJECT held: the STEP keys queue a pattern, on any screen.
         if (on_project_hold(key, down)) return;
+        // PROJECT's LAUNCH page: STEP, OK, CLR, the arrows and push B are its own.
+        if (on_launch_key(key, down)) return;
 
         // FUNC + push D was the held tape stop until 2026-11-25 (backlog D5): one home per job,
         // and the tape stop's is the mixer's slot 8. The chord says where it went rather than
@@ -1042,6 +1054,18 @@
 
     // PROJECT, opened by a press of its key let go with no STEP in between.
     void open_project() {
+        // PROJECT double-tapped opens LAUNCH, as HOME double-tapped opens KEYS (Track Launch):
+        // the second press within kDoubleTapMs, with no other key between. Timed release to
+        // release, since that is when PROJECT opens.
+        const bool double_tap = mode_ == Mode::project && project_tapped_ &&
+                                uint32_t(last_ms_ - project_tapped_at_ms_) < kDoubleTapMs;
+        project_tapped_ = !double_tap;
+        project_tapped_at_ms_ = last_ms_;
+        if (double_tap) {
+            project_page_ = ProjectPage::launch;
+            notice(project_page_name(project_page_));
+            return;
+        }
         mode_ = Mode::project;
         leave_mode();
         // Back on PROJECTS: the list it shares with the sample browser may hold samples now, so

@@ -959,9 +959,23 @@ TEST(ui_hold_project_and_step_queues_a_pattern_from_any_screen) {
     CHECK_EQ(int(app_engine().queue().slot), 2);
     CHECK_EQ(UiProbe::notice(app), "A03 QUEUED END");
 
-    // A plain tap still opens PROJECT, on the release.
+    // A plain tap still opens PROJECT, on the release; a second tap within 0.4 s is LAUNCH,
+    // where the chord still queues a whole pattern rather than launching a lane.
     key(ENAGA_KEY_F3);
     CHECK_EQ(UiProbe::mode(app), int(Mode::project));
+    CHECK_EQ(UiProbe::project_page(app), 0);            // the slots;
+    key(ENAGA_KEY_F3);
+    CHECK_EQ(UiProbe::project_page(app), 5);            // LAUNCH;
+    app.on_key(ENAGA_KEY_F3, true);
+    step_down(3);
+    step_up(3);
+    app.on_key(ENAGA_KEY_F3, false);
+    pump(2);
+    CHECK_EQ(int(app_engine().queue().slot), 3);
+    CHECK_EQ(UiProbe::notice(app), "A04 QUEUED END");
+    CHECK_EQ(UiProbe::project_page(app), 5);            // LAUNCH;
+    key(ENAGA_KEY_CLR);                              // LAUNCH: CLR leaves for the slots
+    CHECK_EQ(UiProbe::project_page(app), 0);            // the slots;
 
     // FUNC + PROJECT is still SAMPLES, at once, and no STEP queues under it.
     key(ENAGA_KEY_F4);
@@ -2996,8 +3010,11 @@ void mixer_page(Strata &app, int page) {
 
 // PROJECT mode's SETUP page, on the octave keys.
 void setup_page(Strata &app, bool on) {
-    app.on_key(ENAGA_KEY_F3, true);
-    app.on_key(ENAGA_KEY_F3, false);
+    // PROJECT, unless it is up already: a second press straight after is a double tap, LAUNCH.
+    if (UiProbe::mode(app) != int(Mode::project)) {
+        app.on_key(ENAGA_KEY_F3, true);
+        app.on_key(ENAGA_KEY_F3, false);
+    }
     for (int i = 0; i < 3; i++) {                   // past CHAIN and PATTERN, or back to the slots
         app.on_key(on ? ENAGA_KEY_SELECT_RIGHT : ENAGA_KEY_SELECT_LEFT, true);
         app.on_key(on ? ENAGA_KEY_SELECT_RIGHT : ENAGA_KEY_SELECT_LEFT, false);
@@ -6356,10 +6373,11 @@ void two_projects() {
     CHECK(std::strcmp(app_storage().project_name(), "SECOND") == 0);
 }
 
-// PROJECT, then the octave keys to the last page, then the card read.
+// PROJECT, then the octave keys to PROJS, then the card read.
 void to_projects_page(Strata &app) {
     key(ENAGA_KEY_F3);
-    for (int i = 0; i < 6; i++) key(ENAGA_KEY_SELECT_RIGHT);
+    for (int i = 0; i < 6; i++) key(ENAGA_KEY_SELECT_LEFT);
+    for (int i = 0; i < 4; i++) key(ENAGA_KEY_SELECT_RIGHT);
     CHECK_EQ(UiProbe::project_page(app), 4);
     for (int i = 0; i < 200 && app_storage().browsing(); i++) pump();
     pump();
@@ -7411,6 +7429,51 @@ TEST(ui_func_held_alone_shows_the_help_and_a_chord_does_not) {
     key(ENAGA_KEY_F4);
 }
 
+TEST(ui_a_quick_tap_of_func_alone_names_the_help) {
+    // Usability review, 2026-11-28: nothing on the panel said the help exists. A tap of FUNC
+    // with nothing else pressed says how to get it; a chord, a long hold (the help itself) or
+    // a notice already up says nothing.
+    Strata &app = fresh();
+    auto quiet = [&]() {                                 // a known notice, then let it fade
+        key(ENAGA_KEY_F2);
+        key(ENAGA_KEY_F2);
+        CHECK_EQ(UiProbe::notice(app), "REC OFF");
+        g_ms += 4000;
+        pump(2);
+    };
+    auto said_help = [&]() {
+        const char *now = UiProbe::notice(app);
+        return now != nullptr && std::strcmp(now, "HOLD FUNC: HELP") == 0;
+    };
+    key(ENAGA_KEY_F4);
+    quiet();
+    app.on_key(ENAGA_KEY_F1, true);
+    pump(20);
+    app.on_key(ENAGA_KEY_F1, false);
+    CHECK(said_help());
+    check_layout(app, "the FUNC tap's notice");
+
+    quiet();
+    shift_key(ENAGA_KEY_F7);                             // a chord says nothing of the help
+    CHECK(!said_help());
+    key(ENAGA_KEY_F4);
+
+    quiet();
+    app.on_key(ENAGA_KEY_F1, true);                      // held long: the help, then nothing
+    pump(700);
+    CHECK(UiProbe::func_help(app));
+    app.on_key(ENAGA_KEY_F1, false);
+    CHECK(!said_help());
+
+    quiet();
+    key(ENAGA_KEY_F2);                                   // a notice up (REC ON) stays
+    app.on_key(ENAGA_KEY_F1, true);
+    pump(20);
+    app.on_key(ENAGA_KEY_F1, false);
+    CHECK_EQ(UiProbe::notice(app), "REC ON");
+    key(ENAGA_KEY_F2);
+}
+
 // The help is for the screen that is up (Roland, 2026-11-23; core/help.hpp): its own page
 // first, and the screen keys or LEFT/RIGHT, with FUNC still held, turn the pages without
 // touching the screen's own.
@@ -7672,12 +7735,12 @@ bool same(const Look &a, const Look &b) { return a.screen == b.screen && a.leds 
 
 
 enum Screen { s_grid, s_keys, s_edit, s_machine, s_kit, s_mixer, s_perform, s_project, s_chain,
-              s_pattern, s_setup, s_projects, s_resample, s_menu, s_sounds, s_count };
+              s_pattern, s_setup, s_projects, s_resample, s_menu, s_sounds, s_launch, s_count };
 
 const char *screen_name(int s) {
     static const char *names[] = {"GRID", "KEYS", "EDIT", "MACHINE", "KIT", "MIXER", "PERFORM",
                                   "PROJECT", "CHAIN", "PATTERN", "SETUP", "PROJECTS",
-                                  "RESAMPLE", "MENU", "SOUNDS"};
+                                  "RESAMPLE", "MENU", "SOUNDS", "LAUNCH"};
     return names[s];
 }
 
@@ -7706,6 +7769,11 @@ void enter(Strata &app, int s) {
             app.on_encoder(1, +1);
             break;
         case s_sounds: key(ENAGA_KEY_F8); key(ENAGA_KEY_OK); break;   // track 1, the kick
+        case s_launch:                         // PROJECT twice, from GRID
+            key(ENAGA_KEY_F4);
+            key(ENAGA_KEY_F3);
+            key(ENAGA_KEY_F3);
+            break;
         default:
             key(ENAGA_KEY_F3);
             // docs/CONTROLS.md: the screen keys walk PROJECT's pages, the pad-row keys the bank.
@@ -7897,7 +7965,6 @@ const char *quiet_reason(int s, const Probe &p, bool func) {
         {s_chain, false, "UP", "an empty chain has no entry to move to"},
         {s_chain, false, "DOWN", "an empty chain has no entry to move to"},
         // docs/CHEATSHEET.md marks these "--": no job in that screen.
-        {s_grid, false, "OK", "no job (hold STEP + OK opens the step page)"},
         {s_keys, false, "OK", "no job"},
         {s_pattern, false, "OK", "no job"},
         {s_mixer, false, "UP", "no job"}, {s_mixer, false, "DOWN", "no job"},
@@ -7926,6 +7993,11 @@ const char *quiet_reason(int s, const Probe &p, bool func) {
         {s_sounds, false, "B+", "SOUNDS uses A"}, {s_sounds, false, "C+", "ditto"},
         {s_sounds, false, "D+", "ditto"}, {s_sounds, true, "B+", "ditto"},
         {s_sounds, true, "C+", "ditto"}, {s_sounds, true, "D+", "ditto"},
+        {s_launch, false, "LEFT", "the slot cursor starts on slot 1"},
+        {s_launch, false, "D+", "LAUNCH's knobs are A-C, as on the slots"},
+        {s_launch, true, "D+", "ditto"},
+        {s_launch, true, "UP", "no copy / paste of a lane: CAPTURE makes the pattern"},
+        {s_launch, true, "DOWN", "ditto"},
         // SETUP shows settings that live in the Enaga menu; only A (quantize) is STRATA's.
         {s_setup, false, "UP", "SETUP only shows"}, {s_setup, false, "DOWN", "ditto"},
         {s_setup, false, "LEFT", "ditto"}, {s_setup, false, "RIGHT", "ditto"},
@@ -12299,6 +12371,7 @@ TEST(ui_hold_ok_in_grid_opens_the_track_menu_for_gen_and_evolve) {
     key(ENAGA_KEY_OK);
     pump(2);
     CHECK(!screen_has(app, "GENERATE"));
+    CHECK_EQ(UiProbe::notice(app), "HOLD OK: TRACK MENU");   // the tap says where it is
     app.on_key(ENAGA_KEY_OK, true);
     pump(600);
     app.on_key(ENAGA_KEY_OK, false);
@@ -12417,4 +12490,155 @@ TEST(ui_jam_rec_without_a_card_says_why) {
     key(ENAGA_KEY_CLR);
     host.set_card(true);
     app.on_card(true);
+}
+
+// --- Track Launch: the LAUNCH page (app/ui_launch.hpp) ---------------------------------------
+
+namespace {
+
+constexpr int kLaunchPage = 5;   // ProjectPage::launch, the last page
+
+// PROJECT twice in quick succession: LAUNCH, PROJECT's last page.
+void to_launch_page(Strata &app) {
+    if (UiProbe::mode(app) == int(Mode::project)) {
+        key(ENAGA_KEY_F4);
+        pump(2);
+    }
+    key(ENAGA_KEY_F3);
+    key(ENAGA_KEY_F3);
+    pump(2);
+    CHECK_EQ(UiProbe::project_page(app), kLaunchPage);
+}
+
+uint8_t lane_source_of(int track) {
+    return app_engine().project().settings.lane_source[track];
+}
+
+uint8_t triggered_on(int track) {
+    return app_engine().status().triggered[track].load(std::memory_order_relaxed);
+}
+
+}  // namespace
+
+TEST(ui_launch_project_twice_opens_launch_and_a_slow_second_press_does_not) {
+    Strata &app = fresh();
+    to_launch_page(app);
+    CHECK(screen_has(app, "LAUNCH"));
+    check_layout(app, "LAUNCH");
+
+    // A second press long after the first is not a double tap: PROJECT stays on SLOT.
+    for (int i = 0; i < 6; i++) key(ENAGA_KEY_SELECT_LEFT);
+    key(ENAGA_KEY_F4);
+    pump(2);
+    key(ENAGA_KEY_F3);
+    CHECK_EQ(UiProbe::project_page(app), 0);
+    pump(800);
+    key(ENAGA_KEY_F3);
+    pump(2);
+    CHECK(UiProbe::project_page(app) != kLaunchPage);
+}
+
+TEST(ui_launch_a_pad_selects_its_lane_silently_and_a_step_launches_on_it) {
+    Strata &app = fresh();
+    to_launch_page(app);
+    const uint8_t before = triggered_on(2);
+    app.on_pad_press(4, 100);                       // pad 4 = track 3
+    pump(4);
+    CHECK_EQ(UiProbe::selected(app), 2);
+    CHECK_EQ(int(triggered_on(2)), int(before));    // no sound on LAUNCH
+    app.on_pad_release(4);
+    pump(2);
+
+    // Stopped, so it lands at once.
+    key(ENAGA_KEY_STEP1 + 6);
+    pump(4);
+    CHECK_EQ(int(lane_source_of(2)), int(lane_source(0, 6)));
+    CHECK(lane_borrowed(app_engine().project(), 2));
+    CHECK(screen_has(app, "A07"));
+    check_layout(app, "LAUNCH, a lane launched");
+
+    // Two held pads launch together.
+    app.on_pad_press(0, 100);
+    app.on_pad_press(2, 100);
+    key(ENAGA_KEY_STEP1 + 3);
+    app.on_pad_release(0);
+    app.on_pad_release(2);
+    pump(4);
+    CHECK_EQ(int(lane_source_of(0)), int(lane_source(0, 3)));
+    CHECK_EQ(int(lane_source_of(1)), int(lane_source(0, 3)));
+}
+
+TEST(ui_launch_clr_sends_the_lane_home_then_leaves_for_slot) {
+    Strata &app = fresh();
+    to_launch_page(app);
+    key(ENAGA_KEY_STEP1 + 4);
+    pump(4);
+    CHECK(lane_borrowed(app_engine().project(), UiProbe::selected(app)));
+    key(ENAGA_KEY_CLR);
+    pump(4);
+    CHECK(!lane_borrowed(app_engine().project(), UiProbe::selected(app)));
+    CHECK_EQ(UiProbe::project_page(app), kLaunchPage);
+    key(ENAGA_KEY_CLR);
+    pump(2);
+    CHECK_EQ(UiProbe::project_page(app), 0);
+}
+
+TEST(ui_launch_push_b_pins_and_the_arrows_move_lane_and_slot) {
+    Strata &app = fresh();
+    to_launch_page(app);
+    const int lane = UiProbe::selected(app);
+    key(ENAGA_KEY_DOWN);
+    CHECK_EQ(UiProbe::selected(app), (lane + 1) % kTracks);
+    key(ENAGA_KEY_UP);
+    CHECK_EQ(UiProbe::selected(app), lane);
+    key(ENAGA_KEY_PUSH_B);
+    pump(4);
+    CHECK((app_engine().project().settings.lane_pinned >> lane & 1u) != 0);
+    CHECK(screen_has(app, "PINNED"));
+    key(ENAGA_KEY_PUSH_B);
+    pump(4);
+    CHECK((app_engine().project().settings.lane_pinned >> lane & 1u) == 0);
+
+    // RIGHT twice, then OK: A03 on the lane.
+    key(ENAGA_KEY_RIGHT);
+    key(ENAGA_KEY_RIGHT);
+    key(ENAGA_KEY_OK);
+    pump(4);
+    CHECK_EQ(int(lane_source_of(lane)), int(lane_source(0, 2)));
+}
+
+TEST(ui_launch_grid_shows_the_borrowed_part_and_refuses_edits_on_it) {
+    Strata &app = fresh();
+    to_launch_page(app);
+    key(ENAGA_KEY_STEP1 + 6);
+    pump(4);
+    key(ENAGA_KEY_F4);
+    pump(2);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::grid));
+    CHECK(screen_has(app, "<A07"));
+    check_layout(app, "GRID, a launched lane");
+
+    const int lane = UiProbe::selected(app);
+    const bool was = trig_at(lane, 0);
+    step_down(0);
+    step_up(0);
+    pump(4);
+    CHECK_EQ(trig_at(lane, 0), was);
+    CHECK_EQ(UiProbe::notice(app), "T1 A07 READ ONLY");
+    CHECK(screen_has(app, "READ ONLY"));
+}
+
+TEST(ui_launch_a_held_ok_captures_into_a_free_slot) {
+    Strata &app = fresh();
+    to_launch_page(app);
+    key(ENAGA_KEY_STEP1 + 6);
+    pump(4);
+    app.on_key(ENAGA_KEY_OK, true);
+    pump(600);
+    app.on_key(ENAGA_KEY_OK, false);
+    pump(4);
+    CHECK(screen_has(app, "CAPTURED"));
+    CHECK_EQ(int(lane_borrowed_mask(app_engine().project())), 0);
+    // The hold did not also launch the cursor's slot.
+    CHECK_EQ(int(lane_source_of(UiProbe::selected(app))), int(kLaneOwn));
 }
