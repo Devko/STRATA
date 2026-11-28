@@ -19,6 +19,15 @@ the project file format or the controls.
   a launched lane says `T3 B07 READ ONLY` and then `HOLD OK: CAPTURE`, taking turns. The first
   lower pad on LAUNCH says `PADS PICK LANES`, since it makes no sound there.
 
+- **TRANSPOSE: FUNC + the screen keys, on every screen.** The melodic tracks a step of the scale
+  down (SEL<) or up (SEL>), 12 steps either way, staying in the key (`TRANSPOSE +2 IN KEY`); both
+  screen keys together go back to 0. The FUNC menu's new TRANSPOSE row switches to semitones
+  (`SEMI`), where the key moves with the notes and the notice names it in sharps
+  (`TRANSPOSE +3 C`). The tracks that move are the ones that fold into the scale (VA MONO and
+  POLY, WAVE MONO and POLY, FM4, GRAIN, SAMPLE while unsliced); drums, sliced samples and MID stay.
+  Steps, chords, the arp, pads, KEYS, MIDI IN notes and MIDI OUT all follow; a held key lets go
+  at the pitch it started. Nothing is written or saved; a LOCK holds it. PERFORM and the live
+  strip show `TR+3`. New emulator scenario `transpose`.
 - **ARR REC: a jam written into the chain.** A FUNC menu row under JAM REC. On, it keeps the
   chain for undo, empties it, and from the next PLAY (or at once, mid-pass) writes every pass of
   the jam into it as song sections: the same pattern with the same mutes, scene, morph side,
@@ -185,6 +194,8 @@ the project file format or the controls.
 - **Every confirmation reads the same way**: the key to press again and what it does, `OK AGAIN:
   DELETE`, `OK AGAIN: OPEN`, `CLR AGAIN: REMOVE`, `DOWN AGAIN: REPLACE`, `A AGAIN: HEAR`,
   `OK AGAIN: RELOAD`; a delete started with push C asks `OK TWICE: DELETE`.
+- **The FUNC help turns its pages on LEFT/RIGHT only.** FUNC + a screen key is TRANSPOSE (above),
+  so holding FUNC a moment too long can never turn a transpose into a page of help.
 - **A slimmer FUNC menu.** FUNC+HOME holds the project-wide rows only, in the order a jam reaches
   for them: SAVE, JAM REC, CLICK, COUNT-IN, REC MODE, QUANTIZE, AUTO-FILL, FX GLIDE, LOOP LEN,
   CHAIN, CHAIN END, then the file rows from SAVE AS down to LOAD DEMO (UP once from SAVE). The

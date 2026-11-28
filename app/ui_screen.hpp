@@ -330,6 +330,12 @@
         if (engine_.len_all() != 0) add(engine_.len_all() < 0 ? "LN-" : "LN+");
         // ENERGY away from rest: EN- thinner, EN+ fuller (core/energy.hpp).
         if (engine_.energy() != 0) add(engine_.energy() < 0 ? "EN-" : "EN+");
+        // TRANSPOSE away from rest, by how much: "TR+3", "TR-12" (core/transpose.hpp).
+        if (engine_.transpose() != 0) {
+            p = part;
+            transpose_short(engine_.transpose(), p, kTransposeShortMax);
+            add(part);
+        }
         // VariSpeed away from rest: VS- slower and lower, VS+ faster and higher.
         if (engine_.varispeed() != 0) add(engine_.varispeed() < 0 ? "VS-" : "VS+");
         // LIVE RND on: its unit, "RN4". Not "R4", which the repeat rate could be read as.
@@ -447,7 +453,7 @@
         return place;
     }
 
-    // Title on the second line, ten rows, and the page line: "SCREEN KEYS: PAGE 1/7", which is
+    // Title on the second line, ten rows, and the page line: "LEFT/RIGHT: PAGE 1/7", which is
     // also how anyone finds out there is more than one page.
     void draw_func_help(enaga::Canvas &canvas) {
         canvas.rect(0, 9, 128, 110, 0);
@@ -467,7 +473,7 @@
         }
         char line[40];
         char *out = line;
-        append(out, pages < 10 ? "SCREEN KEYS: PAGE " : "PAGE ");
+        append(out, "LEFT/RIGHT: PAGE ");      // the screen keys are TRANSPOSE (2026-11-28)
         append_number(out, uint32_t(help_page_ % pages + 1));
         *out++ = '/';
         append_number(out, uint32_t(pages));

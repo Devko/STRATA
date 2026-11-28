@@ -68,8 +68,8 @@ UNIT_CHECKLIST.md's ~550 boxes, 4 are ticked.
 | NEW PROJECT is empty (factory sounds and mixer, pans centred, no steps, scenes or macros); LOAD DEMO loads the factory demo | #140 | ○ (W12) | |
 | **CLEAR PATTERN** in the FUNC menu: every track in one press, OK twice, one undo | #86 | ○ (W16) | Keeps sounds, lengths, speeds and swing |
 | **Help for the screen that is up**: its knobs in words and its gestures, every screen and EDIT/MIXER page, then five shared pages (FUNC + key, FUNC + knob or pad, upper pads, the performance mixer); screen keys turn its pages while FUNC is held; a quick FUNC tap says `HOLD FUNC: HELP`, an OK tap in GRID `HOLD OK: TRACK MENU` | #107, WIP | ○ (W19, W52) | Text only; it says what the build does, so a changed gesture changes `core/help.cpp` too |
-| **PERFORM names its FUNC layer**: while FUNC is held the gauges read REL LEN NRG RND with their values; the FUNC help puts PERFORM LIVE second | Unreleased | ○ (W75) | |
-| **One confirmation wording**: every two-press step reads `<KEY> AGAIN: <WHAT>` (`OK AGAIN: DELETE`), held by tools/check_rules.sh | Unreleased | ○ (W75) | |
+| **PERFORM names its FUNC layer**: while FUNC is held the gauges read REL LEN NRG RND with their values; the FUNC help puts PERFORM LIVE second | Unreleased | ○ (W76) | |
+| **One confirmation wording**: every two-press step reads `<KEY> AGAIN: <WHAT>` (`OK AGAIN: DELETE`), held by tools/check_rules.sh | Unreleased | ○ (W76) | |
 | HOME = GRID, HOME twice = KEYS | v0.1.0 | ◐ | |
 | Lit, self-naming performance pads; mode keys green/red by screen | v0.1.0 | ○ (W8, W20c) | Upper pads are printed TRK 1-7 but are performance pads (Roland's choice) |
 | Arrow-key navigation model (UP/DOWN rows, LEFT/RIGHT sideways, OK picks, CLR back) | v0.1.0 | ○ (5, "Arrow keys") | |
@@ -114,7 +114,7 @@ FM4 and GRAIN machines.
 | --- | --- | --- | --- |
 | Up to 64 steps a track, per-track length and speed (2x ... 1/8): polymeter | v0.1.0 | ○ (M3) | |
 | **Speed 3/2: 16th-note triplets** (16 ticks a step, 24 to the bar) in the track menu's SPEED, between 2 and 1 | #213 | ○ (W57) | Older builds play a 3/2 track at 1x. The arp, rolls and REPEAT had 1/16T already |
-| **Track Launch**: each track can play the same track's part of another pattern (LAUNCH, PROJECT twice), queued on the boundary; read only until CAPTURE (hold OK on LAUNCH, or the track menu's CAPTURE row); PIN; saved in the project | Unreleased | ○ (W64, W75) | Not in the chain. CAPTURE is not undoable. The emulator cannot press pads, so the held-pad launch is host-tested only |
+| **Track Launch**: each track can play the same track's part of another pattern (LAUNCH, PROJECT twice), queued on the boundary; read only until CAPTURE (hold OK on LAUNCH, or the track menu's CAPTURE row); PIN; saved in the project | Unreleased | ○ (W64, W76) | Not in the chain. CAPTURE is not undoable. The emulator cannot press pads, so the held-pad launch is host-tested only |
 | Steps, trigless steps (FUNC + tap), STEP LED colours | v0.1.0 | ◐ | |
 | Step page: NOTE, VEL, LEN, MICR (±11 ticks), PROB, COND, RTCH 1-8, RAMP, ACNT, SLID, CHRD | v0.1.0 | ○ (6) | LEN is the note length on VA POLY, on VA MONO once SUS is up, and for MIDI out; ignored by drums, SAMPLE and GRAIN |
 | Trig conditions: a:b, FILL, PRE, NEI, 1ST and their NOTs; seeded | v0.1.0 | ○ (M3) | |
@@ -163,8 +163,9 @@ FM4 and GRAIN machines.
 | The kill EQ's bands learnt by turning on MIXER's EQ page during MACRO LEARN (FUNC + STEP 5-7 retired) | #156 | ○ (W32) | |
 | **LOCK** (FUNC + MUTATE: hold stores, tap jumps, tap again swaps back), one per pattern, RAM only | #149 | ○ (W20c) | Not saved; the kit is shared, so a jump brings that lock's sound to every pattern |
 | **REL ALL / LEN ALL**: every track's release (FUNC + A) and every note's length (FUNC + B) in PERFORM | #152 | ○ (W29) | Live only; LEN ALL leaves gateless notes (drums, arp) alone |
-| **LIVE RND**: FUNC + turn D in PERFORM shuffles every armed track in blocks of 1-16 steps, FUNC + lower pad arms that track, the kick out at start; OFF is the grid at once | #166, Unreleased | ○ (W36, W75) | Live only, in a LOCK; the pattern is never written |
+| **LIVE RND**: FUNC + turn D in PERFORM shuffles every armed track in blocks of 1-16 steps, FUNC + lower pad arms that track, the kick out at start; OFF is the grid at once | #166, Unreleased | ○ (W36, W76) | Live only, in a LOCK; the pattern is never written |
 | **ENERGY**: FUNC + turn C in PERFORM thins every track in tier order down to a breakdown, or adds ghosts and lifts probabilities up to the peak | #224 | ○ (W62) | Live only, in a LOCK; the pattern is never written |
+| **TRANSPOSE**: FUNC + SEL< / SEL> on every screen moves the melodic tracks (VAs, WAVEs, FM4, GRAIN, unsliced SAMPLE) a scale step, -12..+12, staying in the key; the FUNC menu's row makes it semitones with the key moving; both screen keys back to 0 | Unreleased | ○ (W75) | Live only, in a LOCK; nothing written. Drums, sliced samples and MID never move. A held key is let go of at its own pitch (scenario_transpose) |
 | **VariSpeed**: FUNC + turn VALUE on every screen moves the tempo and every machine's pitch together, an octave each way in tenths of a semitone; FUNC + tap VALUE snaps back | Unreleased | ○ (W70) | Internal clock only. Not saved, not in a LOCK; the project keeps its tempo. MID notes are not moved. No CPU at rest; at +12 SAMPLE and GRAIN read twice as fast (scenario_varispeed) |
 | Pad pressure bends macro A | v0.1.0 | ○ ("Pad feel") | |
 | THROW to delay or reverb | v0.1.0 | ◐ | |
@@ -195,7 +196,7 @@ FM4 and GRAIN machines.
 | Send B **HALL** mode with shimmer | v0.1.0 | ○ (13j) | As LONG |
 | Delay into reverb (D>R) routing | v0.1.0 | ○ ("The sends, the master and SETUP") | Routing page has one empty slot |
 | Master: DJ filter, glue compressor, limiter, output level | v0.1.0 | ◐ | |
-| Master **kill EQ**: 3 bands at 250 Hz / 2.5 kHz, kill switches (FUNC + push A/B/C, FUNC + push D all three), scene-able, macro-able | v0.1.0, Unreleased | ○ (13d / U6, W75) | |
+| Master **kill EQ**: 3 bands at 250 Hz / 2.5 kHz, kill switches (FUNC + push A/B/C, FUNC + push D all three), scene-able, macro-able | v0.1.0, Unreleased | ○ (13d / U6, W76) | |
 | MIXER: 8 faders, 12 pages (3 for the duck since #89) | v0.1.0 | ◐ | |
 
 ## Samples and resampling

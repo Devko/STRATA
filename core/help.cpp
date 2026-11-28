@@ -40,12 +40,12 @@ constexpr Text kFuncKeys = {"FUNC + KEY:", {
 }};
 
 constexpr Text kFuncKnobs = {"FUNC + KNOB OR PAD:", {
-    "PUSH A-C   KILL L/M/H",
-    "PUSH D     KILL ALL",
+    "PUSH A-D KILL LMH ALL",
     "LOWER PAD  BAR MUTE",
     "STEP       TRIGLESS",
     "TURN A-C  EUCLID GRID",
     "VALUE VARI/PUSH NUDGE",
+    "SCREEN KEYS TRANSPOSE",
     "WITHOUT FUNC:",
     "VALUE  TURN/TAP TEMPO",
     "PUSH+TURN VALUE SWING",

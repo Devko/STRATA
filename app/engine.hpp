@@ -206,6 +206,10 @@ public:
     uint8_t live_rnd_armed() const { return perform_.rnd_armed; }
     // ENERGY (core/energy.hpp): -64 .. +64, 0 is rest.
     int8_t energy() const { return perform_.energy; }
+    // TRANSPOSE (core/transpose.hpp): steps on the melodic tracks, 0 is rest; scale steps, or
+    // semitones while `transpose_semitones()`.
+    int8_t transpose() const { return transpose_; }
+    bool transpose_semitones() const { return transpose_semis_; }
     // VariSpeed (core/varispeed.hpp): tenths of a semitone on every machine, 0 is rest.
     int8_t varispeed() const { return vari_tenths_; }
     AutoFill auto_fill() const { return auto_fill_; }
@@ -645,6 +649,12 @@ private:
 
     uint8_t machine_id_[kTracks] = {};
     uint8_t sent_note_[kTracks] = {};  // see sent_note()
+    // TRANSPOSE (core/transpose.hpp), and the shift each held KEYS key or MIDI IN note took, so
+    // its release lets go of the note that sounded even after the transpose moved on.
+    int8_t transpose_ = 0;
+    bool transpose_semis_ = false;
+    int8_t key_shift_[kTracks][128] = {};
+    uint8_t transposed(int track, uint8_t note) const;
 
     // And which tracks host a VaPoly, for the same reason and recorded the same way: a chord is
     // several notes on one frame, so `fire` has to know that this track can take them. A track

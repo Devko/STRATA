@@ -12,6 +12,9 @@
         // key, knob or pad while it is down means the hand knew, and the help stays away.
         // A held LEN key repeats until it, or FUNC, comes up (update).
         if (!down && key == len_repeat_key_) len_repeat_key_ = -1;
+        // Which screen keys are down: both together with FUNC put TRANSPOSE back to 0.
+        if (key == ENAGA_KEY_SELECT_LEFT) sel_left_down_ = down;
+        if (key == ENAGA_KEY_SELECT_RIGHT) sel_right_down_ = down;
         if (key == ENAGA_KEY_F1) {
             // A quick tap of FUNC alone said nothing, and nothing on the panel said the help
             // exists (usability review, 2026-11-28): the tap names it. Never over another
@@ -31,15 +34,14 @@
             }
             return;
         }
-        // While the help shows, the screen keys (or LEFT/RIGHT) turn its pages, as they turn the
-        // screen's own. FUNC + these four does nothing anywhere else (docs/CONTROLS.md), and
-        // only once the help is up, so no chord changes meaning.
-        if (func_help_showing() &&
-            (key == ENAGA_KEY_SELECT_LEFT || key == ENAGA_KEY_SELECT_RIGHT ||
-             key == ENAGA_KEY_LEFT || key == ENAGA_KEY_RIGHT)) {
+        // While the help shows, LEFT/RIGHT turn its pages. FUNC + these two does nothing
+        // anywhere else (docs/CONTROLS.md), and only once the help is up, so no chord changes
+        // meaning. The screen keys turned them too until FUNC + a screen key became TRANSPOSE
+        // (2026-11-28): one gesture that sometimes paged the help instead would be no gesture.
+        if (func_help_showing() && (key == ENAGA_KEY_LEFT || key == ENAGA_KEY_RIGHT)) {
             if (down) {
                 const int pages = help_page_count(help_place());
-                const int delta = key == ENAGA_KEY_SELECT_LEFT || key == ENAGA_KEY_LEFT ? -1 : 1;
+                const int delta = key == ENAGA_KEY_LEFT ? -1 : 1;
                 help_page_ = (help_page_ + delta + pages) % pages;
             }
             return;
@@ -93,6 +95,14 @@
                 }
             }
             if (action == enaga::ui::Action::no) notice("NAME KEPT");
+            return;
+        }
+
+        // FUNC + a screen key: TRANSPOSE (core/transpose.hpp), a semitone down or up; both
+        // together, back to 0. On every screen and over every list, menu and view, as VariSpeed
+        // is on FUNC + VALUE: a performance move works wherever the hands happen to be.
+        if (shift_ && (key == ENAGA_KEY_SELECT_LEFT || key == ENAGA_KEY_SELECT_RIGHT)) {
+            if (down) transpose_key(key == ENAGA_KEY_SELECT_LEFT ? -1 : 1);
             return;
         }
 

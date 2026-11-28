@@ -46,7 +46,8 @@ HOME "system", PLAY "◀◀", STOP "▶▶", MIXER "fx", EDIT "rec src".
      second label.**
    - **Arrow pad:** the cursor on the screen. UP/DOWN rows, LEFT/RIGHT sideways. OK picks, CLR
      goes back (or clears, where there is something selected to clear).
-   - **Screen keys:** the screen's pages. EDIT SRC FLTR AMP FX LFO ARP ENV OSC SCAN (SCAN on
+   - **Screen keys:** the screen's pages; FUNC + a screen key is **TRANSPOSE** (below), on every
+     screen. EDIT SRC FLTR AMP FX LFO ARP ENV OSC SCAN (SCAN on
      the WAVE machines only; a page a machine lacks is stepped over); MIXER's nineteen;
      PROJECT, CHAIN, PATTERN, SETUP, PROJECTS; the step page's field pages; SAMPLES' and KIT's pages of
      eight. On GRID and KEYS, where A-D turn the current EDIT page, they turn that page. The
@@ -153,7 +154,8 @@ HOME "system", PLAY "◀◀", STOP "▶▶", MIXER "fx", EDIT "rec src".
 A list over whatever screen was up, of the project-wide rows only: the selected track's rows are
 in GRID's track menu (below). UP/DOWN or A scroll, OK runs the row, LEFT/RIGHT or B change
 a setting row, CLR or FUNC + HOME closes it and returns to the screen it opened over. STEP
-keys, screen keys and pad-row keys do nothing in it. FUNC + CLR / OK stay undo and redo.
+keys, screen keys and pad-row keys do nothing in it. FUNC + CLR / OK stay undo and redo, and
+FUNC + a screen key stays TRANSPOSE.
 The rows run by how often a jam reaches for them: the live toggles first, the file actions at
 the bottom. The cursor starts on SAVE every time, so **FUNC + HOME, OK saves** and
 **FUNC + HOME, DOWN, OK starts or stops JAM REC**; the list wraps, so the file rows are a few UPs
@@ -171,6 +173,7 @@ FUNC + EDIT twice is KIT.
 | QUANTIZE | | record quantize, by 5 |
 | AUTO-FILL | | OFF 4 8 16 bars |
 | FX GLIDE | | how long a button's jump in the performance mixer rides: `OFF`, `1/16`, `1 BEAT` (default), `1 BAR`, at the tempo. Not saved |
+| TRANSPOSE | | `SCALE` (default) / `SEMI`: what a FUNC + screen key step of TRANSPOSE is, a step of the scale or a semitone. Not saved |
 | LOOP LEN | | the performance mixer's looper: `4 BAR` (1 2 4 8), what push VALUE + STEP 16 records |
 | CHAIN | | ON / OFF |
 | CHAIN END | | SONG (play once) / LOOP |
@@ -211,6 +214,7 @@ Printed labels (above), and the moves made while playing:
 | FUNC + turn C in PERFORM | **ENERGY**: from a sparse breakdown to the peak (below) |
 | FUNC + turn D in PERFORM | **LIVE RND**: the unit (below) |
 | FUNC + turn VALUE | **VariSpeed**: the tempo and every machine's pitch together, on every screen (below) |
+| FUNC + SEL< / SEL> | **TRANSPOSE**: the melodic tracks a scale step (or a semitone) down / up, on every screen; both screen keys together, back to 0 (below) |
 | FUNC + MUTATE, tapped | Jump to that lock at once (`BACK TO LOCK A01`); tapped again, swap back to the state from just before the jump (`SWAPPED BACK A01`). No lock: `NO LOCK: HOLD STORES` |
 
 Retired 2026-11-25 (backlog D1, D5; CHANGELOG "Gestures that moved"): FUNC + VALUE (DJ filter,
@@ -231,7 +235,7 @@ lot, and jump back in one tap; tap again to compare with where you were.
 | Every track's sound bytes (every EDIT page) and fader | The samples, the machines: a lock taken before a machine switch restores the parameters only |
 | The send and master bytes | The kill EQ's switches, the tempo (not STRATA's under an outside clock) |
 | The mutes (D4) | The eight stored mute states |
-| The morph position, the four macro positions, REL ALL, LEN ALL, LIVE RND and ENERGY | The scenes and the macro setup |
+| The morph position, the four macro positions, REL ALL, LEN ALL, LIVE RND, ENERGY and TRANSPOSE | The scenes and the macro setup |
 
 - **One lock per pattern (D14), in RAM only**: not saved, and a project load or NEW clears them.
 - **At once (D3)**, on the next audio block. The performance mixer is not in a lock: the jump
@@ -347,6 +351,43 @@ effect picked or not (a picked effect owns VALUE's plain turn, not FUNC's).
 - **Not saved, not undone, not in a LOCK**, like the tempo.
 - **On screen**: the top bar shows the tempo the clock runs at; the live strip adds `VS+` / `VS-`.
   The FUNC help's FUNC + KNOB OR PAD page lists it.
+
+## TRANSPOSE (FUNC + the screen keys)
+
+Backlog, After 1.0 > Performance (2026-11-28), `core/transpose.hpp`. The melodic tracks moved
+through the key (or by semitones) while the beat plays, from any screen. The screen keys with FUNC did nothing but turn
+the FUNC help's pages once it was up; the help keeps LEFT/RIGHT for that, so no chord that did
+something changed meaning. A gesture that paged the help instead whenever FUNC had been held a
+moment too long would not be one you can play.
+
+| Gesture | Does | Says |
+| --- | --- | --- |
+| FUNC + SEL> | Up a step, to +12 at most | `TRANSPOSE +2 IN KEY`; on SEMI `TRANSPOSE +3 C` |
+| FUNC + SEL< | Down a step, to -12 at most | `TRANSPOSE -1 IN KEY`; on SEMI `TRANSPOSE -1 G#` |
+| FUNC + both screen keys | Back to 0: the second key pressed while the first is down | `TRANSPOSE 0` |
+| FUNC menu, TRANSPOSE | `SCALE` (every start) or `SEMI`: what a step is. The amount stays and is heard in the new unit | `TRANSPOSE SEMITONES`, `TRANSPOSE IN SCALE` |
+
+- **Which tracks move: the ones that fold into the scale**, by the same rule: VA MONO, VA POLY,
+  WAVE MONO, WAVE POLY, FM4, GRAIN, and SAMPLE while unsliced (SLC 1). The drums, a sliced SAMPLE
+  (its note is the slice) and MID (maybe a drum machine) stay where they are.
+- **SCALE stays in the key** (Roland, 2026-11-28: in scale by default, semitones in the menu).
+  Every note walks that many steps of the project's scale, so a riff moves the way a progression
+  does in the key: in A minor, -2 takes a line on A to F and the i chord to the VI (F major),
+  every note still A minor's. A note outside the key keeps its distance to the in-key note it
+  folds to. Under CHROMATIC a step is a semitone.
+- **SEMI moves the key with the notes.** A step folds into the project's key and then moves,
+  which is the same as folding into the key that many semitones up: the parts keep their shape
+  and their chords their colour (A minor +3 plays C minor). The notice names that key, in sharps.
+- **Every note those tracks play**: steps, chords, the arp's hits (a run follows a change at its
+  next hit), pads, KEYS keys and MIDI IN notes, note repeat, and MIDI OUT's copy of them. A held
+  key keeps the pitch it started at and is let go of there.
+- **Nothing is written.** A KEYS note recorded while transposed is stored as the key played and
+  plays back moved, as it was heard. Not saved, not undone; a LOCK holds the amount (not the
+  row), and a jump or swap puts it back. The FUNC menu row is not saved either.
+- **On screen**: the notice; `TR+3` on PERFORM's status line (beside `BAR` while stopped) and in
+  the live strip on every screen. The FUNC help's FUNC + KNOB OR PAD page lists it.
+- **Later, perhaps**: a song section field, so a chain entry can set the transpose as NRG sets
+  ENERGY. Not built.
 
 ## The track menu: GEN, EVOLVE and the track's settings (hold OK in GRID or KEYS)
 
@@ -825,8 +866,8 @@ FUNC held for 0.6 s with nothing else pressed shows help for **the screen that i
 (Roland, 2026-11-23): what A-D do there, named as on the screen and said in words (`B FMA FM
 AMOUNT` on a kick's SRC, `A SRC SOURCE TRACK` on MIXER DUCK), and the gestures that work there
 (the step page, the hold-and-press LEN, MACRO LEARN, NOTE view, SLC AUTO, rename and delete,
-KEYS on the pads ...). While FUNC is still held, **the screen keys (or LEFT/RIGHT) turn the help's
-pages**, as they turn every screen's pages; the help's last line says
+KEYS on the pads ...). While FUNC is still held, **LEFT/RIGHT turn the help's pages**, as they
+turn every screen's pages; the help's last line says
 `PAGE 1/11`, and on the first page `< LAST`: the pages go round, so LEFT reaches the last. The
 last five pages are the same everywhere: FUNC + each function key,
 FUNC + a knob or pad, the upper pads, and the performance mixer's gestures and slots
@@ -836,8 +877,9 @@ A quick tap of FUNC alone (let go before the help shows, nothing else pressed) s
 `HOLD FUNC: HELP`, unless another notice or a MUTATE waiting for OK or CLR is up: nothing else
 on the panel says the help is there.
 
-FUNC + a screen key or LEFT/RIGHT does nothing anywhere else, and the help only takes them once
-it is up, so no chord changes meaning. Any other key, knob or pad, or letting go of FUNC, takes
+FUNC + LEFT/RIGHT does nothing anywhere else, and the help only takes them once it is up, so no
+chord changes meaning. FUNC + a screen key is TRANSPOSE (above), and never turns the help's pages:
+the screen keys turned them too until 2026-11-28. Any other key, knob or pad, or letting go of FUNC, takes
 the help away, so a chord never sees it. Not while a name is being typed.
 
 The screens and their pages, from `core/help.cpp`:

@@ -293,7 +293,7 @@ beat playing.
 **W19. Help for the screen you are on (#107, 3 min).** Hold FUNC alone on each screen below
 for a second; it shows that screen's help, with `PAGE 1/11` at its foot.
 - GRID on the kick: `GRID SRC KCK`, then `A TUN TUNE` ... `D CLK CLICK`, `PUSH A     NOTE VIEW`.
-- Still holding FUNC, tap the screen key RIGHT: `STEPS:` (`STEP+LATER STEP  LEN` among them),
+- Still holding FUNC, tap RIGHT: `STEPS:` (`STEP+LATER STEP  LEN` among them),
   `HOLD STEP + PAD:`, `RANGE AND TRACK:`, `STEP LIGHTS:`, `FUNC + KEY:`, `FUNC + KNOB OR PAD:`,
   `UPPER PADS`, `VALUE FX MIXER:`, `VALUE FX STEPS:`, and round to page 1. LEFT goes back. GRID's
   own knob page did **not** change.
@@ -330,7 +330,7 @@ for a second; it shows that screen's help, with `PAGE 1/11` at its foot.
 
 **W20b. Gestures that moved, MUTE BUS and MORPH (#145, 3 min).** A01 playing, the chord's SnA up.
 - FUNC + turn VALUE is VariSpeed since (W70): the DJ filter does not move. FUNC + push D is
-  the kill for all bands since (W75). FUNC + MUTATE is LOCK now (W20c): tapped with no lock it says
+  the kill for all bands since (W76). FUNC + MUTATE is LOCK now (W20c): tapped with no lock it says
   `NO LOCK: HOLD STORES` and freezes or mutates nothing.
 - Push VALUE + STEP 7 (`7 MUTE BUS`), turn VALUE up slowly: every track fades out evenly and the
   delay and reverb ring on. At the top only the tails. Back to 0: the beat at its own level,
@@ -533,7 +533,7 @@ sustained in it (a pad, a voice, a chord) in `/SAMPLES` first; `unit-test/STRATA
   it stops there; the line under the macros reads `LIVE RND16 FUNC+D` and the live strip `RN16`. RND 1:
   every part scatters; RND 4: the beats of each bar trade places, still on the grid. Musical at
   which units, for techno and for ambient? `____`
-- The kick went straight from the first click while the rest jumps (it starts out, W75); no dot
+- The kick went straight from the first click while the rest jumps (it starts out, W76); no dot
   under meter 1. FUNC + lower pad 1: `T1 RND IN 8 TRK`, the kick jumps too. Again:
   `T1 RND OUT 7 TRK`. `____`
 - FUNC + turn D all the way back: `LIVE RND OFF`, and the beat is exactly A01 again from the next
@@ -1024,7 +1024,24 @@ stopped on A01, scenes 3 and 4 as in W71.
 - CLOCK SRC MIDI with a running outside clock: record two sections; their BPM reads `--`. Back to
   INTERNAL. With JAM REC also running, both blink and both keep recording. `____`
 - Save, power cycle, open: the recorded chain is there. `____`
-**W75. PERFORM's FUNC layer, Track Launch polish and the confirmations (6 min).** A01 playing.
+**W75. TRANSPOSE (4 min).** Beat playing, A01.
+- FUNC + SEL> three times: `TRANSPOSE +1 IN KEY`, `+2`, `+3`; the bass, chords and leads walk up
+  the scale together and stay in the key, while the kick, hats, snare and a sliced loop do not
+  move. The live strip shows `TR+3`, PERFORM's status line `TR+3`. Musical? `____`
+- FUNC+HOME, DOWN to TRANSPOSE (under FX GLIDE), RIGHT: `SEMI`, `TRANSPOSE SEMITONES`; the parts
+  jump to +3 semitones, a new key. FUNC + SEL<: `TRANSPOSE +2 ..` with the key named in sharps.
+  Back to `SCALE`. `____`
+- FUNC held down, SEL< then SEL> while SEL< is still down: `TRANSPOSE 0`, A01 exactly as
+  programmed. Hold FUNC alone for a second: the help comes up, and LEFT/RIGHT (not the screen
+  keys) turn its pages. `____`
+- KEYS on the bass track: hold a pad, FUNC + SEL> twice while it sounds, let go of the pad: the
+  note ends cleanly, nothing hangs. The next pad sounds two scale steps up. With REC on, a note
+  played at +2 plays back moved with the rest; at 0 it is the pad you pressed. `____`
+- ARP on the chord track (EDIT, ARP page, MOD UP): FUNC + SEL< while it runs: the run follows at
+  its next note. `____`
+- `TRANSPOSE +5`, hold FUNC + MUTATE (a lock), go back to 0, tap FUNC + MUTATE: +5 again; tap
+  again: 0. `____`
+**W76. PERFORM's FUNC layer, Track Launch polish and the confirmations (6 min).** A01 playing.
 - PERFORM, hold FUNC: the gauges read `REL LEN NRG RND` with `0 100 0 OFF` and the hint line is
   gone. Still holding, turn A, C and D: each gauge moves and lights, the value under it follows.
   Let go: the macros are back. Readable at a glance on the OLED? `____`
@@ -1042,6 +1059,7 @@ stopped on A01, scenes 3 and 4 as in W71.
   lane edits again. `____`
 - FUNC+HOME, RELOAD PROJECT, OK: `OK AGAIN: RELOAD`; wait 3 s. PROJECT, SLOT, FUNC + LEFT:
   `LEFT AGAIN: CLEAR`; wait. Every confirmation on the unit reads `<KEY> AGAIN: <WHAT>`. `____`
+
 
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
@@ -1569,7 +1587,7 @@ Since #145 both live only in the performance mixer (slots 8 and 5); their FUNC c
       **no click**.
 - [ ] **U8.** Hold a tape stop for 10 s: **MAX `________ %`** against U1's `________ %`.
 - [ ] Lock D on a step (hold STEP, turn D). Hold that STEP, then FUNC, push D: `LOCK CLEARED`.
-      Without a STEP held, FUNC + push D is the kill for all bands (W75) and stops nothing.
+      Without a STEP held, FUNC + push D is the kill for all bands (W76) and stops nothing.
 - [ ] Turn the chord's SnA (delay send) up and play a few chord stabs. **Push VALUE + STEP 5,
       turn VALUE to the top**: `FRZ` on PERFORM's bar line. The echo keeps looping at the same
       level; new stabs are not echoed. Turn down: the loop fades into the delay's tail.

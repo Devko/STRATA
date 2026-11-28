@@ -16,8 +16,9 @@
     // first, the file actions at the bottom. The selected track's rows (SPEED, PLAY, FREEZE,
     // RELOAD SAMPLE) are in GRID's track menu (app/ui_trackmenu.hpp).
     enum class MenuItem : uint8_t { save, jam, arr, click, count_in, rec_mode, quantize,
-                                    autofill, glide, loop_len, chain, song, arr_undo, prog_out,
-                                    save_as, open, kits, fresh, reload, clear, demo, count };
+                                    autofill, glide, transpose, loop_len, chain, song, arr_undo,
+                                    prog_out, save_as, open, kits, fresh, reload, clear, demo,
+                                    count };
     static constexpr int kMenuItems = int(MenuItem::count);
     static constexpr int kMenuRows = 9;
 
@@ -40,6 +41,7 @@
             case MenuItem::count_in: return "COUNT-IN";
             case MenuItem::loop_len: return "LOOP LEN";
             case MenuItem::glide:    return "FX GLIDE";
+            case MenuItem::transpose: return "TRANSPOSE";
             case MenuItem::demo:     return "LOAD DEMO";
             case MenuItem::jam:      return "JAM REC";
             case MenuItem::arr:      return "ARR REC";
@@ -88,6 +90,10 @@
             case MenuItem::glide:
                 // How long a button's jump in the performance mixer rides (core/perffx.hpp).
                 append(out, perf_glide_name(perf_glide_));
+                break;
+            case MenuItem::transpose:
+                // What a FUNC + screen key step is (core/transpose.hpp).
+                append(out, transpose_semis_ ? "SEMI" : "SCALE");
                 break;
             case MenuItem::arr:
                 // OFF, ON, or ON and the sections written so far: ON 7.
@@ -280,6 +286,7 @@
             rnd_armed_ = engine_.live_rnd_armed();
             rnd_armed_chosen_ = true;              // the lock's set, kept as chosen
             energy_ = engine_.energy();
+            transpose_ = engine_.transpose();
             // The mixer to rest over FX GLIDE (a lock holds no effect); a loop plays on.
             if (perf_target_fx() != PerfFx::none) perf_ride_to(perf_target_fx(), 0, false);
         }
@@ -841,6 +848,13 @@
                 notice_logged(notice_buffer_);       // tests/scenario_glide.sh reads it
                 break;
             }
+            case MenuItem::transpose:
+                // A switch: either arrow, B or OK flips it. The amount stays where it is and
+                // is heard in the new unit at once (+2 IN KEY becomes +2 semitones).
+                transpose_semis_ = !transpose_semis_;
+                post_transpose();
+                notice_logged(transpose_semis_ ? "TRANSPOSE SEMITONES" : "TRANSPOSE IN SCALE");
+                break;
             default:
                 break;
         }

@@ -255,6 +255,23 @@
         notice_logged(notice_buffer_);
     }
 
+    // TRANSPOSE (core/transpose.hpp): FUNC + SEL< / SEL> a step (a scale step, or a semitone
+    // with the FUNC menu's row on SEMI), the other screen key held as well puts it back to 0.
+    // Posted absolute with the mode; the notice is logged so a scenario can follow it:
+    // `TRANSPOSE +2 IN KEY`, `TRANSPOSE +3 C` (SEMI: the key the parts are in), `TRANSPOSE 0`.
+    void transpose_key(int delta) {
+        const bool both = sel_left_down_ && sel_right_down_;
+        transpose_ = both ? int8_t(0) : transpose_turn(transpose_, delta);
+        post_transpose();
+        transpose_text(transpose_, transpose_semis_, engine_.key_root(), notice_buffer_,
+                       kTransposeTextMax);
+        notice_logged(notice_buffer_);
+    }
+
+    void post_transpose() {
+        post(Cmd::set_transpose, 0, 0, uint8_t(transpose_), transpose_semis_ ? 1 : 0);
+    }
+
     // LIVE RND's notice, logged so a scenario can follow it: `LIVE RND4 8 TRK` (the unit and how
     // many tracks it moves), `LIVE RND OFF` at rest.
     void live_rnd_notice() {
@@ -405,6 +422,10 @@
                 append(out, " EN");
                 append_signed(out, engine_.energy());
             }
+            if (engine_.transpose() != 0) {
+                append(out, " TR");
+                append_signed(out, engine_.transpose());
+            }
             *out = 0;
             paint::small_text(px, 16, 52, line, 9);
             if (engine_.rel_all() != 0 || engine_.len_all() != 0) {
@@ -458,8 +479,8 @@
             } else {
                 canvas.text(0, 66, "AUTOFILL: FUNC MENU", 7);
             }
-            // The bar, ENERGY away from rest and the held modes: "BAR 1000 EN-64 NRPT" is 19
-            // characters, and FRZ goes on only while it fits the line.
+            // The bar, ENERGY and TRANSPOSE away from rest and the held modes: "BAR 1000 EN-64
+            // TR-12" is 20 characters, so NRPT and FRZ go on only while they fit the line.
             out = line;
             append(out, "BAR ");
             append_number(out, engine_.bar() % 1000u + 1u);
@@ -467,7 +488,11 @@
                 append(out, " EN");
                 append_signed(out, engine_.energy());
             }
-            if (note_repeat_mode_) append(out, " NRPT");
+            if (engine_.transpose() != 0) {
+                append(out, " TR");
+                append_signed(out, engine_.transpose());
+            }
+            if (note_repeat_mode_ && out - line + 5 <= kLineChars) append(out, " NRPT");
             if (engine_.delay_frozen() && out - line + 4 <= kLineChars) append(out, " FRZ");
             *out = 0;
             canvas.text(0, 75, line, 9);
