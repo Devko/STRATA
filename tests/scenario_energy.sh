@@ -21,7 +21,7 @@
 #     FUNC + turn C +32      -> "ENERGY +64", left on to the end: the load with the ghosts
 #   run "load" (1.2 G cycles)
 #     PLAY, FUNC + MIXER     -> PERFORM
-#     FUNC + turn C -5       -> "ENERGY -10"
+#     FUNC + turn C -5       -> "ENERGY -10" (or short of it: any ENERGY below rest)
 #     FUNC + HOME, UP, OK, OK -> LOAD DEMO (tests/scenario_clear.sh: UP from SAVE is LOAD DEMO)
 #     FUNC + turn C +1       -> "ENERGY +2": the load put ENERGY back to rest, so the click
 #                               starts from 0 and not from -10
@@ -155,11 +155,14 @@ check("ENERGY +66" not in log, "peak: and it stopped there", f"log={log}")
 
 load_run = load(sys.argv[3])
 log = common(load_run, "load")
-before = index(log, "ENERGY -10")
-after = index(log, "ENERGY +2", before)
-check(before >= 0, "load: ENERGY down to -10 before the load", f"log={log}")
-check(after > before, "load: after LOAD DEMO one click up reads +2, from rest", f"log={log}")
-check(index(log, "ENERGY -8", before) < 0, "load: not on from -10", f"log={log}")
+# Whatever the turn down reached (a dropped detent leaves it at -8), the first ENERGY notice
+# after the load is the click up from rest.
+energy = [i for i, l in enumerate(log) if l.startswith("ENERGY ")]
+downs = [i for i in energy if log[i].startswith("ENERGY -")]
+check(bool(downs), "load: ENERGY below rest before the load", f"log={log}")
+later = [i for i in energy if downs and i > downs[-1]]
+check(bool(later) and log[later[0]] == "ENERGY +2",
+      "load: after LOAD DEMO the first click up reads +2, from rest", f"log={log}")
 
 peak = peak_run.get("audio_cycles_peak", 0)
 percent = 100.0 * peak / CYCLES_PER_BLOCK
