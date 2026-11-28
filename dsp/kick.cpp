@@ -60,6 +60,20 @@ constexpr float kTransientTau = 0.005f;
 // noise would still add is under 3e-6 of full scale per unit of CLK, -110 dB, under the last
 // bit of a 16-bit file. About 64 ms after the hit at tau = 5 ms; the body rings on far longer.
 constexpr float kTransientFloor = 3.0e-6f;
+// PNCH (kick.hpp). KNK at the top adds 15 x f0 to the increment at the hit: with TUN's 49 Hz the
+// knock starts near 780 Hz, the top of the references' 250 Hz-1 kHz punch. Its time constant
+// runs 1-16 ms (KND), against FMD's 8-128 ms: the knock is over before the body's sweep is.
+constexpr float kKnockMax = 15.0f;
+constexpr float kKnockTauLow = 0.001f;
+constexpr float kKnockTauOctaves = 4.0f;
+// The tick: noise high-passed at 3 kHz under a 1.5 ms envelope, kTickGain at TCK's top, set by
+// measurement against the benchmark's references (kick.hpp).
+constexpr float kTickHz = 3000.0f;
+constexpr float kTickK = 1.4f;
+constexpr float kTickTau = 0.0015f;
+constexpr float kTickGain = 8.0f;
+constexpr float kTickFloor = 1.0e-4f;
+
 // ln(100): EnvelopeShape::make wants the time to reach 1% of the target, where the reference
 // gives time constants. One is ln(100) of the other, and the per-sample coefficient comes out
 // the same as Plaits' 1 / (tau * rate).
@@ -108,6 +122,12 @@ constexpr float kToOnePercent = 4.60517019f;
 //           pairing the 909 is known for.
 //  11  LVL  output level, square law, 0-1. Square gives usable control over the quiet end.
 
+float kick_knock_seconds(uint8_t value) {
+    return kKnockTauLow * exp2(kKnockTauOctaves * float(value) * (1.0f / 127.0f));
+}
+
+int kick_drop_cents(uint8_t value) { return -int((int(value) * 1200 + 63) / 127); }
+
 void Kick::init(float sample_rate) {
     rate_ = sample_rate > 1.0f ? sample_rate : 48000.0f;
     inv_rate_ = reciprocal(rate_);
@@ -117,12 +137,15 @@ void Kick::init(float sample_rate) {
         EnvelopeShape::make(0.0002f, kTransientTau * kToOnePercent, 0.0f, 0.001f, rate_);
     click_coefficients_ =
         SvfCoefficients::from_g(enaga::dsp::tan_pi(kClickHz * inv_rate_), kClickK);
+    tick_coefficients_ = SvfCoefficients::from_g(enaga::dsp::tan_pi(kTickHz * inv_rate_), kTickK);
+    tick_decay_ = exp(-inv_rate_ * reciprocal(kTickTau));
     for (Voice &v : voices_) {
         v = Voice{};
         v.click_band.reset();
         v.noise_lp.reset();
         v.noise_hp.reset();
         v.tone_lp.reset();
+        v.tick_hp.reset();
     }
     active_ = false;
     // A machine must be safe to trigger before the first prepare(), so derive from mid values.
@@ -148,6 +171,16 @@ void Kick::prepare(const TrackParams &params) {
     dirtiness_ = params.unit(10);
     const float level = params.unit(11);
     out_gain_ = level * level;
+
+    // PNCH (kick.hpp): KNK KND TCK DRP, the ASR page's four slots.
+    knock_amount_ = kKnockMax * params.unit(kAsrFirst + 0);
+    const float knock_tau = kick_knock_seconds(params.get(kAsrFirst + 1));
+    knock_decay_ = exp(-inv_rate_ * reciprocal(knock_tau));
+    tick_gain_ = kTickGain * params.unit(kAsrFirst + 2);
+    // The fall: down to 2^-DRP of f0 (an octave at the top), on the amplitude's own time
+    // constant, so the pitch has fallen most of the way by the time the body has.
+    drop_target_ = exp2(-params.unit(kAsrFirst + 3));
+    drop_rate_ = -inv_rate_ * reciprocal(amp_tau);
 }
 
 void Kick::trigger(const Trig &trig) {
@@ -230,6 +263,10 @@ void Kick::start(Voice &v) {
     v.hold = hold_frames_;
     v.gate = gate_frames_;
     v.fm_env = v.trigger_level;
+    v.knock_env = v.trigger_level;
+    v.tick_env = v.trigger_level;
+    v.drop_env = 1.0f;
+    v.tick_hp.reset();
     v.slew = 0.0f;
     v.click_hp = 0.0f;
     v.click_band.reset();
@@ -274,7 +311,11 @@ void Kick::run(Voice &v, float *out, int n) {
 
     // Note-dependent coefficients: still control rate, just once per voice per block rather than
     // once per machine, because the trig note moves f0 and three of these follow f0.
-    const float f0 = clamp(base_hz_ * v.note_ratio * pitch_mod_ratio_, 10.0f, 2000.0f);
+    // DRP: f0 falls from itself towards drop_target_ of itself along drop_env. Control rate: a
+    // fall over hundreds of ms in 1.3 ms steps is a smooth glide on a low sine.
+    const float drop = drop_target_ + (1.0f - drop_target_) * v.drop_env;
+    if (drop_target_ < 1.0f) v.drop_env *= exp(float(n) * drop_rate_);
+    const float f0 = clamp(base_hz_ * v.note_ratio * pitch_mod_ratio_ * drop, 10.0f, 2000.0f);
     const float f0_norm = f0 * inv_rate_;
     const float dirtiness = dirtiness_ * clamp(1.0f - 8.0f * f0_norm, 0.0f, 1.0f);
     const float tone_coefficient = clamp(4.0f * f0_norm * tone_ratio_, 0.0f, 1.0f);
@@ -286,8 +327,13 @@ void Kick::run(Voice &v, float *out, int n) {
     v.hold -= held;
     // The phase accumulator, the FM envelope (which runs through the pinned samples too) and the
     // shaper, in one cl6x-built pass over the block.
-    strata_kick_body(body_, held, n, f0_norm, fm_amount_, fm_decay_, dirtiness, &v.phase,
-                     &v.fm_env);
+    if (knock_amount_ > 0.0f) {
+        strata_kick_body_knock(body_, held, n, f0_norm, fm_amount_, fm_decay_, knock_amount_,
+                               knock_decay_, dirtiness, &v.phase, &v.fm_env, &v.knock_env);
+    } else {
+        strata_kick_body(body_, held, n, f0_norm, fm_amount_, fm_decay_, dirtiness, &v.phase,
+                         &v.fm_env);
+    }
 
     v.amp.render(env_, n, amp_shape_);
     enaga_scale(env_, n, v.trigger_level);
@@ -324,6 +370,15 @@ void Kick::run(Voice &v, float *out, int n) {
     } else {
         v.transient.render(transient_env_, n, transient_shape_);
         v.gate = 0;
+    }
+
+    // TCK: high-passed noise under its own 1.5 ms envelope, after the tone low-pass so TON
+    // never dulls it. Skipped once the envelope is spent (under -80 dB), and entirely at TCK 0.
+    if (tick_gain_ > 0.0f && v.tick_env > kTickFloor) {
+        enaga_clear(aux_, n);
+        tick_rng_.add_noise(aux_, n, 1.0f);
+        strata_svf_inplace(&v.tick_hp.state_, &tick_coefficients_, Svf::band_pass, aux_, n);
+        strata_kick_tick(body_, aux_, n, tick_gain_, tick_decay_, &v.tick_env);
     }
 
     if (v.fade > 0) {

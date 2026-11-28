@@ -50,6 +50,42 @@ void strata_kick_body(float *restrict out, int hold, int n, float f0_norm, float
     *fm_env = e;
 }
 
+void strata_kick_body_knock(float *restrict out, int hold, int n, float f0_norm, float fm_amount,
+                            float fm_decay, float knock_amount, float knock_decay,
+                            float dirtiness, float *phase, float *fm_env, float *knock_env) {
+    float p = *phase;
+    float e = *fm_env;
+    float k = *knock_env;
+    int i;
+    for (i = 0; i < hold; i++) {
+        e *= fm_decay;
+        k *= knock_decay;
+    }
+    for (i = hold; i < n; i++) {
+        float dp = f0_norm * (1.0f + 3.5f * fm_amount * e + knock_amount * k);
+        dp = dp > 0.5f ? 0.5f : dp;
+        p += dp;
+        p -= p >= 1.0f ? 1.0f : 0.0f;
+        out[i] = distorted_sine(p, dirtiness);
+        e *= fm_decay;
+        k *= knock_decay;
+    }
+    *phase = p;
+    *fm_env = e;
+    *knock_env = k;
+}
+
+void strata_kick_tick(float *restrict out, const float *restrict src, int n, float gain,
+                      float decay, float *env) {
+    float e = *env;
+    int i;
+    for (i = 0; i < n; i++) {
+        out[i] += src[i] * gain * e;
+        e *= decay;
+    }
+    *env = e;
+}
+
 void strata_kick_click(float *restrict out, int n, int gate, float *slew, float *high_pass) {
     float s = *slew;
     float hp = *high_pass;

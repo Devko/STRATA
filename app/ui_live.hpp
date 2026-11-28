@@ -233,7 +233,9 @@
                 for (int i = first; i < count && i < first + kEditTabsShown; i++) {
                     const int p = shown[i];
                     const Page page = Page(p);
-                    x = draw_tab(canvas, x, page == Page::fltr ? "FLT" : page_name(page),
+                    x = draw_tab(canvas, x,
+                                 page == Page::fltr ? "FLT"
+                                                    : page_name_on(page, engine_.machine_id(selected_)),
                                  p == param_page_, page_live(p) ? 8 : 3);
                 }
                 break;

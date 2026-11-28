@@ -541,6 +541,13 @@ const char *page_name(Page page) {
     }
 }
 
+// The same, on a machine: KICK's ASR page is PNCH, its knock, tick and drop (dsp/kick.hpp).
+const char *page_name_on(Page page, uint8_t machine) {
+    return page == Page::asr && machine_is_kick(machine) ? "PNCH" : page_name(page);
+}
+// KICK's PNCH page's encoder names.
+constexpr const char *kKickPunchNames[kAsrParams] = {"KNK", "KND", "TCK", "DRP"};
+
 // The ASR page's encoder names (dsp/va.cpp's table). Only the VAs read the page; on any other
 // machine its four slots show "---".
 constexpr const char *kAsrNames[kAsrParams] = {"ATK", "SUS", "REL", "FSU"};

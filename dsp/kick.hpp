@@ -30,7 +30,22 @@
 // is stolen; if it is still loud it fades over kFadeFrames first and the new hit starts at the
 // end of that fade -- the spec's "retrigger with a short fade".
 //
-// It reads the SRC page (0-3) and the AMP page (8-11); FLTR and FX belong to the insert chain.
+// The PNCH page (the ASR page's four slots, 24-27, which no other drum reads) adds what the
+// techno benchmark (2026-11-28) found the model cannot reach: measured against 400+ techno kicks
+// from sample libraries, its first 20 ms was 20-35 dB short from 250 Hz to 4 kHz, and nothing of
+// it fell below f0. A layered techno kick is a low punch, a mid punch and a top; these are the
+// last two and the fall:
+//   KNK  knock: a second pitch envelope on top of FMA's, up to 15 x f0 more (four octaves above
+//        the body), much faster -- the "mid punch" layer, 250 Hz-1 kHz in the first milliseconds
+//   KND  the knock's time constant, 1-16 ms exponential
+//   TCK  tick: noise high-passed at 3 kHz under a 1.5 ms envelope -- the top layer, 2-6 kHz
+//   DRP  drop: the pitch keeps falling below TUN as the hit decays, up to an octave
+// All four at 0 is the kick as it was, bit for bit: KNK 0 runs the old body loop, TCK 0 skips
+// the tick (its noise has a generator of its own, so the click's noise stream never moves), and
+// DRP 0 leaves f0 alone.
+//
+// It reads the SRC page (0-3), the AMP page (8-11) and PNCH (24-27); FLTR and FX belong to the
+// insert chain.
 #pragma once
 
 #include <enaga/dsp.hpp>
@@ -38,6 +53,10 @@
 #include "track.hpp"
 
 namespace strata {
+
+// PNCH's knob curves, for the screen as well as for prepare().
+float kick_knock_seconds(uint8_t value);     // KND: 1-16 ms
+int kick_drop_cents(uint8_t value);          // DRP: 0 to -1200, where the fall ends
 
 class Kick final : public Machine {
 public:
@@ -71,8 +90,12 @@ private:
         enaga::dsp::Svf click_band;                  // the reference's 5 kHz Q 2 on the click
         enaga::dsp::OnePole noise_lp, noise_hp;      // attack noise, 0.05 minus 0.005
         enaga::dsp::OnePole tone_lp;                 // the output low-pass
+        enaga::dsp::Svf tick_hp;                     // TCK's 3 kHz high-pass
         float phase = 0.0f;
         float fm_env = 0.0f;
+        float knock_env = 0.0f;    // KNK's pitch envelope
+        float tick_env = 0.0f;     // TCK's level envelope
+        float drop_env = 1.0f;     // DRP: 1 at the hit, falling towards 0 (the full drop)
         float slew = 0.0f;         // the click gate's slew limiter
         float click_hp = 0.0f;     // the click's one-pole high-pass state
         float note_ratio = 1.0f;   // the trig note's frequency ratio against note 60
@@ -104,9 +127,11 @@ private:
 
     Voice voices_[kVoices];
     enaga::dsp::Random rng_{0x5F2A41C7u};
+    enaga::dsp::Random tick_rng_{0x2C9E5B13u};    // TCK's own, so the click's noise never moves
     enaga::dsp::EnvelopeShape amp_shape_{};
     enaga::dsp::EnvelopeShape transient_shape_{};
     enaga::dsp::SvfCoefficients click_coefficients_{};
+    enaga::dsp::SvfCoefficients tick_coefficients_{};
 
     float rate_ = 48000.0f;
     float inv_rate_ = 1.0f / 48000.0f;
@@ -119,6 +144,12 @@ private:
     float click_level_ = 0.0f;     // CLK
     float tone_ratio_ = 1.0f;      // TON, as 2^(tone * 108/12)
     float out_gain_ = 0.25f;       // LVL
+    float knock_amount_ = 0.0f;    // KNK: extra multiples of f0 at the hit, 0-15
+    float knock_decay_ = 0.98f;    // KND, as a per-sample multiplier
+    float tick_gain_ = 0.0f;       // TCK
+    float tick_decay_ = 0.986f;    // the tick's 1.5 ms, as a per-sample multiplier
+    float drop_target_ = 1.0f;     // DRP: f0's ratio at the end of the fall, 1 (none) to 0.5
+    float drop_rate_ = 0.0f;       // -1 / (the fall's time constant in frames)
     bool active_ = false;
 
     float body_[kBlock] = {};

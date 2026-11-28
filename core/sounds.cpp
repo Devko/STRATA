@@ -46,8 +46,10 @@ constexpr SoundPreset kKickPresets[] = {
     // techno kick): no click, a slow small sweep, a long dirty body driven hard and then the
     // chain's 24 dB low-pass at 290 Hz (CUT 50, MOD 40), so only the low growl is left. Measured
     // against RY Divinity's kick builder rumbles (techno benchmark, 2026-11-28): 125 Hz at -13 dB
-    // and 250 Hz at -29 dB under the fundamental, theirs -16 and -36. Duck it from the main kick.
-    {"RUMBLE", {55, 40, 70, 0}, {120, 50, 60, 40}, {96, 40, 127, 36}, NO_ASR, NO_OSC},
+    // and 250 Hz at -29 dB under the fundamental, theirs -16 and -36. DRP 60 lets the pitch fall
+    // half an octave as it decays, which puts the low end into the 31 Hz band (-8 dB, theirs -8).
+    // Duck it from the main kick.
+    {"RUMBLE", {55, 40, 70, 0}, {120, 50, 60, 40}, {96, 40, 127, 36}, {0, 0, 0, 60}, NO_OSC},
     // Tight: a fast, clicky modern techno kick that leaves room for the bass between hits.
     {"TIGHT", {55, 85, 35, 100}, {20, 127, 20, 0}, {40, 75, 20, 118}, NO_ASR, NO_OSC},
     // Ambient: a slow, deep drop, no click, the longest tail. A boom on the one, not a groove.
@@ -56,18 +58,19 @@ constexpr SoundPreset kKickPresets[] = {
     {"HARD", {55, 110, 30, 120}, {120, 127, 20, 0}, {64, 110, 127, 44}, NO_ASR, NO_OSC},
     // The techno benchmark (2026-11-28) measured the presets above against 400+ techno kicks from
     // sample libraries: in its first 20 ms the 909 is 20-35 dB short of them from 250 Hz to 4 kHz,
-    // the knock that makes a kick punch. The four below get as close as today's knobs can: the
-    // full sweep (FMA 127), full click, DRT at the top and the chain's drive hard, which is where
-    // the 250 Hz-1 kHz knock comes from. LVL sits low because the drive does the level: they land
-    // within about 2 dB of the list's loudest.
+    // the knock that makes a kick punch. The four below use everything: the full sweep (FMA 127),
+    // full click, DRT at the top, the chain's drive hard, and the PNCH page (dsp/kick.hpp) --
+    // KNK's knock for 250 Hz-1 kHz, TCK's tick for 2-6 kHz. TECHNO's first 20 ms now sits 6-10 dB
+    // under the references from 1 to 4 kHz, where the 909 is 30-40 dB under. LVL sits low
+    // because the drive does the level: they land within about 2 dB of the list's loudest.
     // Modern techno: the sweep over 27 ms (FMD 56), a 61 ms body. Closest to the references of all.
-    {"TECHNO", {55, 127, 56, 127}, {110, 127, 20, 0}, {64, 100, 127, 62}, NO_ASR, NO_OSC},
+    {"TECHNO", {55, 127, 56, 127}, {95, 127, 20, 0}, {64, 100, 127, 72}, {127, 60, 127, 20}, NO_OSC},
     // Warehouse: a faster sweep and a longer, darker body (DEC 82, about 190 ms to -20 dB).
-    {"WHOUSE", {55, 127, 48, 127}, {100, 127, 20, 0}, {82, 90, 127, 56}, NO_ASR, NO_OSC},
+    {"WHOUSE", {55, 127, 48, 127}, {90, 127, 20, 0}, {82, 90, 127, 62}, {110, 80, 110, 40}, NO_OSC},
     // Industrial: the fastest sweep, drive at the top, short. Hard and industrial techno.
-    {"INDUS", {55, 127, 36, 127}, {127, 127, 20, 0}, {58, 110, 127, 56}, NO_ASR, NO_OSC},
+    {"INDUS", {55, 127, 36, 127}, {127, 127, 20, 0}, {58, 110, 127, 60}, {127, 50, 127, 0}, NO_OSC},
     // Minimal: short and tight, less drive. Leaves room for a rolling bass between the hits.
-    {"MINIM", {55, 127, 40, 127}, {90, 127, 20, 0}, {44, 100, 100, 82}, NO_ASR, NO_OSC},
+    {"MINIM", {55, 127, 40, 127}, {80, 127, 20, 0}, {44, 100, 100, 90}, {110, 50, 127, 0}, NO_OSC},
 };
 
 // --- SNARE: TUN SNP TON CLP / DEC SPR BDY LVL (dsp/snare.cpp) ------------
@@ -441,7 +444,7 @@ const SoundPreset *sound_preset(uint8_t machine, int index) {
 
 uint64_t sound_preset_writes(uint8_t machine) {
     switch (MachineId(machine)) {
-        case MachineId::kick:
+        case MachineId::kick: return kSrcFltrAmp | kAsrBits;   // and PNCH (dsp/kick.hpp)
         case MachineId::snare:
         case MachineId::perc: return kSrcFltrAmp;
         case MachineId::hat: return kSrcFltrAmp & ~(uint64_t(1) << kHatChoke);
@@ -510,7 +513,7 @@ bool machine_defaults_apply(uint8_t machine, uint8_t *params) {
     const SoundPreset *s = sound_preset(machine, 0);
     if (s == nullptr) return false;
     for (int p = 0; p < 12; p++) params[p] = value_of(*s, p);
-    if (machine_reads_asr(machine)) {
+    if (machine_has_asr_page(machine)) {
         for (int p = 0; p < 4; p++) params[kSoundAsrFirst + p] = s->asr[p];
         if (machine_reads_osc(machine)) {
             for (int p = 0; p < 4; p++) params[kSoundOscFirst + p] = s->osc[p];

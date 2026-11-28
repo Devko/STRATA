@@ -385,7 +385,10 @@
                 break;
             case Page::amp:
             case Page::asr:
-                if (Page(param_page_) == Page::asr && !has_asr(selected_)) {
+                if (Page(param_page_) == Page::asr && machine_is_kick(id)) {
+                    add("KNK KND  MID PUNCH");
+                    add("TCK TOP  DRP FALL");
+                } else if (Page(param_page_) == Page::asr && !has_asr(selected_)) {
                     add("NOT ON THIS MACHINE");
                 } else if (has_asr(selected_)) {
                     const bool sustains = kit.v[kAsrFirst + 1] > 0;

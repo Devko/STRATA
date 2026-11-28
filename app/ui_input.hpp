@@ -1253,7 +1253,9 @@
                     param_page_ = (param_page_ + delta + kEditPages) % kEditPages;
                     if (page_live(param_page_)) break;
                 }
-                if (mode_ != Mode::edit) notice(page_name(Page(param_page_)));
+                if (mode_ != Mode::edit) {
+                    notice(page_name_on(Page(param_page_), engine_.machine_id(selected_)));
+                }
                 break;
             case Mode::mixer:
                 // Faders, then the delay, the reverb, the routing and the master.

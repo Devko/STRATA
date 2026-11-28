@@ -77,8 +77,9 @@ TEST(sounds_every_preset_is_named_drawably_uniquely_and_holds_knob_bytes) {
             for (int k = 0; k < 4; k++) {
                 CHECK(s->src[k] <= 127 && s->fltr[k] <= 127 && s->amp[k] <= 127 && s->asr[k] <= 127);
             }
-            // The drums have no ASR page; a preset for one says so with zeroes.
-            if (!machine_reads_asr(uint8_t(m))) {
+            // The other drums have no ASR page; a preset for one says so with zeroes. (KICK's is
+            // PNCH, dsp/kick.hpp.)
+            if (!machine_has_asr_page(uint8_t(m))) {
                 for (int k = 0; k < 4; k++) CHECK_EQ(int(s->asr[k]), 0);
             }
             // A held sound is loud: five held voices are far more than a 200 ms stab, so a VA
@@ -148,8 +149,9 @@ TEST(sounds_a_preset_writes_its_pages_and_leaves_the_mix_the_lfo_and_the_arp) {
     }
     // HAT's choke group is wiring, not sound.
     CHECK(((sound_preset_writes(uint8_t(MachineId::hat)) >> (kFactoryAmp + 2)) & 1u) == 0);
-    // Only the VAs read ASR.
-    CHECK(((sound_preset_writes(uint8_t(MachineId::kick)) >> kSoundAsrFirst) & 1u) == 0);
+    // The synths read ASR; KICK reads its slots as PNCH, the other drums not at all.
+    CHECK(((sound_preset_writes(uint8_t(MachineId::kick)) >> kSoundAsrFirst) & 1u) != 0);   // PNCH
+    CHECK(((sound_preset_writes(uint8_t(MachineId::snare)) >> kSoundAsrFirst) & 1u) == 0);
     CHECK(((sound_preset_writes(uint8_t(MachineId::va_mono)) >> kSoundAsrFirst) & 1u) != 0);
     uint8_t params[kKitParams] = {};
     CHECK(!sound_preset_apply(uint8_t(MachineId::sample), 0, params));
@@ -230,7 +232,7 @@ namespace {
 // the machines that read them. Everything machine_defaults_apply must leave no stale byte in.
 bool reads_for_sound(uint8_t machine, int p) {
     if (p < 12) return true;
-    if (p >= kSoundAsrFirst && p < kSoundAsrFirst + 4) return machine_reads_asr(machine);
+    if (p >= kSoundAsrFirst && p < kSoundAsrFirst + 4) return machine_has_asr_page(machine);
     if (p >= kSoundScnFirst && p < kSoundScnFirst + 4) return machine_reads_scn(machine);
     return machine_reads_osc(machine) && p >= kSoundOscFirst && p < kSoundOscFirst + 4;
 }

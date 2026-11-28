@@ -661,7 +661,7 @@
         paint::dotted_h(px, 0, 123, 74, 3, 2);
         for (int g = 0; g < 5; g++) {
             const int gx = g * 25;
-            const bool reads = g == 3 ? machine_reads_asr(machine) : (g == 4 ? machine_reads_osc(machine) : true);
+            const bool reads = g == 3 ? machine_has_asr_page(machine) : (g == 4 ? machine_reads_osc(machine) : true);
             for (int k = 0; k < 4; k++) {
                 const int x = gx + k * 5;
                 if (!reads) {
@@ -1130,7 +1130,7 @@
         // The knobs A-D turn here: the EDIT page's, as gauges, with the page named.
         paint::dotted_h(px, 0, 123, 69, 3, 2);
         const Page page = Page(param_page_);
-        paint::small_text(px, 0, 72, page_name(page), 8);
+        paint::small_text(px, 0, 72, page_name_on(page, engine_.machine_id(selected_)), 8);
         for (int slot = 0; slot < 4; slot++) {
             const int cx = 15 + slot * 31;
             const int index = edit_index(slot);

@@ -242,9 +242,16 @@ constexpr bool machine_is_grain(uint8_t id) { return id == uint8_t(MachineId::gr
 constexpr bool machine_reads_osc(uint8_t id) {
     return machine_reads_asr(id) && id != uint8_t(MachineId::sample);
 }
+// KICK reads the ASR page's four slots as a page of its own, PNCH (KNK KND TCK DRP, dsp/kick.hpp):
+// not an envelope, so it is not in machine_reads_asr, which everything about held notes asks.
+constexpr bool machine_is_kick(uint8_t id) { return id == uint8_t(MachineId::kick); }
+// Does this machine have the page at all, as an envelope or as KICK's PNCH? What shows, names,
+// saves and presets the page's bytes asks here.
+constexpr bool machine_has_asr_page(uint8_t id) { return machine_reads_asr(id) || machine_is_kick(id); }
 // SAMPLE's ASR page is SUS and REL alone: ATK is AMP's, and there is no fourth.
 constexpr bool machine_reads_asr_slot(uint8_t id, int slot) {
-    return machine_reads_asr(id) && (id != uint8_t(MachineId::sample) || slot == 1 || slot == 2);
+    return machine_is_kick(id) ||
+           (machine_reads_asr(id) && (id != uint8_t(MachineId::sample) || slot == 1 || slot == 2));
 }
 
 // The WAVE pair: the VA voice with a wavetable where its oscillators were.

@@ -340,6 +340,7 @@
         if (index >= kOscFirst) return osc_param_name(index - kOscFirst);
         if (index >= kAsrFirst) {
             if (!machine_reads_asr_slot(engine_.machine_id(track), index - kAsrFirst)) return "---";
+            if (machine_is_kick(engine_.machine_id(track))) return kKickPunchNames[index - kAsrFirst];
             // FM4's fourth ASR knob holds the index envelope, not a filter's: ISU. GRAIN has no
             // filter envelope, so it has no fourth; SAMPLE reads SUS and REL alone.
             if (index == kAsrFirst + 3 && machine_is_fm(engine_.machine_id(track))) return "ISU";
@@ -535,6 +536,21 @@
         if (machine_is_wave(engine_.machine_id(selected_)) && append_wave_value(out, index, value)) return;
         if (machine_is_fm(engine_.machine_id(selected_)) && append_fm_value(out, index, value)) return;
         if (machine_is_grain(engine_.machine_id(selected_)) && append_grain_value(out, index, value)) return;
+        if (machine_is_kick(engine_.machine_id(selected_)) && index >= kAsrFirst &&
+            index < kAsrFirst + kAsrParams) {
+            // KICK's PNCH (dsp/kick.hpp): KNK and TCK in percent, KND a time, DRP in cents.
+            if (index == kAsrFirst + 1) {
+                append_seconds(out, kick_knock_seconds(value));
+            } else if (index == kAsrFirst + 3) {
+                const int cents = kick_drop_cents(value);
+                if (cents < 0) *out++ = '-';
+                append_number(out, uint32_t(-cents));
+            } else {
+                append_number(out, uint32_t((int(value) * 100 + 63) / 127));
+                *out++ = '%';
+            }
+            return;
+        }
         if (engine_.machine_id(selected_) == uint8_t(MachineId::sample)) {
             // SAMPLE's ASR page: SUS and REL alone, REL on its own curve (dsp/sample.cpp).
             if (index == kAsrFirst + 0 || index == kAsrFirst + 3) {

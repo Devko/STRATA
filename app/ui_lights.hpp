@@ -754,7 +754,7 @@
                 } else if (mode_ == Mode::edit) {
                     // EDIT's page, so a scenario can reach the LFO page with the selection keys.
                     *out++ = ' ';
-                    append(out, page_name(Page(param_page_)));
+                    append(out, page_name_on(Page(param_page_), engine_.machine_id(selected_)));
                 }
                 *out = 0;
                 enaga::log(line);

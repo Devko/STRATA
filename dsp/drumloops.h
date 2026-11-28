@@ -33,6 +33,18 @@ extern "C" {
 void strata_kick_body(float *out, int hold, int n, float f0_norm, float fm_amount,
                       float fm_decay, float dirtiness, float *phase, float *fm_env);
 
+/* The body with KNK, the knock (kick.cpp): a second, much faster pitch envelope on top of the
+ * FM one, the increment f0 * (1 + 3.5 * fm_amount * fm_env + knock_amount * knock_env), still
+ * capped at 0.5. A loop of its own so that a kick with KNK at 0 runs strata_kick_body exactly as
+ * before, bit for bit and cycle for cycle. *knock_env carries on from the last block. */
+void strata_kick_body_knock(float *out, int hold, int n, float f0_norm, float fm_amount,
+                            float fm_decay, float knock_amount, float knock_decay,
+                            float dirtiness, float *phase, float *fm_env, float *knock_env);
+
+/* TCK, the tick: src (high-passed noise) times an exponential envelope, added into out.
+ * *env carries on from the last block. */
+void strata_kick_tick(float *out, const float *src, int n, float gain, float decay, float *env);
+
 /* The click: a gate high for the first `gate` samples, slewed 0.5 rising / 0.1 falling, less its
  * one-pole high-pass. *slew and *high_pass carry on from the last block. */
 void strata_kick_click(float *out, int n, int gate, float *slew, float *high_pass);
