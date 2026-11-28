@@ -212,7 +212,9 @@ void FmVoice::choke() {
 void FmVoice::run(const FmSettings &s, float *out, int n, float *env) {
     if (n <= 0) return;
     // --- control rate: the operators' increments and the indices this slice ramps to ---
-    const float hz = 440.0f * semitones(note_ - 69.0f);
+    // The note with VariSpeed on it; at rest the sum is the note to the bit.
+    const float pitch = note_ + s.pitch_mod;
+    const float hz = 440.0f * semitones(pitch - 69.0f);
     const float base = hz * s.inv_rate;
     strata_fm_block b{};
     b.sine = fm_sine_table();
@@ -241,10 +243,10 @@ void FmVoice::run(const FmSettings &s, float *out, int n, float *env) {
     // An index whose sidebands would fold past Nyquist is capped, for the whole chain at once
     // (fm_index_cap): every link carries the same index, so one cap holds the algorithm's
     // balance and only lowers its brightness. Recomputed when the note or a knob moves.
-    if (note_ != cap_note_ || s.algorithm != cap_algorithm_ || s.feedback != cap_feedback_ ||
+    if (pitch != cap_note_ || s.algorithm != cap_algorithm_ || s.feedback != cap_feedback_ ||
         s.inv_rate != cap_inv_rate_ || s.ratio[0] != cap_ratio_[0] ||
         s.ratio[1] != cap_ratio_[1] || s.ratio[2] != cap_ratio_[2] || s.ratio[3] != cap_ratio_[3]) {
-        cap_note_ = note_;
+        cap_note_ = pitch;
         cap_algorithm_ = s.algorithm;
         cap_feedback_ = s.feedback;
         cap_inv_rate_ = s.inv_rate;
