@@ -37,62 +37,39 @@ function showPair() {
 }
 
 // The starter section for the picked version: projects and the quick start need
-// starter.min_strata, the sample pack fits any.
+// starter.min_strata, the sample pack fits any. One box takes all of it or none.
 function showStarter() {
   if (!starter) return;
   const fits = starterFits(starter, select.value);
-  $("starter-projects-box").disabled = !fits.projects;
+  $("starter-projects-row").hidden = !fits.projects;
   $("starter-qs-row").hidden = !fits.quickstart;
   const note = $("starter-note");
   note.hidden = fits.projects;
-  note.textContent = fits.projects ? "" : `The starter projects and the quick start need STRATA ${starter.min_strata} or newer; the sample pack works with any.`;
+  note.textContent = fits.projects ? "" : `The starter projects and the quick start need STRATA ${starter.min_strata} or newer, so this version gets the sample pack only.`;
   updateStarterSteps();
 }
 
 function picked() {
   if (!starter) return null;
-  return {
-    projects: [...document.querySelectorAll("#starter-projects input:checked")].map((i) => i.value),
-    samples: $("starter-samples").checked,
-    quickstart: $("starter-quickstart").checked,
-  };
+  const on = $("starter-on").checked;
+  return { projects: on ? starter.projects.map((p) => p.name) : [], samples: on, quickstart: on };
 }
 
 function updateStarterSteps() {
   const fits = starterFits(starter, select.value);
-  const p = picked();
-  $("step-starter").hidden = !(fits.projects && p.projects.length);
-  const boxes = [...document.querySelectorAll("#starter-projects input")];
-  const n = boxes.filter((b) => b.checked).length;
-  $("starter-all").checked = n === boxes.length;
-  $("starter-all").indeterminate = n > 0 && n < boxes.length;
+  const on = $("starter-on").checked;
+  $("step-starter").hidden = !(fits.projects && on);
+  $("starter-list").classList.toggle("off", !on);
   $("result").hidden = true;
 }
 
 function setupStarter() {
-  const box = $("starter-projects");
-  box.replaceChildren(...starter.projects.map((p) => {
-    const label = document.createElement("label");
-    const input = document.createElement("input");
-    input.type = "checkbox";
-    input.value = p.name;
-    input.checked = true;
-    input.addEventListener("change", updateStarterSteps);
-    const text = document.createElement("span");
-    const strong = document.createElement("strong");
-    strong.textContent = p.name;
-    text.append(strong, ` ${p.genre}, ${p.bpm} BPM, ${p.key}. ${p.about}`);
-    label.append(input, text);
-    return label;
-  }));
-  $("starter-all").addEventListener("change", (e) => {
-    for (const b of box.querySelectorAll("input")) b.checked = e.target.checked;
-    updateStarterSteps();
-  });
-  $("starter-samples").addEventListener("change", updateStarterSteps);
-  $("starter-quickstart").addEventListener("change", updateStarterSteps);
+  $("starter-projects").textContent = starter.projects.map((p) => p.name).join(", ");
+  $("starter-on").addEventListener("change", updateStarterSteps);
   const mb = (starter.samples.unpacked / 1e6).toFixed(1);
   $("starter-samples-info").textContent = `${starter.samples.count} one-shots and chords, ${mb} MB`;
+  const zipped = starter.samples.bytes + starter.projects.reduce((n, p) => n + p.bytes, 0);
+  $("starter-size").textContent = `(about ${Math.round(zipped / 1e6)} MB more to download)`;
   // The build and install steps move down one.
   for (const n of document.querySelectorAll("h2 .num")) n.textContent = String(Number(n.textContent) + 1);
   $("starter-section").hidden = false;
