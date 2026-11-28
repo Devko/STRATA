@@ -5231,10 +5231,11 @@ void Engine::watch_streams() {
 // macro positions); these two gather it into one LiveState and put one back.
 
 void Engine::capture_live(LiveState &state) const {
-    // What you hear, launched lanes included (core/launch.hpp); a jump back plays it with every
-    // lane on its own part. Parts whose locks do not fit one pattern store the playing pattern.
-    if (lane_borrowed_mask(project_) == 0 || !launch_compose(project_, state.pattern)) {
-        __builtin_memcpy(&state.pattern, &live(), sizeof state.pattern);
+    // The playing pattern as it is, and apart from it what each lane plays (core/lockstore.hpp,
+    // "Launched lanes stay launched"): a borrowed part is never copied into the pattern.
+    __builtin_memcpy(&state.pattern, &live(), sizeof state.pattern);
+    for (int t = 0; t < kTracks; t++) {
+        state.lanes[t] = lane_borrowed(project_, t) ? project_.settings.lane_source[t] : kLaneOwn;
     }
     static_assert(kKitParams == kTrackParams, "a lock holds the kit's bytes as the engine has them");
     for (int t = 0; t < kTracks; t++) {
@@ -5260,9 +5261,13 @@ void Engine::capture_live(LiveState &state) const {
 // lock taken before a machine switch restores the parameters only (docs/MANUAL.md).
 void Engine::apply_live(const LiveState &state) {
     __builtin_memcpy(&live(), &state.pattern, sizeof state.pattern);
-    // A lock is what was heard, as one pattern: every lane plays its own part again, each from
-    // where it counted.
-    launch_all_own(project_);
+    // Each lane back on the part it played in that state, as a NOW launch: from where it counted.
+    // A lane that changes part drops what waited for the old one (land_launch).
+    for (int t = 0; t < kTracks; t++) {
+        const uint8_t source = lane_source_valid(state.lanes[t]) ? state.lanes[t] : kLaneOwn;
+        const uint8_t now = lane_borrowed(project_, t) ? project_.settings.lane_source[t] : kLaneOwn;
+        if (source != now) land_launch(t, source, false, tick_);
+    }
     deferred_count_ = 0;                 // ratchet hits of the steps just replaced
     span_clear();   // and the rolls of spanning ratchets
     for (int t = 0; t < kTracks; t++) {

@@ -11,6 +11,7 @@ bool live_state_same(const LiveState &a, const LiveState &b) {
     if (__builtin_memcmp(a.sends, b.sends, sizeof a.sends) != 0) return false;
     if (__builtin_memcmp(a.master, b.master, sizeof a.master) != 0) return false;
     if (__builtin_memcmp(a.macros, b.macros, sizeof a.macros) != 0) return false;
+    if (__builtin_memcmp(a.lanes, b.lanes, sizeof a.lanes) != 0) return false;
     return a.mutes == b.mutes && a.morph == b.morph && a.rel_all == b.rel_all &&
            a.len_all == b.len_all && a.rnd_unit == b.rnd_unit && a.rnd_armed == b.rnd_armed &&
            a.energy == b.energy && a.transpose == b.transpose;

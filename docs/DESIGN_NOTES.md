@@ -252,6 +252,10 @@ guard, listing every track-edit command. CAPTURE copies every lane's part and co
 pool into one free slot, then switches to it keeping each lane's origin, so nothing restarts.
 LAUNCH is PROJECT's last page so the page walks in older tests and scenarios stay valid.
 `tests/scenario_launch.sh` drives it in the emulator; CAPTURE and held pads are host-tested only.
+A LOCK holds the playing pattern and the lane sources apart (`LiveState::lanes`, review H1,
+Roland 2026-11-28): a jump or swap-back lands each changed lane as a NOW launch
+(`land_launch`), so it keeps counting from where it counted. Storing the composed mix wrote
+borrowed parts over the pattern's own tracks and made the swap-back lossy.
 
 ## Tap tempo, the nudge, PROG CHG OUT and song position in
 
