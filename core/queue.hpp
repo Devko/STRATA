@@ -226,6 +226,21 @@ bool chain_set_section(Project &project, int at, const SectionExtra &extra);
 // playing entry was removed). Read when an entry starts, as `chain_entry_mutes` is.
 const SectionExtra *chain_entry_section(const Project &project, const ChainPlayer &player);
 
+// The section fields a knob edits, in the order the detail view lays them out after PAT and REP.
+enum class SectionField : uint8_t { mut = 0, scn, mrp, nrg, bpm, count };
+
+// One knob turn of `field` on entry `at`, `delta` clicks:
+//   MUT walks --, M1-M8, CAP; arriving on CAP stores `live_mutes` as its mask.
+//   SCN walks --, 1-16 and MRP --, SNAP, RIDE, BACK, stopping at the ends.
+//   NRG and BPM leave `--` for a value on any turn (ENERGY 0; `tempo_centi`, the tempo playing),
+//   then walk -64..+64 and 20-300 BPM a whole BPM a click. Back to `--` is `section_clear`.
+// False for an index outside the chain or a field past the five.
+bool section_step(Project &project, int at, SectionField field, int delta, uint8_t live_mutes,
+                  uint16_t tempo_centi);
+
+// `field` of entry `at` back to `--` (push the knob). MUT `--` clears a recall and a CAP alike.
+bool section_clear(Project &project, int at, SectionField field);
+
 // ENERGY from NRG's byte (1-129), and back. Byte 0 is `--` and has no ENERGY.
 constexpr int section_energy(uint8_t byte) { return int(byte) - int(kSectionEnergyZero); }
 constexpr uint8_t section_energy_byte(int energy) {

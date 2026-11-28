@@ -1590,3 +1590,65 @@ TEST(chain_section_energy_byte_maps_both_ways) {
     CHECK_EQ(int(section_energy_byte(100)), int(kSectionEnergyMax));
     for (int e = -64; e <= 64; e++) CHECK_EQ(section_energy(section_energy_byte(e)), e);
 }
+
+TEST(chain_section_step_walks_each_field_and_clear_puts_it_back) {
+    const Entry entries[] = {{0, 0, 1}};
+    set_chain(g_project, entries, 1);
+    SectionExtra &e = g_project.chain_extra[0];
+    // MUT: --, M1 .. M8, CAP (taking the live mutes), and back down through M8.
+    CHECK(section_step(g_project, 0, SectionField::mut, 3, 0x11, 13000));
+    CHECK_EQ(int(g_project.chain[0].mutes), 3);
+    CHECK(section_step(g_project, 0, SectionField::mut, 20, 0x11, 13000));
+    CHECK_EQ(int(e.cap), 1);
+    CHECK_EQ(int(e.mask), 0x11);
+    CHECK_EQ(int(g_project.chain[0].mutes), 0);
+    CHECK(section_step(g_project, 0, SectionField::mut, 1, 0x22, 13000));
+    CHECK_EQ(int(e.mask), 0x11);                      // at the end: the mask stays as stored
+    CHECK(section_step(g_project, 0, SectionField::mut, -1, 0x22, 13000));
+    CHECK_EQ(int(e.cap), 0);
+    CHECK_EQ(int(e.mask), 0);
+    CHECK_EQ(int(g_project.chain[0].mutes), 8);
+    CHECK(section_step(g_project, 0, SectionField::mut, -20, 0, 13000));
+    CHECK_EQ(int(g_project.chain[0].mutes), 0);
+    // SCN and MRP stop at their ends.
+    CHECK(section_step(g_project, 0, SectionField::scn, 40, 0, 13000));
+    CHECK_EQ(int(e.scene), 16);
+    CHECK(section_step(g_project, 0, SectionField::mrp, 2, 0, 13000));
+    CHECK_EQ(int(e.morph), int(kSectionMorphRide));
+    CHECK(section_step(g_project, 0, SectionField::mrp, 9, 0, 13000));
+    CHECK_EQ(int(e.morph), int(kSectionMorphBack));
+    // NRG and BPM leave `--` for 0 and the tempo playing on any turn, then walk.
+    CHECK(section_step(g_project, 0, SectionField::nrg, -5, 0, 13000));
+    CHECK_EQ(section_energy(e.energy), 0);
+    CHECK(section_step(g_project, 0, SectionField::nrg, -100, 0, 13000));
+    CHECK_EQ(section_energy(e.energy), -64);          // never back to `--` by turning
+    CHECK(section_step(g_project, 0, SectionField::bpm, 3, 0, 12850));
+    CHECK_EQ(int(e.bpm), 12850);
+    CHECK(section_step(g_project, 0, SectionField::bpm, 3, 0, 12850));
+    CHECK_EQ(int(e.bpm), 13150);
+    CHECK(section_step(g_project, 0, SectionField::bpm, 127, 0, 12850));
+    CHECK(section_step(g_project, 0, SectionField::bpm, 127, 0, 12850));
+    CHECK_EQ(int(e.bpm), int(kTempoCentiMax));
+    for (int i = 0; i < 3; i++) CHECK(section_step(g_project, 0, SectionField::bpm, -128, 0, 12850));
+    CHECK_EQ(int(e.bpm), int(kTempoCentiMin));
+    CHECK(section_valid(e));
+    // Push: back to `--`, field by field.
+    CHECK(section_clear(g_project, 0, SectionField::bpm));
+    CHECK_EQ(int(e.bpm), 0);
+    CHECK(section_clear(g_project, 0, SectionField::nrg));
+    CHECK(section_clear(g_project, 0, SectionField::mrp));
+    CHECK(section_clear(g_project, 0, SectionField::scn));
+    CHECK(section_empty(e));
+    CHECK(section_step(g_project, 0, SectionField::mut, 20, 0x03, 13000));
+    CHECK(section_clear(g_project, 0, SectionField::mut));
+    CHECK(section_empty(e));
+    CHECK_EQ(int(e.mask), 0);
+    CHECK(section_step(g_project, 0, SectionField::mut, 2, 0, 13000));
+    CHECK(section_clear(g_project, 0, SectionField::mut));
+    CHECK_EQ(int(g_project.chain[0].mutes), 0);
+    // Refusals: past the chain, past the five fields.
+    CHECK(!section_step(g_project, 1, SectionField::scn, 1, 0, 13000));
+    CHECK(!section_step(g_project, 0, SectionField::count, 1, 0, 13000));
+    CHECK(!section_clear(g_project, 1, SectionField::scn));
+    CHECK(!section_clear(g_project, 0, SectionField::count));
+}

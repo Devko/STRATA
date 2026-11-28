@@ -423,6 +423,80 @@ bool chain_set_section(Project &project, int at, const SectionExtra &extra) {
     return true;
 }
 
+namespace {
+
+int clamp_walk(int value, int delta, int low, int high) {
+    const int next = value + delta;
+    return next < low ? low : (next > high ? high : next);
+}
+
+}  // namespace
+
+bool section_step(Project &project, int at, SectionField field, int delta, uint8_t live_mutes,
+                  uint16_t tempo_centi) {
+    if (at < 0 || at >= chain_length(project) || field >= SectionField::count) return false;
+    chain_normalize(project);
+    SectionExtra &e = project.chain_extra[at];
+    ChainEntry &entry = project.chain[at];
+    switch (field) {
+        case SectionField::mut: {
+            // One line of ten: --, M1 .. M8, CAP.
+            const int now = e.cap != 0 ? int(kChainMutesMax) + 1 : int(entry.mutes);
+            const int next = clamp_walk(now, delta, 0, int(kChainMutesMax) + 1);
+            if (next == now) break;
+            if (next > int(kChainMutesMax)) {
+                e.cap = 1;
+                e.mask = live_mutes;
+                entry.mutes = 0;
+            } else {
+                e.cap = 0;
+                e.mask = 0;
+                entry.mutes = uint8_t(next);
+            }
+            break;
+        }
+        case SectionField::scn:
+            e.scene = uint8_t(clamp_walk(int(e.scene), delta, 0, int(kSectionScenesMax)));
+            break;
+        case SectionField::mrp:
+            e.morph = uint8_t(clamp_walk(int(e.morph), delta, 0, int(kSectionMorphMax)));
+            break;
+        case SectionField::nrg:
+            e.energy = e.energy == 0 ? kSectionEnergyZero
+                                     : uint8_t(clamp_walk(int(e.energy), delta, 1,
+                                                          int(kSectionEnergyMax)));
+            break;
+        case SectionField::bpm: {
+            const int from = e.bpm != 0 ? int(e.bpm) : int(tempo_centi);
+            const int step = e.bpm != 0 ? delta * 100 : 0;
+            e.bpm = uint16_t(clamp_walk(from, step, int(kTempoCentiMin), int(kTempoCentiMax)));
+            break;
+        }
+        case SectionField::count:
+            break;
+    }
+    return true;
+}
+
+bool section_clear(Project &project, int at, SectionField field) {
+    if (at < 0 || at >= chain_length(project) || field >= SectionField::count) return false;
+    chain_normalize(project);
+    SectionExtra &e = project.chain_extra[at];
+    switch (field) {
+        case SectionField::mut:
+            e.cap = 0;
+            e.mask = 0;
+            project.chain[at].mutes = 0;
+            break;
+        case SectionField::scn: e.scene = 0; break;
+        case SectionField::mrp: e.morph = kSectionMorphNone; break;
+        case SectionField::nrg: e.energy = 0; break;
+        case SectionField::bpm: e.bpm = 0; break;
+        case SectionField::count: break;
+    }
+    return true;
+}
+
 const SectionExtra *chain_entry_section(const Project &project, const ChainPlayer &player) {
     if (!player.active || player.orphaned) return nullptr;
     const ChainCursor cursor = chain_cursor(project, player);

@@ -1852,6 +1852,14 @@ bool Engine::apply_arrangement(const Command &command, int, int) {
                     }
                     if (done) chain_player_inserted(chain_, at + 1);
                     break;
+                case ChainEdit::section_delta:
+                    done = section_step(project_, at, SectionField(command.b),
+                                        int(int8_t(command.c)), mute_state_capture(muted_),
+                                        project_.settings.tempo_centi_bpm);
+                    break;
+                case ChainEdit::section_clear:
+                    done = section_clear(project_, at, SectionField(command.b));
+                    break;
                 case ChainEdit::fill: {
                     // What plays now, as the section's fields: the room by ear, then hold OK.
                     SectionExtra extra;
