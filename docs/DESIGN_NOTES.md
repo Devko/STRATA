@@ -377,4 +377,18 @@ come with no command, so the UI marks PROJECT.BIN dirty from `Status::arr_passes
 Found on the way: a jump back of the transport left `boundary_known_` set when the origin was
 already 0 (a plain STOP and PLAY), so the first pass ran to the old run's boundary. Fixed in
 `resolve_tick`; `engine_a_pass_after_stop_and_play_ends_on_its_own_boundary`.
-`tests/scenario_arrrec.sh` records a jam in the emulator. Track Launch capture is the third step.
+`tests/scenario_arrrec.sh` records a jam in the emulator.
+
+**Track Launch** (the concept's choice 4, third step). `ArrState::lanes` holds each borrowed
+lane's source, refreshed in the grace ticks like the rest, so a launch landing on the boundary
+(it lands after `arr_tick`) belongs to the pass it starts. A pass is written as a pattern: the
+one its mix (pattern and lane sources) went into last time when it is the same as the last pass
+written, the live one when nothing is borrowed, otherwise a capture. The capture runs when the
+pass ends, so `launch_compose_lanes` composes from the pass's recorded sources rather than the
+project's, which a pattern change on that tick has already reset, and
+`launch_capture_slot_avoiding` skips both what the pass played and what plays now. Only the
+last pass written is remembered: the same mix after something else is captured again, since a
+part may have been edited in between. A full chain is checked before the capture, so the take's
+end fills no slot. No command writes the slot, so `Status::arr_captures` and
+`arr_capture_banks` tell the UI which banks to save. ARR UNDO swaps the chain only: captured
+slots stay. `tests/scenario_arrlaunch.sh` drives it in the emulator.

@@ -330,7 +330,7 @@ for a second; it shows that screen's help, with `PAGE 1/11` at its foot.
 
 **W20b. Gestures that moved, MUTE BUS and MORPH (#145, 3 min).** A01 playing, the chord's SnA up.
 - FUNC + turn VALUE is VariSpeed since (W70): the DJ filter does not move. FUNC + push D is
-  the kill for all bands since (W76). FUNC + MUTATE is LOCK now (W20c): tapped with no lock it says
+  the kill for all bands since (W77). FUNC + MUTATE is LOCK now (W20c): tapped with no lock it says
   `NO LOCK: HOLD STORES` and freezes or mutates nothing.
 - Push VALUE + STEP 7 (`7 MUTE BUS`), turn VALUE up slowly: every track fades out evenly and the
   delay and reverb ring on. At the top only the tails. Back to 0: the beat at its own level,
@@ -533,7 +533,7 @@ sustained in it (a pad, a voice, a chord) in `/SAMPLES` first; `unit-test/STRATA
   it stops there; the line under the macros reads `LIVE RND16 FUNC+D` and the live strip `RN16`. RND 1:
   every part scatters; RND 4: the beats of each bar trade places, still on the grid. Musical at
   which units, for techno and for ambient? `____`
-- The kick went straight from the first click while the rest jumps (it starts out, W76); no dot
+- The kick went straight from the first click while the rest jumps (it starts out, W77); no dot
   under meter 1. FUNC + lower pad 1: `T1 RND IN 8 TRK`, the kick jumps too. Again:
   `T1 RND OUT 7 TRK`. `____`
 - FUNC + turn D all the way back: `LIVE RND OFF`, and the beat is exactly A01 again from the next
@@ -1041,7 +1041,21 @@ stopped on A01, scenes 3 and 4 as in W71.
   its next note. `____`
 - `TRANSPOSE +5`, hold FUNC + MUTATE (a lock), go back to 0, tap FUNC + MUTATE: +5 again; tap
   again: 0. `____`
-**W76. PERFORM's FUNC layer, Track Launch polish and the confirmations (6 min).** A01 playing.
+**W76. ARR REC keeps Track Launch (4 min).** The factory beat stopped on A01, bank A with free
+slots, no chain.
+- PROJECT twice (LAUNCH), track 3, STEP 7: `T3 < A07 AT END`. FUNC+HOME, DOWN, DOWN, OK:
+  `ARR: PRESS PLAY`. PLAY: track 3 plays A07's part from the start. `____`
+- At the end of the first pass: `LAUNCH IN A..` (the first free slot); the pattern shown is still
+  A01 and track 3 still borrows. Two more passes: no second toast. `____`
+- On LAUNCH, CLR on track 3 (`T3 < OWN`), one pass; then STEP 7 again, one pass: the
+  second launched section takes another slot (`LAUNCH IN A..`). STOP: `ARR 3 SECTIONS`. `____`
+- PROJECT, CHAIN: the captured slot X3, A01 X1, the second slot X1. CHAIN END SONG, CHAIN ON, PLAY
+  from stop: it sounds as played, track 3's part on the captured slots, with no lane borrowed. `____`
+- Save, power cycle, open: the captured slots are still there and the chain still plays them. `____`
+- Fill every empty slot of bank A, then the same take: `LAUNCH NOT KEPT`, once, and the chain
+  entry is A01. FUNC+HOME, RELOAD PROJECT. `____`
+
+**W77. PERFORM's FUNC layer, Track Launch polish and the confirmations (6 min).** A01 playing.
 - PERFORM, hold FUNC: the gauges read `REL LEN NRG RND` with `0 100 0 OFF` and the hint line is
   gone. Still holding, turn A, C and D: each gauge moves and lights, the value under it follows.
   Let go: the macros are back. Readable at a glance on the OLED? `____`
@@ -1059,7 +1073,6 @@ stopped on A01, scenes 3 and 4 as in W71.
   lane edits again. `____`
 - FUNC+HOME, RELOAD PROJECT, OK: `OK AGAIN: RELOAD`; wait 3 s. PROJECT, SLOT, FUNC + LEFT:
   `LEFT AGAIN: CLEAR`; wait. Every confirmation on the unit reads `<KEY> AGAIN: <WHAT>`. `____`
-
 
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
@@ -1587,7 +1600,7 @@ Since #145 both live only in the performance mixer (slots 8 and 5); their FUNC c
       **no click**.
 - [ ] **U8.** Hold a tape stop for 10 s: **MAX `________ %`** against U1's `________ %`.
 - [ ] Lock D on a step (hold STEP, turn D). Hold that STEP, then FUNC, push D: `LOCK CLEARED`.
-      Without a STEP held, FUNC + push D is the kill for all bands (W76) and stops nothing.
+      Without a STEP held, FUNC + push D is the kill for all bands (W77) and stops nothing.
 - [ ] Turn the chord's SnA (delay send) up and play a few chord stabs. **Push VALUE + STEP 5,
       turn VALUE to the top**: `FRZ` on PERFORM's bar line. The echo keeps looping at the same
       level; new stabs are not echoed. Turn down: the loop fades into the delay's tail.

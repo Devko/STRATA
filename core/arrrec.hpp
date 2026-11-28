@@ -22,6 +22,22 @@
 // has no half passes, so the rule is one rule for all of them: a pass is written when at least
 // half of it was recorded, and dropped otherwise. A whole pass is always written.
 //
+// ## Track Launch
+//
+// The chain holds no launch states (Roland, 2026-11-27), so a pass with a borrowed lane is
+// written as a pattern of its own: what every lane played is CAPTUREd into the first free slot of
+// the playing pattern's bank (core/launch.hpp's rules: no steps, not playing and not a lane's
+// source), WITHOUT switching to it, and the new entry names that slot. The arrangement concept,
+// choice 4. Passes that play the same mix again in a row reuse the slot, as repeats or, past
+// X16, as a new entry on it; the same mix after something else is captured again, because a part
+// may have been edited in between and the chain must replay what was heard. With no free slot,
+// or with more locks than one pattern holds, the pass is written as the playing pattern alone
+// and the take says so (`ArrLaunch::lost`, `LAUNCH NOT KEPT`), once for that run of passes.
+//
+// Every lane replays from the captured pattern's start. A lane launched on the pattern's own
+// boundary (the default) is in step with it; one landed NOW or on a 16 / 32 step grid replays
+// shifted to the pattern's start.
+//
 // ## Undo
 //
 // Starting a take keeps the chain it replaces in an `ArrBackup` (one level). ARR UNDO swaps the
@@ -33,6 +49,7 @@
 // the host tests run whole synthetic jams through it.
 #pragma once
 
+#include "launch.hpp"
 #include "project.hpp"
 
 #include <cstdint>
@@ -44,6 +61,7 @@ struct ArrState {
     uint8_t bank = 0;
     uint8_t slot = 0;
     SectionExtra fields;     // always MUT CAP; SCN, MRP, NRG set; BPM `--` under an outside clock
+    uint8_t lanes[kTracks] = {};   // each borrowed lane's source, kLaneOwn for its own part
 };
 
 // The live state as an ArrState. `scene_b` is 0-15, `morph` 0..kMorphScale (snapped to its
@@ -53,12 +71,23 @@ struct ArrState {
 ArrState arr_state(uint8_t bank, uint8_t slot, uint8_t mutes, uint8_t scene_b, uint16_t morph,
                    int energy, uint16_t tempo_centi, bool external);
 
+// Fill `state.lanes` from the project's launch state: a borrowed lane's source, kLaneOwn for every
+// lane on its own part (so two states playing the same mix always compare equal).
+void arr_state_lanes(ArrState &state, const Project &project);
+
 // The chain as it was before a take.
 struct ArrBackup {
     ChainEntry chain[kChainEntries];
     SectionExtra extra[kChainEntries];
     uint8_t length = 0;
     bool valid = false;
+};
+
+// What the last pass written did with Track Launch.
+enum class ArrLaunch : uint8_t {
+    none = 0,    // nothing to say: no borrowed lane, or the slot of the passes before it reused
+    kept,        // captured into `launch_bank` / `launch_slot`
+    lost,        // no free slot or too many locks: written as the playing pattern alone
 };
 
 struct ArrRec {
@@ -69,6 +98,17 @@ struct ArrRec {
     uint32_t pass_from = 0;     // the tick its recording began: the boundary, or where it was cut in
     uint32_t pass_loop = 1;     // its pattern's master loop in ticks
     ArrState pass;              // what it plays
+    // The last pass written, as played (`last`, of which bank, slot and lanes are read) and as
+    // the pattern it went into the chain as (`target_*`: the captured slot, or the live one).
+    // A pass that plays the same goes into the same pattern without another capture.
+    bool last_known = false;
+    ArrState last;
+    uint8_t target_bank = 0;
+    uint8_t target_slot = 0;
+    // What the last pass written did with Track Launch, for the engine to say. Kept by arr_finish.
+    ArrLaunch launch = ArrLaunch::none;
+    uint8_t launch_bank = 0;
+    uint8_t launch_slot = 0;
 };
 
 // What ending a pass did with it.
@@ -88,7 +128,8 @@ bool arr_start(Project &project, ArrRec &rec, ArrBackup &backup);
 void arr_pass_begin(ArrRec &rec, const ArrState &state, uint32_t tick, uint32_t loop);
 
 // The pass in progress ends at `tick` and is written (or not) as the rules above say. On `full`
-// the take is over: the caller ends it with `arr_finish`.
+// the take is over: the caller ends it with `arr_finish`. A pass with a borrowed lane may write a
+// pattern (Track Launch, above); `rec.launch` says what happened, and is reset at every call.
 ArrPass arr_pass_end(Project &project, ArrRec &rec, uint32_t tick);
 
 // The chain was edited by hand during a take: the next pass starts a new entry rather than

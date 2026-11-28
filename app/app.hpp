@@ -852,6 +852,7 @@ private:
     // ARR REC: Status::arr_event and Status::arr_passes as last acted on.
     uint8_t arr_event_seen_ = 0;
     uint8_t arr_passes_seen_ = 0;
+    uint8_t arr_captures_seen_ = 0;    // Status::arr_captures as last acted on
     uint32_t stream_late_said_ms_ = 0;
 
     // The card side: projects, autosave and the sample loader, all in this context. It owns the

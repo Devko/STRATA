@@ -284,3 +284,161 @@ TEST(arrrec_a_recorded_chain_writes_cap_so_an_old_build_reads_no_recall) {
     CHECK_EQ(int(g_project.chain_extra[0].cap), 1);
     CHECK_EQ(int(g_project.chain_extra[0].mask), 0x0F);
 }
+
+// --- Track Launch (the arrangement concept's choice 4) -----------------------------------------
+
+namespace {
+
+// Bank A blank, A01 a beat on track 1, B07 a bass on track 3; every lane on its own part.
+void launch_reset() {
+    reset();
+    for (int s = 0; s < kPatternsPerBank; s++) {
+        pattern_init(g_project.patterns[0][s]);
+        pattern_init(g_project.patterns[1][s]);
+    }
+    g_project.patterns[0][0].tracks[0].steps[0].flags = kStepTrig;
+    g_project.patterns[1][6].tracks[2].steps[0].flags = kStepTrig;
+    g_project.patterns[1][6].tracks[2].steps[3].flags = kStepTrig;
+    g_project.bank = 0;
+    g_project.slot = 0;
+    for (int t = 0; t < kTracks; t++) g_project.settings.lane_source[t] = kLaneOwn;
+    g_project.settings.lane_pinned = 0;
+    g_project.bank_dirty[0] = false;
+}
+
+// What plays now, launches included.
+ArrState playing(uint8_t mutes = 0) {
+    ArrState s = arr_state(g_project.bank, g_project.slot, mutes, 0, 0, 0, 13000, false);
+    arr_state_lanes(s, g_project);
+    return s;
+}
+
+}  // namespace
+
+TEST(arrrec_state_lanes_names_only_borrowed_lanes) {
+    launch_reset();
+    ArrState s = playing();
+    for (int t = 0; t < kTracks; t++) CHECK_EQ(int(s.lanes[t]), int(kLaneOwn));
+    g_project.settings.lane_source[2] = lane_source(1, 6);
+    // A source naming the playing pattern is its own part, and reads as such.
+    g_project.settings.lane_source[4] = lane_source(0, 0);
+    s = playing();
+    CHECK_EQ(int(s.lanes[2]), int(lane_source(1, 6)));
+    CHECK_EQ(int(s.lanes[4]), int(kLaneOwn));
+}
+
+TEST(arrrec_a_borrowed_lane_is_captured_into_a_free_slot_without_switching) {
+    launch_reset();
+    CHECK(arr_start(g_project, g_rec, g_backup));
+    uint32_t tick = 0;
+    g_project.settings.lane_source[2] = lane_source(1, 6);
+    CHECK(pass(playing(0x10), tick) == ArrPass::added);
+    // A01 is the playing pattern, so A02 is the first free slot.
+    CHECK(g_rec.launch == ArrLaunch::kept);
+    CHECK_EQ(int(g_rec.launch_bank), 0);
+    CHECK_EQ(int(g_rec.launch_slot), 1);
+    CHECK_EQ(chain_length(g_project), 1);
+    CHECK_EQ(int(g_project.chain[0].bank), 0);
+    CHECK_EQ(int(g_project.chain[0].slot), 1);
+    CHECK_EQ(int(g_project.chain_extra[0].mask), 0x10);
+    const Pattern &a02 = g_project.patterns[0][1];
+    CHECK_EQ(int(a02.tracks[0].steps[0].flags & kStepTrig), int(kStepTrig));   // A01's beat
+    CHECK_EQ(int(a02.tracks[2].steps[3].flags & kStepTrig), int(kStepTrig));   // B07's bass
+    CHECK(g_project.bank_dirty[0]);
+    // Nothing switched: A01 still plays, and track 3 still borrows from B07.
+    CHECK_EQ(int(g_project.slot), 0);
+    CHECK_EQ(int(g_project.settings.lane_source[2]), int(lane_source(1, 6)));
+    CHECK_EQ(int(g_project.patterns[0][0].tracks[2].steps[3].flags & kStepTrig), 0);
+}
+
+TEST(arrrec_the_same_mix_again_reuses_its_slot_past_x16_too) {
+    launch_reset();
+    CHECK(arr_start(g_project, g_rec, g_backup));
+    uint32_t tick = 0;
+    g_project.settings.lane_source[2] = lane_source(1, 6);
+    for (int i = 0; i < 17; i++) pass(playing(), tick);
+    CHECK_EQ(chain_length(g_project), 2);
+    CHECK_EQ(int(g_project.chain[0].slot), 1);
+    CHECK_EQ(int(g_project.chain[0].repeats), 16);
+    CHECK_EQ(int(g_project.chain[1].slot), 1);      // X16 split: a new entry, the same slot
+    CHECK_EQ(int(g_project.chain[1].repeats), 1);
+    CHECK(g_rec.launch == ArrLaunch::none);          // nothing new to say
+    CHECK(!pattern_has_steps(g_project.patterns[0][2]));
+    // A mute change on the same mix is a new section on the same captured slot.
+    pass(playing(0x01), tick);
+    CHECK_EQ(chain_length(g_project), 3);
+    CHECK_EQ(int(g_project.chain[2].slot), 1);
+    CHECK(!pattern_has_steps(g_project.patterns[0][2]));
+}
+
+TEST(arrrec_the_same_mix_after_another_section_is_captured_again) {
+    launch_reset();
+    CHECK(arr_start(g_project, g_rec, g_backup));
+    uint32_t tick = 0;
+    g_project.settings.lane_source[2] = lane_source(1, 6);
+    pass(playing(), tick);
+    g_project.settings.lane_source[2] = kLaneOwn;
+    pass(playing(), tick);
+    g_project.settings.lane_source[2] = lane_source(1, 6);
+    pass(playing(), tick);
+    CHECK_EQ(chain_length(g_project), 3);
+    CHECK_EQ(int(g_project.chain[0].slot), 1);
+    CHECK_EQ(int(g_project.chain[1].slot), 0);      // A01 on its own
+    CHECK_EQ(int(g_project.chain[2].slot), 2);      // a part may have changed in between
+    CHECK(g_rec.launch == ArrLaunch::kept);
+}
+
+TEST(arrrec_a_capture_avoids_what_the_pass_played_and_what_plays_now) {
+    launch_reset();
+    CHECK(arr_start(g_project, g_rec, g_backup));
+    uint32_t tick = 0;
+    // Track 3 borrows A03, which is empty, and the pass ends after a switch to A02, empty too:
+    // neither may be written, so the capture goes to A04.
+    g_project.settings.lane_source[2] = lane_source(0, 2);
+    const ArrState s = playing();
+    arr_pass_begin(g_rec, s, tick, kLoop);
+    g_project.slot = 1;
+    g_project.settings.lane_source[2] = kLaneOwn;
+    CHECK(arr_pass_end(g_project, g_rec, tick + kLoop) == ArrPass::added);
+    CHECK_EQ(int(g_project.chain[0].slot), 3);
+    CHECK(!pattern_has_steps(g_project.patterns[0][1]));
+    CHECK(!pattern_has_steps(g_project.patterns[0][2]));
+    CHECK_EQ(int(g_project.patterns[0][3].tracks[0].steps[0].flags & kStepTrig), int(kStepTrig));
+}
+
+TEST(arrrec_a_full_bank_writes_the_playing_pattern_and_says_so_once) {
+    launch_reset();
+    for (int s = 1; s < kPatternsPerBank; s++) {
+        g_project.patterns[0][s].tracks[7].steps[5].flags = kStepTrig;
+    }
+    CHECK(arr_start(g_project, g_rec, g_backup));
+    uint32_t tick = 0;
+    g_project.settings.lane_source[2] = lane_source(1, 6);
+    CHECK(pass(playing(), tick) == ArrPass::added);
+    CHECK(g_rec.launch == ArrLaunch::lost);
+    CHECK_EQ(int(g_project.chain[0].slot), 0);
+    // The same mix again is a repeat, and nothing more is said.
+    CHECK(pass(playing(), tick) == ArrPass::extended);
+    CHECK(g_rec.launch == ArrLaunch::none);
+    CHECK_EQ(int(g_project.chain[0].repeats), 2);
+    // A mute change on the same mix is a new entry with nothing to say either.
+    CHECK(pass(playing(0x02), tick) == ArrPass::added);
+    CHECK(g_rec.launch == ArrLaunch::none);
+    // Another mix cannot be kept: said again, and arr_finish keeps it for the engine to tell.
+    g_project.settings.lane_source[4] = lane_source(1, 6);
+    arr_pass_begin(g_rec, playing(0x02), tick, kLoop);
+    CHECK_EQ(arr_finish(g_project, g_rec, g_backup, tick + kLoop), 3);
+    CHECK(g_rec.launch == ArrLaunch::lost);
+    CHECK_EQ(int(g_project.chain[2].slot), 0);
+}
+
+TEST(arrrec_a_take_that_is_full_captures_nothing) {
+    launch_reset();
+    CHECK(arr_start(g_project, g_rec, g_backup));
+    uint32_t tick = 0;
+    for (int i = 0; i < kChainEntries; i++) pass(playing(uint8_t(i & 1)), tick);
+    CHECK_EQ(chain_length(g_project), kChainEntries);
+    g_project.settings.lane_source[2] = lane_source(1, 6);
+    CHECK(pass(playing(), tick) == ArrPass::full);
+    for (int s = 1; s < kPatternsPerBank; s++) CHECK(!pattern_has_steps(g_project.patterns[0][s]));
+}

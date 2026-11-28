@@ -101,28 +101,41 @@ bool pattern_has_steps(const Pattern &pattern) {
 }
 
 int launch_capture_slot(const Project &project, int bank) {
+    return launch_capture_slot_avoiding(project, bank, nullptr, 0);
+}
+
+int launch_capture_slot_avoiding(const Project &project, int bank, const uint8_t *avoid,
+                                 int count) {
     if (bank < 0 || bank >= kBanks) return -1;
     for (int slot = 0; slot < kPatternsPerBank; slot++) {
         const uint8_t here = lane_source(bank, slot);
         if (here == lane_live_source(project)) continue;
         bool feeding = false;
         for (int t = 0; t < kTracks; t++) feeding = feeding || lane_playing_source(project, t) == here;
+        for (int i = 0; i < count; i++) feeding = feeding || (avoid[i] != kLaneOwn && avoid[i] == here);
         if (feeding) continue;
         if (!pattern_has_steps(project.patterns[bank][slot])) return slot;
     }
     return -1;
 }
 
-bool launch_compose(const Project &project, Pattern &out) {
+namespace {
+
+// The pattern a source names: `live` for kLaneOwn or a byte no pattern exists at.
+const Pattern &source_pattern(const Project &project, uint8_t source, const Pattern &live) {
+    if (source == kLaneOwn || !lane_source_valid(source)) return live;
+    return project.patterns[lane_source_bank(source)][lane_source_slot(source)];
+}
+
+// Each lane's part from `from[t]`, the master settings from `live`, locks compacted into `out`.
+bool compose(const Pattern &live, const Pattern *const from[kTracks], Pattern &out) {
     // Count first: nothing is written unless every part's locks fit in one pool.
     uint32_t needed = 0;
     for (int t = 0; t < kTracks; t++) {
-        const Pattern &from = lane_pattern(project, t);
-        for (int s = 0; s < kStepsPerTrack; s++) needed += pattern_step_locks(from, t, s).count;
+        for (int s = 0; s < kStepsPerTrack; s++) needed += pattern_step_locks(*from[t], t, s).count;
     }
     if (needed > uint32_t(kLockPool)) return false;
 
-    const Pattern &live = project.live();
     out.master_length = live.master_length;
     out.swing = live.swing;
     out.root = live.root;
@@ -131,11 +144,10 @@ bool launch_compose(const Project &project, Pattern &out) {
     out.seed = live.seed;
     uint16_t used = 0;
     for (int t = 0; t < kTracks; t++) {
-        const Pattern &from = lane_pattern(project, t);
-        out.tracks[t] = from.tracks[t];
+        out.tracks[t] = from[t]->tracks[t];
         for (int s = 0; s < kStepsPerTrack; s++) {
             Step &step = out.tracks[t].steps[s];
-            const LockView view = pattern_step_locks(from, t, s);
+            const LockView view = pattern_step_locks(*from[t], t, s);
             step.lock_first = view.count != 0 ? used : kNoLock;
             step.lock_count = view.count;
             for (const Lock &lock : view) out.locks[used++] = lock;
@@ -143,6 +155,23 @@ bool launch_compose(const Project &project, Pattern &out) {
     }
     out.locks_used = used;
     return true;
+}
+
+}  // namespace
+
+bool launch_compose(const Project &project, Pattern &out) {
+    const Pattern *from[kTracks];
+    for (int t = 0; t < kTracks; t++) from[t] = &lane_pattern(project, t);
+    return compose(project.live(), from, out);
+}
+
+bool launch_compose_lanes(const Project &project, uint8_t live, const uint8_t lanes[kTracks],
+                          Pattern &out) {
+    if (live == kLaneOwn || !lane_source_valid(live)) return false;
+    const Pattern &base = project.patterns[lane_source_bank(live)][lane_source_slot(live)];
+    const Pattern *from[kTracks];
+    for (int t = 0; t < kTracks; t++) from[t] = &source_pattern(project, lanes[t], base);
+    return compose(base, from, out);
 }
 
 CaptureResult launch_capture(Project &project, int bank, int slot) {

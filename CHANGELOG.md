@@ -40,6 +40,11 @@ the project file format or the controls.
   END, swaps the chain from before the take back in, and again swaps the take back. While a take
   runs the live strip reads `ARR7` and the REC key blinks as for JAM REC. Under an outside clock
   the sections carry no BPM. Independent of JAM REC. New emulator scenario `arrrec`.
+- **ARR REC keeps Track Launch.** A pass in which a lane plays another pattern's part is written
+  into the first free slot of the playing pattern's bank, as CAPTURE would write it but without
+  switching, and the chain entry names that slot (`LAUNCH IN A05`). More passes of the same mix
+  in a row share the slot. With no free slot or too many locks the pass is written as the playing
+  pattern alone (`LAUNCH NOT KEPT`). New emulator scenario `arrlaunch`.
 - **WAVE scan modes: the SCAN page.** WAVE MONO and WAVE POLY have a ninth EDIT page, SCAN:
   MOD moves the wavetable position from POS towards END with each note (OFF, FWD, REV, LOOP,
   LREV, PING, RET, SINE, RAND, DRFT), SPD sets the speed free or synced like the LFO's RAT, END
