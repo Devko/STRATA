@@ -21,7 +21,10 @@
 #     turn C -1, rested      -> macro C (not logged): no "ENERGY -8"
 #   run "peak" (1.9 G cycles)
 #     PLAY, FUNC + MIXER     -> PERFORM
-#     FUNC + turn C +32      -> "ENERGY +64", left on to the end: the load with the ghosts
+#     FUNC + turn C +36      -> "ENERGY +64", left on to the end: the load with the ghosts.
+#                               +36, not +32: the emulator holds each encoder phase 3 ms and
+#                               Enaga's decoder counts a detent only on phase 0, so a main-loop
+#                               pass over 3 ms loses one (two of 32 here); ENERGY stops at +64
 #
 # -64 and the order the tracks thin in are tests/test_energy.cpp's.
 #
@@ -80,7 +83,7 @@ echo "running the emulator: ENERGY at +64 ..."
 emulate "$LOG" 1900000000 \
     --key 22@300000000 \
     --key 19@380000000 --key 21@385000000 \
-    --key 19@460000000 --turn 2:32@462000000
+    --key 19@460000000 --turn 2:36@462000000
 
 rc=0
 python3 - "$LOG_WALK" "$LOG" <<'PY' || rc=$?
