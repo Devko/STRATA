@@ -67,10 +67,12 @@ constexpr SoundPreset kKickPresets[] = {
     // kick is.
     // Modern techno: the sweep over 27 ms (FMD 56), a 61 ms body. Closest to the references of all.
     {"TECHNO", {55, 127, 56, 127}, {70, 127, 20, 0}, {95, 100, 60, 95}, {127, 50, 40, 30}, NO_OSC},
-    // Warehouse: a faster sweep and a longer, darker body (DEC 82, about 190 ms to -20 dB).
-    {"WHOUSE", {55, 127, 48, 127}, {60, 127, 20, 0}, {105, 90, 40, 90}, {110, 60, 30, 30}, NO_OSC},
-    // Industrial: the fastest sweep, drive at the top, short. Hard and industrial techno.
-    {"INDUS", {55, 127, 40, 127}, {105, 127, 20, 0}, {85, 110, 127, 85}, {127, 40, 80, 0}, NO_OSC},
+    // Warehouse: TECHNO's recipe with a slightly faster sweep, a longer body (DEC 100) and a
+    // longer knock. In a blind test against library kicks (2026-11-28) TECHNO passed as a sample
+    // and the first WHOUSE and INDUS did not; both moved towards TECHNO after it.
+    {"WHOUSE", {55, 127, 52, 127}, {70, 127, 20, 0}, {100, 100, 60, 90}, {120, 55, 40, 30}, NO_OSC},
+    // Industrial: a fast sweep, heavy drive and dirt, more tick. Hard and industrial techno.
+    {"INDUS", {55, 127, 44, 127}, {100, 127, 20, 0}, {92, 105, 127, 80}, {127, 45, 55, 10}, NO_OSC},
     // Minimal: short and tight, less drive. Leaves room for a rolling bass between the hits.
     {"MINIM", {55, 127, 40, 127}, {50, 127, 20, 0}, {72, 100, 40, 115}, {100, 40, 60, 0}, NO_OSC},
 };
