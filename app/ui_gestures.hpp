@@ -126,11 +126,11 @@
                 return;
             }
             if (shift_) {
-                // FUNC + VALUE was the master DJ filter until 2026-11-25 (backlog D1): the
-                // filter's live home is the mixer's slots 1 and 2, and its setting MIXER's MST
-                // page, where a project saved with it set can still put it back. Free for now,
-                // so it says where the filter went rather than turning the tempo.
-                notice_logged("DJ FILTER: SLOT 1/2");
+                // FUNC + VALUE is VariSpeed (core/varispeed.hpp): VALUE is the tempo, and with
+                // FUNC the pitch moves with it, like a record's speed. It was the master DJ
+                // filter until 2026-11-25 (backlog D1), whose live home is the mixer's slots 1
+                // and 2, and then free, naming those slots.
+                vari_turn_by(delta);
                 return;
             }
             // REFUSED under an external clock, rather than moved and then ignored. docs/SPEC.md:
@@ -152,7 +152,7 @@
             if (tenths > 3000) tenths = 3000;
             tempo_tenths_ = uint32_t(tenths);
             // Main context again.
-            clock_refused_ = !enaga::clock::set_tempo(float(tempo_tenths_) * 0.1f);
+            clock_refused_ = !set_clock_tempo(tempo_tenths_ * 10u);      // times VariSpeed's
             // And the project, which is where the tempo is SAVED. Nothing posted this before, so
             // `ProjectSettings::tempo_centi_bpm` round-tripped through the serializer while
             // holding the default for ever: a project saved at 142 reopened at 130. The engine

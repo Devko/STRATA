@@ -16,6 +16,15 @@ the project file format or the controls.
   plays. A BPM is skipped under an outside clock (`EXT CLOCK: BPM SKIPPED`). Saved in PROJECT.BIN
   section 10: older projects open with every field `--`, and older builds play the chain as before.
   New emulator scenario `sections`.
+- **VariSpeed: FUNC + turn VALUE, on every screen.** The whole unit faster or slower like a
+  turntable: the tempo and the pitch of every machine move together, an octave either way in
+  tenths of a semitone (`VARISPEED +1.2 140.3`, the amount and the tempo it runs at). The drums,
+  SAMPLE and GRAIN read faster, the synths and FM4 move by semitones, held notes and ringing hits
+  included, and the delay's echoes keep to the moved tempo. The project keeps its own tempo, so a
+  save stores the tempo the song was written at; VALUE alone still turns it. Rest is a detent,
+  and FUNC + tap VALUE (with no effect picked) snaps back. Internal clock only: refused with
+  `EXT CLOCK`, and back to rest when CLOCK SRC changes. The live strip says `VS+` or `VS-`. FUNC
+  + VALUE used to say `DJ FILTER: SLOT 1/2`. New emulator scenario `varispeed`.
 - **Line input as a mixer channel.** MIXER's new IN and IN+ pages, after CHO, play whatever is
   on the INPUT jacks through STRATA's mix: LVL, PAN, the delay, reverb and chorus sends, a duck
   depth, a tone knob, the jack (LINE, LINE L, MIC, DYN MIC, HI-Z, USB) and its gain on push D.

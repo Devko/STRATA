@@ -88,11 +88,12 @@ HOME "system", PLAY "◀◀", STOP "▶▶", MIXER "fx", EDIT "rec src".
    - **VALUE is the crossfader.** Push VALUE + STEP picks what it fades: an effect, the morph
      (13) or the looper (16), on every screen (the performance mixer, below). With nothing
      picked it is the tempo (PERFORM: the morph; CHAIN/PATTERN: the field under the cursor).
-     Push + turn = swing. FUNC + turn is free (D1, 2026-11-25: it says `DJ FILTER: SLOT 1/2`).
+     Push + turn = swing. FUNC + turn = **VariSpeed** (below): the tempo with the pitch tied to
+     it. It was the DJ filter until D1 (2026-11-25), then free.
      **A press of VALUE alone** (let go within half a second, with nothing turned or pressed
      meanwhile) resets what it is on to 0: a picked effect's amount, the looper's mix, the morph
      (PERFORM, or slot 13 picked). Never the tempo, swing or a field, and nothing while a STEP
-     is held.
+     is held. With FUNC: a cut of the picked effect, or with none picked VariSpeed back to 0.
    - **STEP keys:** the sixteen of whatever the pad-row keys chose. **On every playing screen,
      PERFORM and KEYS included, they are steps** (D12, 2026-11-25): tap, hold + knob, hold + OK
      work as on GRID. MUTE MODE (STEP 1-8 the mute states), a held scene pad, push VALUE (the
@@ -194,6 +195,7 @@ Printed labels (above), and the moves made while playing:
 | FUNC + turn A / B in PERFORM | **REL ALL** / **LEN ALL** (below) |
 | FUNC + turn C in PERFORM | **ENERGY**: from a sparse breakdown to the peak (below) |
 | FUNC + turn D / push D in PERFORM | **LIVE RND**: the unit / the selected track in or out (below) |
+| FUNC + turn VALUE | **VariSpeed**: the tempo and every machine's pitch together, on every screen (below) |
 | FUNC + MUTATE, tapped | Jump to that lock at once (`BACK TO LOCK A01`); tapped again, swap back to the state from just before the jump (`SWAPPED BACK A01`). No lock: `NO LOCK: HOLD STORES` |
 
 Retired 2026-11-25 (backlog D1, D5; CHANGELOG "Gestures that moved"): FUNC + VALUE (DJ filter,
@@ -295,6 +297,32 @@ ALL. FUNC + turn C in PERFORM only duplicated the macro before, so no gesture ch
 - **On screen**: the notice `ENERGY -20` / `ENERGY +12`, `EN-20` on PERFORM's status line (the
   `BAR` line while stopped), `EN-` / `EN+` in the live strip. The FUNC help's third PERFORM page
   lists it.
+
+## VariSpeed (FUNC + turn VALUE)
+
+CyDrums' P7 (backlog, After 1.0 > Performance), `core/varispeed.hpp`. VALUE is the tempo; FUNC +
+VALUE is the tempo with every machine's pitch tied to it, like a turntable. On every screen, an
+effect picked or not (a picked effect owns VALUE's plain turn, not FUNC's).
+
+| Gesture | Does | Says |
+| --- | --- | --- |
+| FUNC + turn VALUE | A tenth of a semitone a click, -12.0 .. +12.0; the clock runs at the project's tempo times 2^(n/12), and every machine plays n semitones off | `VARISPEED +1.2 140.3` |
+| FUNC + tap VALUE, no effect picked | Back to rest at once | `VARISPEED 0 130.0` |
+
+- **Rest is 0, and 0 is a detent**: a turn that would cross it stops on it. At rest the tempo and
+  the sound are the project's to the bit.
+- **The project keeps its tempo**: a save stores the unmoved tempo, and VALUE alone turns it with
+  VariSpeed riding on top. A turn that would take the clock past 20-300 BPM stops where it fits,
+  and a faster project tempo pulls VariSpeed back towards 0 rather than past 300.
+- **What moves**: the clock (so the delay's division follows); the drums' base frequency and
+  SAMPLE's and GRAIN's read rate; the synths' and FM4's pitch by semitones, as the LFO on TUN
+  does. Held notes and ringing hits follow. Envelope times do not, and MID's notes go out as
+  played.
+- **Internal clock only** (Enaga owns the clock): under MIDI or SYNC the turn says `EXT CLOCK`,
+  and a change of CLOCK SRC takes VariSpeed to rest (`VARISPEED 0 EXT CLOCK`).
+- **Not saved, not undone, not in a LOCK**, like the tempo.
+- **On screen**: the top bar shows the tempo the clock runs at; the live strip adds `VS+` / `VS-`.
+  The FUNC help's FUNC + KNOB OR PAD page lists it.
 
 ## The track menu: GEN, EVOLVE and the track's settings (hold OK in GRID or KEYS)
 

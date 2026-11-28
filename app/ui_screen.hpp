@@ -321,6 +321,8 @@
         if (engine_.len_all() != 0) add(engine_.len_all() < 0 ? "LN-" : "LN+");
         // ENERGY away from rest: EN- thinner, EN+ fuller (core/energy.hpp).
         if (engine_.energy() != 0) add(engine_.energy() < 0 ? "EN-" : "EN+");
+        // VariSpeed away from rest: VS- slower and lower, VS+ faster and higher.
+        if (engine_.varispeed() != 0) add(engine_.varispeed() < 0 ? "VS-" : "VS+");
         // LIVE RND on: its unit, "RN4". Not "R4", which the repeat rate could be read as.
         if (engine_.live_rnd_unit() != kLiveRndOff) {
             p = part;

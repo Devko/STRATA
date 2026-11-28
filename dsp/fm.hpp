@@ -71,6 +71,9 @@ struct FmSettings {
     float out_gain = 0.25f;       // LVL
     float rate = 48000.0f;
     float inv_rate = 1.0f / 48000.0f;
+    // Semitones on every voice's pitch, held notes too (Machine::set_pitch_mod): VariSpeed. Not
+    // from the knobs, so `make` leaves it 0 and FmPoly puts it back after each prepare.
+    float pitch_mod = 0.0f;
 };
 
 class FmVoice {
