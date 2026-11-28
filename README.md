@@ -123,7 +123,7 @@ The full tour, with the factory kit and every effect, is in
 release and the **release candidate for 1.0**, for **Enaga 0.4.0**: GEN and EVOLVE, chord
 recording, choke groups, arp depth and more since 0.4.0. Until 1.0, only fixes, measurements and
 docs land ([docs/PLAN.md](docs/PLAN.md), "Release candidate"); 1.0 is this build with what the
-unit test finds fixed. Earlier releases have run on the unit for days: the default beat loads the
+unit test finds fixed. Earlier releases have run on the unit: the default beat loads the
 CPU under 30%, and long, heavy play on an earlier build peaked at 84.3% with no dropouts. The
 features new in 0.5 are still being walked through on the hardware
 ([unit checklist](docs/UNIT_CHECKLIST.md)).
