@@ -1074,15 +1074,6 @@ slots, no chain.
 - FUNC+HOME, RELOAD PROJECT, OK: `OK AGAIN: RELOAD`; wait 3 s. PROJECT, SLOT, FUNC + LEFT:
   `LEFT AGAIN: CLEAR`; wait. Every confirmation on the unit reads `<KEY> AGAIN: <WHAT>`. `____`
 
-**W78. A project opens at rest; ENERGY ghosts skip conditional trigs (3 min).** A01 playing.
-- PERFORM: FUNC + turn C to `ENERGY -64`, FUNC + turn D to `LIVE RND4`, FUNC + turn A a few
-  clicks, FUNC + SEL> three times (`TR+3`), FUNC + turn VALUE to `VARISPEED +12.0`. FUNC+HOME,
-  LOAD DEMO, OK, OK: the demo plays at its own tempo and pitch, the full beat, and the live strip
-  shows no `EN`, `RN`, `RL`, `TR` or `VS`. Holding FUNC in PERFORM reads `0 100 0 OFF`. `____`
-- FUNC + turn C one click: `ENERGY +2`, not -62. Back to 0. `____`
-- NEW PROJECT, PLAY. GRID, select the SNARE track and clear its trigs, then hold FILL and tap
-  STEP 13: its only trig is a FILL trig. PERFORM, FUNC + turn C to `ENERGY +64`: the snare stays
-  silent (before, its ghosts played the FILL hit every bar); hold FILL and step 13 plays. `____`
 **W78. LOCK keeps launched tracks apart (4 min).** A01 playing, its track 3 with a few steps of
 its own; A07's track 3 a different part.
 - PROJECT twice (LAUNCH), track 3, STEP 7, wait for `T3 A07`. Hold FUNC + MUTATE: `LOCK A01
@@ -1092,6 +1083,15 @@ its own; A07's track 3 a different part.
 - STEP 7 on track 3 again, tap FUNC + MUTATE twice, then CLR on track 3: A01's own track 3 is
   still its own part, not A07's. Save, RELOAD PROJECT: the same. `____`
 
+**W79. A project opens at rest; ENERGY ghosts skip conditional trigs (3 min).** A01 playing.
+- PERFORM: FUNC + turn C to `ENERGY -64`, FUNC + turn D to `LIVE RND4`, FUNC + turn A a few
+  clicks, FUNC + SEL> three times (`TR+3`), FUNC + turn VALUE to `VARISPEED +12.0`. FUNC+HOME,
+  LOAD DEMO, OK, OK: the demo plays at its own tempo and pitch, the full beat, and the live strip
+  shows no `EN`, `RN`, `RL`, `TR` or `VS`. Holding FUNC in PERFORM reads `0 100 0 OFF`. `____`
+- FUNC + turn C one click: `ENERGY +2`, not -62. Back to 0. `____`
+- NEW PROJECT, PLAY. GRID, select the SNARE track and clear its trigs, then hold FILL and tap
+  STEP 13: its only trig is a FILL trig. PERFORM, FUNC + turn C to `ENERGY +64`: the snare stays
+  silent (before, its ghosts played the FILL hit every bar); hold FILL and step 13 plays. `____`
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
 
