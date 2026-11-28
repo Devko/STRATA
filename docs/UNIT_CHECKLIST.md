@@ -578,7 +578,10 @@ hit, a 44.1 kHz loop and a long stem (a minute or more). Beat stopped, A01.
   Push A: `STOPPED`, a short fade. `____`
 - The long stem, push A: how long before it sounds? `________` (it should be as quick as the
   hit). Let it run 20 s: no dropouts, `HEARING 20/..S`. `____`
-- PLAY the beat, and hear files over it: the audition sits about 6 dB under full scale, not
+- PLAY the beat, push A once on a file: `A AGAIN TO HEAR` and nothing is heard. Wait 3 s,
+  push A once: the same toast again. Push A twice quickly: now it plays. While it plays, DOWN
+  hears the next file without asking again. STOP the beat: one push hears a file again. `____`
+- With the beat playing and a file heard, the audition sits about 6 dB under full scale, not
   through the master effects or beat repeat. Too loud or too quiet against A01? `________`
 - While one plays: OK loads it into track 8 (`LOADING`) and the audition stops; CLR, a folder,
   or HOME stop it too. FUNC + push A is still the kill EQ. `____`
@@ -813,6 +816,19 @@ with all starter projects, the sample pack and the quick start ticked, copied on
   or take a few dB. `____`
 - `STRATA-QUICKSTART.txt` at the card root opens on a PC and every gesture it names does what
   it says on the unit (sections 1-7). `____`
+
+**W62. ENERGY in PERFORM (4 min).** Beat playing, A01.
+- PERFORM (FUNC + MIXER). FUNC + turn C down one click at a time: `ENERGY -2` .. `-64`. The hats
+  thin first, then the percussion and snare, the bass, the pads; the kick holds until about -40
+  and is gone at -64, where only the pads and textures remain. The live strip shows `EN-`, the
+  status line `EN-..`. Does the order and the breakdown at the bottom sound right? `____`
+- Turn back up: it stops on `ENERGY 0`, and the beat is exactly A01 again, no stumble. Each hit
+  comes back where it was. GRID: no step changed, CLR's undo has nothing new. `____`
+- FUNC + turn C up to `+64`: ghost hits on the off-beats, hats busiest, the kick only now and
+  then; a probability step plays every pass. Musical, or too busy for techno? `____`
+- `ENERGY -30`, hold FUNC + MUTATE (a lock), turn it back to 0, tap FUNC + MUTATE: the
+  breakdown is back; tap again: rest again. `____`
+- MAX at `+64` against the default beat at 0: `________ %`
 
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.

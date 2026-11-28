@@ -187,6 +187,7 @@ Printed labels (above), and the moves made while playing:
 | FUNC + A / B / C on GRID | Euclidean fill |
 | FUNC + MUTATE, held half a second | **LOCK**: store the live set as the playing pattern's lock (`LOCK A01 STORED`); again later overwrites it |
 | FUNC + turn A / B in PERFORM | **REL ALL** / **LEN ALL** (below) |
+| FUNC + turn C in PERFORM | **ENERGY**: from a sparse breakdown to the peak (below) |
 | FUNC + turn D / push D in PERFORM | **LIVE RND**: the unit / the selected track in or out (below) |
 | FUNC + MUTATE, tapped | Jump to that lock at once (`BACK TO LOCK A01`); tapped again, swap back to the state from just before the jump (`SWAPPED BACK A01`). No lock: `NO LOCK: HOLD STORES` |
 
@@ -207,7 +208,7 @@ lot, and jump back in one tap; tap again to compare with where you were.
 | Every track's sound bytes (all eight EDIT pages) and fader | The samples, the machines: a lock taken before a machine switch restores the parameters only |
 | The send and master bytes | The kill EQ's switches, the tempo (not STRATA's under an outside clock) |
 | The mutes (D4) | The eight stored mute states |
-| The morph position, the four macro positions, REL ALL, LEN ALL and LIVE RND | The scenes and the macro setup |
+| The morph position, the four macro positions, REL ALL, LEN ALL, LIVE RND and ENERGY | The scenes and the macro setup |
 
 - **One lock per pattern (D14), in RAM only**: not saved, and a project load or NEW clears them.
 - **At once (D3)**, on the next audio block. The performance mixer is not in a lock: the jump
@@ -227,7 +228,7 @@ lot, and jump back in one tap; tap again to compare with where you were.
 CyDrums' P4 (backlog Phase 5 item 5, 2026-11-25), `core/moveall.hpp`. Two global controls in
 the Moves layer, beside the macros and the morph, on the one screen that is that layer's home.
 FUNC + turn on PERFORM's A and B only duplicated the plain turn (the macro) before, so no gesture
-changed meaning; C and D with FUNC still turn their macros.
+changed meaning. C and D with FUNC are ENERGY and LIVE RND (below).
 
 | Control | Moves | Range | Says |
 | --- | --- | --- | --- |
@@ -265,6 +266,30 @@ that did something changed meaning; FUNC + push D still names slot 8 on every ot
 - **On screen**: PERFORM's line under the macros reads `LIVE RND4 FUNC+D`, or `REL -12 LEN 71% R4`
   with REL/LEN ALL away from rest; the track meters mark the armed tracks with a dot; the live
   strip adds `RN4`. The FUNC help's third PERFORM page lists both gestures.
+
+## ENERGY (FUNC + turn C in PERFORM)
+
+Roland's pick of the bold ideas (backlog, After 1.0 > Performance), `core/energy.hpp`. One
+bipolar control from a sparse breakdown to the peak, in the Moves layer beside REL ALL and LEN
+ALL. FUNC + turn C in PERFORM only duplicated the macro before, so no gesture changed meaning.
+
+| Direction | Does |
+| --- | --- |
+| Down (-2 .. -64) | Every track drops its weakest hits first: 16ths, then 8ths, then beats, the one last, an accent counting for more. The tracks go in an order from their machines: HAT at once, then PERC, SNARE and SAMPLE (and MID), the MONO lines, the pads (POLY, WAVE POLY, FM4, GRAIN), and KICK from -40. At -64 the drums and lines are silent and the pads keep only their strongest hits |
+| Up (+2 .. +64) | Empty steps may get a quiet ghost (velocity about 40-86) with the note, length and locks of the trig before it on that track, off-beats first: HAT fills most, then PERC, SNARE and SAMPLE, the MONO lines; KICK only above +32; pads and MID never. A track with no trig stays silent. Step probabilities lift towards 100 (a 50% step plays every pass at +64) |
+
+- **Rest is 0, and 0 is a detent**, two counts a click, like REL ALL. At rest the part is the
+  programmed one to the bit.
+- **The same groove at the same position**: every draw is fixed per step (the pattern's seed,
+  the track, the step), not per pass. Each click down drops one more set of hits and never a
+  different set; turning back brings each one back where it was.
+- **What it never touches**: the pattern (nothing is written, saved or undone), trigless steps,
+  conditions and the PRE/NEI chain (a thinned hit still counts as a pass), the recorder. A kept
+  step keeps its ratchet; a thinned one loses it whole.
+- **A LOCK holds it**, and a jump or swap puts it back.
+- **On screen**: the notice `ENERGY -20` / `ENERGY +12`, `EN-20` on PERFORM's status line (the
+  `BAR` line while stopped), `EN-` / `EN+` in the live strip. The FUNC help's third PERFORM page
+  lists it.
 
 ## GEN and EVOLVE (hold OK in GRID)
 
@@ -558,6 +583,8 @@ dim fill; under the part the note has already travelled, a brighter one.
 SAMPLES (the sample browser) lists seven rows and draws what the track plays under them, from the
 same picture, over the `NOW` line. **Push A hears the file under the cursor** without loading it
 (dsp/audition.hpp): streamed whole from its start, straight to the output, after every effect.
+With the transport running it takes a second push on the same file within 2 s (the first says
+`A AGAIN TO HEAR`): there is no cue output, so it would go out to the room with the beat.
 Push A again stops it; while one plays, UP/DOWN, turning A and the pages hear the file the cursor
 lands on; OK, CLR, another folder or leaving SAMPLES stops it. A one-pixel line under the heard
 file's name grows as it plays, and a toast reads `HEARING 3/12S` (`OPENING` until it sounds).

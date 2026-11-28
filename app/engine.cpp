@@ -3,6 +3,7 @@
 #include "arp.hpp"       // the arpeggiator's notes; the engine schedules them
 #include "factory.hpp"
 #include "liverand.hpp"    // LIVE RND: the unit held to its range
+#include "energy.hpp"      // ENERGY: the amount held to its range, the tiers
 #include "chainloops.h"    // strata_choke_fade, a choke group's fade
 #include "masterloops.h"   // strata_master_peak, for the input meter
 #include "pcm.hpp"         // a streamed file's bytes to int16, in top_up_streams
@@ -1071,6 +1072,11 @@ bool Engine::apply_perform(const Command &command, int track, int step) {
             // at the next slot, and OFF puts every slot back on its own step.
             perform_.rnd_unit = live_rnd_turn(command.a, 0);          // held to OFF .. RND16
             perform_.rnd_armed = command.b;
+            break;
+
+        case Cmd::set_energy:
+            // Read by the scheduler on the next tick: a thinned hit drops, a ghost comes in.
+            perform_.energy = energy_turn(int8_t(command.a), 0);    // held to the range
             break;
 
         case Cmd::set_macro:
@@ -2895,6 +2901,14 @@ void Engine::resolve_tick(uint32_t tick, uint32_t frame) {
     // A finished song is silent until the transport stops or starts again.
     if (song_over_) return;
 
+    // ENERGY's tiers follow the machines (core/energy.hpp), looked up only while it is away from
+    // rest: at 0 the scheduler reads none of them.
+    if (perform_.energy != 0) {
+        for (int t = 0; t < kTracks; t++) {
+            perform_.energy_tier[t] = uint8_t(energy_tier(machine_id_[t]));
+        }
+    }
+
     // The pattern's own tick: steps, passes and conditions all count from where it started.
     const int count =
         scheduler_.tick(tick - origin_, frame, live(), perform_, events_, kMaxEventsPerTick);
@@ -4399,6 +4413,7 @@ void Engine::capture_live(LiveState &state) const {
     state.len_all = len_all_;
     state.rnd_unit = perform_.rnd_unit;
     state.rnd_armed = perform_.rnd_armed;
+    state.energy = perform_.energy;
 }
 
 // At once (D3): the next step plays from the restored pattern, and the sound is heard in this
@@ -4428,6 +4443,7 @@ void Engine::apply_live(const LiveState &state) {
     len_all_ = state.len_all;
     perform_.rnd_unit = state.rnd_unit;
     perform_.rnd_armed = state.rnd_armed;
+    perform_.energy = energy_turn(state.energy, 0);
     perform_dirty_ = true;
     reconfigure();
 }

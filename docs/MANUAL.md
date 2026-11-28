@@ -1296,6 +1296,31 @@ LIVE RND is not saved or undone; a LOCK holds the unit and which tracks are in, 
 back the shuffle you stored, and the swap-back the one you had. A hit recorded while it is on goes
 on the step that was sounding.
 
+### ENERGY: from breakdown to peak on one knob
+
+**FUNC + turn C in PERFORM is ENERGY**, two counts a click from -64 to +64, with rest at 0 and a
+detent there, like REL ALL (`ENERGY -20`, `ENERGY +12`).
+
+**Turn it down and the beat thins out**, the way a DJ strips a track for a breakdown. Every track
+drops its weakest hits first (the 16ths, then the off-beat 8ths, then the beats; an accented step
+holds on longer), and the tracks go in an order: the hats straight away, then the percussion, the
+snare and the samples, the bass and lead lines, the pads, and the kick last, from -40. At -64 the
+drums and lines are gone and only the pads and textures play, on their strongest hits.
+
+**Turn it up and the beat fills in.** Empty steps get quiet ghost hits, off-beats first, with the
+sound of the hit before them on the same track, so a ghost on a tuned kick is the same kick and a
+ghost on a bass line repeats the note it follows. The hats fill most, then the percussion, the
+snare and the samples, and the lines; the kick only in the top half, and pads and MID tracks
+never. A track with nothing on it stays silent. Steps with a probability play more often too: a
+50% hat plays every pass at +64.
+
+Each position of the knob plays the same groove every bar: turning one click further takes away
+(or adds) exactly one more set of hits, and turning back brings each one back where it was. The
+pattern is never changed, so at 0 the beat is exactly as programmed. Trigless steps (a programmed
+filter sweep) and conditions are left alone. While it is away from rest, PERFORM shows `EN-20` on
+its status line (beside `BAR` while stopped) and the live strip says `EN-` or `EN+`. ENERGY is not
+saved or undone; a LOCK holds it, so a jump brings back the energy you stored.
+
 ### Beat repeat, throws and auto-fill
 
 REPEAT loops the last 1/4, 1/8, 1/16 or 1/32 (or triplets) of the finished master while held;
@@ -1383,7 +1408,7 @@ over the old one.
 
 A lock holds the pattern whole (steps, locks, conditions, lengths, swing), every track's sound
 (all eight EDIT pages) and fader, the sends and the master, the mutes, and where the morph and
-the four macros are, REL ALL and LEN ALL, and LIVE RND (FEEL is in the pattern). It does not hold the samples or the machines (a lock taken before a machine
+the four macros are, REL ALL and LEN ALL, LIVE RND and ENERGY (FEEL is in the pattern). It does not hold the samples or the machines (a lock taken before a machine
 switch brings back the parameters only), the tempo, the kill EQ's switches, the scenes or the
 macro setup, the stored mute states or the chain. The performance mixer is not in it either: a
 jump rides the picked effect back to 0 over FX GLIDE and leaves a loop playing.
@@ -1847,11 +1872,14 @@ browser opens in the folder of the file the track plays, with the cursor on it, 
   are left alone.
 - **Push A to hear a file first.** It plays the file under the cursor, whole and from its
   start, straight to the output at about -6 dB, without loading it: the track and the kit stay
-  as they were. Push A again to stop. While a file is heard, UP/DOWN (or turning A, or a page)
+  as they were. Push A again to stop. **With the beat playing it takes two pushes**: the
+  first only says `A AGAIN TO HEAR`, and a second push on the same file within 2 s plays it.
+  The SmplTrek has no separate cue output, so the audition goes out with the beat, and a single
+  bump of the knob in a set should not put a file into the room. While a file is heard, UP/DOWN (or turning A, or a page)
   hears the next file the cursor lands on, so you can listen down a folder and press OK on the
   one you want. A toast says `HEARING 3/12S` (seconds heard of the file's
   length, `OPENING` for the moment before it sounds), and a line under the file's name grows as
-  it plays. It works with the beat playing or stopped; it is streamed from the card, so a long
+  it plays. It is streamed from the card, so a long
   stem starts as quickly as a short hit, plays at its own rate and takes no sample memory. It is
   not recorded by RESAMPLE or the looper and goes round no effect. OK (which loads it), CLR,
   another folder, a folder under the cursor or leaving SAMPLES stops it. A file that cannot be
