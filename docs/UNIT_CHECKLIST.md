@@ -899,6 +899,20 @@ Beat playing, A01, a card with some space.
   at the end of the pattern. `____`
 - Tap PROJECT: PROJECT opens as the key comes up, no slower than before to the hand. FUNC +
   PROJECT: SAMPLES at once. `____`
+
+**W68. Your own sounds and copy / paste in SOUNDS (5 min).** Beat playing, A01, a card in.
+- Track 1 (KCK), EDIT, turn TUN and DEC somewhere new, OK: SOUNDS. FUNC + DOWN: `SAVE SOUND`
+  offering `KCK 1`. OK: `SAVED KCK 1`, and `+KCK 1     NOW` at the end of the list, under the
+  cursor. The beat never stops or stutters. `____`
+- Down to 909, OK: the factory kick. Back to `+KCK 1`, OK: your kick again, as you left it. `____`
+- Push B on `+KCK 1`, UP once, OK: `+LCK 1`. Push C, OK, OK: `DELETED`, the row is gone. Push B
+  on a factory sound: `YOUR OWN SOUNDS ONLY`. `____`
+- Save one again, then switch the unit off and on: it is still in the list, in this project and
+  after NEW. On the PC the card has `ENAGA/DATA/STRATA/SOUNDS/KCK.BIN`. `____`
+- Track 6 (MNO), SOUNDS, FUNC + UP: `COPIED T6 MNO`. Screen key right to track 7 (PLY):
+  `PASTE T6 MNO` under AS WAS, `SWITCHES MACHINE` under the bars. OK: track 7 plays track 6's
+  bass sound on its own notes, its pan and sends as they were. AS WAS: PLY and its stab are
+  back. `____`
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
 
@@ -926,6 +940,8 @@ From `D:\DEV\STRATA` through WSL, as in CLAUDE.md (`wsl.exe -d Ubuntu -- bash -c
       only; record both in docs/BUDGET.md, "A05 PAD". Peak `____ %` / `____ %`
 - [ ] `tests/scenario_sounds.sh` (new: SOUNDS on the kick track, loads 808 and PUNCH while
       playing, then AS WAS) passes with cl6x. Peak `____ %`
+- [ ] `tests/scenario_usersounds.sh` (new: saves the kick's sound as KCK 1, loads HARD and KCK 1,
+      copies, pastes onto track 2, AS WAS) passes with cl6x. Peak `____ %`
 - [ ] `tests/scenario_midi.sh` (new: track 1 to MID on the running beat, both STOPs) passes with
       cl6x and GCC only. It is part of E1's `tools/scenarios.sh` too. Peak `____ %` / `____ %`
 - [ ] **E1.** `tools/scenarios.sh` (every scenario) passes, with cl6x and with GCC only, on main

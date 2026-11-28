@@ -8,6 +8,16 @@ the project file format or the controls.
 
 ### Added
 
+- **Your own sounds in SOUNDS.** FUNC+DOWN saves the track's sound under a name of up to eight
+  characters; it is listed after the factory sounds as `+NAME` and loads with OK on any track with
+  the same machine, in every project. FUNC+DOWN on one of your own replaces it, push B renames and
+  push C deletes it (OK twice). Up to 16 per machine, kept in `ENAGA/DATA/STRATA/SOUNDS/<MCH>.BIN`,
+  a versioned file per machine beside the projects; project files do not change. A saved sound
+  sets the pages a factory sound sets.
+- **Copy a sound to another track.** FUNC+UP in SOUNDS copies the track's sound; a `PASTE T1 KCK`
+  row then sits under AS WAS on every track, and OK on it gives that track the sound, switching
+  its machine first when it hosts another. AS WAS takes the paste back, machine included. New
+  emulator scenario `usersounds`.
 - **Queue a pattern from any screen.** Hold PROJECT and press STEP n: slot n of the shown bank is
   queued (`A05 QUEUED END`) and the screen you play on stays up. PROJECT now opens when the key
   comes up, and not at all when a STEP was pressed while it was held. The FUNC help's FUNC + KNOB
