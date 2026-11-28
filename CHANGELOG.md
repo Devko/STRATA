@@ -8,14 +8,12 @@ the project file format or the controls.
 
 ### Added
 
-- **JAM REC: the whole jam to the card.** The FUNC menu's last row (FUNC+HOME, UP, OK) records
+- **JAM REC: the whole jam to the card.** The FUNC menu's second row (FUNC+HOME, DOWN, OK) records
   everything STRATA plays to `/RECORD/JAM_<n>.WAV` until OK again: 48 kHz 24-bit stereo, about
   1 GB an hour, up to 3 h 51 min. The finished master as RESAMPLE hears it, never the click or
   the sample audition. A dot blinks in the top bar while it runs and the row counts the time. A
   full card or the length limit closes the file cleanly and says so; switching off closes it
-  too. RESAMPLE, freeze and the looper still work meanwhile. Every FUNC menu row counted
-  upwards from SAVE is one further on (LOAD DEMO is UP twice now). New emulator scenario
-  `jamrec`.
+  too. RESAMPLE, freeze and the looper still work meanwhile. New emulator scenario `jamrec`.
 - **ENERGY, one knob from breakdown to peak.** In PERFORM, FUNC + turn C (-64 .. +64, rest at 0
   with a detent). Down, every track drops its weakest hits first, in an order: hats at once, then
   percussion, snare and samples, the lines, the pads (which keep their strongest hits), and the
@@ -66,6 +64,14 @@ the project file format or the controls.
 
 ### Changed
 
+- **A slimmer FUNC menu.** FUNC+HOME holds the project-wide rows only, in the order a jam reaches
+  for them: SAVE, JAM REC, CLICK, COUNT-IN, REC MODE, QUANTIZE, AUTO-FILL, FX GLIDE, LOOP LEN,
+  CHAIN, CHAIN END, then the file rows from SAVE AS down to LOAD DEMO (UP once from SAVE). The
+  selected track's TRACK SPEED, TRACK PLAY, FREEZE and RELOAD SAMPLE are in GRID's track menu
+  (hold OK) as SPEED, PLAY, FREEZE and RELOAD SAMPLE, after HOME: UP from GENERATE reaches them.
+  FREEZE keeps the menu open, its row reading `WAIT`, `REC`, `ON`, and EDIT on a frozen track
+  says `FROZEN: TRACK MENU`. The emulator scenarios `triplets`, `playmode` and `freeze` hold OK
+  for the track menu through `tools/emu_drive.py`.
 - **Sample audition with the beat playing takes two pushes.** In SAMPLES, push A while the
   transport runs only says `A AGAIN TO HEAR`; a second push on the same file within 2 s plays
   it. The SmplTrek has no cue output, so the audition goes out with the beat, and one bump of
