@@ -21,7 +21,7 @@
 #   detents do not land, about 1 in 6 on C and 1 in 20 on VALUE in the first cl6x run, and 3 in
 #   16 on A GCC-only.)
 #   FUNC + SEL> x3                                      -> "TRANSPOSE +3 IN KEY"
-#   FUNC + HOME, DOWN, OK                               -> "JAM REC JAM <n>"
+#   FUNC + HOME, DOWN to JAM REC, OK                    -> "JAM REC JAM <n>"
 #   3 s of play, every block's cost read
 #
 # Keys (third_party/enaga/include/enaga/abi.h): PLAY (F5) 22, OK 23, CLR 30, DOWN 25, RIGHT 18,
@@ -181,11 +181,15 @@ check(has("VARISPEED +12.0 "), "FUNC + turn VALUE took VariSpeed to +12.0", f"lo
 for _ in range(3): func_key(SEL_R)
 check("TRANSPOSE +3 IN KEY" in log, "FUNC + SEL> took TRANSPOSE to +3", f"log={log[-6:]}")
 
-# JAM REC: the FUNC menu's second row.
+# JAM REC: the FUNC menu's row, walked by name (tools/menu_rows.py), not by a press count.
+import subprocess
+jam_downs = int(subprocess.check_output(
+    [sys.executable, "-B", "tools/menu_rows.py", "app/ui_perfmix.hpp", "MenuItem", "jam"]))
 func_key(HOME)
 go(40 * M)
-tap(DOWN)
-go(40 * M)
+for _ in range(jam_downs):
+    tap(DOWN)
+    go(40 * M)
 tap(OK)
 go(100 * M)
 check(has("JAM REC JAM "), "the FUNC menu started JAM REC", f"log={log[-8:]}")
