@@ -229,7 +229,10 @@
             return true;
         }
         if (track_ok_held_) {
-            track_ok_held_ = false;          // a tap: OK in GRID and KEYS does nothing else
+            // A tap: OK in GRID and KEYS has no other job, so it says where the menu is
+            // (usability review, 2026-11-28: the hold was only in the FUNC help's sixth page).
+            track_ok_held_ = false;
+            notice("HOLD OK: TRACK MENU");
             return true;
         }
         return false;

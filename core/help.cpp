@@ -306,6 +306,19 @@ constexpr Text kChain = {"CHAIN:", {
     nullptr,
 }};
 
+constexpr Text kLaunch = {"LAUNCH:", {
+    "STEP     LAUNCH LANE",
+    "PADS+STEP  SEVERAL",
+    "PAD      PICK LANE",
+    "UP/DOWN  LANE",
+    "OK       CURSOR SLOT",
+    "HOLD OK  CAPTURE",
+    "CLR      OWN PART",
+    "PUSH B   PIN LANE",
+    "FUNC+STEP  PATTERN",
+    "A        QUEUE MODE",
+}};
+
 constexpr Text kPattern = {"PATTERN:", {
     "LEFT/RIGHT FIELD",
     "UP/DOWN    CHANGE",
@@ -717,6 +730,7 @@ bool own_page(const HelpPlace &place, int page, char title[kHelpChars + 1],
             list[listed++] = &kPerform3;
             break;
         case HelpScreen::project:   list[listed++] = &kProject; break;
+        case HelpScreen::launch:    list[listed++] = &kLaunch; break;
         case HelpScreen::chain:     list[listed++] = &kChain; break;
         case HelpScreen::pattern:   list[listed++] = &kPattern; break;
         case HelpScreen::setup:     list[listed++] = &kSetup; break;

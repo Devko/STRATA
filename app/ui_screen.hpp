@@ -416,6 +416,7 @@
             case Mode::perform:  place.screen = HelpScreen::perform; break;
             case Mode::project:
                 switch (project_page_) {
+                    case ProjectPage::launch:  place.screen = HelpScreen::launch; break;
                     case ProjectPage::chain:   place.screen = HelpScreen::chain; break;
                     case ProjectPage::pattern: place.screen = HelpScreen::pattern; break;
                     case ProjectPage::setup:   place.screen = HelpScreen::setup; break;
@@ -484,7 +485,14 @@
             const int y = grid_top + t * kGridRow;
             const uint8_t head = status.playhead[t].load(std::memory_order_relaxed);
             const char number[2] = {char('1' + t), 0};
-            paint::small_text(px, 2, y + 2, number, t == selected_ ? 15 : (muted_[t] ? 3 : 7));
+            // A launched lane (core/launch.hpp) underlines its number; one with a launch queued
+            // blinks it until it lands.
+            const bool borrowed = lane_borrowed(engine_.project(), t);
+            const bool queued = engine_.lane_queue(t).queue.pending;
+            if (!queued || queue_blink_on()) {
+                paint::small_text(px, 2, y + 2, number, t == selected_ ? 15 : (muted_[t] ? 3 : 7));
+            }
+            if (borrowed) canvas.rect(2, y + 8, 3, 1, 9);
             if (running) {
                 const uint32_t level = status.track_milli[t].load(std::memory_order_relaxed);
                 const int lit = paint::level_rows(level, 6, 36);
@@ -492,7 +500,8 @@
             }
             for (int i = 0; i < 16; i++) {
                 const int step = i + page_ * 16;
-                const Step &s = engine_.pattern().tracks[t].steps[step];
+                const Pattern &lane = engine_.lane(t);
+                const Step &s = lane.tracks[t].steps[step];
                 const bool trig = (s.flags & kStepTrig) != 0;
                 const bool on_head = running && step == head;
 
@@ -506,7 +515,7 @@
                     if (trig) {
                         draw_step_glyph(canvas, x, y + 1, s,
                                         s.lock_count > 0 &&
-                                            step_param_lock_count(engine_.pattern(), t, step) > 0);
+                                            step_param_lock_count(lane, t, step) > 0);
                     }
                 } else if ((s.flags & kStepTrigless) != 0) {
                     draw_trigless_cell(canvas, x, y + 1);
@@ -523,7 +532,7 @@
 
         // The track's own layout: length and speed are per track (polymeter), so they belong on
         // screen next to the track number rather than behind a menu.
-        const TrackPattern &track = engine_.pattern().tracks[selected_];
+        const TrackPattern &track = engine_.lane(selected_).tracks[selected_];
         out = line;
         // "T1", not "TRK 1": with a three-character speed and a two-digit length the long form
         // was 22 characters, and the speed ran off the right edge.
@@ -545,6 +554,10 @@
             char *o = info;
             append(o, line);
             if (muted_[selected_]) append(o, " MUTE");          // 24 at the most: fits
+            if (lane_borrowed(engine_.project(), selected_)) {
+                append(o, " <");                                 // the part it borrows: " <B07"
+                append_source(o, engine_.project().settings.lane_source[selected_]);
+            }
             int active = 0;
             for (int i = 0; i < 16; i++) {
                 active += (track.steps[page_ * 16 + i].flags & kStepTrig) != 0 ? 1 : 0;

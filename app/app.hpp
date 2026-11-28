@@ -602,6 +602,7 @@ public:
 #include "ui_live.hpp"
 
 #include "ui_project.hpp"
+#include "ui_launch.hpp"
 #include "ui_trackmenu.hpp"
 #include "ui_pickview.hpp"
 #include "ui_listview.hpp"
@@ -876,14 +877,27 @@ private:
     int mixer_bank_ = 0;      // which kMixerPages entry: the faders, then the sends and master
     // PROJECT mode's pages, on the octave keys: the slots, the chain, the pattern's own
     // settings and SETUP.
-    enum class ProjectPage : uint8_t { slots = 0, chain, pattern, setup, files, count };
+    // LAUNCH last, so the walk to every page before it is what it always was (the scenarios and
+    // the tests walk it); PROJECT twice goes straight to it.
+    enum class ProjectPage : uint8_t { slots = 0, chain, pattern, setup, files, launch, count };
     ProjectPage project_page_ = ProjectPage::slots;
     bool project_setup() const { return project_page_ == ProjectPage::setup; }
     int chain_cursor_ = 0;         // the CHAIN page's entry
+    // The LAUNCH page (app/ui_launch.hpp): the lower pads held there, OK's hold for CAPTURE,
+    // the last Status::launch_event said, and the lane sources and live pattern last seen, so a
+    // landed launch is said once.
+    uint8_t launch_held_ = 0;
+    bool launch_ok_held_ = false;
+    uint32_t launch_ok_down_ms_ = 0;
+    uint8_t launch_landed_seen_ = 0;
+    uint8_t launch_event_seen_ = 0;
+    uint8_t launch_seen_[kTracks] = {};
+    uint8_t launch_seen_live_ = 0;
     int pattern_field_ = 0;        // the PATTERN page's field: 0 LEN, 1 SWG, 2 FEEL, 3-10 swings
     static const char *project_page_name(ProjectPage page) {
         switch (page) {
             case ProjectPage::slots:   return "PROJECT";
+            case ProjectPage::launch:  return "LAUNCH";
             case ProjectPage::chain:   return "CHAIN";
             case ProjectPage::pattern: return "PATTERN";
             case ProjectPage::files:   return "PROJECTS";
@@ -961,6 +975,8 @@ private:
     static constexpr uint32_t kDoubleTapMs = 400;   // HOME, HOME: KEYS
     bool home_tapped_ = false;
     uint32_t home_tapped_at_ms_ = 0;
+    bool project_tapped_ = false;         // PROJECT double-tapped is LAUNCH, as HOME's is KEYS
+    uint32_t project_tapped_at_ms_ = 0;
 
     // The project tempo this side has already reconciled with the clock, so that a LOAD is
     // adopted and the engine's echo of our own knob move is not.

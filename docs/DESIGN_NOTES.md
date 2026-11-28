@@ -187,3 +187,16 @@ seed, track, step, pass and parameter. The scheduler looks ahead for a slid step
 (`StepEvent::glide_*`, in play order); `Engine::start_slides` / `run_slides` glide at control rate
 before the LFOs. Hold STEP + FUNC + push no longer clears a lock: it toggles the slide.
 `scenario_locks` walks both gestures; UNIT_CHECKLIST W37.
+
+## Track Launch
+
+`core/launch.hpp` has the design and Roland's decisions (2026-11-27). The scheduler plays each
+lane from its own pattern and its own tick (`Scheduler::configure` and `tick` take lane arrays;
+the single-pattern calls wrap them). FEEL comes from the playing pattern, the probability seed
+from the lane's. The engine keeps a `LaneQueue` (the pattern queue's timing) and an origin per
+lane; `lane_follows_` marks the lanes that count from the pattern's origin. Launches due on a
+tick land after a pattern change on the same tick. `Engine::launch_refuses` is the read-only
+guard, listing every track-edit command. CAPTURE copies every lane's part and compacts the lock
+pool into one free slot, then switches to it keeping each lane's origin, so nothing restarts.
+LAUNCH is PROJECT's last page so the page walks in older tests and scenarios stay valid.
+`tests/scenario_launch.sh` drives it in the emulator; CAPTURE and held pads are host-tested only.

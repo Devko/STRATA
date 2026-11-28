@@ -5,7 +5,7 @@ On a unit that still runs Enaga 0.3.0, update it to 0.4.0 first and do **the Ena
 most likely to break only on the hardware. If it passes, the walkthrough is worth its two hours;
 if an item fails, report that first.
 
-Then **the walkthrough** (W1-W64, about 215 minutes): everything merged since v0.1.0,
+Then **the walkthrough** (W1-W65, about 220 minutes): everything merged since v0.1.0,
 in an order that plays from one item into the next. Report back by number, for example
 `W3 fail: reads 055`. After it comes **the full walkthrough**, first written for the v0.1.0 card
 on 2026-11-22: the PC runs (E1-E16), a section per feature with the deeper checks and the U
@@ -298,6 +298,7 @@ for a second; it shows that screen's help, with `PAGE 1/11` at its foot.
   `UPPER PADS`, `VALUE FX MIXER:`, `VALUE FX STEPS:`, and round to page 1. LEFT goes back. GRID's
   own knob page did **not** change.
 - Let go of FUNC: GRID is back. Hold again: page 1 again.
+- Tap FUNC quickly on its own: the toast says `HOLD FUNC: HELP`. FUNC + MIXER: PERFORM, no such toast.
 - EDIT on track 2 (snare): `EDIT SRC SNR`, `B SNP SNAPPY`. Screen key RIGHT to ENV (without FUNC),
   hold FUNC: `ASR: SYNTHS GRN SMP`. Track 7: `A ATK ATTACK`, `SUS 0  ONE-SHOT`.
 - MIXER DUCK: `A SRC SOURCE TRACK`. PERFORM: `PUSH A-D   LEARN`. Push A (LEARN), hold FUNC:
@@ -714,7 +715,7 @@ hit, a 44.1 kHz loop and a long stem (a minute or more). Beat stopped, A01.
 - Save, power cycle: the arp's settings and the loaded arp come back. `____`
 
 **W52. GEN and EVOLVE (4 min).** Beat playing, A01, GRID.
-- Tap OK: nothing opens. Hold OK half a second: the track menu, `>GENERATE`, footer `T1  OK: RUN`.
+- Tap OK: nothing opens, the toast says `HOLD OK: TRACK MENU`. Hold OK half a second: the track menu, `>GENERATE`, footer `T1  OK: RUN`.
   OK: `GEN T1 BOTH`, a new kick part that starts on step 1. OK again: another one. Close with CLR
   and FUNC + CLR: the part before. `____`
 - Screen key down to T6 (the bass), hold OK, OK: a bass line in the key (KEY on PROJECT), starting
@@ -849,8 +850,21 @@ free.
 - Start another, let it run 30 s with four streamed samples playing if you have them, then
   power off with it running. On the PC the second file has the next number and plays to the
   end. `____`
+**W64. Track Launch (5 min).** Beat playing, A01. First put a part in A07: PROJECT, STEP 7, let
+it switch, put a few trigs on track 3 that sound clearly different, then PROJECT, STEP 1 back.
+- PROJECT twice quickly: `LAUNCH`, a row per track. Press pad 3 of the lower row: no sound, the
+  row of track 3 is marked. STEP 7: `T3 < A07 AT END`, its cell blinks. At the end of A01 track 3
+  plays A07's part, starting on the bar, in time; the other tracks carry on. `T3 A07`. `____`
+- HOME: GRID shows A07's trigs on track 3, its number underlined, the info line ends `<A07`. Tap
+  a STEP of track 3: `T3 A07 READ ONLY`, nothing changes. `____`
+- PROJECT twice, push B: `T3 PINNED`. FUNC + STEP 2 for A02: at the boundary track 3 still plays
+  A07, the others A02. Push B again, then FUNC + STEP 1: track 3 goes back to its own part. `____`
+- Launch A07 on track 3 again, hold two pads (1 and 2) and press STEP 7: tracks 1 and 2 land
+  together. Hold OK for half a second: `CAPTURED A0x` (the first empty slot), no gap in the
+  sound, and GRID now edits track 3. `____`
+- Launch something, save, power cycle, open: the launch is still playing. `____`
 
-**W64. Usability quick wins: MIXER groups, the KEYS track menu, JAM REC on FUNC+REC (5 min).**
+**W65. Usability quick wins: MIXER groups, the KEYS track menu, JAM REC on FUNC+REC (5 min).**
 Beat playing, A01, a card with some space.
 - MIXER, then DOWN: `DCK 1-4`; DOWN again `WID 1-4`, then `DLY`, `REV`, `CHO 1-4`, `MST` and
   round to `TRK 1-4`. UP from `TRK 1-4` is `MST`. LEFT/RIGHT still go one page. `____`
@@ -3028,4 +3042,3 @@ sends), rim -35.6, blips -37.7; the mix -17.0 RMS with peaks at the limiter.
       only, the bare groove without rim and blips.
 - [ ] Anything that sounds wrong, say which and how: each value has its arithmetic in a comment
       in core/factory.cpp, so a change is one number.
-

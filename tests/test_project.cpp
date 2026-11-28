@@ -43,8 +43,8 @@ using namespace strata;
 // 393 since MIDI OUT: a sixth entry (12) and one channel per track (8). 402 since the sends'
 // ambient modes: nine bytes on the end of the mixer section. 425 since EVOLVE: a seventh entry
 // (12) and its 11 bytes, optional like the others. 429 since the chorus: its four send bytes on the
-// end of the mixer section.
-constexpr uint32_t kProjectFileBytes = 429;
+// end of the mixer section. 450 since Track Launch: an eighth entry (12) and its 9 bytes.
+constexpr uint32_t kProjectFileBytes = 450;
 constexpr uint32_t kKitFileBytes = 1506;   // 1486 before the widths (12 + 8), 1466 before the chorus sends (12 + 8), 1453 before the LFO layout (12 + 1), 1409 before the arp settings (12 + 32), 1389 before the choke groups (12 + 8), 1329 before the mod slots (12 + 48), 1309 before LFO TRIG (12 + 8), 1296 before the filter layout (12 + 1), 1076 before the LFO and arp (12 + 8 x 4 each), 1164 before SLC AUTO (12 + 8), 1184 before ASR (12 + 32), 1228 before the duck (12 + 12), 1252 before OSC (12 + 32)
 
 // Room past the end of every file, filled with a sentinel, so that a writer going one byte long
@@ -734,7 +734,7 @@ TEST(project_a_file_from_before_evolve_opens_with_nothing_evolving) {
     uint32_t written = 0;
     CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
              int(SerializeResult::ok));
-    for (uint32_t e = 0; e < 7; e++) {
+    for (uint32_t e = 0; e < 8; e++) {
         const uint32_t at = kHeaderBytes + e * kSectionEntryBytes;
         if (peek_u16(g_project, at) == kSectionProjectEvolve) poke_u16(g_project, at, 99);
     }
@@ -769,6 +769,60 @@ TEST(project_damaged_evolve_bytes_take_the_defaults) {
     CHECK_EQ(int(g_loaded.settings.evolve_mode), 0);
     CHECK_EQ(int(g_loaded.settings.evolve_kind), int(kEvolveKindDefault));
     CHECK_EQ(int(g_loaded.settings.evolve_amount), 50);
+}
+
+TEST(project_launch_state_round_trips) {
+    fill_project(g_source, 0);            // live is A12
+    g_source.settings.lane_source[2] = 7;               // T3 plays A07
+    g_source.settings.lane_source[6] = 128;             // T7 plays H16
+    g_source.settings.lane_pinned = 0x24;
+    uint32_t written = 0;
+    CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
+             int(SerializeResult::ok));
+    project_init(g_loaded);
+    CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::ok));
+    for (int t = 0; t < kTracks; t++) {
+        CHECK_EQ(int(g_loaded.settings.lane_source[t]), int(g_source.settings.lane_source[t]));
+    }
+    CHECK_EQ(int(g_loaded.settings.lane_pinned), 0x24);
+}
+
+TEST(project_a_file_from_before_launch_opens_with_every_lane_on_its_own_part) {
+    fill_project(g_source, 0);
+    g_source.settings.lane_source[0] = 3;
+    g_source.settings.lane_pinned = 0xFF;
+    uint32_t written = 0;
+    CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
+             int(SerializeResult::ok));
+    for (uint32_t e = 0; e < 8; e++) {
+        const uint32_t at = kHeaderBytes + e * kSectionEntryBytes;
+        if (peek_u16(g_project, at) == kSectionProjectLaunch) poke_u16(g_project, at, 99);
+    }
+    refresh_crc(g_project);
+    project_init(g_loaded);
+    g_loaded.settings.lane_source[4] = 9;              // a previous project's
+    g_loaded.settings.lane_pinned = 1;
+    CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::ok));
+    for (int t = 0; t < kTracks; t++) CHECK_EQ(int(g_loaded.settings.lane_source[t]), 0);
+    CHECK_EQ(int(g_loaded.settings.lane_pinned), 0);
+    CHECK_EQ(int(g_loaded.settings.evolve_amount), int(g_source.settings.evolve_amount));
+}
+
+TEST(project_a_damaged_lane_source_puts_that_lane_on_its_own_part) {
+    fill_project(g_source, 0);            // live is A12, source 12
+    for (int t = 0; t < kTracks; t++) g_source.settings.lane_source[t] = 5;
+    uint32_t written = 0;
+    CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
+             int(SerializeResult::ok));
+    const uint32_t launch = section_at(g_project, kSectionProjectLaunch);
+    g_project[launch + 1] = 129;          // one past H16
+    g_project[launch + 3] = 12;           // the live pattern: its own part
+    refresh_crc(g_project);
+    project_init(g_loaded);
+    CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::ok));
+    CHECK_EQ(int(g_loaded.settings.lane_source[0]), 5);
+    CHECK_EQ(int(g_loaded.settings.lane_source[1]), 0);
+    CHECK_EQ(int(g_loaded.settings.lane_source[3]), 0);
 }
 
 TEST(project_a_damaged_midi_out_channel_turns_that_track_off) {
@@ -837,12 +891,13 @@ TEST(project_a_file_from_before_song_mode_loops_and_recalls_no_mutes) {
     uint32_t written = 0;
     CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
              int(SerializeResult::ok));
-    // The MIDI and EVOLVE sections came after song mode, so a file from before song mode had
-    // neither.
+    // The MIDI, EVOLVE and launch sections came after song mode, so a file from before song
+    // mode had none of them.
     uint32_t old_size = drop_last_section(g_project, g_project_alt);
     old_size = drop_last_section(g_project_alt, g_project_alt);
     old_size = drop_last_section(g_project_alt, g_project_alt);
-    CHECK_EQ(old_size, kProjectFileBytes - 12 - 11 - 12 - 8 - 12 - 65);
+    old_size = drop_last_section(g_project_alt, g_project_alt);
+    CHECK_EQ(old_size, kProjectFileBytes - 12 - 9 - 12 - 11 - 12 - 8 - 12 - 65);
     // A previous project's song settings, which must not survive into this one.
     project_init(g_loaded);
     g_loaded.settings.chain_song = true;
@@ -1063,7 +1118,7 @@ TEST(project_the_header_says_strata_and_the_version) {
     CHECK_EQ(int(g_project[2]), int(kMagic2));
     CHECK_EQ(int(g_project[3]), int(kMagic3));
     CHECK_EQ(int(peek_u16(g_project, kVersionOffset)), int(kProjectVersion));
-    CHECK_EQ(int(peek_u16(g_project, 6)), 7);   // settings, chain, mixer, live, song, MIDI, EVOLVE
+    CHECK_EQ(int(peek_u16(g_project, 6)), 8);   // settings, chain, mixer, live, song, MIDI, EVOLVE, launch
     CHECK_EQ(peek_u32(g_project, 8), kProjectFileBytes - kHeaderBytes);
     CHECK_EQ(peek_u32(g_project, kCrcOffset),
              crc32(g_project + kHeaderBytes, kProjectFileBytes - kHeaderBytes));
@@ -1074,7 +1129,7 @@ TEST(project_the_header_says_strata_and_the_version) {
     const uint32_t mixer = section_at(g_project, kSectionProjectMixer);
     const uint32_t live = section_at(g_project, kSectionProjectLive);
     const uint32_t song = section_at(g_project, kSectionProjectSong);
-    CHECK_EQ(settings, kHeaderBytes + 7 * kSectionEntryBytes);
+    CHECK_EQ(settings, kHeaderBytes + 8 * kSectionEntryBytes);
     CHECK_EQ(chain, settings + 19);
     CHECK_EQ(mixer, chain + 64 * 3);
     CHECK_EQ(live, mixer + uint32_t(kSendFields + kMasterFields + 1));
@@ -1083,7 +1138,9 @@ TEST(project_the_header_says_strata_and_the_version) {
     CHECK_EQ(midi, song + 1 + 64);
     const uint32_t evolve = section_at(g_project, kSectionProjectEvolve);
     CHECK_EQ(evolve, midi + 8);
-    CHECK_EQ(evolve + 11, kProjectFileBytes);
+    const uint32_t launch = section_at(g_project, kSectionProjectLaunch);
+    CHECK_EQ(launch, evolve + 11);
+    CHECK_EQ(launch + 9, kProjectFileBytes);
 }
 
 // --- PROJECT.BIN: value-tolerant ------------------------------------------
