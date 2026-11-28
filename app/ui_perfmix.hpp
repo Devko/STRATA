@@ -12,9 +12,12 @@
     // change a setting row, CLR or FUNC + HOME closes it and returns to the screen it opened
     // over. The cursor always starts on SAVE, so FUNC + HOME, OK saves.
 
-    enum class MenuItem : uint8_t { save, save_as, open, fresh, reload, clear, kits, sample,
-                                    speed, play, chain, song, autofill, quantize, rec_mode, click,
-                                    count_in, glide, freeze, loop_len, demo, jam, count };
+    // Project-wide rows only, ordered by how often a jam reaches for them: the live toggles
+    // first, the file actions at the bottom. The selected track's rows (SPEED, PLAY, FREEZE,
+    // RELOAD SAMPLE) are in GRID's track menu (app/ui_trackmenu.hpp).
+    enum class MenuItem : uint8_t { save, jam, click, count_in, rec_mode, quantize, autofill,
+                                    glide, loop_len, chain, song, save_as, open, kits, fresh,
+                                    reload, clear, demo, count };
     static constexpr int kMenuItems = int(MenuItem::count);
     static constexpr int kMenuRows = 9;
 
@@ -27,9 +30,6 @@
             case MenuItem::reload:   return "RELOAD PROJECT";
             case MenuItem::clear:    return "CLEAR PATTERN";
             case MenuItem::kits:     return "KITS";
-            case MenuItem::sample:   return "RELOAD SAMPLE";
-            case MenuItem::speed:    return "TRACK SPEED";
-            case MenuItem::play:     return "TRACK PLAY";
             case MenuItem::chain:    return "CHAIN";
             case MenuItem::song:     return "CHAIN END";
             case MenuItem::autofill: return "AUTO-FILL";
@@ -37,7 +37,6 @@
             case MenuItem::rec_mode: return "REC MODE";
             case MenuItem::click:    return "CLICK";
             case MenuItem::count_in: return "COUNT-IN";
-            case MenuItem::freeze:   return "FREEZE";
             case MenuItem::loop_len: return "LOOP LEN";
             case MenuItem::glide:    return "FX GLIDE";
             case MenuItem::demo:     return "LOAD DEMO";
@@ -49,18 +48,6 @@
     // A setting row's value as the row shows it, or "" for an action row.
     void menu_item_value(MenuItem item, char *out) {
         switch (item) {
-            case MenuItem::speed:
-                *out++ = 'T';
-                append_number(out, uint32_t(selected_) + 1);
-                *out++ = ' ';
-                append(out, speed_name(Speed(engine_.pattern().tracks[selected_].speed)));
-                break;
-            case MenuItem::play:
-                *out++ = 'T';
-                append_number(out, uint32_t(selected_) + 1);
-                *out++ = ' ';
-                append(out, play_mode_name(PlayMode(engine_.pattern().tracks[selected_].play)));
-                break;
             case MenuItem::chain:
                 append(out, engine_.chain().active ? "ON" : "OFF");
                 break;
@@ -76,23 +63,6 @@
             case MenuItem::rec_mode:
                 append(out, rec_add() ? "ADD" : "REPLACE");
                 break;
-            case MenuItem::freeze: {
-                // The selected track: frozen, recording its loop, or how many bars OK records.
-                *out++ = 'T';
-                append_number(out, uint32_t(selected_) + 1);
-                *out++ = ' ';
-                if (frozen(selected_)) {
-                    append(out, "ON");
-                } else if (storage_.freezing_track() == selected_) {
-                    const uint8_t state =
-                        engine_.status().resample_state.load(std::memory_order_relaxed);
-                    append(out, state == 2u ? "REC" : "WAIT");
-                } else {
-                    append_number(out, uint32_t(kTakeBars[freeze_bars_index_]));
-                    append(out, " BAR");
-                }
-                break;
-            }
             case MenuItem::loop_len:
                 // How many bars push VALUE + STEP 16 records (dsp/looper.hpp).
                 append_number(out, uint32_t(kTakeBars[loop_bars_index_]));
@@ -654,17 +624,6 @@
     // so one key reaches every value; the arrows stop at the ends where the list has ends.
     void menu_value(int delta, bool wrap) {
         switch (MenuItem(menu_cursor_)) {
-            case MenuItem::speed: {
-                const uint8_t current = engine_.pattern().tracks[selected_].speed;
-                const bool slowest =
-                    uint8_t(kSpeedDisplayOrder[int(Speed::count) - 1]) == current;
-                if (wrap && slowest) walk_speed(-int(Speed::count));
-                else walk_speed(delta);
-                break;
-            }
-            case MenuItem::play:
-                walk_play(delta, wrap);
-                break;
             case MenuItem::chain: {
                 const bool on = engine_.chain().active;
                 post(Cmd::set_chain, 0, 0, on ? 0 : 1);
@@ -702,18 +661,6 @@
                 const bool add = !rec_add();
                 post(Cmd::set_rec_mode, 0, 0, add ? 1 : 0);
                 notice_logged(add ? "REC ADDS NOTES" : "REC REPLACES");
-                break;
-            }
-            case MenuItem::freeze: {
-                // The length, 1, 2, 4 or 8 bars, as RESAMPLE's; it wraps like AUTO-FILL.
-                const int next = (freeze_bars_index_ + delta + kTakeBarChoices) % kTakeBarChoices;
-                freeze_bars_index_ = next;
-                char *out = notice_buffer_;
-                append(out, "FREEZE ");
-                append_number(out, uint32_t(kTakeBars[freeze_bars_index_]));
-                append(out, " BAR");
-                *out = 0;
-                notice(notice_buffer_);
                 break;
             }
             case MenuItem::loop_len: {
@@ -808,16 +755,6 @@
             }
             case MenuItem::kits:
                 open_kits();
-                break;
-            case MenuItem::sample:
-                // The one thing a user can do about a FAIL, and the only way back after a card
-                // has been out.
-                if (storage_.request_sample(selected_)) notice("LOADING");
-                else notice("NO SAMPLE");
-                break;
-            case MenuItem::freeze:
-                toggle_freeze();
-                close_menu(false);
                 break;
             case MenuItem::jam:
                 toggle_jam(true);

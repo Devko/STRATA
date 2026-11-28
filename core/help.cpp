@@ -431,7 +431,7 @@ constexpr Text kMenu = {"FUNC MENU:", {
     "FUNC+HOME OK  SAVES",
     "NEW RELOAD CLEAR",
     "PATTERN  OK TWICE",
-    "TRACK PLAY FWD-RND16",
+    "TRACK ROWS: HOLD OK",
     "FUNC+REC TWICE  JAM",
 }};
 
@@ -671,16 +671,16 @@ void edit_title(const char *screen, const HelpPlace &place, char title[kHelpChar
 
 // The screen's own pages, before the five shared ones. Indexed from 0; returns false past
 // the last, so help_page_count can count them with the same code that writes them.
-// GRID's and KEYS' track menu (app/ui_trackmenu.hpp): GEN and EVOLVE.
+// GRID's and KEYS' track menu (app/ui_trackmenu.hpp): GEN, EVOLVE and the track's settings.
 constexpr Text kTrackMenu = {"HOLD OK: TRACK MENU", {
     "GENERATE  NEW PART",
     "DENS RANGE LEAP WHAT",
-    "EVOLVE  MUTATE EVERY",
-    "  1 2 4 8 LOOPS",
-    "ORBIT  AROUND HOME",
-    "DRIFT  WANDERS OFF",
-    "KEEP  PLAYING = HOME",
-    "HOME  BACK AND STOP",
+    "EVOLVE 1 2 4 8 LOOPS",
+    "ORBIT DRIFT KEEP HOME",
+    "SPEED  2X TO 1/8",
+    "PLAY FWD REV PING RND",
+    "FREEZE  LOOP IN RAM",
+    "RELOAD SAMPLE",
     "UP/DN A ROW  LR B SET",
     "OK RUN  CLR CLOSE",
 }};

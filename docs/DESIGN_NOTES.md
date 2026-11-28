@@ -65,7 +65,7 @@ on the PATTERN page (`core/timing.hpp` feel_offset, pattern file section 5, D tu
 **LIVE RND** (CyDrums P1's live half, `core/liverand.hpp`, docs/CONTROLS.md "LIVE RND"): FUNC +
 turn D in PERFORM sets a unit (OFF, 1-16) for the armed tracks, FUNC + push D arms or disarms the
 selected one (all eight at start). It lives in `PerformState` (`rnd_unit`, `rnd_armed`) and the
-scheduler asks `live_play_mode` for each track's mode every tick, so it reuses TRACK PLAY's RND
+scheduler asks `live_play_mode` for each track's mode every tick, so it reuses the track PLAY mode's RND
 draw and never writes the pattern; the recorder asks the same function. In a LOCK (`LiveState`
 grew two bytes), not saved. Default armed set is all eight: Roland may prefer the kick out by
 default. `scenario_liverand` walks it; UNIT_CHECKLIST W36.
