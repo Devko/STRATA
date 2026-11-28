@@ -382,3 +382,42 @@ TEST(sounds_ringing_and_short_perc_presets_land_within_a_few_db) {
     CHECK_EQ(found, 7);
     CHECK(hi - lo < 4.5f);
 }
+
+// Each kit byte comes from its own page and place, at every page's first byte; a preset matches
+// only when every byte it writes is its own, the first too; GRAIN's write mask spares POS and PIT.
+TEST(sounds_bytes_come_from_their_own_page_and_matching_checks_them_all) {
+    const uint8_t fm = uint8_t(MachineId::fm);
+    for (int i = 0; i < sound_preset_count(fm); i++) {
+        const SoundPreset *s = sound_preset(fm, i);
+        uint8_t params[kKitParams];
+        std::memset(params, 0xEE, sizeof params);
+        CHECK(sound_preset_apply(fm, i, params));
+        for (int p = 0; p < 4; p++) {
+            CHECK_EQ(int(params[p]), int(s->src[p]));
+            CHECK_EQ(int(params[4 + p]), int(s->fltr[p]));
+            CHECK_EQ(int(params[8 + p]), int(s->amp[p]));
+            CHECK_EQ(int(params[kSoundAsrFirst + p]), int(s->asr[p]));
+            CHECK_EQ(int(params[kSoundOscFirst + p]), int(s->osc[p]));
+        }
+        CHECK(sound_preset_matches(fm, i, params));
+        for (int p = 0; p < kKitParams; p++) {
+            if (((sound_preset_writes(fm) >> p) & 1u) == 0) continue;
+            params[p] ^= 1;
+            CHECK(!sound_preset_matches(fm, i, params));
+            params[p] ^= 1;
+        }
+        CHECK(!sound_preset_matches(fm, i, nullptr));
+    }
+    const uint32_t grain = sound_preset_writes(uint8_t(MachineId::grain));
+    CHECK_EQ(grain & 1u, 0u);            // POS
+    CHECK((grain >> 1) & 1u);
+    CHECK_EQ((grain >> 8) & 1u, 0u);     // PIT
+    // SAMPLE's defaults: no resonance, filter OFF, no attack, forward one-shot.
+    uint8_t sample[kKitParams] = {};
+    std::memset(sample, 0xEE, sizeof sample);
+    CHECK(machine_defaults_apply(uint8_t(MachineId::sample), sample));
+    CHECK_EQ(int(sample[6]), 0);
+    CHECK_EQ(int(sample[7]), 0);
+    CHECK_EQ(int(sample[8]), 0);
+    CHECK_EQ(int(sample[10]), 0);
+}
