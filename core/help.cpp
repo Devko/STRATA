@@ -303,7 +303,20 @@ constexpr Text kChain = {"CHAIN:", {
     "CLR TWICE  REMOVE",
     "PAD-ROW KEYS  BANK",
     "ON/OFF+END FUNC MENU",
-    nullptr,
+    "PUSH A     SECTION",
+}};
+
+constexpr Text kSection = {"SECTION:", {
+    "A-D   THE PAGE FIELDS",
+    "PUSH  FIELD TO --",
+    "SCREEN KEYS SECT/MOVE",
+    "UP/DOWN    ENTRY",
+    "HOLD OK FILL FROM NOW",
+    "OK OR CLR  BACK",
+    "MUT --/M1-M8/CAP",
+    "SCN  SCENE ON SIDE B",
+    "MRP SNAP/RIDE/BACK/A",
+    "NRG ENERGY  BPM TEMPO",
 }};
 
 constexpr Text kLaunch = {"LAUNCH:", {
@@ -752,6 +765,7 @@ bool own_page(const HelpPlace &place, int page, char title[kHelpChars + 1],
         case HelpScreen::project:   list[listed++] = &kProject; break;
         case HelpScreen::launch:    list[listed++] = &kLaunch; break;
         case HelpScreen::chain:     list[listed++] = &kChain; break;
+        case HelpScreen::section:   list[listed++] = &kSection; break;
         case HelpScreen::pattern:   list[listed++] = &kPattern; break;
         case HelpScreen::setup:     list[listed++] = &kSetup; break;
         case HelpScreen::projects:  list[listed++] = &kProjects; list[listed++] = &kNaming; break;

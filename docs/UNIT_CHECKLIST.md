@@ -950,7 +950,28 @@ and R (line level), headphones on.
 - SETUP, CLOCK SRC to MIDI with VariSpeed up: `VARISPEED 0 EXT CLOCK`; FUNC + turn VALUE says
   `EXT CLOCK`. Back to INTERNAL: 130 again. `____`
 
-**W71. WAVE scan modes: the SCAN page (4 min).** Beat playing, A01.
+**W71. Song sections on the chain (6 min).** Beat playing, A01; scene 3 captured with the
+filters closed, scene 4 open and wet; something different in A02.
+- PROJECT, the screen key to CHAIN, OK twice: two entries of A01. UP to entry 1, push A:
+  `SECT 1/2`, the SECTION view with `PAT A01`, `REP X1`, `MUT --`, `SCN --`. Turn D to 3. The
+  screen key: MOVE, turn A to `SNAP`, B to `0` then `-40`. CLR: the list shows `+` on entry 1 and
+  `S3 SNAP E-40` under MUTES. `____`
+- DOWN to entry 2, push A, D to 4, the screen key, A to `RIDE`, C: the tempo playing, then +6.
+  Turn the entry's REP (B on SECT, or VALUE) to X4. `____`
+- FUNC menu CHAIN ON. Entry 1 starts on the closed scene 3 at full morph, thinner (ENERGY -40);
+  entry 2 starts at the new tempo and opens up from scene 3 to 4 over its four passes, smoothly,
+  with no step at the pass lines. Turn VALUE in PERFORM halfway through: the ride stops where your
+  hand is. The next round of entry 1 snaps back. `____`
+- Entry 1, push A, C (MUT) all the way up to `CAP` with tracks 1 and 2 muted by hand: the eight
+  boxes show them. Unmute by hand; at entry 1's next start they mute again. `____`
+- With the beat on the breakdown you want, entry 2's view, hold OK half a second: `SECTION
+  FILLED`; every field now reads what plays. `____`
+- CLOCK SRC MIDI with a running outside clock: at the entry with a BPM, `EXT CLOCK: BPM SKIPPED`
+  once, the outside tempo stays. Back to INTERNAL. `____`
+- Save, power cycle, open: the sections are still there and play the same. Open a project saved
+  by v0.5.0: its chain plays as it did, every field `--`. `____`
+
+**W72. WAVE scan modes: the SCAN page (4 min).** Beat playing, A01.
 - Lower pad 6, FUNC+EDIT (MACHINE), DOWN three times: `WMN`. EDIT, then SELECT_LEFT from SRC:
   the SCAN tab, `MOD OFF`, `SCAN OFF: TURN MOD`. On a drum track SCAN never comes up. `____`
 - OK (SOUNDS): WOBBLE (the growl opens and closes once a beat, on the beat), SCANLD (each note
@@ -1972,7 +1993,7 @@ Enaga's menu and start STRATA6.
 | E14 WAVE, `scenario_wave.sh` vs `scenario_factory.sh`; boot cycles before/after, cl6x / GCC (PC) | |
 | U13 MAX with WMN GROWL and WPL PAD, over A01 (W23) | |
 | E17 WAVE scan, `scenario_wavescan.sh` vs `scenario_wave.sh`, cl6x / GCC (PC) | |
-| U15 MAX with WMN WOBBLE and WPL DRIFT, over A01 (W71) | |
+| U15 MAX with WMN WOBBLE and WPL DRIFT, over A01 (W72) | |
 | E15 FM4, `scenario_fm.sh` vs `scenario_factory.sh`; `ti_loops.py` FM loops, cl6x / GCC (PC) | |
 | U14 MAX with FM4 PAD on track 7, over A01 (W24) | |
 | MAX straight after a kit recall (15) | |

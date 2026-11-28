@@ -490,6 +490,42 @@ struct ChainEntry {
 // The highest `ChainEntry::mutes`: one per stored mute state.
 constexpr uint8_t kChainMutesMax = 8;
 
+// A chain entry's song-section fields (PROJECT.BIN section 10), beside `ChainEntry` rather than in
+// it so that section 2's layout, and every reader of it, stays as it was. Every field's 0 is
+// `--`, "leave it as it is", so a zeroed SectionExtra is an entry exactly as an older build
+// plays it, and that is what a file without section 10 reads as. Applied as the entry starts
+// (Engine::chain_entry_started), beside the mute recall; the hands take over at once and the
+// next entry applies its own fields again.
+//
+// `cap` and `ChainEntry::mutes` never both hold: CAP is an exact mute mask stored here, and an
+// entry with it keeps `mutes` at 0, so section 5 says `--` to a build that does not know CAP.
+struct SectionExtra {
+    uint8_t cap = 0;        // 1: `mask` is the entry's mute state (MUT CAP)
+    uint8_t mask = 0;       // bit t = track t muted
+    uint8_t scene = 0;      // SCN: 0 --, 1-16 that scene on morph side B
+    uint8_t morph = 0;      // MRP: kSectionMorph*
+    uint8_t energy = 0;     // NRG: 0 --, 1-129 = ENERGY -64 .. +64
+    uint8_t reserved = 0;   // byte 7 of the file's record; written 0, ignored on read
+    uint16_t bpm = 0;       // BPM: 0 --, else centi-BPM, kTempoCentiMin .. kTempoCentiMax
+};
+static_assert(sizeof(SectionExtra) == 8, "64 of them sit in the Project, beside the chain");
+
+constexpr uint8_t kSectionMorphNone = 0;
+constexpr uint8_t kSectionMorphSnap = 1;   // the morph jumps to B on the boundary
+constexpr uint8_t kSectionMorphRide = 2;   // it rides to B over the whole entry
+constexpr uint8_t kSectionMorphBack = 3;   // it rides back to A over the whole entry
+constexpr uint8_t kSectionMorphSnapA = 4;  // the morph jumps to A on the boundary
+constexpr uint8_t kSectionMorphMax = kSectionMorphSnapA;
+constexpr uint8_t kSectionScenesMax = 16;
+// NRG's byte for ENERGY 0, and its highest (+64).
+constexpr uint8_t kSectionEnergyZero = 65;
+constexpr uint8_t kSectionEnergyMax = 129;
+
+// True when the entry sets nothing beyond what an older build plays.
+constexpr bool section_empty(const SectionExtra &e) {
+    return e.cap == 0 && e.scene == 0 && e.morph == 0 && e.energy == 0 && e.bpm == 0;
+}
+
 // --- the project ----------------------------------------------------------
 
 // The tempo's domain, in centi-BPM. Enaga's clock takes 20-300 BPM (docs/ENAGA_API.md), so a
@@ -668,6 +704,8 @@ struct Project {
     ProjectSettings settings;
     Kit kit;
     ChainEntry chain[kChainEntries];
+    // Each chain entry's section fields, index for index with `chain`.
+    SectionExtra chain_extra[kChainEntries];
     Pattern patterns[kBanks][kPatternsPerBank];
 
     // Which pattern is playing. The sequencer plays `live()`, in place.
@@ -752,6 +790,11 @@ constexpr uint16_t kSectionProjectLaunch = 8;
 // section and never hears the input. A shorter section is a file from before a field was added,
 // and the missing fields take their defaults.
 constexpr uint16_t kSectionProjectInput = 9;
+// The chain's song sections (SectionExtra): a layout byte (0), then 8 bytes for each of the 64
+// entries: CAP flag, mask, SCN, MRP, NRG, BPM (u16, little end first, as every u16 here),
+// reserved. Optional on read like the ones above: an older file has every field `--`, and an
+// older build ignores the section and plays pattern, repeats and mute recall.
+constexpr uint16_t kSectionProjectSections = 10;
 
 constexpr uint16_t kKitVersion = 1;
 constexpr uint16_t kSectionKitTracks = 1;

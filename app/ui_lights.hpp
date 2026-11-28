@@ -274,6 +274,7 @@
         service_slot_menu();
         service_track_menu();
         service_launch();
+        service_section();
         service_input_route();
 
         // A queued launch landed (Track Launch): the lane's source is saved in PROJECT.BIN.
@@ -488,6 +489,55 @@
             }
         }
 
+        // Song sections (core/project.hpp, SectionExtra). An entry that started with fields of
+        // its own moved the morph and ENERGY on the audio side: the knobs the UI shadows follow,
+        // as after a LOCK jump, and so does the morph all the way through a RIDE or BACK, so a
+        // hand on VALUE takes over from where the ride has got to.
+        {
+            const Status &status = engine_.status();
+            const uint8_t event = status.section_event.load(std::memory_order_acquire);
+            if (event != section_event_seen_) {
+                // Logged, not shown (a song would flash it at every entry): "SECTION 2 S4 SNAP",
+                // the entry and what it set, which is what the emulator and a unit log can see.
+                const ChainPlayer &player = engine_.chain();
+                char line[48];
+                char *out = line;
+                append(out, "SECTION ");
+                append_number(out, uint32_t(player.entry) + 1);
+                *out++ = ' ';
+                section_summary(engine_.project().chain_extra[player.entry % kChainEntries], out);
+                enaga::log(line);
+            }
+            if (event != section_event_seen_ ||
+                status.morph_riding.load(std::memory_order_relaxed) != 0) {
+                section_event_seen_ = event;
+                morph_ = engine_.morph();
+                energy_ = engine_.energy();
+            }
+            // A section's BPM: only this context may set Enaga's clock. Refused under an outside
+            // clock, which the song then follows, said once a run of the transport.
+            const uint8_t due = status.tempo_due.load(std::memory_order_acquire);
+            if (due != tempo_due_seen_) {
+                tempo_due_seen_ = due;
+                const uint16_t centi = status.section_tempo.load(std::memory_order_relaxed);
+                if (enaga::clock::source() != ENAGA_CLOCK_INTERNAL ||
+                    !enaga::clock::set_tempo(float(centi) * 0.01f)) {
+                    clock_refused_ = true;
+                    if (!bpm_skip_said_) {
+                        bpm_skip_said_ = true;
+                        notice_logged("EXT CLOCK: BPM SKIPPED");
+                    }
+                } else {
+                    // As a turn of VALUE: the project's tempo, which the delay follows and a
+                    // save keeps, and the screen's.
+                    clock_refused_ = false;
+                    tempo_tenths_ = uint32_t(centi) / 10;
+                    adopted_tempo_centi_ = centi;
+                    post_tempo(float(centi) * 0.01f);
+                }
+            }
+        }
+
         // The tempo a LOADED project brought with it. PROJECT.BIN has always had the field and
         // nothing read it, so every project opened at whatever the clock happened to be set to
         // -- a project saved at 142 came back at 130. Watched here rather than hooked to the end
@@ -520,6 +570,8 @@
                 // now and not to a load or an earlier pattern. Here rather than in on_transport
                 // because this edge is seen whoever started the clock.
                 if (running && !logged_running_) cpu_max_ = 0;
+                // And a fresh song: its first refused BPM is said again.
+                if (running && !logged_running_) bpm_skip_said_ = false;
                 logged_running_ = running;
                 logged_source_ = source;
                 enaga::log(running ? (source == ENAGA_CLOCK_INTERNAL ? "run int"

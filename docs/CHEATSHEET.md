@@ -187,7 +187,8 @@ Page 1 NOTE VEL LEN MICR, page 2 PROB COND RTCH RAMP, page 3 ACNT SLID CHRD.
 | SOUNDS | Entry | First / last entry | Track | — | A: entry; push B / C: rename / delete your own | Load into the track (AS WAS: put yours back; PASTE: the copied sound) / back | Copy the sound / save it as your own |
 | RESAMPLE | Bars 1/2/4/8 | Destination FILE, TRK 1-8 | Destination | Step page | A: bars, B: source, C: input level | Arm / cancel | Copy / paste |
 | PROJECT | Slot cursor by row | Slot cursor | Page: PROJECT CHAIN PATTERN SETUP PROJECTS | Bank A-H | A: queue mode, B: key, C: scale | Queue slot / cancel queue | — (FUNC menu) |
-| CHAIN | Entry | Entry's pattern -/+ | Page | Bank A-H | A: repeats X1-X16, B: mute recall --/M1-M8 | Add entry / remove entry (twice; empty: back) | — (FUNC menu) |
+| CHAIN | Entry | Entry's pattern -/+ | Page | Bank A-H | A: repeats X1-X16, B: mute recall --/M1-M8; push A: SECTION view | Add entry / remove entry (twice; empty: back) | — (FUNC menu) |
+| SECTION | Entry | Entry's pattern -/+ | SECT / MOVE | Bank A-H | SECT: PAT REP MUT SCN, MOVE: MRP NRG BPM; push: field to -- | Back (hold: fill from what plays) / back | — |
 | PATTERN | Change field -/+ | Field LEN / SWG / FEEL / track 1-8 swing | Page | Bank A-H | A: LEN 1-64, B: SWG, C: track swing (PAT, 50-75), D: FEEL (OFF, DRIFT 1-6, WAVE 1-6) | — / back | — |
 | PERFORM | Mutation type | Macro A-D | Mutate amount (±10) | Step page | Macros A-D (push: MACRO LEARN; FUNC + A: REL ALL, FUNC + B: LEN ALL, FUNC + C: ENERGY, FUNC + D: LIVE RND, FUNC + push D: track in/out) | Capture scene / clear macro | — (auto-fill: FUNC menu) |
 | FUNC menu | Row | Change a setting row | — | — | A: row, B: change | Run the row / close | — |
@@ -228,6 +229,11 @@ open project cannot be deleted (PROJECT IS OPEN).
 the chain); VALUE also sets repeats; OK adds a copy after the cursor (the playing pattern when
 empty), up to 64 entries. CLR twice within 2 s removes the entry under the cursor (`AGAIN TO REMOVE`, then `ENTRY REMOVED`; not undoable); on an empty chain CLR goes back. B recalls a mute state as the entry starts. The FUNC menu's CHAIN turns the chain on and off, and CHAIN END
 switches SONG (play the chain once and stop, `SONG END`) and LOOP. Chain edits are not undoable.
+**SECTION (push A on CHAIN):** the entry's fields applied as it starts. MUT --/M1-M8/CAP (an
+exact mute mask), SCN --/1-16 (scene on side B), MRP --/SNAP/RIDE/BACK/SNAP A (morph to B at once,
+to B over the entry, to A over the entry, to A at once), NRG --/-64..+64 (ENERGY), BPM --/20-300 (skipped under an
+outside clock: `EXT CLOCK: BPM SKIPPED`). Push a knob: `--`. Hold OK: `SECTION FILLED` from what
+plays. The hands win until the next entry.
 **PATTERN:** VALUE also changes the field under `>`. LEN is the master length that a queued change
 (END) and the chain wait for. The eight TRACK SWING fields read `PAT` (follow SWG) or 50-75%: C
 sets the one under `>`, or the selected track's when `>` is on LEN or SWG. FEEL (D, or its row)
@@ -293,6 +299,7 @@ CC 120/123 let go of held notes. Program change 1-128 on your MIDI CH queues pat
 | GRID cells | dot / cut corner / teeth / outline | Locks / top-left condition, top-right probability / ratchet / trigless |
 | PROJECT | `Q END CHAIN`, `BANK A 5/16`, the map A-H | Queue mode, chain running; the shown bank and how many of its slots hold a pattern; every bank's slots (grey: used, white: playing, blinking: queued) |
 | CHAIN | `CHAIN 3/64 ON SONG`, `>02 A05 X2 M3 PLAY` | Entries used, chain on/off, plays once (SONG) or loops; cursor, entry, pattern, repeats, mute state recalled at its start, playing now |
+| SECTION | `SECT 2/5`, `MRP RIDE`, `S4 SNAP E-40 132BPM` | The entry (a badge while it plays), the page's fields; on CHAIN, the cursor entry's section fields |
 | PATTERN | `>LEN 16 STEPS`, `SWG 54%`, `FEEL DRIFT 3`, `3 PAT`, `>5 66%` | Master length; swing; FEEL; a track following SWG or with its own (`>` = field VALUE changes) |
 | EDIT | `A TUN G-1+  B FMA 072  C FMD 056`, `D CLK 072` | The knob line at the top (A-C) and the footer (D); a held step's lock lights its value |
 | EDIT | `LFO>CUT 40`, `VEL>RES +20`, `ENV>CUT +37` | The footer's second line: what moves the page's knobs (the LFO, a MOD slot, the filter envelope) |
@@ -334,6 +341,8 @@ MNO VA mono · PLY VA poly · WMN wavetable mono · WPL wavetable poly · FM4 fo
 **SCAN page (WAVE MONO, WAVE POLY):** moves the position from POS towards END with each note. MOD `OFF` `FWD` (once, holds) `REV` (from END, once) `LOOP` `LREV` (looped backwards) `PING` (there and back) `RET` (there and back once) `SINE` (eased there and back) `RAND` (a random frame a cycle) `DRFT` (glides to a random frame a cycle) · SPD the LFO's RAT: 0-63 free (28 = 1 Hz), 64-127 synced (96 ticks = a beat) · END frame 0-15 as POS · CRV `LIN` at 64, `+n` slow start, `-n` fast start.
 
 **FM4 pages:** ENV = ATK SUS REL ISU (index sustain). OSC = DET `OFF`/`D1`-`D25` the second pair sharp · FIN fine ratio, `0` at 64 · BRT index keytrack · CAR carrier ratio 1 0.5 2 3 4.
+
+**SECTION (CHAIN, push A):** SECT = PAT pattern · REP repeats · MUT mute state (`--`, M1-M8, CAP an exact mask) · SCN scene on side B. MOVE = MRP morph move (SNAP, RIDE, BACK, SNAP A) · NRG ENERGY · BPM tempo.
 
 **ARP page:** MOD OFF UP DN U/D ORD RND · RAT `1/4` to `1/32T` · OCT `X1`-`X4` · GAT note length, `50%`-`99%` of the spacing. On, a step plays a run for its length (PLY: through its chord); in KEYS, held keys are arpeggiated. Lockable and scene-able. Push A VAR (CONV DIVG THUMB PINKY), push B RHYTHM (rests; a rest holds the note), push C ACCENT (patterns, CYC), push D RATCHET (2:4 2:8 3:8 4:16 2ALL RND2 RND3): kit settings, not lockable. OK: ARPS, 14 factory arps.
 

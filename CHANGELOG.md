@@ -16,6 +16,14 @@ the project file format or the controls.
   SCANLD and WOBBLE (WAVE MONO) and DRIFT and SWIRL (WAVE POLY). Projects saved before it load
   with MOD OFF and sound as they did; the kit and the performance files gain an optional section.
   New emulator scenario `wavescan`.
+- **Song sections on the chain.** Push A on a CHAIN entry opens its SECTION view: besides the
+  pattern, repeats and mute state, an entry can put a scene on morph side B (SCN), jump the morph to
+  B or A, or ride it there over the whole entry (MRP SNAP, SNAP A, RIDE, BACK), set ENERGY (NRG) and the
+  tempo (BPM) as it starts, and store an exact mute mask (MUT CAP). `--` leaves each one as it is,
+  and the hands take over until the next entry. Hold OK in the view to fill the fields from what
+  plays. A BPM is skipped under an outside clock (`EXT CLOCK: BPM SKIPPED`). Saved in PROJECT.BIN
+  section 10: older projects open with every field `--`, and older builds play the chain as before.
+  New emulator scenario `sections`.
 - **VariSpeed: FUNC + turn VALUE, on every screen.** The whole unit faster or slower like a
   turntable: the tempo and the pitch of every machine move together, an octave either way in
   tenths of a semitone (`VARISPEED +1.2 140.3`, the amount and the tempo it runs at). The drums,

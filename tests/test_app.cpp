@@ -260,7 +260,7 @@ TEST(app_the_first_save_of_a_project_writes_all_ten_files) {
 
     // The sizes tests/test_project.cpp pins, reached through the real card protocol this time.
     project_file(path, "PROJECT.BIN");
-    CHECK_EQ(host.file_bytes(path), 472);   // core/project.cpp: 305, 12 + 65 song, 12 + 8 MIDI, 12 + 11 EVOLVE, 4 chorus, 12 + 9 launch, 12 + 10 input
+    CHECK_EQ(host.file_bytes(path), 997);   // core/project.cpp: 305, 12 + 65 song, 12 + 8 MIDI, 12 + 11 EVOLVE, 4 chorus, 12 + 9 launch, 12 + 10 input, 12 + 513 sections
     project_file(path, "KIT.BIN");
     CHECK_EQ(host.file_bytes(path), 1550);  // 1076, SCN (12 + 32), the widths (12 + 8), the chorus sends (12 + 8), the LFO layout (12 + 1), the arp settings (12 + 32), the choke groups (12 + 8), the mod slots (12 + 48), LFO TRIG (12 + 8), the filter layout (12 + 1), the LFO and arp (2 x (12 + 8 x 4)), SLC AUTO (12 + 8), ASR (12 + 32), the duck (12 + 12), OSC (12 + 32)
     project_file(path, "PERFORM.BIN");
