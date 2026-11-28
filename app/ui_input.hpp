@@ -47,6 +47,18 @@
         if (down) shift_alone_ = false;
         // Any other key between two PROJECT presses makes them two presses, not a double tap.
         if (down && key != ENAGA_KEY_F3) project_tapped_ = false;
+        // PROJECT opens on its RELEASE, so that a STEP pressed while it is held can queue a
+        // pattern instead, on whatever screen is up (on_project_hold). `project_open_` is set by
+        // the press below, where every guard a press of PROJECT has always had still applies.
+        if (key == ENAGA_KEY_F3) {
+            const bool open = !down && project_open_;
+            project_down_ = down && !shift_;
+            project_open_ = false;
+            if (open) {
+                open_project();
+                return;
+            }
+        }
         // A press of VALUE on its own, let go with nothing turned or pressed in between, resets
         // what VALUE is on to 0 (Roland, 2026-11-23; value_reset). Held, it stays the modifier
         // for swing, STEP, LEFT/RIGHT and CLR, which is why it acts on the RELEASE.
@@ -86,6 +98,8 @@
         if (on_slot_menu_key(key, down)) return;
         // GRID and KEYS: a held OK opens the track menu (GEN and EVOLVE), which then takes its keys.
         if (on_track_menu_key(key, down)) return;
+        // PROJECT held: the STEP keys queue a pattern, on any screen.
+        if (on_project_hold(key, down)) return;
         // PROJECT's LAUNCH page: STEP, OK, CLR, the arrows and push B are its own.
         if (on_launch_key(key, down)) return;
 
@@ -677,24 +691,14 @@
                     open_samples();
                     break;
                 }
-                // PROJECT double-tapped opens LAUNCH, as HOME double-tapped opens KEYS (Track
-                // Launch): the second press within kDoubleTapMs, with no other key between.
-                {
-                    const bool double_tap = mode_ == Mode::project && project_tapped_ &&
-                                            uint32_t(last_ms_ - project_tapped_at_ms_) < kDoubleTapMs;
-                    project_tapped_ = !double_tap;
-                    project_tapped_at_ms_ = last_ms_;
-                    if (double_tap) {
-                        project_page_ = ProjectPage::launch;
-                        notice(project_page_name(project_page_));
-                        break;
-                    }
+                // A STEP held as a modifier: PROJECT opens at once, as it always did, and ends
+                // the hold (leave_mode). Otherwise it waits for the release, because a STEP
+                // pressed meanwhile queues that slot and PROJECT never opens (on_project_hold).
+                if (held_step_ >= 0) {
+                    open_project();
+                    break;
                 }
-                mode_ = Mode::project;
-                leave_mode();
-                // Back on PROJECTS: the list it shares with the sample browser may hold samples
-                // now, so it is read again.
-                if (project_page_ == ProjectPage::files) list_projects();
+                project_open_ = true;
                 break;
             case ENAGA_KEY_F4:                         // HOME: GRID and KEYS; FUNC: "system", the menu
                 if (shift_) {
@@ -1057,6 +1061,51 @@
         if (held_step_ < 0) return;
         release_hold();
         end_gesture();
+    }
+
+    // PROJECT, opened by a press of its key let go with no STEP in between.
+    void open_project() {
+        // PROJECT double-tapped opens LAUNCH, as HOME double-tapped opens KEYS (Track Launch):
+        // the second press within kDoubleTapMs, with no other key between. Timed release to
+        // release, since that is when PROJECT opens.
+        const bool double_tap = mode_ == Mode::project && project_tapped_ &&
+                                uint32_t(last_ms_ - project_tapped_at_ms_) < kDoubleTapMs;
+        project_tapped_ = !double_tap;
+        project_tapped_at_ms_ = last_ms_;
+        if (double_tap) {
+            project_page_ = ProjectPage::launch;
+            notice(project_page_name(project_page_));
+            return;
+        }
+        mode_ = Mode::project;
+        leave_mode();
+        // Back on PROJECTS: the list it shares with the sample browser may hold samples now, so
+        // it is read again.
+        if (project_page_ == ProjectPage::files) list_projects();
+    }
+
+    // Hold PROJECT + STEP n: queue slot n of the shown bank (the one PROJECT last showed) from
+    // any screen, without leaving it, so a pattern change in a jam is one chord rather than
+    // PROJECT, STEP, HOME (usability review, 2026-11-28). The change lands as PROJECT's own
+    // queue does, by QUEUE mode. PROJECT's release then opens nothing. Taken ahead of every
+    // screen's own STEP meaning, PROJECT's CHAIN page and KIT's slots included: the chord is
+    // the same everywhere. The STEP keys the chord took keep their releases from the screen
+    // under it, which would otherwise toggle a trig nobody pressed.
+    bool on_project_hold(int key, bool down) {
+        if (key < ENAGA_KEY_STEP1 || key >= ENAGA_KEY_STEP1 + 16) return false;
+        const int slot = key - ENAGA_KEY_STEP1;
+        const uint16_t bit = uint16_t(1u << slot);
+        if (!down) {
+            if ((project_steps_ & bit) == 0) return false;
+            project_steps_ = uint16_t(project_steps_ & ~bit);
+            return true;
+        }
+        if (!project_down_) return false;
+        project_steps_ = uint16_t(project_steps_ | bit);
+        project_open_ = false;
+        if (mode_ == Mode::project) slot_cursor_ = slot;
+        queue_shown_pattern(slot, true);
+        return true;
     }
 
     void leave_mode() {

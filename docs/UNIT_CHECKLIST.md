@@ -891,6 +891,14 @@ Beat playing, A01, a card with some space.
   menu; OK again: `UNFROZEN`. EDIT on a frozen track says `FROZEN: TRACK MENU`. Easier to reach
   than before? `____`
 
+**W67. Queue a pattern from any screen (3 min).** Beat playing, A01, something different in A05.
+- GRID. Hold PROJECT: the screen stays on GRID and PROJECT lights green. Press STEP 5:
+  `A05 QUEUED END`. Let both go: still GRID, no trig on step 5 changed, and A05 starts at the end
+  of A01, on the bar. `____`
+- PERFORM (FUNC + MIXER). Hold PROJECT, STEP 1: `A01 QUEUED END`, still PERFORM, A01 comes back
+  at the end of the pattern. `____`
+- Tap PROJECT: PROJECT opens as the key comes up, no slower than before to the hand. FUNC +
+  PROJECT: SAMPLES at once. `____`
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
 

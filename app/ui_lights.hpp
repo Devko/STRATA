@@ -732,7 +732,8 @@
         // KEYS (its second press) and red in the FUNC menu ("system").
         leds_.key(ENAGA_KEY_F4, mode_ == Mode::keys || mode_ == Mode::menu ? 8 : 0,
                   mode_ == Mode::grid || mode_ == Mode::keys ? 8 : 0);
-        leds_.key(ENAGA_KEY_F3, mode_ == Mode::samples ? 8 : 0, mode_ == Mode::project ? 8 : 0);
+        leds_.key(ENAGA_KEY_F3, mode_ == Mode::samples ? 8 : 0,
+                  mode_ == Mode::project || project_down_ ? 8 : 0);
         leds_.key(ENAGA_KEY_F7, mode_ == Mode::perform ? 8 : 0, mode_ == Mode::mixer ? 8 : 0);
         leds_.key(ENAGA_KEY_F8, mode_ == Mode::machine || mode_ == Mode::kit ? 8 : 0,
                   mode_ == Mode::edit ? 8 : 0);

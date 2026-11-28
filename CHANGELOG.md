@@ -8,6 +8,10 @@ the project file format or the controls.
 
 ### Added
 
+- **Queue a pattern from any screen.** Hold PROJECT and press STEP n: slot n of the shown bank is
+  queued (`A05 QUEUED END`) and the screen you play on stays up. PROJECT now opens when the key
+  comes up, and not at all when a STEP was pressed while it was held. The FUNC help's FUNC + KNOB
+  OR PAD page lists the chord in place of two lines for gestures retired on 2026-11-25.
 - **JAM REC on FUNC+REC twice.** FUNC+REC opens RESAMPLE as before; pressed again there it
   starts JAM REC, and again stops it. RESAMPLE's last line shows the time and `FUNC+REC: STOP
   JAM` (`JAM OFF` when none runs), and the REC key blinks a dim red with the top bar's dot while

@@ -725,7 +725,14 @@ private:
     int selected_ = 0;
     int shown_bank_ = 0;                        // PROJECT mode browses a bank without switching
     QueueMode queue_mode_ = QueueMode::end_of_pattern;
-    uint32_t jam_lost_seen_ = 0;                // JAM REC's dropped frames last said
+    // Hold PROJECT + STEP queues a pattern from any screen (app/ui_input.hpp, on_project_hold).
+    // `project_down_` follows the key itself; `project_open_` is a plain press waiting for its
+    // release to open PROJECT, which a STEP pressed meanwhile cancels. `project_steps_` are the
+    // STEP keys the chord took, whose releases it swallows too.
+    bool project_down_ = false;
+    bool project_open_ = false;
+    uint16_t project_steps_ = 0;
+    uint32_t jam_lost_seen_ = 0;               // JAM REC's dropped frames last said
     uint32_t jam_lost_ms_ = 0;
     char notice_buffer_[24] = {};               // notice() keeps the pointer, so dynamic text
                                                 // needs somewhere of its own to live
