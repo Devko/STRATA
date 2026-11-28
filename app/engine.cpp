@@ -645,18 +645,16 @@ bool Engine::apply_sound(const Command &command, int track, int) {
                 sound_back_ = params_[track];
                 sound_back_track_ = track;
                 sound_back_machine_ = machine_id_[track];
+                sound_back_extras_ = user_sound_extras_of(project_.kit.tracks[track]);
+                sound_back_all_ = false;
                 break;
             }
             if (command.b == kSoundPresetBack && sound_back_track_ == track &&
                 machine_id_[track] != sound_back_machine_) {
-                // A paste switched the machine since the list opened: switch it back, then put
-                // back every sound page the switch wrote. The FX page, LFO and ARP were not
-                // touched by either, and stay as they are.
+                // A paste switched the machine since the list opened: switch it back. The
+                // paste wrote every parameter, so everything is put back below.
                 switch_machine(track, sound_back_machine_);
-                for (int p = 0; p < kTrackParams; p++) {
-                    const bool sound_page = p < kUserSoundFxFirst || (p >= kSoundAsrFirst && p < kKitParams);
-                    if (sound_page) params_[track].v[p] = sound_back_.v[p];
-                }
+                sound_back_all_ = true;
             }
             const uint8_t machine = machine_id_[track];
             uint8_t *bytes = params_[track].v;
@@ -665,8 +663,20 @@ bool Engine::apply_sound(const Command &command, int track, int) {
                     status_.bump_refused();
                     break;
                 }
+                // After a user sound or a paste, which write every parameter and the LFO and
+                // ARP pages' kit settings (Cmd::sound_bytes), all of it goes back. After factory
+                // sounds only, just the bytes they write: a pan move made meanwhile is the
+                // user's and stays.
+                const uint64_t factory = sound_preset_writes(machine);
                 for (int p = 0; p < kTrackParams; p++) {
-                    if (user_sound_owns(machine, p)) bytes[p] = sound_back_.v[p];
+                    if (sound_back_all_ || (factory >> p & 1u) != 0) bytes[p] = sound_back_.v[p];
+                }
+                if (sound_back_all_) {
+                    KitTrack &kit = project_.kit.tracks[track];
+                    kit.lfo_trig = sound_back_extras_.lfo_trig;
+                    for (int m = 0; m < kModSlots; m++) kit.mod[m] = sound_back_extras_.mod[m];
+                    kit.arp = sound_back_extras_.arp;
+                    lfo_[track].rest();          // as Cmd::set_lfo_trig
                 }
             } else if (command.a != machine || !sound_preset_apply(machine, command.b, bytes)) {
                 // Picked for a machine the track no longer hosts, or no such preset.
@@ -684,8 +694,9 @@ bool Engine::apply_sound(const Command &command, int track, int) {
 
         case Cmd::sound_bytes: {
             // core/usersounds.hpp: a saved or copied sound, eight bytes at a time, written as
-            // sound_preset writes a factory one -- the bytes a sound owns, into the kit and,
-            // where no lock holds them, effective_.
+            // sound_preset writes a factory one -- every parameter a sound owns, into the kit
+            // and, where no lock holds them, effective_. Its kit settings follow by their own
+            // commands (set_lfo_trig, set_mod_slot, set_arp_ext).
             const uint8_t machine = machine_id_[track];
             if (command.a != machine || !user_sounds_supported(machine)) {
                 status_.bump_refused();
@@ -702,6 +713,7 @@ bool Engine::apply_sound(const Command &command, int track, int) {
                 params_[track].v[p] = bytes[i] > top ? top : bytes[i];
                 if ((locked >> p & 1u) == 0) effective_[track].v[p] = params_[track].v[p];
             }
+            if (sound_back_track_ == track) sound_back_all_ = true;   // AS WAS puts it all back
             perform_dirty_ = true;
             break;
         }

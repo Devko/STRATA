@@ -904,14 +904,18 @@ Beat playing, A01, a card with some space.
   offering `KCK 1`. OK: `SAVED KCK 1`, and `+KCK 1     NOW` at the end of the list, under the
   cursor. The beat never stops or stutters. `____`
 - Down to 909, OK: the factory kick. Back to `+KCK 1`, OK: your kick again, as you left it. `____`
+- On the FX page turn PAN hard left, on the LFO page push RAT to `RETRIG` and give the LFO some
+  depth, then FUNC + DOWN on `+KCK 1`, OK (REPLACE). Pan back to the middle and TRIG to `FREE`,
+  OK on `+KCK 1`: the kick is hard left again and its LFO restarts on every hit. AS WAS: middle,
+  FREE. `____`
 - Push B on `+KCK 1`, UP once, OK: `+LCK 1`. Push C, OK, OK: `DELETED`, the row is gone. Push B
   on a factory sound: `YOUR OWN SOUNDS ONLY`. `____`
 - Save one again, then switch the unit off and on: it is still in the list, in this project and
   after NEW. On the PC the card has `ENAGA/DATA/STRATA/SOUNDS/KCK.BIN`. `____`
 - Track 6 (MNO), SOUNDS, FUNC + UP: `COPIED T6 MNO`. Screen key right to track 7 (PLY):
   `PASTE T6 MNO` under AS WAS, `SWITCHES MACHINE` under the bars. OK: track 7 plays track 6's
-  bass sound on its own notes, its pan and sends as they were. AS WAS: PLY and its stab are
-  back. `____`
+  bass sound on its own notes, with track 6's pan, sends, LFO and arp. AS WAS: PLY and its
+  stab are back, with its own pan and sends. `____`
 
 **W69. Line input as a mixer channel (6 min).** Beat playing, A01, a synth or phone on INPUT L
 and R (line level), headphones on.

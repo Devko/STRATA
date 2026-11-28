@@ -175,11 +175,12 @@
         return sound_user_first() + rank;
     }
 
-    // A sound's bytes into a track: eight a command, all posted together so they land in one
-    // block (Cmd::sound_bytes). Only the bytes a sound owns are written on the audio side. The
-    // last command is short (44 is not a multiple of eight): its spare bytes go as 0, past every
-    // parameter, and the engine skips them.
-    void post_sound_bytes(int track, uint8_t machine, const uint8_t *params) {
+    // A sound into a track: its parameters eight a command (Cmd::sound_bytes), then its LFO
+    // TRIG, mod slots and arp settings by the commands their pages post, all together so they
+    // land in one block. Only the bytes a sound owns are written on the audio side. The last
+    // bytes command is short (44 is not a multiple of eight): its spare bytes go as 0, past
+    // every parameter, and the engine skips them.
+    void post_sound(int track, uint8_t machine, const uint8_t *params, const UserSoundExtras &extras) {
         for (int first = 0; first < kKitParams; first += 8) {
             uint8_t b[8] = {};
             for (int i = 0; i < 8 && first + i < kKitParams; i++) b[i] = params[first + i];
@@ -195,6 +196,26 @@
             command.u = uint32_t(b[4]) | uint32_t(b[5]) << 8 | uint32_t(b[6]) << 16 | uint32_t(b[7]) << 24;
             post_command(command);
         }
+        const uint8_t t = uint8_t(track);
+        post(Cmd::set_lfo_trig, t, 0, extras.lfo_trig);
+        for (int m = 0; m < kModSlots; m++) {
+            Command slot;
+            slot.cmd = Cmd::set_mod_slot;
+            slot.track = t;
+            slot.a = uint8_t(m);
+            slot.b = extras.mod[m].source;
+            slot.c = extras.mod[m].dest;
+            slot.d = uint8_t(extras.mod[m].depth);
+            post_command(slot);
+        }
+        for (int f = 0; f < kArpExtFields; f++) {
+            post(Cmd::set_arp_ext, t, 0, uint8_t(f), arp_ext_get(extras.arp, f));
+        }
+    }
+
+    // The selected track's LFO TRIG, mod slots and arp settings, as a sound would carry them.
+    UserSoundExtras selected_extras() const {
+        return user_sound_extras_of(engine_.project().kit.tracks[selected_]);
     }
 
     // `snd <what>` in the log: the emulator can press keys but not read the screen
@@ -226,6 +247,7 @@
         sound_clip_.track = uint8_t(selected_);
         const uint8_t *now = engine_.params(selected_).v;
         for (int p = 0; p < kKitParams; p++) sound_clip_.params[p] = now[p];
+        sound_clip_.extras = selected_extras();
         char *out = notice_buffer_;
         append(out, "COPIED T");
         append_number(out, uint32_t(selected_) + 1);
@@ -245,7 +267,7 @@
         if (machine != sound_clip_.machine) {
             post(Cmd::set_machine, uint8_t(selected_), 0, sound_clip_.machine);
         }
-        post_sound_bytes(selected_, sound_clip_.machine, sound_clip_.params);
+        post_sound(selected_, sound_clip_.machine, sound_clip_.params, sound_clip_.extras);
         char *out = notice_buffer_;
         append(out, "PASTED TO T");
         append_number(out, uint32_t(selected_) + 1);
@@ -286,6 +308,7 @@
         sound_entry_machine_ = machine;
         const uint8_t *now = engine_.params(selected_).v;
         for (int p = 0; p < kKitParams; p++) sound_entry_params_[p] = now[p];
+        sound_entry_extras_ = selected_extras();
         char name[kUserSoundNameChars + 1];
         if (replace) {
             const char *had = storage_.sound_bank().slots[slot].name;
@@ -334,7 +357,7 @@
         char name[kUserSoundNameChars + 1];
         if (!typed_sound_name(name, sound_entry_slot_)) return;
         if (!storage_.request_sound_store(sound_entry_machine_, sound_entry_slot_, name,
-                                          sound_entry_params_)) {
+                                          sound_entry_params_, sound_entry_extras_)) {
             notice(storage_.card_usable() ? "CARD BUSY" : "NO CARD");
             return;
         }
@@ -478,7 +501,7 @@
                 const char *name = "AS WAS";
                 if (kind == SoundRow::user) {
                     const UserSound &sound = storage_.sound_bank().slots[index];
-                    post_sound_bytes(selected_, machine, sound.params);
+                    post_sound(selected_, machine, sound.params, sound.extras);
                     name = sound.name;
                 } else {
                     if (kind == SoundRow::factory) name = sound_preset(machine, index)->name;

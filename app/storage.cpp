@@ -1613,9 +1613,9 @@ bool Storage::sound_bank_editable(uint8_t machine) const {
 }
 
 bool Storage::request_sound_store(uint8_t machine, int slot, const char *name,
-                                  const uint8_t *params) {
+                                  const uint8_t *params, const UserSoundExtras &extras) {
     if (!sound_bank_editable(machine)) return false;
-    if (!user_sound_store(sound_bank_, slot, name, params)) return false;
+    if (!user_sound_store(sound_bank_, slot, name, params, extras)) return false;
     sound_write_pending_ = true;
     return true;
 }

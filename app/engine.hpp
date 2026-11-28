@@ -48,6 +48,7 @@
 #include "launch.hpp"    // Track Launch: a lane playing another slot's part
 #include "moveall.hpp"   // REL ALL and LEN ALL: every track's release and note length
 #include "varispeed.hpp" // VariSpeed: every machine's pitch with the tempo
+#include "usersounds.hpp"  // UserSoundExtras: what AS WAS puts back after a user sound
 #include "arp.hpp"       // the arpeggiator's notes
 #include "sample.hpp"
 #include "scale.hpp"       // the global key and scale: Cmd::set_root and set_scale
@@ -701,6 +702,8 @@ private:
     TrackParams sound_back_ = {};
     int sound_back_track_ = -1;
     uint8_t sound_back_machine_ = 0;   // and its machine, which a paste may have switched
+    UserSoundExtras sound_back_extras_ = {};   // its LFO TRIG, mod slots and arp settings
+    bool sound_back_all_ = false;      // a user sound or paste landed since: AS WAS puts back all
     // And `Cmd::arp_preset`'s: the ARP bytes and the arp's kit settings when ARPS opened.
     uint8_t arp_back_[kArpBytes] = {};
     KitArp arp_back_ext_ = {};
