@@ -5216,6 +5216,39 @@ TEST(storage_jams_are_numbered_and_never_replace_each_other) {
     host.remove_file(jam_path());
 }
 
+TEST(storage_a_jam_the_card_refuses_leaves_its_number_for_the_next) {
+    // A start that cannot make its file (here a full card) says why and takes no number: the
+    // next jam that does start is the very next one after the last real jam.
+    clean();
+    FakeHost &host = FakeHost::the();
+    CHECK(storage().request_jam_start());
+    char first[24];
+    std::snprintf(first, sizeof first, "%s", storage().jam_name());
+    pump(5);
+    storage().request_jam_stop();
+    CHECK(pump_until_jam_closed());
+    storage().take_jam_message();
+    const int number = std::atoi(first + 4);          // JAM_<n>.WAV
+    host.set_full(true);
+    CHECK(!storage().request_jam_start());
+    const char *why = storage().take_jam_message();
+    CHECK(why != nullptr && std::strncmp(why, "JAM: ", 5) == 0);
+    CHECK(!storage().jam_running());
+    CHECK(!storage().request_jam_start());           // twice: still no number spent
+    storage().take_jam_message();
+    host.set_full(false);
+    CHECK(storage().request_jam_start());
+    CHECK_EQ(std::atoi(storage().jam_name() + 4), number + 1);
+    pump(5);
+    storage().request_jam_stop();
+    CHECK(pump_until_jam_closed());
+    storage().take_jam_message();
+    char path[64];
+    std::snprintf(path, sizeof path, "/RECORD/%s", first);
+    host.remove_file(path);
+    host.remove_file(jam_path());
+}
+
 TEST(storage_a_jam_on_a_full_card_is_closed_cleanly_and_says_so) {
     clean();
     FakeHost &host = FakeHost::the();
@@ -5261,7 +5294,7 @@ TEST(storage_a_jam_stops_itself_at_its_length_limit) {
     host.remove_file(jam_path());
 }
 
-TEST(storage_a_card_too_slow_for_a_jam_drops_whole_blocks_and_counts_them) {
+TEST(storage_a_card_too_slow_for_a_jam_drops_what_does_not_fit_and_counts_it) {
     clean();
     FakeHost &host = FakeHost::the();
     CHECK(storage().request_jam_start());

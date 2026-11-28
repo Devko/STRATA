@@ -237,6 +237,32 @@ static_assert(kMixerPages[kMixerEqPage].master &&
                   kMixerPages[kMixerEqPage].field[0] == int8_t(MasterField::eq_low),
               "kMixerEqPage no longer names the kill EQ's page");
 
+// MIXER's groups, for UP/DOWN (usability review, 2026-11-28): each group's first page, in page
+// order. Levels, the duck, the widths, the delay, the reverb (with ROUTE), the chorus, the
+// master. LEFT/RIGHT still walk page by page; UP/DOWN jump to the first page of the group before
+// or after the one showing, round the ends as LEFT/RIGHT go round.
+constexpr int kMixerGroupStart[] = {0, kMixerDuckDepthPage, kMixerWidthPage, kMixerDelayPage,
+                                    kMixerHallPage - 1, kMixerChorusSendPage, kMixerEqPage - 1};
+constexpr int kMixerGroups = int(sizeof(kMixerGroupStart) / sizeof(kMixerGroupStart[0]));
+static_assert(kMixerPages[kMixerHallPage - 1].field[0] == int8_t(SendField::reverb_decay_s) &&
+                  kMixerPages[kMixerEqPage - 1].field[0] == int8_t(MasterField::dj),
+              "MIXER's groups no longer start on REV and MST");
+
+constexpr int mixer_group_of(int page) {
+    int group = 0;
+    for (int g = 0; g < kMixerGroups; g++) group = page >= kMixerGroupStart[g] ? g : group;
+    return group;
+}
+
+// The page UP (delta -1) or DOWN (+1) lands on from `page`.
+constexpr int mixer_group_jump(int page, int delta) {
+    const int group = (mixer_group_of(page) + delta % kMixerGroups + kMixerGroups) % kMixerGroups;
+    return kMixerGroupStart[group];
+}
+static_assert(mixer_group_jump(0, 1) == kMixerDuckDepthPage && mixer_group_jump(0, -1) == kMixerEqPage - 1 &&
+                  mixer_group_jump(kMixerEqPage, 1) == 0 && mixer_group_jump(kMixerDuckPage, -1) == 0,
+              "MIXER's group jumps");
+
 // Every send and master field has a slot on some page. Without this a field added to
 // dsp/buses.hpp would be saved, loaded and completely unreachable -- which is the bug this whole
 // change exists to fix, so it is worth a compile-time check rather than a comment.
@@ -908,6 +934,7 @@ private:
     uint32_t slot_ok_down_ms_ = 0;
     // The track menu (hold OK in GRID, app/ui_trackmenu.hpp): GEN's knobs and EVOLVE.
     bool track_menu_ = false;
+    Mode track_menu_mode_ = Mode::grid;   // GRID or KEYS: the screen it opened over
     int track_menu_cursor_ = 0;
     bool track_ok_held_ = false;
     uint32_t track_ok_down_ms_ = 0;

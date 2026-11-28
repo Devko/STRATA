@@ -20,6 +20,8 @@ Publishing is one command, `tools/publish_release.sh`, and it refuses rather tha
       and say the zip does not include it. If the Enaga version changed since the last release,
       they say so, since updating then needs step 1 of docs/INSTALL.md again. (v0.1.0 to v0.3.1
       bundled Enaga 0.2.0's `SmplTrek.bin`; their notes describe that and stay as published.)
+- [ ] `docs/INSTALL.md`'s table "Which Enaga goes with which STRATA" lists the release (the
+      script refuses otherwise). The rest of the release's names it writes itself (step 4).
 - [ ] The notes' install section starts with the card builder,
       [strata.einblick.dev](https://strata.einblick.dev), as the easy way, before the steps by
       hand.
@@ -73,27 +75,32 @@ What it does, refusing at the first thing that is wrong:
    compare SHA-256 by hand then.)
 4. It fills the `{{FIELDS}}` in `CHANGELOG.md` and `docs/release/v0.1.0.md` (date, build, MAX
    readings, the zip's SHA-256), runs `tests/test_package_release.py`, and builds the zip with
-   `tools/package_release.py`. `--dry-run` prints the release text here and stops, leaving the
-   tree as it was.
-5. It commits the filled notes on `release/v0.1.0`, tags that commit `v0.1.0`, pushes both, creates
-   the GitHub pre-release "STRATA 0.1.0" with the zip and its `.sha256`, and opens a PR that
-   brings the dated changelog into `main`.
+   `tools/package_release.py`. Then `tools/release_docs.py` pins the release in the card
+   builder's `web/public/compat.json` (its zip's SHA-256, date and Enaga; a new Enaga version
+   with its zip's and LICENSE's SHA-256, fetched with `gh`), writes it into the README's status
+   line (under the `release-status` marker), and moves the zip's name in the README and
+   `docs/INSTALL.md` to it; the card builder's tests run on the result where `node` exists.
+   `--dry-run` prints the release text and those changes here and stops, leaving the tree as it
+   was.
+5. It commits the filled notes and those files on `release/v0.1.0`, tags that commit `v0.1.0`,
+   pushes both, creates the GitHub pre-release "STRATA 0.1.0" with the zip and its `.sha256`, and
+   opens a PR that brings them into `main`.
 
 ## After
 
 - [ ] Merge the release PR. A tag is never moved or released again: a fix after a release is
       the next version.
-- [ ] Update the README's "Status" section (current release and date) and, if the release changes
-      the install steps or the Enaga version, the README's "Try it" and `docs/INSTALL.md`.
+- [ ] If the release changes the install steps or the Enaga version, update the README's "Try it"
+      and `docs/INSTALL.md` by hand: the script moves only the zip's name and the status line.
 - [ ] Check that [strata.einblick.dev](https://strata.einblick.dev) offers the release (within
       ten minutes). The card builder reads releases from GitHub, and the Enaga version from a
       comment the script adds to the release body, `<!-- strata-card: {"enaga":"X.Y.Z"} -->`. A
       release made by hand needs that line too ([web/README.md](../../web/README.md)).
-- [ ] Pin the release in `web/public/compat.json` (its zip's SHA-256, and the Enaga it needs
-      with that Enaga zip's and LICENSE's SHA-256), in a PR, and ask Roland to deploy the site.
-      Without a `GITHUB_TOKEN` on the site, GitHub's API often refuses it (the rate limit of
-      Cloudflare's shared IPs), and the site then offers only what `compat.json` pins: that is
-      why 0.5.0 was missing on its release day.
+- [ ] Once the release PR is merged, Roland deploys the card builder from an up-to-date `main`
+      (`cd web && npx wrangler pages deploy --branch main`), so the site's `compat.json` pins
+      the release. Without a `GITHUB_TOKEN` on the site, GitHub's API often refuses it (the rate
+      limit of Cloudflare's shared IPs), and the site then offers only what `compat.json` pins:
+      that is why 0.5.0 was missing on its release day.
 - [ ] Optional, and worth it: download the zip from the release page, unzip it onto a freshly
       formatted card, install, and play A01.
 

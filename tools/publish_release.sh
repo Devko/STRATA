@@ -22,15 +22,19 @@
 #      still has the SmplTrek.bin the unit was updated from, that file is byte for byte the one in
 #      Enaga's zip, so the unit test ran on Enaga's own build;
 #   4. the {{FIELDS}} in CHANGELOG.md and docs/release/v<version>.md are filled, the packaging
-#      script's tests pass, and tools/package_release.py builds the zip.
+#      script's tests pass, and tools/package_release.py builds the zip; then
+#      tools/release_docs.py pins the release in the card builder's web/public/compat.json and
+#      writes it into README.md's status line and the zip names in README.md and docs/INSTALL.md.
 #
 # The zip never carries firmware: tools/package_release.py takes only APP.ENA from the card.
 #
-# Then (5) it commits the filled notes on a branch release/<tag>, tags that commit, pushes both, creates
-# the GitHub release (a pre-release, the zip and its .sha256 attached, the notes as its body) and
-# opens a PR that brings the dated changelog into main.
+# Then (5) it commits the filled notes and those files on a branch release/<tag>, tags that commit,
+# pushes both, creates the GitHub release (a pre-release, the zip and its .sha256 attached, the
+# notes as its body) and opens a PR that brings them into main. The card builder offers the
+# release from GitHub at once; deploying web/ after that PR merges pins it there too (Roland).
 #
-# --dry-run does 0-4 and stops: it shows the release body and leaves the tree as it was.
+# --dry-run does 0-4 and stops: it shows the release body and the changes to compat.json, README.md
+# and docs/INSTALL.md, and leaves the tree as it was.
 # --draft creates the GitHub release as a draft instead, to look at before pressing Publish.
 #
 # Needs: git, python3, gh (logged in, `gh auth status`), and the device toolchain for check 2.
@@ -176,7 +180,7 @@ fi
 
 # --- 4. fill the notes, test, package ----------------------------------------------------------
 say "4. notes, tests, zip"
-FILES=(CHANGELOG.md "$NOTES")
+FILES=(CHANGELOG.md "$NOTES" README.md docs/INSTALL.md web/public/compat.json)
 restore() { "$GIT" checkout -q -- "${FILES[@]}"; rm -rf "$WORK"; }
 trap restore EXIT
 fill() {   # fill <file> KEY=VALUE ...: replace {{KEY}} with VALUE
@@ -194,6 +198,7 @@ for f in "${FILES[@]}"; do
     fill "$f" "RELEASE_DATE=$DATE" "BUILD=$BUILD_LABEL" "UNIT_LOAD=$UNIT_LOAD"
 done
 python3 -B tests/test_package_release.py >/dev/null 2>&1 || die "tests/test_package_release.py failed"
+python3 -B tests/test_release_docs.py >/dev/null 2>&1 || die "tests/test_release_docs.py failed"
 python3 -B tools/package_release.py "$TAG" --card "$CARD" --out build/release
 ZIP="build/release/STRATA-$TAG-smpltrek.zip"
 ZIP_SHA=$(cut -d' ' -f1 "$ZIP.sha256")
@@ -201,6 +206,30 @@ BODY="build/release/$TAG-notes.md"
 sed '1,/^---$/d' "$NOTES" | sed "s/{{ZIP_SHA256}}/$ZIP_SHA/g" > "$BODY"
 # The card builder (web/, strata.einblick.dev) reads which Enaga this release needs from here.
 printf '\n<!-- strata-card: {"enaga":"%s"} -->\n' "$ENAGA_VERSION" >> "$BODY"
+
+# The card builder's pinned list (web/public/compat.json), README.md's status line and the zip's
+# name in README.md and docs/INSTALL.md. An Enaga the list does not pin yet also needs its zip's
+# SHA-256 (downloaded in step 3) and its LICENSE's at the tag (what the card builder checks).
+ENAGA_ARGS=()
+if ! python3 -B -c 'import json, sys; sys.exit(sys.argv[1] not in json.load(open("web/public/compat.json"))["enaga"])' "$ENAGA_VERSION"; then
+    EZIP="$WORK/enaga/enaga-v$ENAGA_VERSION-smpltrek.zip"
+    [ -f "$EZIP" ] || die "Enaga $ENAGA_VERSION is new to web/public/compat.json, which needs its zip's SHA-256:
+    run without --skip-enaga-check"
+    "$GH" api "repos/seawaffle/enaga/contents/LICENSE?ref=v$ENAGA_VERSION" \
+        -H "Accept: application/vnd.github.raw" > "$WORK/ENAGA-LICENSE" \
+        || die "cannot fetch Enaga's LICENSE at v$ENAGA_VERSION for web/public/compat.json"
+    [ -s "$WORK/ENAGA-LICENSE" ] || die "Enaga's LICENSE at v$ENAGA_VERSION came back empty"
+    ENAGA_ARGS=(--enaga-zip-sha256 "$(sha256sum "$EZIP" | cut -d' ' -f1)"
+                --enaga-license-sha256 "$(sha256sum "$WORK/ENAGA-LICENSE" | cut -d' ' -f1)")
+fi
+python3 -B tools/release_docs.py "$TAG" --date "$DATE" --zip-sha256 "$ZIP_SHA" \
+    --enaga "$ENAGA_VERSION" "${ENAGA_ARGS[@]}" || die "tools/release_docs.py refused (above)"
+if command -v node > /dev/null; then
+    (cd web && node --test test/*.test.mjs > /dev/null 2>&1) || die "the card builder's tests fail
+    with the new compat.json (cd web && npm test)"
+else
+    echo "no node here: the card builder's tests run in CI on the release PR"
+fi
 LEFT=$(grep -oE '\{\{[A-Z_0-9]+\}\}|TODO\(release\)' "$BODY" CHANGELOG.md | sort -u || true)
 [ -z "$LEFT" ] || die "still unfilled: $LEFT"
 
@@ -208,6 +237,8 @@ if [ "$DRY" -eq 1 ]; then
     say "dry run: nothing committed, tagged, pushed or created. The release body would be:"
     cat "$BODY"
     echo
+    say "and these changes, committed with the notes:"
+    "$GIT" --no-pager diff -- README.md docs/INSTALL.md web/public/compat.json
     echo "zip: $ZIP  sha256 $ZIP_SHA"
     exit 0
 fi
@@ -220,7 +251,10 @@ BRANCH="release/$TAG"
 "$GIT" commit -q -m "release: $TAG
 
 The changelog dated $DATE and the notes filled from the unit test: $BUILD_LABEL build,
-$UNIT_LOAD Zip sha256 $ZIP_SHA."
+$UNIT_LOAD Zip sha256 $ZIP_SHA.
+
+The release pinned in the card builder's web/public/compat.json, and named in README.md's
+status and the zip names in README.md and docs/INSTALL.md (tools/release_docs.py)."
 trap 'rm -rf "$WORK"' EXIT          # the filled notes are committed now
 "$GIT" tag -a "$TAG" -m "STRATA $VERSION"
 "$GIT" push -q origin "$BRANCH" "$TAG"
@@ -230,7 +264,7 @@ FLAGS=(--prerelease)
 "$GH" release create "$TAG" "$ZIP" "$ZIP.sha256" --verify-tag --title "STRATA $VERSION" \
     --notes-file "$BODY" "${FLAGS[@]}"
 "$GH" pr create --base main --head "$BRANCH" --title "release: $TAG, the dated changelog" \
-    --body "The release commit that $TAG points at: CHANGELOG.md dated and the release notes filled from the unit test. Merge it so main has them, then follow docs/release/RELEASING.md, \"After\"." || true
+    --body "The release commit that $TAG points at: CHANGELOG.md dated and the release notes filled from the unit test, the release pinned in the card builder's web/public/compat.json, and README.md's status and the zip names in README.md and docs/INSTALL.md moved to $TAG. Merge it so main has them, deploy the card builder (\`cd web && npx wrangler pages deploy --branch main\`), then follow docs/release/RELEASING.md, \"After\"." || true
 # Back where it started: main itself is usually checked out in another worktree, where a
 # checkout of it here would fail.
 "$GIT" checkout -q "$ORIG"

@@ -138,16 +138,23 @@
         append_padded(out, secs, 2);
     }
 
-    // JAM REC's OK: start the jam, or stop it. The menu closes on a start, so the music is back on
-    // the screen with the REC dot in the top bar; a stop's SAVED comes once the file is closed.
-    void toggle_jam() {
+    // JAM REC's mark, the top bar's dot and the REC key's blink: lit for 600 ms of each second
+    // while the jam records, steady while its file is being closed, dark otherwise.
+    bool jam_mark_on() const {
+        return storage_.jam_running() && (!storage_.jam_recording() || last_ms_ % 1000u < 600u);
+    }
+
+    // JAM REC, from the menu's row (OK) or FUNC + REC on RESAMPLE: start the jam, or stop it. From
+    // the menu, the menu closes on a start, so the music is back on the screen with the REC dot in
+    // the top bar; a stop's SAVED comes once the file is closed.
+    void toggle_jam(bool from_menu) {
         if (storage_.jam_running()) {
             storage_.request_jam_stop();
             notice_logged("JAM STOPPING");
             return;
         }
         if (!storage_.request_jam_start()) return;     // the reason comes as a jam message
-        close_menu(false);
+        if (from_menu) close_menu(false);
         char *out = notice_buffer_;
         append(out, "JAM REC ");
         const char *name = storage_.jam_name();
@@ -813,7 +820,7 @@
                 close_menu(false);
                 break;
             case MenuItem::jam:
-                toggle_jam();
+                toggle_jam(true);
                 break;
             default:
                 menu_value(+1, true);

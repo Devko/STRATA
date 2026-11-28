@@ -25,6 +25,9 @@ tools/render.sh              # render the output to a WAV offline
   emulator: it walks every screen with keys and knobs and keeps the frames the docs show (MUTATE
   and SCENE need pads, which the emulator lacks, so those two come from the host draw).
   `tools/screenshots.sh` is the quicker host-only route: the same screen code on the host build.
+- `tools/wt.sh` makes, lists and removes one worktree per line of work next to the checkout
+  (`../STRATA-wt/<name>`), each building into its own `$HOME/strata-build-<name>`; removal refuses
+  uncommitted or unpushed work. Its header has the details.
 - `tools/readme_clip.py` records the README's clip (`docs/media/strata.gif`) the same way: the
   TECHNO showcase project playing, a scripted walk on a timeline, one frame every 50 ms, then a
   GIF in the screenshots' look. Its docstring has the two commands.
@@ -35,7 +38,7 @@ tools/render.sh              # render the output to a WAV offline
 under AddressSanitizer and UBSan, the layout check over every screen, the screenshots, and the
 repo checks: `tools/audit_commands.sh` (every command posted and handled), `tools/check_rules.sh`
 (CLAUDE.md's source rules), `tools/enaga_check.sh` (the Enaga pin), `tools/check_scripts.sh`
-(every script parses), the tests of the release packaging and the Enaga build cache, and the card
+(every script parses), the tests of the release packaging, the Enaga build cache and `tools/wt.sh`, and the card
 builder's tests in `web/`. A docs-only change skips the test jobs. `tools/ci_local.sh` runs the same lanes locally (`--scenarios` adds
 the emulator scenarios).
 

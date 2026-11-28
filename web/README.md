@@ -111,8 +111,10 @@ cd web && node tools/starter.mjs --samples /tmp/pack
 
 A release published with `tools/publish_release.sh` carries the marker and appears within ten
 minutes, with no deploy, whenever GitHub's API answers. A release made by hand needs the marker
-line in its body. Pin each release in `compat.json` as well, and deploy, so that it is offered
-even when GitHub refuses the site; `npm test` checks the file.
+line in its body. Each release is also pinned in `compat.json`, so that it is offered even when
+GitHub refuses the site: the script writes the entry (`tools/release_docs.py`) into the release
+PR, and deploying after that PR merges puts it live. A release made by hand needs the entry
+written by hand; `npm test` checks the file.
 
 ## Running it locally
 

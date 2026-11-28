@@ -124,7 +124,7 @@ HOME "system", PLAY "◀◀", STOP "▶▶", MIXER "fx", EDIT "rec src".
 | Key | Plain | FUNC + key (printed second label) | Lit |
 | --- | --- | --- | --- |
 | FUNC | modifier | — | green while held |
-| REC | live record on/off | RESAMPLE ("sampling") | red recording, green on RESAMPLE |
+| REC | live record on/off | RESAMPLE ("sampling"); again JAM REC on/off | red recording, green on RESAMPLE; a dim red blink while JAM REC records |
 | PROJECT | PROJECT: banks, patterns, chain, card. Opens on the release; held, STEP n queues slot n from any screen (below) | SAMPLES, the selected track's browser ("pool") | green PROJECT, red SAMPLES |
 | HOME | GRID, always. Double-tap (within 0.4 s, on GRID) = KEYS | **FUNC menu** ("system"); again closes it | green GRID, amber KEYS, red menu |
 | PLAY | play | restart from step 1 ("◀◀") | green running |
@@ -139,8 +139,8 @@ HOME "system", PLAY "◀◀", STOP "▶▶", MIXER "fx", EDIT "rec src".
 A list over whatever screen was up. UP/DOWN or A scroll, OK runs the row, LEFT/RIGHT or B change
 a setting row, CLR or FUNC + HOME closes it and returns to the screen it opened over. STEP
 keys, screen keys and pad-row keys do nothing in it. FUNC + CLR / OK stay undo and redo.
-The cursor starts on SAVE every time, so **FUNC + HOME, OK saves**, and the list wraps, so
-**FUNC + HOME, UP, OK starts or stops JAM REC**.
+The cursor starts on SAVE every time, so **FUNC + HOME, OK saves**. JAM REC has a key of its
+own as well: **FUNC + REC twice** (RESAMPLE, then again), as FUNC + EDIT twice is KIT.
 
 | Row | What OK does | Value (LEFT/RIGHT, B, or OK steps) |
 | --- | --- | --- |
@@ -165,7 +165,7 @@ The cursor starts on SAVE every time, so **FUNC + HOME, OK saves**, and the list
 | FREEZE | freeze the selected track (its loop from the next bar line), or unfreeze it | `T3 1 BAR` (1 2 4 8), `T3 WAIT` / `REC` while recording, `T3 ON` frozen |
 | LOOP LEN | | the performance mixer's looper: `4 BAR` (1 2 4 8), what push VALUE + STEP 16 records |
 | LOAD DEMO | OK twice within 2 s: the factory demo project (the boot beat), under a new name | |
-| JAM REC | starts recording the finished master to `/RECORD/JAM_<n>.WAV` and closes the menu (`JAM REC JAM 3`); OK again stops it (`JAM STOPPING`, then `SAVED JAM 3` once the file is closed). The last row: FUNC + HOME, UP, OK | `OFF`, or how long it has run, `4:07`, `1:02:33` |
+| JAM REC | starts recording the finished master to `/RECORD/JAM_<n>.WAV` and closes the menu (`JAM REC JAM 3`); OK again stops it (`JAM STOPPING`, then `SAVED JAM 3` once the file is closed). FUNC + REC on RESAMPLE does the same and stays on RESAMPLE, whose last line shows the time and `FUNC+REC: STOP JAM` (`JAM OFF` when none runs) | `OFF`, or how long it has run, `4:07`, `1:02:33` |
 
 Moved here from: FUNC + PROJECT twice (save), PROJECT's FUNC + UP/DOWN/LEFT/RIGHT (chain,
 sample reload, reload, new), PROJECTS' FUNC + DOWN (save as, still there too), CHAIN's FUNC +
@@ -278,7 +278,7 @@ ALL. FUNC + turn C in PERFORM only duplicated the macro before, so no gesture ch
 | Direction | Does |
 | --- | --- |
 | Down (-2 .. -64) | Every track drops its weakest hits first: 16ths, then 8ths, then beats, the one last, an accent counting for more. The tracks go in an order from their machines: HAT at once, then PERC, SNARE and SAMPLE (and MID), the MONO lines, the pads (POLY, WAVE POLY, FM4, GRAIN), and KICK from -40. At -64 the drums and lines are silent and the pads keep only their strongest hits |
-| Up (+2 .. +64) | Empty steps may get a quiet ghost (velocity about 40-86) with the note, length and locks of the trig before it on that track, off-beats first: HAT fills most, then PERC, SNARE and SAMPLE, the MONO lines; KICK only above +32; pads and MID never. A track with no trig stays silent. Step probabilities lift towards 100 (a 50% step plays every pass at +64) |
+| Up (+2 .. +64) | Empty steps may get a quiet ghost (velocity about 40-86) with the note, length and locks of the trig before it on that track, off-beats first: HAT fills most, then PERC, SNARE and SAMPLE, the MONO lines; KICK only above +32; pads and MID never. A track with no trig stays silent. A ghost is one note with the arp on, and lights no step or trig glow. Step probabilities lift towards 100 (a 50% step plays every pass at +64) |
 
 - **Rest is 0, and 0 is a detent**, two counts a click, like REL ALL. At rest the part is the
   programmed one to the bit.
@@ -293,12 +293,14 @@ ALL. FUNC + turn C in PERFORM only duplicated the macro before, so no gesture ch
   `BAR` line while stopped), `EN-` / `EN+` in the live strip. The FUNC help's third PERFORM page
   lists it.
 
-## GEN and EVOLVE (hold OK in GRID)
+## GEN and EVOLVE (hold OK in GRID or KEYS)
 
 Roland, 2026-11-27: generate a drum or melodic part, random but in the key, and let it mutate on
 its own every few loops. `core/generate.hpp`, `core/evolve.hpp`, `app/ui_trackmenu.hpp`. OK in
 GRID with nothing held did nothing, so the hold costs no gesture; a tap says where the menu is
-(`HOLD OK: TRACK MENU`).
+(`HOLD OK: TRACK MENU`). KEYS has the same hold and tap (usability review, 2026-11-28): GEN on a
+melodic track while playing the pads. There the pads stay the piano, and the arrows are the
+menu's until CLR closes it (`KEYS`).
 
 | Row | Does | Says |
 | --- | --- | --- |
