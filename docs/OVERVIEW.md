@@ -40,13 +40,16 @@ any machine. The factory kit:
   an attack-sustain-release page for pads and drones.
 - **WAVE MONO and WAVE POLY:** the same voice with 16 built-in wavetables (classic shapes, sync,
   formants, FM, e-piano, vowels, mallets and more), a position the envelope can sweep, and warp.
+  The SCAN page moves the position with each note: once, looped, ping-pong, eased, random or
+  drifting, free or synced, along a curve.
 - **FM4:** four-operator FM in eight algorithms, with feedback and an index envelope, for
   e-pianos, bells, glass, brass, organs and FM basses; chords of up to six notes.
 - **SAMPLE:** one-shot or slices by note, with SLC AUTO cutting a break at its hits.
 - **GRAIN:** granular clouds from a sample, with its own envelope, a scan that time-stretches,
   and a pitch spray up to an octave shimmer.
-- **Factory sounds:** 116 ready-made sounds for the drums, the VAs, WAVE, FM4 and GRAIN, loaded
-  into one track at a time while the beat plays.
+- **Factory sounds:** 120 ready-made sounds for the drums, the VAs, WAVE, FM4 and GRAIN, loaded
+  into one track at a time while the beat plays. **Your own sounds** are saved by name (up to 16
+  per machine) and load into any project; a sound also copies to another track, machine and all.
 - **Per track:** drive, multimode filter (LP, BP, HP, 12 or 24 dB; one TON knob on the VA and
   WAVE machines, which have a filter of their own), lo-fi, amp envelope, sidechain duck, pan,
   level, an **LFO** (six shapes, free or synced), two **MOD slots**, a **choke group** and an
@@ -56,6 +59,8 @@ any machine. The factory kit:
 - **Sends and master:** a tempo-synced ping-pong delay with a LONG mode (up to 12 s, tape wow), a
   reverb with a HALL mode (shimmer), a stereo chorus, a DJ filter, a three-band kill EQ, a glue
   compressor and a limiter.
+- **Line input:** whatever is on the INPUT jacks (line, mic, Hi-Z or USB audio) plays through the
+  mix as a ninth channel, with its level, pan, tone, duck and the three sends.
 
 ## Sequencer
 
@@ -69,10 +74,16 @@ any machine. The factory kit:
 - Live and motion recording (chords note for note, note-repeat rolls, a click and a count-in),
   a Euclidean generator, and KEYS: both pad rows as a
   pressure-sensitive keyboard, with the pattern's scale lit, while the STEP keys stay steps
-- 8 banks of 16 patterns with queued changes, a pattern menu (copy, paste, clear, double), and
-  a chain that becomes a song: each entry can recall a mute state, and SONG mode stops at the end
+- 8 banks of 16 patterns with queued changes (hold PROJECT + STEP queues one from any screen),
+  a pattern menu (copy, paste, clear, double), and a chain that becomes a song: SONG mode stops at
+  the end
+- **Song sections:** each chain entry can recall a mute state or an exact mute mask, put a scene
+  on morph side B, snap or ride the morph, and set ENERGY, TRANSPOSE and the tempo as it starts
+- **Track Launch:** one track plays its part from another pattern while the others carry on
+  (PROJECT twice); CAPTURE writes what plays into a free slot
 - **ARR REC** writes a jam into the chain as you play it, a section for each change of pattern,
-  mutes, scene, morph, ENERGY or tempo, to replay and edit afterwards
+  mutes, scene, morph, ENERGY, TRANSPOSE or tempo, launched tracks included, to replay and edit
+  afterwards; ARR UNDO swaps the chain from before the take back in
 - **GENERATE** a drum or melodic part in the key, and **EVOLVE** it every few loops, orbiting
   the part or drifting away from it (hold OK in GRID)
 - 16 levels of undo
@@ -89,18 +100,26 @@ any machine. The factory kit:
 - Scenes with an A/B morph, four macros you set up by turning knobs (B, C and D ready in the
   demo project) and stored mute states
 - Beat repeat, note repeat, **step stutter** (hold REPEAT and a STEP), delay and reverb throws,
-  kill-EQ switches, and seeded mutation you keep or revert
+  kill-EQ switches (FUNC + push D: all three at once), and seeded mutation you keep or revert
+- **PERFORM's FUNC layer:** hold FUNC and the four knobs are **REL ALL** (every track's release),
+  **LEN ALL** (every note's length), **ENERGY** and **LIVE RND** (the beat shuffled in blocks),
+  the gauges showing where each is
 - **ENERGY:** one knob from a breakdown to the peak: turned down, every track drops its weakest
   hits, hats first and kick last; turned up, quiet ghosts fill the empty off-beats. The pattern
   itself never changes
 - **TRANSPOSE:** FUNC + the screen keys walk the melodic tracks through the key a step at a time
   (or by semitones), while the drums and sliced loops stay put
+- **VariSpeed:** FUNC + turn VALUE moves the tempo and every machine's pitch together, like a
+  turntable, an octave either way
+- **Tap tempo and nudge:** tap VALUE in time to set the tempo; FUNC + push VALUE + turn pushes
+  the beat a little faster or slower for a moment, to line up by ear
+- Every project opens with the live layer at rest: no ENERGY, TRANSPOSE or VariSpeed carried over
 - **LOCK:** store the live set of a pattern, change everything, and jump back in one tap; tap
   again to swap back
 - **Freeze** a track to a loop in memory to save CPU, **resample** the master or an input, or
   **bounce** one track to a file or another track
 - **JAM REC:** the finished master to a WAV on the card for as long as the set runs (up to
-  3 h 51 min), started and stopped from the FUNC menu
+  3 h 51 min), started and stopped from the FUNC menu or with FUNC+REC twice
 
 ## Samples, projects and MIDI
 
@@ -112,7 +131,8 @@ any machine. The factory kit:
 - **Starter content** from the card builder: ten starter projects from techno to ambient and
   breakbeat, and a sample pack of 105 files rendered by STRATA's own machines
 - MIDI out per track; MIDI in for notes, CCs and program changes; follows the unit's clock
-  (internal, MIDI clock or SYNC IN)
+  (internal, MIDI clock or SYNC IN) and a MIDI song position; PROG CHG OUT sends each pattern
+  change as a program change, so a second unit follows
 - **Help on every screen:** hold FUNC for what the knobs and keys do where you are
 - **A screen that shows the music:** bar.beat and a progress line on every screen, a strip of
   what is off rest, a master meter, the sample and its playheads under SAMPLE's and GRAIN's knobs,

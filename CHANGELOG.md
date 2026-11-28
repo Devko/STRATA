@@ -6,6 +6,19 @@ the project file format or the controls.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Docs brought up to 0.6.0.** README and OVERVIEW list the arrangement (song sections, ARR REC,
+  Track Launch), tap tempo and nudge, the line input, your own sounds, WAVE's scan, PROG CHG OUT
+  and the song position; the factory sound count is 120. MANUAL: FUNC + push D in the kill EQ
+  section, and what a project resets when it opens; the kill switches are not saved (the manual
+  said they were). CHEATSHEET: FUNC + push D, PERFORM's FUNC gauges, the at-rest rule, and the
+  new screens. 0.6.0's notes said tap tempo needs two taps; it needs three.
+- **New screenshots** from the emulator: LAUNCH, PERFORM with FUNC held, the TRANSPOSE and
+  VariSpeed notices, and the SECTION view's two pages; the FUNC help and FUNC menu frames that had
+  gone stale are drawn again. `tools/emulator_screens.py` walks the new screens (part f), every
+  MIXER and EDIT page, and all of the help; `STRATA_SCREENS_KEEP` keeps the walk's frames.
+
 ## [0.6.0] - 2026-11-28
 
 Everything merged since 0.5.0 (#211 to #262). 0.5.0 was planned as the release candidate for
@@ -102,7 +115,7 @@ Release notes: [docs/release/v0.6.0.md](docs/release/v0.6.0.md).
   SCANLD and WOBBLE (WAVE MONO) and DRIFT and SWIRL (WAVE POLY). Projects saved before it load
   with MOD OFF and sound as they did; the kit and the performance files gain an optional section.
   New emulator scenario `wavescan`.
-- **Tap tempo and nudge.** Tap VALUE in time, twice or more, wherever VALUE turns the tempo
+- **Tap tempo and nudge.** Tap VALUE in time, three times or more, wherever VALUE turns the tempo
   (`TAP 128.0`); the tempo follows the last four taps. FUNC + push VALUE + turn nudges: 4% faster
   or slower for a quarter of a second a detent, then back to the set tempo, to line STRATA up by
   ear with something that sends no clock.

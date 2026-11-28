@@ -1257,6 +1257,8 @@ the tempo the take started at, so the song comes back to it when it loops.
 
 ### Track Launch: one track from another pattern
 
+<p><img src="screens/launch.png" width="256" alt="LAUNCH, PROJECT pressed twice: track 3 plays the part of slot A02, the other tracks their own"></p>
+
 Play the bass of B07 under the drums of A01 without making a new pattern. Press PROJECT twice
 quickly for the **LAUNCH** page: a row for each track with the 16 slots of the shown bank. Pick
 the track with UP/DOWN or its lower pad (the pads make no sound here), then press a STEP key:
@@ -1453,6 +1455,8 @@ on the selected track's sound and the pads become expressive.
 
 ### REL ALL and LEN ALL: every track's release and note length at once
 
+<p><img src="screens/perform_func.png" width="256" alt="PERFORM with FUNC held: the gauges read REL, LEN, NRG and RND, ENERGY at +12 and LIVE RND on"></p>
+
 Two more hands in PERFORM, beside the macros: **FUNC + turn A is REL ALL** and **FUNC + turn B is
 LEN ALL**. Each starts at rest, where the sound is exactly what you programmed, and turning back
 always stops on rest for one click (a detent), so you can find it without looking.
@@ -1530,6 +1534,8 @@ or NEW, puts it to 0.
 
 ### VariSpeed: the whole unit faster or slower
 
+<p><img src="screens/varispeed.png" width="256" alt="GRID after FUNC + turn VALUE: VARISPEED +1.2 139.3, VS+ on the live strip"></p>
+
 **FUNC + turn VALUE is VariSpeed**, on every screen. VALUE alone is the tempo; with FUNC the pitch
 moves with it, the way a turntable's speed control or a tape machine's varispeed moves both. Every
 machine follows: the drums, SAMPLE and GRAIN read faster or slower, the synths and FM4 move by the
@@ -1553,6 +1559,8 @@ changes. It is not saved, not undone and not held by a LOCK, like the tempo. Ope
 it to rest, so the project plays at its own tempo and pitch.
 
 ### TRANSPOSE: move the melodic tracks through the key
+
+<p><img src="screens/transpose.png" width="256" alt="GRID after FUNC + SEL> twice: TRANSPOSE +2 IN KEY, TR+2 on the live strip"></p>
 
 **FUNC + SEL> moves the melodic tracks up a step of the scale, FUNC + SEL< down**, on every
 screen, up to 12 steps either way. Press **both screen keys** with FUNC (the second while the
@@ -1629,6 +1637,9 @@ The master has a DJ-style **kill EQ** (an isolator) after the DJ filter: three b
   turning the encoders is still the macros). The notice says `KILL LOW` or `LOW BACK`. A switch
   latches: push to take the band out, push again to bring it back. On the MIXER's EQ page a
   plain push of A, B or C does the same.
+- **All three at once**: FUNC + push D, in any mode, takes every band out (`KILL ALL`); with all
+  three out, the same push brings them back (`ALL BANDS BACK`). Since 0.6.0 this is FUNC + push
+  D in PERFORM too, so LIVE RND's tracks are picked with FUNC + a lower pad instead.
 - **The knobs**: MIXER, then the screen keys (or LEFT/RIGHT) to the last page, `EQ`. A, B and
   C are LOW, MID and HI: centre (`0`) is flat, down to `KILL` at the bottom, up to +6 dB at the
   top (`+63`). D is empty.
@@ -1636,9 +1647,10 @@ The master has a DJ-style **kill EQ** (an isolator) after the DJ filter: three b
 A kill takes its band down by 30-50 dB within about 10 ms and comes back as fast, with no click.
 Coming back puts the band where its knob is. While all three bands are flat and no switch is on,
 the EQ is bypassed and costs nothing; turning a knob or throwing a switch starts it, and it
-switches itself off again a few milliseconds after everything is flat. The knobs and the
-switches are saved with the project, so a project saved with the lows killed reopens that way:
-look for `KILL` on the EQ page.
+switches itself off again a few milliseconds after everything is flat. The knobs are saved with
+the project; the switches are a performance move and are not: a project always opens with every
+band in. A knob turned to the bottom is saved, so a project saved that way reopens with the band
+out: look for `KILL` on the EQ page.
 
 ### Tape stop and delay freeze
 
@@ -2067,7 +2079,10 @@ In the FUNC menu (FUNC+HOME), each with OK twice within 2 s:
 - LOAD DEMO (`OK AGAIN: DEMO`): the factory demo project, the beat a first start plays, under
   a new name. Again nothing is written until you save.
 
-All three stop the transport.
+All three stop the transport. Every project, including one opened from PROJECTS, opens **at
+rest**: ENERGY, TRANSPOSE, VariSpeed, REL ALL, LEN ALL and LIVE RND go back to 0 (or OFF), the
+LOCKs are cleared, every kill switch is off, and the next turn of any of them starts from there.
+The mutes, the scenes and the EQ knobs are the project's own and come back as they were saved.
 
 ### Projects: open, save as, rename and delete
 

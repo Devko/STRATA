@@ -61,7 +61,8 @@ pads and the performance mixer.
 
 Frames of the device build (cl6x) running in the emulator, the factory project playing
 (`tools/emulator_screens.sh` redraws them; MUTATE and SCENE are the host build's draw, as the
-emulator has no pads). The cheatsheet's "The screen" table below explains what
+emulator has no pads; SECTION and EDIT SCAN, which need a chain entry with fields and a WAVE track,
+are kept from their own captures). The cheatsheet's "The screen" table below explains what
 each line means.
 
 <table>
@@ -74,7 +75,10 @@ each line means.
 <tr><td align="center"><img src="screens/project.png" width="200" alt="PROJECT"><br><sub>PROJECT</sub></td><td align="center"><img src="screens/chain.png" width="200" alt="CHAIN"><br><sub>CHAIN</sub></td><td align="center"><img src="screens/pattern.png" width="200" alt="PATTERN"><br><sub>PATTERN</sub></td></tr>
 <tr><td align="center"><img src="screens/setup.png" width="200" alt="SETUP"><br><sub>SETUP</sub></td><td align="center"><img src="screens/projects.png" width="200" alt="PROJECTS"><br><sub>PROJECTS</sub></td><td align="center"><img src="screens/menu.png" width="200" alt="FUNC menu (FUNC+HOME)"><br><sub>FUNC menu (FUNC+HOME)</sub></td></tr>
 <tr><td align="center"><img src="screens/help.png" width="200" alt="FUNC held alone on GRID"><br><sub>FUNC held alone (GRID)</sub></td><td align="center"><img src="screens/mutate.png" width="200" alt="MUTATE pressed"><br><sub>MUTATE pressed</sub></td><td align="center"><img src="screens/scene.png" width="200" alt="SCENE A held"><br><sub>SCENE A held</sub></td></tr>
-<tr><td align="center"><img src="screens/help_keys.png" width="200" alt="FUNC held, LEFT to FUNC + KEY"><br><sub>FUNC held, LEFT: FUNC + KEY</sub></td><td></td><td></td></tr>
+<tr><td align="center"><img src="screens/help_keys.png" width="200" alt="FUNC held, RIGHT to FUNC + KEY"><br><sub>FUNC held, RIGHT: FUNC + KEY</sub></td><td align="center"><img src="screens/trackmenu.png" width="200" alt="Track menu (hold OK in GRID)"><br><sub>Track menu (hold OK)</sub></td><td align="center"><img src="screens/sounds.png" width="200" alt="SOUNDS (OK in MACHINE)"><br><sub>SOUNDS</sub></td></tr>
+<tr><td align="center"><img src="screens/edit_scan.png" width="200" alt="EDIT, SCAN on WAVE MONO"><br><sub>EDIT, SCAN (WAVE)</sub></td><td align="center"><img src="screens/mixer_in.png" width="200" alt="MIXER, IN"><br><sub>MIXER, IN (line input)</sub></td><td align="center"><img src="screens/section.png" width="200" alt="SECTION (push A on CHAIN), MOVE page"><br><sub>SECTION, MOVE</sub></td></tr>
+<tr><td align="center"><img src="screens/launch.png" width="200" alt="LAUNCH (PROJECT twice), track 3 playing A02"><br><sub>LAUNCH (PROJECT twice)</sub></td><td align="center"><img src="screens/perform_func.png" width="200" alt="PERFORM with FUNC held: REL LEN NRG RND"><br><sub>PERFORM, FUNC held</sub></td><td align="center"><img src="screens/transpose.png" width="200" alt="FUNC + SEL> on GRID: TRANSPOSE +2 IN KEY"><br><sub>TRANSPOSE (FUNC + SEL>)</sub></td></tr>
+<tr><td align="center"><img src="screens/varispeed.png" width="200" alt="FUNC + turn VALUE: VARISPEED +1.2 139.3"><br><sub>VariSpeed (FUNC + VALUE)</sub></td><td></td><td></td></tr>
 </table>
 
 ## Keys that work everywhere
@@ -95,6 +99,7 @@ each line means.
 | FUNC + push VALUE + turn | Nudge: 4% faster or slower for 250 ms a detent, then back to the set tempo (`NUDGE FASTER`) |
 | Push VALUE + STEP, CLR, LEFT/RIGHT | The performance mixer (below) |
 | FUNC + push A / B / C | Master kill EQ: kill LOW / MID / HI, again to bring it back (`KILL LOW`, `LOW BACK`). Performance only: not saved, and a load brings every band back |
+| FUNC + push D | All three bands out (`KILL ALL`); with all three out, all back (`ALL BANDS BACK`). PERFORM too |
 | FUNC + pad-row L/R | Selected track's length (polymeter), on every screen but the menu; hold to repeat |
 | Arrow pad | UP/DOWN move through rows, LEFT/RIGHT sideways, OK picks, CLR goes back |
 | Screen keys L/R | The screen's pages (on GRID and KEYS: the EDIT page A-D turn); with FUNC, TRANSPOSE |
@@ -185,7 +190,7 @@ Page 1 NOTE VEL LEN MICR, page 2 PROB COND RTCH RAMP, page 3 ACNT SLID CHRD.
 | KEYS | Track | Octave (OCT 0-7) | EDIT page (for A-D) | Step page | Current EDIT page params | — | Copy / paste |
 | MACHINE | Machine | Machine column (3 over) | Track | Step page | A: machine, B: MIDI OUT channel (OFF, 1-16) | SMP/GRN: open SAMPLES; drums and synths: open SOUNDS / — | Copy / paste |
 | KIT | Slot | Page of 8 slots | Page of 8 slots | — | A: slot | Recall (twice) / back to MACHINE | DOWN: save here, UP: read the card again |
-| MIXER | Group of pages: TRK DCK WID DLY REV CHO MST | Page (17) | Page | Step page | Levels or page fields; on EQ, push A-C kills a band; on DLY+ and REV+, push A flips the mode; on WID and CHO 1-4 / 5-8, push A-D steps that track's width or send (OFF, 48, 96 / OFF, 64) | — / clear | Copy / paste |
+| MIXER | Group of pages: TRK DCK WID DLY REV CHO MST | Page (19) | Page | Step page | Levels or page fields; on EQ, push A-C kills a band; on DLY+ and REV+, push A flips the mode; on WID and CHO 1-4 / 5-8, push A-D steps that track's width or send (OFF, 48, 96 / OFF, 64) | — / clear | Copy / paste |
 | SAMPLES | Entry | Page of 8 | Page of 8 | — | A: entry; push A: hear the file (twice while playing) / stop | Load file or open folder / up a folder (at the top: back) | UP: read the folder again |
 | SOUNDS | Entry | First / last entry | Track | — | A: entry; push B / C: rename / delete your own | Load into the track (AS WAS: put yours back; PASTE: the copied sound) / back | Copy the sound / save it as your own |
 | RESAMPLE | Bars 1/2/4/8 | Destination FILE, TRK 1-8 | Destination | Step page | A: bars, B: source, C: input level | Arm / cancel | Copy / paste |
@@ -258,6 +263,8 @@ note's length (`LEN ALL 71%`, 25-400%). 0 is rest and a detent; not saved; a LOC
 **LIVE RND:** in PERFORM, FUNC + turn D shuffles every armed track in random blocks of 1, 2, 4, 8
 or 16 steps (`LIVE RND4 7 TRK`), OFF puts the programmed order back at once; FUNC + lower pad takes
 that track out or back in (every track but the kick at start). Pattern untouched; not saved; in a LOCK.
+**At rest:** every project opens with ENERGY, TRANSPOSE, VariSpeed, REL ALL, LEN ALL and LIVE RND
+at rest, no LOCK and no kill switch on (OPEN, RELOAD, NEW, LOAD DEMO).
 **ENERGY:** in PERFORM, FUNC + turn C from a breakdown (-64: drums and lines out, pads keep their
 strongest hits; hats go first, kick last) to the peak (+64: quiet ghosts on empty off-beats, hats
 most, probabilities towards 100). `ENERGY -20`; 0 is rest and a detent; pattern untouched; in a LOCK; 0 after a load or NEW.
@@ -338,6 +345,7 @@ every pattern change sends its number 0-127 as a program change on your MIDI CH.
 | PROJECT | `UNSAVED`, `NO CARD` | RAM differs from the card; no usable card |
 | KIT | `>03 KIT`, `EMPTY`, `UNREADABLE`, `...` | Cursor and slot: holds a kit, nothing, a damaged file, not read yet; the cursor's kit below as two lines of four machines |
 | PERFORM | `A1 12P`, `>A`, `3P`, `REL -12 LEN 71%`, `LIVE RND4 FUNC+D` | Scene slot and its parameter count; selected macro; macro targets; REL ALL, LEN ALL and LIVE RND away from rest |
+| PERFORM, FUNC held | `REL` `LEN` `NRG` `RND` | The four gauges are FUNC's layer: where REL ALL, LEN ALL, ENERGY and LIVE RND are, the knob you are about to turn |
 | PERFORM | `MUT NOTES T1 50`, `FILL AF16 1/16- DLY`, `BAR n` | Mutation, track, amount; fill, auto-fill, repeat (`-` pitched down), throw; bar count (`NRPT`: note repeat on, `FRZ`: delay frozen) |
 | MIXER | `100`, `KCK`, `SRC 35` | A fader's level and its track (a muted one dim); on DCK, how far a track ducks (`SRC`: the duck's source) |
 | MIXER MST | `GR -0.5`, `LUFS -15.6`, `CMP` `LIM` | The compressor's gain reduction, the loudness, the compressor and limiter as bars |

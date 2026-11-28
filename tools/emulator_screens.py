@@ -30,17 +30,20 @@ ROOT = Path(__file__).resolve().parent.parent
 # Screenshot name -> walk frame. Burst frames end _fNN; the first of a burst is used.
 PICKS = {
     "grid": "grid_f00", "step": "step", "keys": "keys_f00", "help": "help",
-    "help_keys": "helpp_06", "menu": "menu", "perform": "perform_f00", "resample": "resample",
+    "help_keys": "helpp_07", "menu": "menu", "perform": "perform_f00", "resample": "resample",
     "project": "project", "chain": "chain", "pattern": "pattern", "setup": "setup",
     "projects": "projects_saved", "kit": "kit_saved", "machine": "machine", "sounds": "sounds",
     "samples": "samples_loaded", "trackmenu": "trackmenu", "menu_click": "menu_click",
     "arps": "arps",
     "edit": "edit_t1_p2_f00", "edit_fltr": "edit_t1_p3_f00", "edit_amp": "edit_t1_p4_f00",
     "edit_fx": "edit_t1_p5_f00", "edit_lfo": "lfo_on_f00", "edit_arp": "edit_t1_p1_f00",
-    "edit_vfltr": "edit_t6_p7_f00", "edit_env": "edit_t7_p4_f00", "edit_osc": "edit_t7_p5_f00",
+    "edit_vfltr": "edit_t6_p0_f00", "edit_env": "edit_t7_p4_f00", "edit_osc": "edit_t7_p5_f00",
     "edit_wave": "smp_p1_f00", "edit_wave_amp": "smp_p3_f00", "edit_grain": "grn_p0_f00",
-    "mixer": "mixer_02_f00", "mixer_dck": "mixer_04_f00", "mixer_duck": "mixer_06_f00",
-    "mixer_dly": "mixer_07_f00", "mixer_mst": "mixer_12_f00", "mixer_eq": "mixer_13_f00",
+    "mixer": "mixer_00_f00", "mixer_dck": "mixer_02_f00", "mixer_duck": "mixer_04_f00",
+    "mixer_dly": "mixer_07_f00", "mixer_in": "mixer_15_f00", "mixer_mst": "mixer_17_f00",
+    "mixer_eq": "mixer_18_f00",
+    "launch": "launch", "transpose": "transpose",
+    "varispeed": "varispeed", "perform_func": "perform_func_f02",
 }
 HOST = ["mutate", "scene"]
 ORDER = ["grid", "step", "edit", "mixer", "perform", "keys", "machine", "kit", "project"]
@@ -49,6 +52,7 @@ M = 1_000_000
 FUNC, REC, PROJ, HOME, PLAY, STOP, MIXER, EDIT = 19, 26, 20, 27, 22, 29, 21, 28
 SL, SR, UP, DN, LT, RT, OK, CLR = 8, 9, 17, 25, 24, 18, 23, 30
 STEP1 = 32
+PUSH_A, PUSH_VALUE = 1, 4
 TOAST = 1000 * M                                     # 2.7 s: a screen's name toast is gone
 
 
@@ -146,7 +150,7 @@ def walk(stage, out, part):
         emu.key(FUNC, True); go(320 * M); shot("help", wait=10 * M)
         emu.key(FUNC, False); go(30 * M)
         chord(FUNC, HOME); shot("menu", wait=TOAST)
-        for _ in range(2):                                   # down from SAVE to CLICK
+        for _ in range(3):                                   # down from SAVE to CLICK
             tap(DN)
         shot("menu_click", wait=60 * M)
         tap(CLR); go(30 * M)
@@ -157,24 +161,28 @@ def walk(stage, out, part):
         tap(PROJ); shot("project", wait=TOAST)
         for nm in ("chain", "pattern", "setup", "projects"):
             tap(SR); shot(nm, wait=TOAST)
+            if nm == "chain":                                # push A: the entry's SECTION view
+                tap(PUSH_A); shot("section", wait=TOAST)
+                tap(SR); shot("section_move", wait=TOAST)
+                tap(CLR); go(TOAST)
         tap(CLR); tap(HOME)
 
     if part == "b":                                          # every EDIT page of every track
         to_first_page()
         for t in range(8):
-            for p in range(8):
+            for p in range(9):
                 shot(f"edit_t{t + 1}_p{p}", wait=30 * M, burst=2)
                 tap(SR)
             tap(DN)
-        tap(OK); shot("sounds", wait=TOAST); tap(CLR)
         chord(FUNC, EDIT); shot("machine", wait=TOAST)
-        tap(CLR); tap(HOME)
+        tap(OK); shot("sounds", wait=TOAST)                  # OK in MACHINE on the kick: SOUNDS
+        tap(CLR); tap(CLR); tap(HOME)
 
     if part == "c":                                          # every MIXER page
         tap(MIXER)
-        for _ in range(14):
+        for _ in range(19):                                  # the 19 pages wrap: back to TRK 1-4
             tap(SL)
-        for p in range(14):
+        for p in range(19):
             shot(f"mixer_{p:02d}", wait=40 * M, burst=2)
             tap(SR)
 
@@ -216,10 +224,36 @@ def walk(stage, out, part):
         shot("projects_saved", wait=TOAST)
         tap(CLR); tap(HOME); go(30 * M)
         emu.key(FUNC, True); go(320 * M)
-        for i in range(11):
+        for i in range(12):                                  # LEFT/RIGHT turn the help's pages
             shot(f"helpp_{i:02d}", wait=10 * M)
-            tap(SR)
+            tap(RT)
         emu.key(FUNC, False); go(30 * M)
+
+    if part == "f":                                          # the live layer and LAUNCH
+        tap(HOME); go(TOAST)
+        chord(FUNC, SR); chord(FUNC, SR); shot("transpose", wait=60 * M)
+        emu.key(FUNC, True); go(3 * M)                       # FUNC + both screen keys: back to 0
+        emu.key(SL, True); go(3 * M); emu.key(SR, True); go(12 * M)
+        emu.key(SL, False); emu.key(SR, False); go(14 * M); emu.key(FUNC, False); go(TOAST)
+        emu.key(FUNC, True); go(5 * M)
+        for _ in range(3):
+            emu.turn(4, 4); go(20 * M)
+        emu.key(FUNC, False); shot("varispeed", wait=60 * M)
+        go(TOAST)
+        emu.key(FUNC, True); go(5 * M); tap(PUSH_VALUE); emu.key(FUNC, False); go(TOAST)
+        chord(FUNC, MIXER); go(TOAST)
+        emu.key(FUNC, True); go(5 * M)
+        emu.turn(2, 6); go(30 * M)                           # FUNC + turn C: ENERGY +12
+        emu.turn(3, 2); go(30 * M)                           # FUNC + turn D: LIVE RND
+        shot("perform_func", wait=20 * M, burst=3)
+        emu.key(FUNC, False); go(TOAST)
+        shot("perform_live", wait=10 * M)
+        tap(HOME); go(30 * M)
+        tap(PROJ, hold=6 * M); tap(PROJ, hold=6 * M)          # PROJECT twice quickly: LAUNCH
+        shot("launch_open", wait=TOAST)
+        tap(DN); tap(DN); tap(STEP1 + 1)                     # track 3 plays slot A02's part
+        shot("launch", wait=TOAST)
+        tap(CLR); tap(HOME)
 
     print("done", round(time.time() - t0, 1))
     emu.close()
