@@ -303,16 +303,18 @@ quotes, and a script file in the scratchpad for anything longer than one command
 container none of that applies.
 
 **Threads work in worktrees** (`D:\DEV\STRATA-wt\<name>`, each with its own `ENAGA_BUILD`), made
-by Windows git, because several threads share `D:\DEV\STRATA` and none may switch its branch. A
-new worktree needs `git submodule update --init`. WSL's git cannot read such a worktree, so
-`tools/env.sh` sets `STRATA_GIT` / `STRATA_GH` to Windows' `git.exe` / `gh.exe` there (WSL runs
+by Windows git, because several threads share `D:\DEV\STRATA` and none may switch its branch.
+`tools/wt.sh new <name> [<branch>]` (from WSL) makes one with Enaga checked out, and inside it
+`tools/env.sh` defaults `ENAGA_BUILD` to `$HOME/strata-build-<name>`. WSL's git cannot read such
+a worktree, so `tools/env.sh` sets `STRATA_GIT` / `STRATA_GH` to Windows' `git.exe` / `gh.exe` there (WSL runs
 them), and `tools/enaga_check.sh` and `tools/publish_release.sh` use those; gh and the GitHub
 credentials exist only on Windows anyway. The emulator clone is untracked and lives in the main
 checkout only: `tools/env.sh` finds it from a worktree, and `tools/scenarios.sh` refuses to run
 without one rather than report every scenario's SKIP as a pass.
 
 **Worktrees and build folders pile up.** Each thread leaves a worktree, a branch, an
-`$HOME/strata-build-<name>` in WSL and often a `build\card-*` folder; nothing removes them. When a
-thread's PR has merged, its worktree can go (`git.exe worktree remove`, then `git.exe worktree
-prune`) together with its build folder. Clean up only from a script with absolute paths, and only
-with Roland's yes.
+`$HOME/strata-build-<name>` in WSL and often a `build\card-*` folder. When a thread's PR has
+merged, `tools/wt.sh rm <name>` removes its worktree, local branch and build folder, and refuses
+(changing nothing) while anything there is uncommitted, unpushed, or ignored but not build output;
+`tools/wt.sh list` shows which are which. Anything wider (`build\card-*`, other threads'
+worktrees) only from a script with absolute paths, and only with Roland's yes.
