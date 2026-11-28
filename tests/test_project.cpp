@@ -43,9 +43,10 @@ using namespace strata;
 // 393 since MIDI OUT: a sixth entry (12) and one channel per track (8). 402 since the sends'
 // ambient modes: nine bytes on the end of the mixer section. 425 since EVOLVE: a seventh entry
 // (12) and its 11 bytes, optional like the others. 429 since the chorus: its four send bytes on the
-// end of the mixer section. 450 since Track Launch: an eighth entry (12) and its 9 bytes. 975
-// since the song sections: a ninth entry (12), a layout byte and 8 bytes per chain entry (513).
-constexpr uint32_t kProjectFileBytes = 975;
+// end of the mixer section. 450 since Track Launch: an eighth entry (12) and its 9 bytes. 472 since
+// the line input: a ninth entry (12) and its 10 bytes. 997 since the song sections: a tenth entry
+// (12), a layout byte and 8 bytes per chain entry (513).
+constexpr uint32_t kProjectFileBytes = 997;
 constexpr uint32_t kKitFileBytes = 1506;   // 1486 before the widths (12 + 8), 1466 before the chorus sends (12 + 8), 1453 before the LFO layout (12 + 1), 1409 before the arp settings (12 + 32), 1389 before the choke groups (12 + 8), 1329 before the mod slots (12 + 48), 1309 before LFO TRIG (12 + 8), 1296 before the filter layout (12 + 1), 1076 before the LFO and arp (12 + 8 x 4 each), 1164 before SLC AUTO (12 + 8), 1184 before ASR (12 + 32), 1228 before the duck (12 + 12), 1252 before OSC (12 + 32)
 
 // Room past the end of every file, filled with a sentinel, so that a writer going one byte long
@@ -809,6 +810,100 @@ TEST(project_a_file_from_before_launch_opens_with_every_lane_on_its_own_part) {
     CHECK_EQ(int(g_loaded.settings.evolve_amount), int(g_source.settings.evolve_amount));
 }
 
+TEST(project_the_line_input_strip_round_trips) {
+    fill_project(g_source, 0);
+    const uint8_t strip[kInputFields] = {1, 90, 30, 40, 50, 60, 70, 20, 4, 2};
+    for (int i = 0; i < kInputFields; i++) g_source.settings.input[i] = strip[i];
+    uint32_t written = 0;
+    CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
+             int(SerializeResult::ok));
+    project_init(g_loaded);
+    CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::ok));
+    for (int i = 0; i < kInputFields; i++) CHECK_EQ(int(g_loaded.settings.input[i]), int(strip[i]));
+}
+
+TEST(project_a_new_project_has_the_line_input_off_and_flat) {
+    project_init(g_loaded);
+    const ProjectSettings &s = g_loaded.settings;
+    CHECK_EQ(int(s.input[int(InputField::on)]), 0);
+    CHECK_EQ(int(s.input[int(InputField::level)]), int(kInputLevelUnity));
+    CHECK_EQ(int(s.input[int(InputField::pan)]), 64);
+    CHECK_EQ(int(s.input[int(InputField::delay)]), 0);
+    CHECK_EQ(int(s.input[int(InputField::reverb)]), 0);
+    CHECK_EQ(int(s.input[int(InputField::chorus)]), 0);
+    CHECK_EQ(int(s.input[int(InputField::duck)]), 0);
+    CHECK_EQ(int(s.input[int(InputField::tone)]), 64);
+    CHECK_EQ(int(s.input[int(InputField::source)]), 0);
+    CHECK_EQ(int(s.input[int(InputField::gain)]), int(kInputGainNormal));
+}
+
+TEST(project_a_file_from_before_the_line_input_opens_with_it_off) {
+    fill_project(g_source, 0);
+    g_source.settings.input[int(InputField::on)] = 1;
+    g_source.settings.lane_pinned = 0x81;
+    uint32_t written = 0;
+    CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
+             int(SerializeResult::ok));
+    for (uint32_t e = 0; e < 10; e++) {
+        const uint32_t at = kHeaderBytes + e * kSectionEntryBytes;
+        if (peek_u16(g_project, at) == kSectionProjectInput) poke_u16(g_project, at, 99);
+    }
+    refresh_crc(g_project);
+    project_init(g_loaded);
+    g_loaded.settings.input[int(InputField::on)] = 1;      // a previous project's
+    g_loaded.settings.input[int(InputField::level)] = 3;
+    CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::ok));
+    const ProjectSettings defaults;
+    for (int i = 0; i < kInputFields; i++) {
+        CHECK_EQ(int(g_loaded.settings.input[i]), int(defaults.input[i]));
+    }
+    CHECK_EQ(int(g_loaded.settings.lane_pinned), 0x81);
+}
+
+TEST(project_a_short_line_input_section_reads_what_it_has_and_defaults_the_rest) {
+    fill_project(g_source, 0);
+    for (int i = 0; i < kInputFields; i++) g_source.settings.input[i] = 5;
+    uint32_t written = 0;
+    CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
+             int(SerializeResult::ok));
+    // The section's length in the table, cut to four bytes: a file from a build with four fields.
+    for (uint32_t e = 0; e < 10; e++) {
+        const uint32_t at = kHeaderBytes + e * kSectionEntryBytes;
+        if (peek_u16(g_project, at) == kSectionProjectInput) poke_u32(g_project, at + 8, 4);
+    }
+    refresh_crc(g_project);
+    project_init(g_loaded);
+    CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::ok));
+    const ProjectSettings defaults;
+    CHECK_EQ(int(g_loaded.settings.input[0]), 1);           // 5, read as on
+    for (int i = 1; i < 4; i++) CHECK_EQ(int(g_loaded.settings.input[i]), 5);
+    for (int i = 4; i < kInputFields; i++) {
+        CHECK_EQ(int(g_loaded.settings.input[i]), int(defaults.input[i]));
+    }
+}
+
+TEST(project_a_damaged_line_input_byte_lands_on_a_legal_value) {
+    fill_project(g_source, 0);
+    uint32_t written = 0;
+    CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
+             int(SerializeResult::ok));
+    const uint32_t input = section_at(g_project, kSectionProjectInput);
+    g_project[input + int(InputField::on)] = 7;
+    g_project[input + int(InputField::level)] = 200;
+    g_project[input + int(InputField::duck)] = 101;
+    g_project[input + int(InputField::source)] = kInputSources;
+    g_project[input + int(InputField::gain)] = 9;
+    refresh_crc(g_project);
+    project_init(g_loaded);
+    CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::ok));
+    const ProjectSettings &s = g_loaded.settings;
+    CHECK_EQ(int(s.input[int(InputField::on)]), 1);
+    CHECK_EQ(int(s.input[int(InputField::level)]), 127);
+    CHECK_EQ(int(s.input[int(InputField::duck)]), int(kDuckDepthMax));
+    CHECK_EQ(int(s.input[int(InputField::source)]), 0);
+    CHECK_EQ(int(s.input[int(InputField::gain)]), int(kInputGainNormal));
+}
+
 TEST(project_a_damaged_lane_source_puts_that_lane_on_its_own_part) {
     fill_project(g_source, 0);            // live is A12, source 12
     for (int t = 0; t < kTracks; t++) g_source.settings.lane_source[t] = 5;
@@ -892,14 +987,15 @@ TEST(project_a_file_from_before_song_mode_loops_and_recalls_no_mutes) {
     uint32_t written = 0;
     CHECK_EQ(int(project_write(g_source, g_project, uint32_t(sizeof(g_project)), &written)),
              int(SerializeResult::ok));
-    // The MIDI, EVOLVE, launch and song-section sections came after song mode, so a file from
-    // before song mode had none of them.
+    // The MIDI, EVOLVE, launch, input and song-section sections came after song mode, so a file
+    // from before song mode had none of them.
     uint32_t old_size = drop_last_section(g_project, g_project_alt);
     old_size = drop_last_section(g_project_alt, g_project_alt);
     old_size = drop_last_section(g_project_alt, g_project_alt);
     old_size = drop_last_section(g_project_alt, g_project_alt);
     old_size = drop_last_section(g_project_alt, g_project_alt);
-    CHECK_EQ(old_size, kProjectFileBytes - 12 - 513 - 12 - 9 - 12 - 11 - 12 - 8 - 12 - 65);
+    old_size = drop_last_section(g_project_alt, g_project_alt);
+    CHECK_EQ(old_size, kProjectFileBytes - 12 - 513 - 12 - 10 - 12 - 9 - 12 - 11 - 12 - 8 - 12 - 65);
     // A previous project's song settings, which must not survive into this one.
     project_init(g_loaded);
     g_loaded.settings.chain_song = true;
@@ -917,7 +1013,7 @@ TEST(project_a_file_from_before_song_mode_loops_and_recalls_no_mutes) {
     CHECK_EQ(int(project_read(g_loaded, g_project, written)), int(SerializeResult::malformed));
 }
 
-// --- song sections (section 9) ----------------------------------------------
+// --- song sections (section 10) ---------------------------------------------
 
 namespace {
 
@@ -976,8 +1072,8 @@ TEST(project_song_sections_round_trip) {
     CHECK_EQ(int(g_project[r + 7]), 0);               // reserved
 }
 
-// The 1.0 rule both ways. An older file has no section 9 and opens with every field `--`; an
-// older build reading a newer file ignores section 9, and sees `--` in section 5 for a CAP entry
+// The 1.0 rule both ways. An older file has no section 10 and opens with every field `--`; an
+// older build reading a newer file ignores section 10, and sees `--` in section 5 for a CAP entry
 // rather than a recall it would apply.
 TEST(project_an_older_file_opens_with_every_section_field_left_alone) {
     fill_project(g_source, 0);
@@ -1260,7 +1356,7 @@ TEST(project_the_header_says_strata_and_the_version) {
     CHECK_EQ(int(g_project[2]), int(kMagic2));
     CHECK_EQ(int(g_project[3]), int(kMagic3));
     CHECK_EQ(int(peek_u16(g_project, kVersionOffset)), int(kProjectVersion));
-    CHECK_EQ(int(peek_u16(g_project, 6)), 9);   // settings, chain, mixer, live, song, MIDI, EVOLVE, launch, sections
+    CHECK_EQ(int(peek_u16(g_project, 6)), 10);   // settings, chain, mixer, live, song, MIDI, EVOLVE, launch, input, sections
     CHECK_EQ(peek_u32(g_project, 8), kProjectFileBytes - kHeaderBytes);
     CHECK_EQ(peek_u32(g_project, kCrcOffset),
              crc32(g_project + kHeaderBytes, kProjectFileBytes - kHeaderBytes));
@@ -1271,7 +1367,7 @@ TEST(project_the_header_says_strata_and_the_version) {
     const uint32_t mixer = section_at(g_project, kSectionProjectMixer);
     const uint32_t live = section_at(g_project, kSectionProjectLive);
     const uint32_t song = section_at(g_project, kSectionProjectSong);
-    CHECK_EQ(settings, kHeaderBytes + 9 * kSectionEntryBytes);
+    CHECK_EQ(settings, kHeaderBytes + 10 * kSectionEntryBytes);
     CHECK_EQ(chain, settings + 19);
     CHECK_EQ(mixer, chain + 64 * 3);
     CHECK_EQ(live, mixer + uint32_t(kSendFields + kMasterFields + 1));
@@ -1282,8 +1378,10 @@ TEST(project_the_header_says_strata_and_the_version) {
     CHECK_EQ(evolve, midi + 8);
     const uint32_t launch = section_at(g_project, kSectionProjectLaunch);
     CHECK_EQ(launch, evolve + 11);
+    const uint32_t input = section_at(g_project, kSectionProjectInput);
+    CHECK_EQ(input, launch + 9);
     const uint32_t sections = section_at(g_project, kSectionProjectSections);
-    CHECK_EQ(sections, launch + 9);
+    CHECK_EQ(sections, input + uint32_t(kInputFields));
     CHECK_EQ(sections + 1 + 64 * 8, kProjectFileBytes);
 }
 

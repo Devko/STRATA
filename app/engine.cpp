@@ -8,6 +8,7 @@
 #include "masterloops.h"   // strata_master_peak, for the input meter
 #include "pcm.hpp"         // a streamed file's bytes to int16, in top_up_streams
 #include "sounds.hpp"      // Cmd::sound_preset: the factory sounds
+#include "usersounds.hpp"  // Cmd::sound_bytes: saved and copied sounds
 #include "arppresets.hpp"  // Cmd::arp_preset: the factory arps
 #include "stepnotes.hpp"   // a step's played-in extra notes, as locks
 #include "tuning.hpp"      // a knob click in NOTE view: tune_step
@@ -313,6 +314,41 @@ void Engine::build_placeholder_sample() {
 
 // --- commands -------------------------------------------------------------
 
+// Cmd::set_machine's work, and AS WAS's when a paste had switched the machine (Cmd::sound_preset).
+void Engine::switch_machine(int track, uint8_t id) {
+    // The machine being LEFT is silenced first. It will not be rendered again, so it
+    // cannot release its own tail -- and a voice left sounding in an object nothing
+    // calls is a note that never ends and never ends up in the voice count either.
+    silence_track(track);
+
+    machine_id_[track] = id;
+    project_.kit.tracks[track].machine = id;
+    cc_known_[track] = false;     // a MID track's CCs start from what they are now
+    rewire_machines();
+
+    // The new machine reads this track's parameters, which mean different things to it:
+    // slot 10 is GLD on VA MONO and DET on VA POLY, and the FLTR page is the insert
+    // chain's on both. Until 2026-11-23 the knobs kept their positions across a switch.
+    //
+    // Since then (Roland) a switch loads the new machine's default sound
+    // (core/sounds.hpp, machine_defaults_apply) into its sound pages, so nothing the old
+    // machine left there leaks into the new one: a VA's knobs made a new SAMPLE start
+    // half way into the file, sliced, and fade early. The mix, LFO and ARP stay. A lock on
+    // the current step still wins until the next step, as for a knob or a preset.
+    if (machine_defaults_apply(id, params_[track].v)) {
+        const uint64_t locked = locked_[track];
+        for (int p = 0; p < kTrackParams; p++) {
+            if ((locked >> p & 1u) == 0) effective_[track].v[p] = params_[track].v[p];
+        }
+    }
+    if (machines_[track] != nullptr) machines_[track]->prepare(effective_[track]);
+
+    // And the sample, if the new machine plays one. The loader's path is in the kit; a
+    // track switched to SAMPLE or GRAIN before any card has been read falls back to the
+    // placeholder every machine in the pool was given at init.
+    perform_dirty_ = true;
+}
+
 void Engine::apply_commands() {
     Command command;
     // The spec's limit: a burst of edits must not be able to break the deadline.
@@ -437,6 +473,7 @@ void Engine::forget_prepared() {
         machine_prepared_for_[t] = nullptr;
         chain_prepared_valid_[t] = false;
     }
+    input_prepared_scale_ = -1.0f;
 }
 
 void Engine::prepare_machine(int track) {
@@ -482,6 +519,55 @@ void Engine::prepare_chain(int track) {
     chain_prepared_mix_[track] = mix;
     chain_prepared_valid_[track] = true;
     chain_prepared_tone_[track] = tone;
+}
+
+// The line input's strip as an insert chain: TON alone (D8, the chain's `tone` mode, so drive is
+// off and the filter is one knob, flat at 64), PAN, the delay and reverb sends from the same
+// slots a track's are read from, and the fader, the duck and the chorus in the ChainMix. Only
+// when a byte or the MUTE BUS moved: the tone's exp2 and the pan's sine are not per block work.
+void Engine::prepare_input(bool on) {
+    const uint8_t *bytes = project_.settings.input;
+    const float scale = on ? perf_plan_.tracks : 0.0f;
+    if (prepare_memo_ && input_prepared_on_ == on && input_prepared_scale_ == scale &&
+        __builtin_memcmp(input_prepared_, bytes, sizeof input_prepared_) == 0) {
+        return;
+    }
+    TrackParams params{};
+    const int fltr = page_first(Page::fltr);
+    const int fx = page_first(Page::fx);
+    params.v[fltr + 1] = bytes[int(InputField::tone)];
+    params.v[fx + 1] = bytes[int(InputField::pan)];
+    params.v[fx + 2] = bytes[int(InputField::delay)];
+    params.v[fx + 3] = bytes[int(InputField::reverb)];
+    // The fader: square law on the byte over kInputLevelUnity, so 100 is 0 dB, 127 about +4 dB
+    // and the bottom of the travel thins out as a fader's does.
+    const float u = float(bytes[int(InputField::level)]) * (1.0f / float(kInputLevelUnity));
+    ChainMix mix;
+    mix.level = u * u * scale;
+    const uint8_t depth = bytes[int(InputField::duck)];
+    mix.duck = float(depth > kDuckDepthMax ? kDuckDepthMax : depth) / 100.0f;
+    mix.chorus = float(bytes[int(InputField::chorus)] > 127 ? 127 : bytes[int(InputField::chorus)]) *
+                 (1.0f / 127.0f);
+    mixer_.input_chain().prepare(params, mix, true);
+    __builtin_memcpy(input_prepared_, bytes, sizeof input_prepared_);
+    input_prepared_scale_ = scale;
+    input_prepared_on_ = on;
+}
+
+void Engine::run_input(const float *in, uint32_t frames) {
+    const bool on = project_.settings.input[int(InputField::on)] != 0;
+    if (!on && !input_live_) return;
+    if (on && !input_live_) {
+        // From rest: no filter state from the last time, and the gain ramps from 0, so turning
+        // the input on fades it in over one block instead of clicking.
+        mixer_.input_chain().reset();
+        input_prepared_scale_ = -1.0f;
+        input_live_ = true;
+    }
+    // Off: one more block, prepared at level 0, so the ramp takes it down to silence.
+    prepare_input(on);
+    if (in != nullptr) mixer_.add_input(in, int(frames));
+    if (!on) input_live_ = false;
 }
 
 void Engine::apply(const Command &command) {
@@ -554,7 +640,19 @@ bool Engine::apply_sound(const Command &command, int track, int) {
             if (command.b == kSoundPresetKeep) {
                 sound_back_ = params_[track];
                 sound_back_track_ = track;
+                sound_back_machine_ = machine_id_[track];
                 break;
+            }
+            if (command.b == kSoundPresetBack && sound_back_track_ == track &&
+                machine_id_[track] != sound_back_machine_) {
+                // A paste switched the machine since the list opened: switch it back, then put
+                // back every sound page the switch wrote. The FX page, LFO and ARP were not
+                // touched by either, and stay as they are.
+                switch_machine(track, sound_back_machine_);
+                for (int p = 0; p < kTrackParams; p++) {
+                    const bool sound_page = p < kUserSoundFxFirst || (p >= kSoundAsrFirst && p < kKitParams);
+                    if (sound_page) params_[track].v[p] = sound_back_.v[p];
+                }
             }
             const uint8_t machine = machine_id_[track];
             uint8_t *bytes = params_[track].v;
@@ -563,9 +661,8 @@ bool Engine::apply_sound(const Command &command, int track, int) {
                     status_.bump_refused();
                     break;
                 }
-                const uint32_t mask = sound_preset_writes(machine);
                 for (int p = 0; p < kTrackParams; p++) {
-                    if ((mask >> p) & 1u) bytes[p] = sound_back_.v[p];
+                    if (user_sound_owns(machine, p)) bytes[p] = sound_back_.v[p];
                 }
             } else if (command.a != machine || !sound_preset_apply(machine, command.b, bytes)) {
                 // Picked for a machine the track no longer hosts, or no such preset.
@@ -576,6 +673,30 @@ bool Engine::apply_sound(const Command &command, int track, int) {
             for (int p = 0; p < kTrackParams; p++) {
                 // A lock on the current step still wins until the next step, as for a knob.
                 if ((locked >> p & 1u) == 0) effective_[track].v[p] = bytes[p];
+            }
+            perform_dirty_ = true;
+            break;
+        }
+
+        case Cmd::sound_bytes: {
+            // core/usersounds.hpp: a saved or copied sound, eight bytes at a time, written as
+            // sound_preset writes a factory one -- the bytes a sound owns, into the kit and,
+            // where no lock holds them, effective_.
+            const uint8_t machine = machine_id_[track];
+            if (command.a != machine || !user_sounds_supported(machine)) {
+                status_.bump_refused();
+                break;
+            }
+            const uint8_t bytes[8] = {command.b, command.c, command.d, command.e,
+                                      uint8_t(command.u), uint8_t(command.u >> 8),
+                                      uint8_t(command.u >> 16), uint8_t(command.u >> 24)};
+            const uint64_t locked = locked_[track];
+            for (int i = 0; i < 8; i++) {
+                const int p = int(command.step) + i;
+                if (p >= kTrackParams || !user_sound_owns(machine, p)) continue;
+                const uint8_t top = kit_param_max(p);
+                params_[track].v[p] = bytes[i] > top ? top : bytes[i];
+                if ((locked >> p & 1u) == 0) effective_[track].v[p] = params_[track].v[p];
             }
             perform_dirty_ = true;
             break;
@@ -684,38 +805,7 @@ bool Engine::apply_sound(const Command &command, int track, int) {
                 break;
             }
             if (machine_id_[track] == command.a) break;      // already hosting it
-
-            // The machine being LEFT is silenced first. It will not be rendered again, so it
-            // cannot release its own tail -- and a voice left sounding in an object nothing
-            // calls is a note that never ends and never ends up in the voice count either.
-            silence_track(track);
-
-            machine_id_[track] = command.a;
-            project_.kit.tracks[track].machine = command.a;
-            cc_known_[track] = false;     // a MID track's CCs start from what they are now
-            rewire_machines();
-
-            // The new machine reads this track's parameters, which mean different things to it:
-            // slot 10 is GLD on VA MONO and DET on VA POLY, and the FLTR page is the insert
-            // chain's on both. Until 2026-11-23 the knobs kept their positions across a switch.
-            //
-            // Since then (Roland) a switch loads the new machine's default sound
-            // (core/sounds.hpp, machine_defaults_apply) into its sound pages, so nothing the old
-            // machine left there leaks into the new one: a VA's knobs made a new SAMPLE start
-            // half way into the file, sliced, and fade early. The mix, LFO and ARP stay. A lock on
-            // the current step still wins until the next step, as for a knob or a preset.
-            if (machine_defaults_apply(command.a, params_[track].v)) {
-                const uint64_t locked = locked_[track];
-                for (int p = 0; p < kTrackParams; p++) {
-                    if ((locked >> p & 1u) == 0) effective_[track].v[p] = params_[track].v[p];
-                }
-            }
-            if (machines_[track] != nullptr) machines_[track]->prepare(effective_[track]);
-
-            // And the sample, if the new machine plays one. The loader's path is in the kit; a
-            // track switched to SAMPLE or GRAIN before any card has been read falls back to the
-            // placeholder every machine in the pool was given at init.
-            perform_dirty_ = true;
+            switch_machine(track, command.a);
             break;
         }
 
@@ -1456,6 +1546,38 @@ bool Engine::apply_mixer(const Command &command, int track, int) {
                                  int(int8_t(command.b)));
             apply_mixer_bytes();
             break;
+
+        case Cmd::set_input: {
+            if (command.a >= uint8_t(kInputFields)) {
+                status_.bump_refused();
+                break;
+            }
+            uint8_t &byte = project_.settings.input[command.a];
+            const InputField field = InputField(command.a);
+            if (command.c == 1) {
+                // A push: ON over, SRC and GAIN one round on; nothing else has a push.
+                if (field == InputField::on) {
+                    byte = byte != 0 ? 0 : 1;
+                } else if (field == InputField::source) {
+                    byte = uint8_t(byte + 1 < kInputSources ? byte + 1 : 0);
+                } else if (field == InputField::gain) {
+                    byte = uint8_t(byte + 1 < kInputGains ? byte + 1 : 0);
+                } else {
+                    status_.bump_refused();
+                }
+                break;
+            }
+            int next = int(byte) + int(int8_t(command.b));
+            // The two choices stop at their ends rather than wrap, as every encoder does here.
+            const int top = field == InputField::on       ? 1
+                            : field == InputField::duck   ? int(kDuckDepthMax)
+                            : field == InputField::source ? int(kInputSources) - 1
+                            : field == InputField::gain   ? int(kInputGains) - 1
+                                                          : 127;
+            next = next < 0 ? 0 : (next > top ? top : next);
+            byte = input_field_sanitized(command.a, uint8_t(next));
+            break;
+        }
 
         case Cmd::eq_kill: {
             if (command.a >= uint8_t(kKillBands) || command.b > 2) {
@@ -4421,6 +4543,9 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
         if (choked) mixer_.chain(t).clear_state();
         voices++;
     }
+
+    // The line input's strip, after the tracks: both scratch blocks are free again.
+    run_input(in, frames);
 
     mixer_.finish_block(out, int(frames));
 

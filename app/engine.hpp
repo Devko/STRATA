@@ -625,6 +625,8 @@ private:
     // switching makes that an assumption rather than a fact, so it is re-derived on every
     // change: a closed hat chokes an open one only while both tracks still host a Hat.
     void rewire_machines();
+    // Cmd::set_machine's work: silence, switch, load the machine's default sound.
+    void switch_machine(int track, uint8_t id);
 
     Machine *machines_[kTracks] = {};
 
@@ -687,6 +689,7 @@ private:
     // its AS WAS row can put it back. -1 when nothing is remembered.
     TrackParams sound_back_ = {};
     int sound_back_track_ = -1;
+    uint8_t sound_back_machine_ = 0;   // and its machine, which a paste may have switched
     // And `Cmd::arp_preset`'s: the ARP bytes and the arp's kit settings when ARPS opened.
     uint8_t arp_back_[kArpBytes] = {};
     KitArp arp_back_ext_ = {};
@@ -875,6 +878,15 @@ private:
 
     void prepare_machine(int track);
     void prepare_chain(int track);
+    // The line input's strip (ProjectSettings::input), between the tracks and the sends: fades in
+    // when turned on, plays one block down to silence when turned off, and costs nothing while
+    // off. `in` is audio()'s input buffer, nullptr where the host gives none.
+    void run_input(const float *in, uint32_t frames);
+    void prepare_input(bool on);
+    bool input_live_ = false;                    // the chain is running (on, or its last block)
+    uint8_t input_prepared_[kInputFields] = {};
+    float input_prepared_scale_ = -1.0f;         // the MUTE BUS's fader scale it was prepared at
+    bool input_prepared_on_ = false;
     void forget_prepared();
     TrackParams machine_prepared_[kTracks] = {};
     const Machine *machine_prepared_for_[kTracks] = {};

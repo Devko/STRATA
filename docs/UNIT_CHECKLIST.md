@@ -787,7 +787,7 @@ to reach `GUARD4` here at a 40-60% top line.
   bright, slightly barking strike that mellows as it rings; soft notes are rounder. `____`
 
 **W59. Chorus (3 min).** Beat playing, A01.
-- MIXER, SELECT_LEFT four times: `CHO 5-8`. Push C: `T7 CHORUS 64`, the chord track's bar stands
+- MIXER, SELECT_LEFT six times: `CHO 5-8`. Push C: `T7 CHORUS 64`, the chord track's bar stands
   half up and the chords sound wider and gently moving. Push C again: OFF, back to the dry
   chords. Turn C up to 127 and down: the chorus follows smoothly, no click. `____`
 - SELECT_RIGHT: `CHO`. Turn A (RAT) up: the sweeps on screen bunch up and the warble speeds up;
@@ -869,8 +869,8 @@ it switch, put a few trigs on track 3 that sound clearly different, then PROJECT
 
 **W65. Usability quick wins: MIXER groups, the KEYS track menu, JAM REC on FUNC+REC (5 min).**
 Beat playing, A01, a card with some space.
-- MIXER, then DOWN: `DCK 1-4`; DOWN again `WID 1-4`, then `DLY`, `REV`, `CHO 1-4`, `MST` and
-  round to `TRK 1-4`. UP from `TRK 1-4` is `MST`. LEFT/RIGHT still go one page. `____`
+- MIXER, then DOWN: `DCK 1-4`; DOWN again `WID 1-4`, then `DLY`, `REV`, `CHO 1-4`, `IN`, `MST`
+  and round to `TRK 1-4`. UP from `TRK 1-4` is `MST`. LEFT/RIGHT still go one page. `____`
 - HOME twice for KEYS, hold OK half a second: the track menu (`TRACK T1`, `>GENERATE`). The pads
   still play notes; UP/DOWN move the menu's row, not the track; OK on GENERATE writes a part.
   CLR: `KEYS`, the keyboard back. `____`
@@ -899,7 +899,43 @@ Beat playing, A01, a card with some space.
   at the end of the pattern. `____`
 - Tap PROJECT: PROJECT opens as the key comes up, no slower than before to the hand. FUNC +
   PROJECT: SAMPLES at once. `____`
-**W68. Song sections on the chain (6 min).** Beat playing, A01; scene 3 captured with the
+**W68. Your own sounds and copy / paste in SOUNDS (5 min).** Beat playing, A01, a card in.
+- Track 1 (KCK), EDIT, turn TUN and DEC somewhere new, OK: SOUNDS. FUNC + DOWN: `SAVE SOUND`
+  offering `KCK 1`. OK: `SAVED KCK 1`, and `+KCK 1     NOW` at the end of the list, under the
+  cursor. The beat never stops or stutters. `____`
+- Down to 909, OK: the factory kick. Back to `+KCK 1`, OK: your kick again, as you left it. `____`
+- Push B on `+KCK 1`, UP once, OK: `+LCK 1`. Push C, OK, OK: `DELETED`, the row is gone. Push B
+  on a factory sound: `YOUR OWN SOUNDS ONLY`. `____`
+- Save one again, then switch the unit off and on: it is still in the list, in this project and
+  after NEW. On the PC the card has `ENAGA/DATA/STRATA/SOUNDS/KCK.BIN`. `____`
+- Track 6 (MNO), SOUNDS, FUNC + UP: `COPIED T6 MNO`. Screen key right to track 7 (PLY):
+  `PASTE T6 MNO` under AS WAS, `SWITCHES MACHINE` under the bars. OK: track 7 plays track 6's
+  bass sound on its own notes, its pan and sends as they were. AS WAS: PLY and its stab are
+  back. `____`
+**W69. Line input as a mixer channel (6 min).** Beat playing, A01, a synth or phone on INPUT L
+and R (line level), headphones on.
+- MIXER, SELECT_LEFT four times: `IN`, the strip dim and `IN OFF`. The input is not heard. Push A:
+  `IN ON`, the synth fades in through the headphones, centred, at about the level it has
+  straight; the meter on the left moves with it. Push A again: `IN OFF`, it fades out, no click.
+  `____`
+- On: turn A (LVL) down and up, B (PAN) to the left, C (DLY) and D (REV) up: the synth goes into
+  the delay and the reverb. Delay to 0 while it rings: the echoes ring out. `____`
+- SELECT_RIGHT: `IN+`. B (DCK) to 100: the synth ducks under the kick. C (TON) down: darker; up
+  past the middle: thinner. D (SRC) one click: `IN LINE L`, the synth from the left jack in both
+  ears; back to `LINE`. Push D: `IN GAIN HIGH`, then `LOW` (the -20 dB pad: much quieter), then
+  `NORM`. `____`
+- How much later does the synth come out than it goes in? Play a short note on the synth with
+  the strip on and off (the synth's own out in one ear if you can): `____` (expect a few ms). Hiss
+  with the synth off, LVL 100, gain NORM: `____` (none / faint / audible). `____`
+- With the input on, the DJ filter (FUNC + VALUE), the kill EQ's LOW and REPEAT take the synth
+  too; JAM REC for a few bars: the file has the synth in it. `____`
+- RESAMPLE (FUNC+REC), B to `MIC`: the input switches to the mic; leave RESAMPLE: back to LINE
+  (the synth heard again). `____`
+- The top line with the input on reads `____ %`, off `____ %`. Save, power cycle, open: the strip
+  comes back on, as left. FUNC+HOME, NEW: the input is off. `____`
+
+
+**W70. Song sections on the chain (6 min).** Beat playing, A01; scene 3 captured with the
 filters closed, scene 4 open and wet; something different in A02.
 - PROJECT, the screen key to CHAIN, OK twice: two entries of A01. UP to entry 1, push A:
   `SECT 1/2`, the SECTION view with `PAT A01`, `REP X1`, `MUT --`, `SCN --`. Turn D to 3. The
@@ -947,6 +983,8 @@ From `D:\DEV\STRATA` through WSL, as in CLAUDE.md (`wsl.exe -d Ubuntu -- bash -c
       only; record both in docs/BUDGET.md, "A05 PAD". Peak `____ %` / `____ %`
 - [ ] `tests/scenario_sounds.sh` (new: SOUNDS on the kick track, loads 808 and PUNCH while
       playing, then AS WAS) passes with cl6x. Peak `____ %`
+- [ ] `tests/scenario_usersounds.sh` (new: saves the kick's sound as KCK 1, loads HARD and KCK 1,
+      copies, pastes onto track 2, AS WAS) passes with cl6x. Peak `____ %`
 - [ ] `tests/scenario_midi.sh` (new: track 1 to MID on the running beat, both STOPs) passes with
       cl6x and GCC only. It is part of E1's `tools/scenarios.sh` too. Peak `____ %` / `____ %`
 - [ ] **E1.** `tools/scenarios.sh` (every scenario) passes, with cl6x and with GCC only, on main

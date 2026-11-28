@@ -275,6 +275,7 @@
         service_track_menu();
         service_launch();
         service_section();
+        service_input_route();
 
         // A queued launch landed (Track Launch): the lane's source is saved in PROJECT.BIN.
         {

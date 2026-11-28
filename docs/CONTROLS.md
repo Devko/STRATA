@@ -46,7 +46,7 @@ HOME "system", PLAY "◀◀", STOP "▶▶", MIXER "fx", EDIT "rec src".
      second label.**
    - **Arrow pad:** the cursor on the screen. UP/DOWN rows, LEFT/RIGHT sideways. OK picks, CLR
      goes back (or clears, where there is something selected to clear).
-   - **Screen keys:** the screen's pages. EDIT SRC FLTR AMP FX LFO ARP ENV OSC; MIXER's seventeen; PROJECT,
+   - **Screen keys:** the screen's pages. EDIT SRC FLTR AMP FX LFO ARP ENV OSC; MIXER's nineteen; PROJECT,
      CHAIN, PATTERN, SETUP, PROJECTS; the step page's field pages; SAMPLES' and KIT's pages of
      eight. On GRID and KEYS, where A-D turn the current EDIT page, they turn that page. The
      one-page screens give them their one sideways setting: MACHINE and SOUNDS the track,
@@ -83,7 +83,8 @@ HOME "system", PLAY "◀◀", STOP "▶▶", MIXER "fx", EDIT "rec src".
      EDIT, GRID and KEYS. OK on the ARP page opens ARPS, the factory arps, as OK on the sound
      pages opens SOUNDS (same keys, AS WAS first).
      On PROJECTS, where only A turns, push B renames and push C deletes the project under the
-     cursor (delete then asks for OK twice).
+     cursor (delete then asks for OK twice). SOUNDS does the same for your own saved sounds
+     (core/usersounds.hpp); on a factory sound or in ARPS they say `YOUR OWN SOUNDS ONLY`.
    - **VALUE is the crossfader.** Push VALUE + STEP picks what it fades: an effect, the morph
      (13) or the looper (16), on every screen (the performance mixer, below). With nothing
      picked it is the tempo (PERFORM: the morph; CHAIN/PATTERN: the field under the cursor).
@@ -182,7 +183,7 @@ Printed labels (above), and the moves made while playing:
 | Chord | Does |
 | --- | --- |
 | FUNC + CLR / OK | undo / redo |
-| FUNC + UP / DOWN | copy / paste (editing screens; on PROJECT's slots a whole pattern, the paste twice). Card lists: read again / store here (KIT save, PROJECTS save as). FUNC + LEFT twice on PROJECT's slots clears the pattern under the cursor |
+| FUNC + UP / DOWN | copy / paste (editing screens; on PROJECT's slots a whole pattern, the paste twice). Card lists: read again / store here (KIT save, PROJECTS save as). SOUNDS: copy the track's sound (the PASTE row under AS WAS loads it, on any track) / store it as your own, named (on one of your own: replace it). ARPS: `ARPS: NOT SAVED`. FUNC + LEFT twice on PROJECT's slots clears the pattern under the cursor |
 | FUNC + lower pad | mute that track on the next bar (at once while stopped). Several pads before the bar all land; the same pad twice takes it back |
 | FUNC + FILL / REPEAT / THROW | note repeat on/off / pitched-down repeat / reverb throw |
 | FUNC + push A / B / C | kill LOW / MID / HI |
@@ -443,7 +444,7 @@ a CHAIN entry opens its SECTION view; the list's own keys are unchanged.
   breakdown in by ear, then hold OK.
 - **The list** marks an entry with fields of its own: under its mute state on the lane, `S4`
   (its scene) or `+` for any other field; the cursor's entry lists them under MUTES.
-- **Saved** in PROJECT.BIN section 9. A project from before this opens with every field `--`; an
+- **Saved** in PROJECT.BIN section 10. A project from before this opens with every field `--`; an
   older build plays pattern, repeats and mute recall, and reads a CAP entry as `--`.
 
 ## The performance mixer (push VALUE + STEP)
@@ -759,7 +760,7 @@ The screens and their pages, from `core/help.cpp`:
 | EDIT in MACRO LEARN | what a push does now, then the page's knobs |
 | KEYS | the pads as a piano, the page's knobs, the pad lights |
 | Step page | the three field pages, what each field is |
-| MIXER | the page that is up (TRK, DCK, DUCK, WID, DLY, DLY+, REV, REV+, ROUTE, CHO, MST, EQ) |
+| MIXER | the page that is up (TRK, DCK, DUCK, WID, DLY, DLY+, REV, REV+, ROUTE, CHO, IN, IN+, MST, EQ) |
 | PERFORM | macros, LEARN, scenes, morph, mutate |
 | PROJECT, CHAIN, PATTERN, SETUP | one page each |
 | SECTION (push A on CHAIN) | one page |

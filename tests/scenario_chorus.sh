@@ -6,7 +6,7 @@
 # ENAGA_TI_CGT=none. Compare it with scenario_m7.sh, the same beat with no track sending to it.
 #
 #   PLAY                          -> the default beat
-#   MIXER, SELECT_LEFT x4         -> CHO 5-8 (going round: EQ, MST, CHO, CHO 5-8)
+#   MIXER, SELECT_LEFT x6         -> CHO 5-8 (going round: EQ, MST, IN+, IN, CHO, CHO 5-8)
 #   push A, push C, push D        -> T5, T7 and T8 CHORUS 64, logged
 #   SELECT_RIGHT                  -> CHO: the two sweeps
 #
@@ -45,8 +45,8 @@ mkdir -p "$ENAGA_BUILD"
 LOG="$ENAGA_BUILD/scenario_chorus.log"
 
 keys=(--key 22@300000000 --key 21@380000000)
-for i in 0 1 2 3; do keys+=(--key "8@$((440000000 + i * 60000000))"); done
-keys+=(--key 1@760000000 --key 2@820000000 --key 3@880000000 --key 9@960000000)
+for i in 0 1 2 3 4 5; do keys+=(--key "8@$((440000000 + i * 60000000))"); done
+keys+=(--key 1@880000000 --key 2@940000000 --key 3@1000000000 --key 9@1080000000)
 
 echo "running the emulator for $CYCLES cycles: play, MIXER CHO 5-8, three tracks into the chorus ..."
 python3 -B tools/enaga_cached.py emulate "$STAGE" --cycles "$CYCLES" "${keys[@]}" \

@@ -479,6 +479,7 @@ you, with starter projects, a sample pack and a quick start unless you untick th
                                   /BANK_A.BIN ... BANK_H.BIN   16 patterns each
 /ENAGA/DATA/STRATA/AUTOSAVE/                   the working copy, same files
 /ENAGA/DATA/STRATA/KITS/KIT_01.BIN ... KIT_16.BIN   the kit library
+/ENAGA/DATA/STRATA/SOUNDS/KCK.BIN ... FM4.BIN      your own sounds, one file per machine
 /RECORD/STRATA_<n>.WAV                         resampled takes
 /RECORD/JAM_<n>.WAV                            JAM REC recordings
 /SAMPLES/STRATA/                               the starter sample pack, if the card builder added it
@@ -987,6 +988,32 @@ Most lists are longer than the screen: they scroll as the cursor moves. PAD, STR
 FAT, REESE, ACID, SYNC, LEAD and DRONE sustain (the ENV page's SUS is up), so their notes last as long as
 each step's LEN: give the steps long LENs, or hear PAD on A05. A loaded sound is a change to the
 kit like turning knobs: it is saved with the project, and FUNC+CLR does not undo it (AS WAS does).
+
+### Your own sounds, and copying a sound to another track
+
+A sound you made on a track can join its machine's SOUNDS list, so every project can load it.
+In SOUNDS, **FUNC+DOWN saves** the track's sound: name it (eight characters; A or LEFT/RIGHT move,
+B, VALUE or UP/DOWN pick the character) and press OK. It is listed after the factory sounds with
+a `+` in front (`+KCK 1`), and loads with OK like any other, on any track with the same machine.
+FUNC+DOWN on one of your own sounds replaces it with what the track has now, under the same name
+or a new one. **Push B** renames the sound under the cursor and **push C** deletes it (OK twice).
+The factory sounds cannot be renamed or deleted. Each machine keeps up to 16 of your sounds.
+
+A saved sound holds the same pages a factory sound sets, and leaves the FX page, the LFO, the
+ARP, HAT's choke group and GRAIN's POS and PIT to the track it is loaded into. SMP and MID have no
+SOUNDS list and so no saved sounds.
+
+**FUNC+UP copies** the track's sound. A **PASTE** row then sits under AS WAS on every track
+(`PASTE T1 KCK`): OK on it gives the selected track the copied sound. On a track with another
+machine it switches the machine first (`SWITCHES MACHINE` under the bars), the way MACHINE does,
+and then sets the sound; the track keeps its mix, LFO and ARP. AS WAS takes a paste back, the
+machine included. The copy lasts until the next FUNC+UP or until STRATA is switched off.
+
+Saved sounds live on the card in `ENAGA/DATA/STRATA/SOUNDS/`, one file per machine (`KCK.BIN`,
+`MNO.BIN` and so on), beside the projects and the kit library. They are not part of a project:
+copying that folder to another card takes them along, and projects open exactly as they did. A
+file that cannot be read shows `SOUND FILE` and the reason on the list's top line, and is never
+written over, so nothing in it is lost.
 
 ---
 
@@ -1607,7 +1634,7 @@ tracks 3 and 4 is separate and still works without a group.
 
 <p><img src="screens/mixer.png" width="256" alt="MIXER: the faders of tracks 1-4"> <img src="screens/mixer_dly.png" width="256" alt="MIXER's DLY page"></p>
 
-<sub>MIXER's first page, all eight faders with A-D on tracks 1-4, and the DLY page. The screen keys walk all seventeen: TRK 1-4, TRK 5-8, DCK 1-4, DCK 5-8, DUCK, WID 1-4, WID 5-8, DLY, DLY+, REV, REV+, ROUTE, CHO 1-4, CHO 5-8, CHO, MST, EQ. UP/DOWN jump a group at a time, to its first page: the levels (TRK), the duck (DCK), the widths (WID), the delay (DLY), the reverb (REV), the chorus (CHO 1-4) and the master (MST).</sub>
+<sub>MIXER's first page, all eight faders with A-D on tracks 1-4, and the DLY page. The screen keys walk all nineteen: TRK 1-4, TRK 5-8, DCK 1-4, DCK 5-8, DUCK, WID 1-4, WID 5-8, DLY, DLY+, REV, REV+, ROUTE, CHO 1-4, CHO 5-8, CHO, IN, IN+, MST, EQ. UP/DOWN jump a group at a time, to its first page: the levels (TRK), the duck (DCK), the widths (WID), the delay (DLY), the reverb (REV), the chorus (CHO 1-4), the line input (IN) and the master (MST).</sub>
 
 Each send has a second mode for long, washy sounds. They sit on the MIXER pages beside their
 send, `DLY+` after `DLY` and `REV+` after `REV`. **Push A** on either page (or turn A) flips the
@@ -1678,6 +1705,36 @@ parameter, because every track's 32 parameter slots are taken: a lock, a scene o
 move it. The sends are saved with the kit (and in the kit library), the chorus's four knobs with
 the project. A project or kit from before the chorus opens with no track sending to it.
 
+### Line input: IN and IN+
+
+<p><img src="screens/mixer_in.png" width="256" alt="MIXER's IN page with the input on"></p>
+
+Whatever is plugged into the SmplTrek's **INPUT** jacks can play through STRATA's mix as a
+channel of its own: an outboard synth, a drum machine, a phone. It gets a fader, pan, the three
+sends and the duck, and it goes through the master like the tracks do, so the DJ filter, the kill
+EQ, the performance mixer, the looper, REPEAT, the tape stop and **JAM REC** all take it too.
+
+- **IN** (MIXER, after CHO): **LVL** (A) the fader, 0-127 with 100 at unity; **PAN** (B);
+  **DLY** (C) and **REV** (D), the delay and reverb sends. **Push A** turns the input on and off;
+  the strip says `IN ON` / `IN OFF` and fades rather than clicks.
+- **IN+**: **CHO** (A) the chorus send; **DCK** (B) how far the kit's duck takes the input down,
+  so a synth pad pumps under the kick; **TON** (C) the tone knob the synth tracks have, flat in
+  the middle, a low-pass below it and a high-pass above; **SRC** (D) the jack: `LINE` (stereo, L
+  and R), `LINE L` (mono, the left jack), `MIC` (the built-in microphone, heard only with
+  headphones in), `DYN MIC`, `HI-Z` (a guitar) or `USB` (the computer's audio). **Push D** steps
+  the gain: `LOW` (the line input's -20 dB pad), `NORM`, `HIGH`.
+
+The page shows the input's level before the fader, so it reads even with the fader down: set the
+gain until the loudest notes come near the top, then the fader for the mix. The sends are
+post-fader, as on the tracks.
+
+The input is **off** in a new project and in every project from before it, so nothing is heard
+from the jacks by surprise. Its settings are saved with the project, not the kit: recalling a kit
+leaves the synth plugged in and playing. The input is routed while the strip is on; RESAMPLE's own
+input sources take over while that screen shows one, and the strip's jack comes back when you
+leave it. The input adds a few milliseconds of delay through the box, as any digital mixer does.
+The strip costs a little CPU while it is on and nothing while it is off.
+
 ### Freeze
 
 CPU is the SmplTrek's tight resource and memory is not, so a track can be **frozen**: it plays
@@ -1744,7 +1801,8 @@ guitar). C sets the input level, `LOW`, `NORM` or `HIGH` (on LINE, LOW is the -2
 input shows a meter under `FROM ...`; set the level so it does not reach `CLIP`. The take is the
 input alone, before anything STRATA plays, and otherwise works exactly like a master take: it
 starts on the next bar line with the transport running, lasts 1-8 bars, and lands in a file or
-a track. You do not hear the input through STRATA; listen to the source directly. Turning B or C
+a track. The input is heard through STRATA only while MIXER's IN strip is on ("Line input: IN
+and IN+"); otherwise listen to the source directly. Turning B or C
 makes the input quiet for about 10 ms, and Enaga puts the input back to LINE, NORM when STRATA
 stops.
 

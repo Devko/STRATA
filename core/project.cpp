@@ -310,7 +310,7 @@ SerializeResult find_sections(const uint8_t *buffer, uint32_t size, uint16_t ver
 
 // --- PROJECT.BIN sizes ----------------------------------------------------
 
-constexpr uint32_t kProjectSections = 9;
+constexpr uint32_t kProjectSections = 10;
 constexpr uint32_t kProjectSettingsBytes = 19;
 constexpr uint32_t kProjectChainBytes = uint32_t(kChainEntries) * 3;
 // The sends, the master bytes and the kill switches. The section GREW when the kill EQ came
@@ -345,18 +345,21 @@ constexpr uint32_t kProjectEvolveOffset = kProjectMidiOffset + kProjectMidiBytes
 // Track Launch: each lane's source, then the pin mask.
 constexpr uint32_t kProjectLaunchBytes = uint32_t(kTracks) + 1;
 constexpr uint32_t kProjectLaunchOffset = kProjectEvolveOffset + kProjectEvolveBytes;
+// The line input's strip, one byte a field.
+constexpr uint32_t kProjectInputBytes = uint32_t(kInputFields);
+constexpr uint32_t kProjectInputOffset = kProjectLaunchOffset + kProjectLaunchBytes;
 // The song sections: a layout byte, then a record per chain entry.
 constexpr uint32_t kSectionRecordBytes = 8;
 constexpr uint8_t kSectionLayout = 0;
 constexpr uint32_t kProjectSectionsBytes = 1 + uint32_t(kChainEntries) * kSectionRecordBytes;
-constexpr uint32_t kProjectSectionsOffset = kProjectLaunchOffset + kProjectLaunchBytes;
+constexpr uint32_t kProjectSectionsOffset = kProjectInputOffset + kProjectInputBytes;
 constexpr uint32_t kProjectTotalBytes = kHeaderBytes + kProjectSectionsOffset + kProjectSectionsBytes;
 
-// How many of `wanted` at the END of the list a reader may do without. Seven: the mixer, the
-// live, the song, the MIDI, the EVOLVE, the launch and the song-section sections, none of which
-// existed when the format was first written, so a PROJECT.BIN from before them has two to eight
-// sections and must still load (core/project.hpp).
-constexpr uint32_t kProjectOptionalSections = 7;
+// How many of `wanted` at the END of the list a reader may do without. Eight: the mixer, the
+// live, the song, the MIDI, the EVOLVE, the launch, the input and the song-section sections, none
+// of which existed when the format was first written, so a PROJECT.BIN from before them has two
+// to nine sections and must still load (core/project.hpp).
+constexpr uint32_t kProjectOptionalSections = 8;
 
 static_assert(sizeof(ProjectSettings::mute_states) == 8,
               "the settings section is 19 bytes on the strength of 8 mute states");
@@ -507,6 +510,7 @@ SerializeResult project_write(const Project &project, uint8_t *buffer, uint32_t 
         {kSectionProjectMidi, kProjectMidiOffset, kProjectMidiBytes},
         {kSectionProjectEvolve, kProjectEvolveOffset, kProjectEvolveBytes},
         {kSectionProjectLaunch, kProjectLaunchOffset, kProjectLaunchBytes},
+        {kSectionProjectInput, kProjectInputOffset, kProjectInputBytes},
         {kSectionProjectSections, kProjectSectionsOffset, kProjectSectionsBytes},
     };
 
@@ -564,6 +568,7 @@ SerializeResult project_write(const Project &project, uint8_t *buffer, uint32_t 
     w.u8(s.evolve_amount);
     for (int t = 0; t < kTracks; t++) w.u8(s.lane_source[t]);
     w.u8(s.lane_pinned);
+    for (int i = 0; i < kInputFields; i++) w.u8(s.input[i]);
 
     w.u8(kSectionLayout);
     for (int i = 0; i < kChainEntries; i++) {
@@ -615,12 +620,13 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
         return why;
     };
 
-    // The seven optional sections (mixer, live, song, MIDI, EVOLVE, launch, song sections) come
-    // LAST: kProjectOptionalSections.
+    // The eight optional sections (mixer, live, song, MIDI, EVOLVE, launch, input, song
+    // sections) come LAST: kProjectOptionalSections.
     const uint16_t wanted[kProjectSections] = {kSectionProjectSettings, kSectionProjectChain,
                                                kSectionProjectMixer, kSectionProjectLive,
                                                kSectionProjectSong, kSectionProjectMidi,
                                                kSectionProjectEvolve, kSectionProjectLaunch,
+                                               kSectionProjectInput,
                                                kSectionProjectSections};
     uint32_t offset[kProjectSections] = {};
     uint32_t length[kProjectSections] = {};
@@ -650,7 +656,7 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
     if (offset[7] != 0 && length[7] < kProjectLaunchBytes) {
         return refuse(SerializeResult::malformed);
     }
-    if (offset[8] != 0 && length[8] < 1) return refuse(SerializeResult::malformed);
+    if (offset[9] != 0 && length[9] < 1) return refuse(SerializeResult::malformed);
 
     Reader r(buffer, size);
     if (!r.seek(kHeaderBytes + offset[0])) return refuse(SerializeResult::malformed);
@@ -830,17 +836,33 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
         s.lane_pinned = pinned;
     }
 
+    // The line input: absent is an older file, where the input was never heard, so the strip
+    // takes the defaults (off) rather than whatever the reused buffer held. A section shorter
+    // than this build's is a file from before a field was appended: what it has is read, the rest
+    // defaults. Unlike the sections above, short is NOT damage here, because this section is
+    // meant to grow on the end.
+    {
+        const ProjectSettings defaults;
+        for (int i = 0; i < kInputFields; i++) s.input[i] = defaults.input[i];
+        if (offset[8] != 0) {
+            if (!r.seek(kHeaderBytes + offset[8])) return refuse(SerializeResult::malformed);
+            const int present = length[8] < kProjectInputBytes ? int(length[8]) : kInputFields;
+            for (int i = 0; i < present; i++) s.input[i] = input_field_sanitized(i, r.u8());
+            if (!r.ok()) return refuse(SerializeResult::truncated);
+        }
+    }
+
     // The song sections: absent is an older file, where every field is `--`. A layout this build
     // does not know is a newer writer's, read as absent rather than guessed at; so is a section
     // too short for the layout it names. Each field out of its range is damage and reads `--`,
     // and an entry the chain section left unused keeps the zeroed record, as its mute recall
     // does. CAP wins over a mute recall on the same entry (only damage puts both there).
     for (int i = 0; i < kChainEntries; i++) project.chain_extra[i] = SectionExtra{};
-    if (offset[8] != 0) {
-        if (!r.seek(kHeaderBytes + offset[8])) return refuse(SerializeResult::malformed);
+    if (offset[9] != 0) {
+        if (!r.seek(kHeaderBytes + offset[9])) return refuse(SerializeResult::malformed);
         const uint8_t layout = r.u8();
         if (!r.ok()) return refuse(SerializeResult::truncated);
-        if (layout == kSectionLayout && length[8] >= kProjectSectionsBytes) {
+        if (layout == kSectionLayout && length[9] >= kProjectSectionsBytes) {
             for (int i = 0; i < kChainEntries; i++) {
                 const uint8_t cap = r.u8();
                 const uint8_t mask = r.u8();

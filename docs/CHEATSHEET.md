@@ -43,7 +43,7 @@ pads and the performance mixer.
 | MACHINE | FUNC+EDIT | Pick the machine on each track, and its MIDI OUT channel |
 | KIT | FUNC+EDIT twice, or the menu's KITS | Save and recall whole kits: 16 slots on the card, shared by all projects |
 | SAMPLES | FUNC+PROJECT ("pool"), or OK in EDIT or MACHINE on a SMP track, OK in MACHINE on a GRN track | Pick the track's WAV from `/SAMPLES` or `/RECORD` |
-| SOUNDS | OK in EDIT or MACHINE on a drum, VA, WAVE or FM4 track; OK in EDIT on a GRN track | Load a factory sound into that track only; AS WAS puts yours back |
+| SOUNDS | OK in EDIT or MACHINE on a drum, VA, WAVE or FM4 track; OK in EDIT on a GRN track | Load a factory sound or one of your own into that track only; AS WAS puts yours back. FUNC+DOWN saves the track's sound as your own, FUNC+UP copies it for the PASTE row |
 | MIXER | MIXER | Levels, the sidechain duck, stereo width, delay, reverb, routing, chorus, master, kill EQ |
 | PERFORM | FUNC+MIXER | Scenes, morph, macros, mutation |
 | Track menu | **Hold OK** in GRID or KEYS (a tap says `HOLD OK: TRACK MENU`) | The selected track's rows: GENERATE a drum or melodic part (DENSITY, RANGE, LEAP, WHAT); EVOLVE every 1-8 loops (mutation MIX: a different one each turn), ORBIT or DRIFT, KEEP or HOME, saved with the project; SPEED, PLAY, FREEZE, RELOAD SAMPLE |
@@ -183,7 +183,7 @@ Page 1 NOTE VEL LEN MICR, page 2 PROB COND RTCH RAMP, page 3 ACNT SLID CHRD.
 | KIT | Slot | Page of 8 slots | Page of 8 slots | — | A: slot | Recall (twice) / back to MACHINE | DOWN: save here, UP: read the card again |
 | MIXER | Group of pages: TRK DCK WID DLY REV CHO MST | Page (17) | Page | Step page | Levels or page fields; on EQ, push A-C kills a band; on DLY+ and REV+, push A flips the mode; on WID and CHO 1-4 / 5-8, push A-D steps that track's width or send (OFF, 48, 96 / OFF, 64) | — / clear | Copy / paste |
 | SAMPLES | Entry | Page of 8 | Page of 8 | — | A: entry; push A: hear the file (twice while playing) / stop | Load file or open folder / up a folder (at the top: back) | UP: read the folder again |
-| SOUNDS | Entry | First / last entry | Track | — | A: entry | Load into the track (AS WAS: put yours back) / back | — |
+| SOUNDS | Entry | First / last entry | Track | — | A: entry; push B / C: rename / delete your own | Load into the track (AS WAS: put yours back; PASTE: the copied sound) / back | Copy the sound / save it as your own |
 | RESAMPLE | Bars 1/2/4/8 | Destination FILE, TRK 1-8 | Destination | Step page | A: bars, B: source, C: input level | Arm / cancel | Copy / paste |
 | PROJECT | Slot cursor by row | Slot cursor | Page: PROJECT CHAIN PATTERN SETUP PROJECTS | Bank A-H | A: queue mode, B: key, C: scale | Queue slot / cancel queue | — (FUNC menu) |
 | CHAIN | Entry | Entry's pattern -/+ | Page | Bank A-H | A: repeats X1-X16, B: mute recall --/M1-M8; push A: SECTION view | Add entry / remove entry (twice; empty: back) | — (FUNC menu) |
@@ -374,7 +374,7 @@ OFF-100% (SRC: the source, never ducked) · DUCK: SRC source track, ATK attack 1
 FBK feedback, TON tone, LVL · DLY+: TYP CLAS/LONG (push A flips it), MUL X1-X8 (LONG: time x MUL,
 up to 12 s), WOW tape wobble, DIF diffusion · REV: DEC decay, DMP damping, HPF high-pass, LVL ·
 REV+: TYP ROOM/HALL (push A), SIZ size, MOD sweep, SHM octave-up shimmer · ROUTE: PNG ping-pong,
-D>R delay into reverb, LCT the LONG delay's low cut · CHO 1-4, CHO 5-8: each track's chorus send, OFF-127 (push A-D: OFF or 64; saved in the kit) · CHO: RAT sweep 0.05-5 Hz, DEP depth, LVL return, C>R chorus into the reverb · MST master: DJ filter, CMP compressor, LIM limiter, LVL · EQ master kill EQ:
+D>R delay into reverb, LCT the LONG delay's low cut · CHO 1-4, CHO 5-8: each track's chorus send, OFF-127 (push A-D: OFF or 64; saved in the kit) · CHO: RAT sweep 0.05-5 Hz, DEP depth, LVL return, C>R chorus into the reverb · IN: the line input, LVL (100 = 0 dB), PAN, DLY, REV sends (push A: on/off) · IN+: CHO send, DCK duck depth, TON tone, SRC jack LINE/LINE L/MIC/DYN MIC/HI-Z/USB (push D: gain LOW/NORM/HIGH; saved in the project) · MST master: DJ filter, CMP compressor, LIM limiter, LVL · EQ master kill EQ:
 LOW (below 250 Hz), MID, HI (above 2.5 kHz), each flat at centre, KILL at the bottom, +6 dB at the top.
 
 **Lists:** queue modes END (end of pattern), 16, 32 (steps), NOW · repeat 1/4 1/8 1/16 1/32 1/4T

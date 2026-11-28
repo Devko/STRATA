@@ -45,6 +45,7 @@ UNIT_CHECKLIST.md's ~550 boxes, 4 are ticked.
 | **PROJECT's slots and MACHINE redrawn to the drafts** (docs/SCREENS.md): a map of all 128 patterns (empty, used, playing, queued) and each of the shown bank's sixteen drawn as its steps; MACHINE's kit as pictures, every machine a picture of its sound, what it is for and what it costs | #175 | ○ (W44) | draw() 1.28 ms PROJECT, 2.50 ms MACHINE (emulator, cl6x) |
 | **Stereo width WID** on VA POLY, WAVE POLY and FM4: MIXER WID 1-4 / 5-8, 1-63 spread (chord notes across the field), 64-127 unison (two voices a note, hard L/R, 6-40 cents); push OFF / 48 / 96 | #216 | ○ (W60) | A kit setting, not lockable; unison halves a track's notes (3) and counts two voices a note against the 12; docs/BUDGET.md "Stereo width" |
 | **Chorus, send C**: a stereo chorus on MIXER; CHO 1-4 / 5-8 set each track's send (push: OFF or 64), CHO its RAT DEP LVL and C>R into the reverb | #214 | ○ (W59) | The send is a kit setting, not lockable; costs nothing while no track sends; docs/BUDGET.md "The chorus" |
+| **Line input as a mixer channel**: MIXER IN / IN+, the INPUT jacks through STRATA's mix with LVL, PAN, DLY, REV, CHO, DCK and TON; SRC picks the jack (LINE, LINE L, MIC, DYN MIC, HI-Z, USB), push D the gain | #242 | ○ (W69), E (scenario_linein.sh) | Off by default and in older projects; saved in the project, not the kit; through the master, the looper, REPEAT and JAM REC; latency and noise owed from the unit |
 | **EDIT and MIXER redrawn to the drafts** (docs/SCREENS.md): EDIT's knob line and a picture on every page of every machine; MIXER's eight-strip desk, duck, DLY, REV, ROUTE, MST with LUFS, EQ curve; lists with a lit cursor, the step page's lane, CHAIN's strip | #174 | ○ (W43) | draw() see docs/BUDGET.md "The screen"; GRID and PERFORM unchanged |
 | **Screens rebuilt to the mockups**: frame (badges, toasts, tabs), PERFORM, GRID, EDIT (graph rows 50-117, filter response, LFO trail, WAVE LIVE, GRAIN cloud), MIXER master (spectrum, vectorscope, CMP/LIM bars) | #171 | ○ (W42) | draw() 1.71 ms on PERFORM, 1.20 ms on MST (emulator, cl6x). Knob values in the small font and LUFS on MST came with #174 |
 | **Live screens 6**: MIXER MST/EQ spectrum (24 bands, peak dots) and vectorscope; live meters beside the faders | #170 | ○ (W41) | draw() 1.21 ms on MST (emulator, cl6x) |
@@ -142,7 +143,7 @@ FM4 and GRAIN machines.
 | **Queue from any screen**: hold PROJECT + STEP n queues slot n of the shown bank and the screen stays; PROJECT opens on its release | Unreleased | ○ (W67) | The bank is the one PROJECT last showed |
 | Chain of up to 64 entries, repeats X1-X16 | v0.1.0 | ○ (3b, 12) | |
 | **Song mode**: per-entry mute recall, SONG plays once and stops | v0.1.0 | ○ (13i) | |
-| **Song sections**: a chain entry's SCN, MRP (SNAP, RIDE, BACK), NRG, BPM and MUT CAP, applied as it starts; the SECTION view (push A on CHAIN) with quick fill (hold OK); saved in PROJECT.BIN section 9 | Unreleased | ○ (W68), E (scenario_sections.sh) | BPM is skipped under an outside clock. A section has no "morph to A at once": BACK rides there. Quick fill writes SNAP only when the morph is past half way. No kit per section (byte 7 reserved). ARR REC is the next step |
+| **Song sections**: a chain entry's SCN, MRP (SNAP, RIDE, BACK), NRG, BPM and MUT CAP, applied as it starts; the SECTION view (push A on CHAIN) with quick fill (hold OK); saved in PROJECT.BIN section 10 | Unreleased | ○ (W70), E (scenario_sections.sh) | BPM is skipped under an outside clock. A section has no "morph to A at once": BACK rides there. Quick fill writes SNAP only when the morph is past half way. No kit per section (byte 7 reserved). ARR REC is the next step |
 | Restart (FUNC+PLAY) and stop-and-reset (FUNC+STOP, also resets the chain) | v0.1.0 | ○ (11) | |
 
 ## Performance
@@ -209,7 +210,7 @@ FM4 and GRAIN machines.
 | Bounce: resample ONE track alone (B = `TRK 1`-`TRK 8`), mono, before its duck, fader, pan and sends | #109 | ○ (13m) | No emulator scenario: B is an encoder, the emulator presses keys only |
 | **Bounce to track**: a take to FILE is offered to a SAMPLE or GRAIN track (`PUT ON TRK 3 GRN`), one OK puts it there | #153 | ○ (13m) | `scenario_bounce` runs a take through Enaga's real file layer. Takes failed `DENIED` on the unit before #153 (Storage made `/RECORD`) |
 | **Freeze**: the track menu's FREEZE (hold OK in GRID), a track plays a 1-8 bar loop of its machine from RAM; chain, mix and sends stay live; instant unfreeze | #109 | ○ (13n), E (scenario_freeze.sh) | Not saved: a reload, NEW or kit recall unfreezes. Measured (cl6x): A05 held pad 20.3% to 10.1% average; A01 peaks 7 points lower |
-| Sample from the input: LINE, LINE L, MIC, DYN MIC, HI-Z, with level and meter | v0.1.0 | ○ (8c) | No monitoring through STRATA; MIC needs headphones in |
+| Sample from the input: LINE, LINE L, MIC, DYN MIC, HI-Z, with level and meter | v0.1.0 | ○ (8c) | Heard through STRATA only with the line input's strip on (MIXER IN); MIC needs headphones in |
 
 ## MIDI and sync
 
@@ -239,6 +240,7 @@ FM4 and GRAIN machines.
 | **Starter content in the card builder** (web/, `content/starter/`): ten starter projects (0.5.0 and newer), a 105-file sample pack rendered by STRATA (`host/starter.cpp`) in `/SAMPLES/STRATA`, and `STRATA-QUICKSTART.txt`, behind one tick box (#230) | #223 | ○ W61 | `tests/test_starter.cpp` opens every project through Storage; web tests check the pack and the manifest. No emulator scenario: nothing in the app changed |
 | Factory pattern A05 PAD: held VA POLY chords from the ENV page, in the pattern's locks | #100 | ○ (13k) | The kit's chord stays A01's SUS 0 stab |
 | Factory sounds: SOUNDS (OK in EDIT or MACHINE) loads one of 116 ready-made sounds (KCK 10, SNR 10, HAT 11, PRC 12, MNO 14, PLY 12, WMN 12, WPL 12, FM4 12, GRN 11) into one track, AS WAS puts it back | #102, #118, #122, #126, #134, #184 | ○ (15e) | Leaves FX, LFO, ARP, fader and HAT's choke group; not undoable except by AS WAS |
+| **Your own sounds**: in SOUNDS, FUNC+DOWN saves the track's sound by name (16 per machine, on the card in `SOUNDS/<MCH>.BIN`, shared by every project), OK loads it on any track with that machine, push B renames, push C deletes; FUNC+UP copies a track's sound and the PASTE row puts it on any track, switching the machine if needed, AS WAS takes it back | WIP | ○ (W68) | Same pages as a factory sound (not FX, LFO, ARP); SMP and MID have none; the copy is lost at power-off |
 
 ---
 

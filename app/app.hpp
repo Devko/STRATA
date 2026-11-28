@@ -41,6 +41,7 @@
 #include "spectrum.hpp"     // the output's spectrum for MIXER's master pages
 #include "record.hpp"       // live recording's stamping and quantizing, used from here only
 #include "sounds.hpp"       // SOUNDS: the factory sounds for one track
+#include "usersounds.hpp"   // and your own, saved on the card
 #include "arppresets.hpp"   // ARPS: the factory arps for one track
 #include "stepnotes.hpp"    // a chord step's extra notes: counted on the step page, not as locks
 #include "storage.hpp"      // projects, autosave and the sample loader: the card side
@@ -181,6 +182,11 @@ constexpr MixerPage kMixerPages[] = {
     {"CHO 5-8", false, {-1, -1, -1, -1}},
     {"CHO", false, {int8_t(SendField::chorus_rate), int8_t(SendField::chorus_depth),
                     int8_t(SendField::chorus_level), int8_t(SendField::chorus_to_reverb)}},
+    // The line input's strip (core/project.hpp, InputField): the fader, pan and the two sends,
+    // then the chorus send, the duck, the tone and the jack. Project bytes, handled on their own
+    // like the duck's: `field` is unused. Push A on either turns the input on and off.
+    {"IN", false, {-1, -1, -1, -1}},
+    {"IN+", false, {-1, -1, -1, -1}},
     {"MST", true, {int8_t(MasterField::dj), int8_t(MasterField::compressor),
                    int8_t(MasterField::limit), int8_t(MasterField::level)}},
     // The kill EQ, next to the master it sits in. Push A, B or C to throw that band's kill
@@ -233,16 +239,42 @@ constexpr bool mixer_chorus_send_page(int page) {
     return page == kMixerChorusSendPage || page == kMixerChorusSendPage + 1;
 }
 
+// The line input's two pages, after the chorus and before the master: the scenarios that go
+// round from TRK 1-4 to MST and EQ still find them one and two presses away.
+constexpr int kMixerInputPage = kMixerChorusPage + 1;
+static_assert(kMixerPages[kMixerInputPage].name[0] == 'I' && kMixerPages[kMixerInputPage].name[2] == 0 &&
+                  kMixerPages[kMixerInputPage + 1].name[2] == '+',
+              "the line input's pages moved");
+constexpr bool mixer_input_page(int page) {
+    return page == kMixerInputPage || page == kMixerInputPage + 1;
+}
+// Which field each of the IN pages' four encoders moves, in InputField numbers.
+constexpr InputField kInputPageFields[2][4] = {
+    {InputField::level, InputField::pan, InputField::delay, InputField::reverb},
+    {InputField::chorus, InputField::duck, InputField::tone, InputField::source},
+};
+// The sources as the IN+ page names them, in core/project.hpp's numbering, and the route Enaga
+// takes for each (enaga_input_source).
+struct InputRoute {
+    const char *name;
+    int route;
+};
+constexpr InputRoute kInputRoutes[kInputSources] = {
+    {"LINE", ENAGA_INPUT_LINE_STEREO}, {"LINE L", ENAGA_INPUT_LINE_MONO}, {"MIC", ENAGA_INPUT_MIC},
+    {"DYN MIC", ENAGA_INPUT_DYNAMIC_MIC}, {"HI-Z", ENAGA_INPUT_HIZ},     {"USB", ENAGA_INPUT_USB},
+};
+
 static_assert(kMixerPages[kMixerEqPage].master &&
                   kMixerPages[kMixerEqPage].field[0] == int8_t(MasterField::eq_low),
               "kMixerEqPage no longer names the kill EQ's page");
 
 // MIXER's groups, for UP/DOWN (usability review, 2026-11-28): each group's first page, in page
-// order. Levels, the duck, the widths, the delay, the reverb (with ROUTE), the chorus, the
-// master. LEFT/RIGHT still walk page by page; UP/DOWN jump to the first page of the group before
+// order. Levels, the duck, the widths, the delay, the reverb (with ROUTE), the chorus, the line
+// input, the master. LEFT/RIGHT still walk page by page; UP/DOWN jump to the first page of the group before
 // or after the one showing, round the ends as LEFT/RIGHT go round.
 constexpr int kMixerGroupStart[] = {0, kMixerDuckDepthPage, kMixerWidthPage, kMixerDelayPage,
-                                    kMixerHallPage - 1, kMixerChorusSendPage, kMixerEqPage - 1};
+                                    kMixerHallPage - 1, kMixerChorusSendPage, kMixerInputPage,
+                                    kMixerEqPage - 1};
 constexpr int kMixerGroups = int(sizeof(kMixerGroupStart) / sizeof(kMixerGroupStart[0]));
 static_assert(kMixerPages[kMixerHallPage - 1].field[0] == int8_t(SendField::reverb_decay_s) &&
                   kMixerPages[kMixerEqPage - 1].field[0] == int8_t(MasterField::dj),
@@ -845,6 +877,9 @@ private:
     int take_level_ = ENAGA_INPUT_NORMAL;
     bool input_applied_ = false;
     int input_result_ = 0;
+    // The line input strip's route as last applied to the codec, source * kInputGains + gain, or
+    // -1 for none yet or one RESAMPLE changed since (service_input_route).
+    int input_route_applied_ = -1;
 
     int pressure_pad_ = -1;
     uint8_t pressure_sent_ = 0;
@@ -932,7 +967,9 @@ private:
     enaga::ui::TextEntry name_entry_;
     // What the name entry is for: SAVE AS (FUNC+DOWN, the menu) or a rename (push B), and the
     // project the rename is of.
-    enum class EntryFor : uint8_t { save_as, rename };
+    // SOUNDS uses it too: saving the track's sound (FUNC+DOWN), replacing one of yours with it,
+    // or renaming one (push B).
+    enum class EntryFor : uint8_t { save_as, rename, sound_save, sound_replace, sound_rename };
     EntryFor entry_for_ = EntryFor::save_as;
     char rename_from_[Storage::kNameBytes] = {};
     bool projects_op_reread_ = false;  // list again once a rename or delete is done
@@ -988,6 +1025,22 @@ private:
     int sound_track_ = -1;                      // the track whose sound the engine remembers
     Mode sounds_return_ = Mode::edit;           // where CLR goes back to
     bool sounds_arps_ = false;                  // the list is ARPS (core/arppresets.hpp)
+    // SOUNDS' clipboard (FUNC+UP): a track's sound and the machine it is for.
+    struct SoundClip {
+        bool has = false;
+        uint8_t machine = 0;
+        uint8_t track = 0;
+        uint8_t params[kKitParams] = {};
+    };
+    SoundClip sound_clip_;
+    // The name entry SOUNDS opened: which bank slot, for which machine, and (a save) the bytes
+    // taken when FUNC+DOWN was pressed, so a knob turned while naming does not change what saves.
+    int sound_entry_slot_ = -1;
+    uint8_t sound_entry_machine_ = 0;
+    uint8_t sound_entry_params_[kKitParams] = {};
+    int sound_delete_armed_ = -1;               // push C on this slot; OK twice deletes it
+    int sound_delete_oks_ = 0;
+    uint32_t sound_delete_ok_at_ms_ = 0;
     KitAction kit_armed_ = KitAction::none;     // KIT: OK or F1 + DOWN pressed once
     uint32_t kit_armed_at_ms_ = 0;
     static constexpr uint32_t kSaveArmMs = 2000;
