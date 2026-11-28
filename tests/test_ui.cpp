@@ -7604,12 +7604,12 @@ bool same(const Look &a, const Look &b) { return a.screen == b.screen && a.leds 
 
 
 enum Screen { s_grid, s_keys, s_edit, s_machine, s_kit, s_mixer, s_perform, s_project, s_chain,
-              s_pattern, s_setup, s_projects, s_resample, s_menu, s_sounds, s_count };
+              s_pattern, s_setup, s_projects, s_resample, s_menu, s_sounds, s_launch, s_count };
 
 const char *screen_name(int s) {
     static const char *names[] = {"GRID", "KEYS", "EDIT", "MACHINE", "KIT", "MIXER", "PERFORM",
                                   "PROJECT", "CHAIN", "PATTERN", "SETUP", "PROJECTS",
-                                  "RESAMPLE", "MENU", "SOUNDS"};
+                                  "RESAMPLE", "MENU", "SOUNDS", "LAUNCH"};
     return names[s];
 }
 
@@ -7638,6 +7638,11 @@ void enter(Strata &app, int s) {
             app.on_encoder(1, +1);
             break;
         case s_sounds: key(ENAGA_KEY_F8); key(ENAGA_KEY_OK); break;   // track 1, the kick
+        case s_launch:                         // PROJECT twice, from GRID
+            key(ENAGA_KEY_F4);
+            key(ENAGA_KEY_F3);
+            key(ENAGA_KEY_F3);
+            break;
         default:
             key(ENAGA_KEY_F3);
             // docs/CONTROLS.md: the screen keys walk PROJECT's pages, the pad-row keys the bank.
@@ -7858,6 +7863,11 @@ const char *quiet_reason(int s, const Probe &p, bool func) {
         {s_sounds, false, "B+", "SOUNDS uses A"}, {s_sounds, false, "C+", "ditto"},
         {s_sounds, false, "D+", "ditto"}, {s_sounds, true, "B+", "ditto"},
         {s_sounds, true, "C+", "ditto"}, {s_sounds, true, "D+", "ditto"},
+        {s_launch, false, "LEFT", "the slot cursor starts on slot 1"},
+        {s_launch, false, "D+", "LAUNCH's knobs are A-C, as on the slots"},
+        {s_launch, true, "D+", "ditto"},
+        {s_launch, true, "UP", "no copy / paste of a lane: CAPTURE makes the pattern"},
+        {s_launch, true, "DOWN", "ditto"},
         // SETUP shows settings that live in the Enaga menu; only A (quantize) is STRATA's.
         {s_setup, false, "UP", "SETUP only shows"}, {s_setup, false, "DOWN", "ditto"},
         {s_setup, false, "LEFT", "ditto"}, {s_setup, false, "RIGHT", "ditto"},
@@ -12349,6 +12359,8 @@ TEST(ui_jam_rec_without_a_card_says_why) {
     key(ENAGA_KEY_CLR);
     host.set_card(true);
     app.on_card(true);
+}
+
 // --- Track Launch: the LAUNCH page (app/ui_launch.hpp) ---------------------------------------
 
 namespace {
