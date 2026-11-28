@@ -9,7 +9,7 @@
 #   push VALUE + STEP 7      -> "7 MUTE BUS"
 #   push VALUE + STEP 13     -> "MORPH 0" (a control: picked at where the morph is)
 #   push VALUE + STEP 13     -> "MORPH KEPT: VALUE TEMPO"
-#   FUNC + push D            -> "TAPE STOP: SLOT 8", and no tape stop
+#   FUNC + push D            -> "KILL ALL" (D2, 2026-11-28), and no tape stop
 #
 # Keys (third_party/enaga/include/enaga/abi.h): F5 = 22, PUSH VALUE = 4, STEP n = 31 + n,
 # F1 = 19, PUSH D = 3. A chord is the first key pressed and the second 5 M cycles later
@@ -87,12 +87,12 @@ def index(line):
 bus = index("7 MUTE BUS")
 morph = index("MORPH 0")
 kept = index("MORPH KEPT: VALUE TEMPO")
-tape = index("TAPE STOP: SLOT 8")
+tape = index("KILL ALL")
 check(bus >= 0, "push VALUE + STEP 7 picked MUTE BUS", f"log={log}")
 check(morph > bus, "push VALUE + STEP 13 picked MORPH after it", f"log={log}")
 check(kept > morph, "STEP 13 again let the morph go and kept it", f"log={log}")
-check(tape > kept, "FUNC + push D named the tape stop's slot", f"log={log}")
-check("TAPE STOP" not in log, "and held no tape stop", f"log={log}")
+check(tape > kept, "FUNC + push D killed every band", f"log={log}")
+check(not any(l.startswith("TAPE STOP") for l in log), "and held no tape stop", f"log={log}")
 # The boot logs the pattern once at u0; a STEP that reached it would log u1.
 check(not any(re.match(r"g[0-9a-f]+ u[1-9]", l) for l in log),
       "no STEP under VALUE reached the pattern", f"log={log}")
