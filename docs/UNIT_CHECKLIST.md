@@ -1092,6 +1092,14 @@ A01 at 130.0, no chain.
 - FUNC + turn VALUE to +5.0 at 130. Give a chain entry BPM 280: as it plays, `VARISPEED HELD`
   and a smaller amount; at the next entry with a slower BPM, `VARISPEED +5.0 ...` again.
   FUNC + tap VALUE. `____`
+**W78. LOCK keeps launched tracks apart (4 min).** A01 playing, its track 3 with a few steps of
+its own; A07's track 3 a different part.
+- PROJECT twice (LAUNCH), track 3, STEP 7, wait for `T3 A07`. Hold FUNC + MUTATE: `LOCK A01
+  STORED`. CLR on track 3 (`T3 < OWN`): A01's own track 3 plays, the top line shows `L+`. `____`
+- Tap FUNC + MUTATE: `BACK TO LOCK A01`, track 3 plays A07's part again and LAUNCH shows A07 on
+  it. Tap again: `SWAPPED BACK A01`, track 3 plays A01's own part, unchanged. `____`
+- STEP 7 on track 3 again, tap FUNC + MUTATE twice, then CLR on track 3: A01's own track 3 is
+  still its own part, not A07's. Save, RELOAD PROJECT: the same. `____`
 
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
