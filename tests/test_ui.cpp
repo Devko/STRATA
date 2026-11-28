@@ -5072,6 +5072,18 @@ TEST(ui_a_sections_tempo_is_set_here_or_skipped_under_an_outside_clock) {
     status.bump_tempo_due(13000);
     pump(3);
     CHECK_NEAR(host.tempo(), 130.0f, 0.01);
+    // With VariSpeed off rest the clock is the section's tempo times its ratio, as for VALUE's
+    // turn: the song keeps its VariSpeed across a section's BPM (it played the plain BPM until
+    // VALUE was touched).
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_encoder(4, -5);
+    app.on_key(ENAGA_KEY_F1, false);
+    pump(2);
+    CHECK_EQ(UiProbe::vari(app), -5);
+    status.bump_tempo_due(12000);
+    pump(3);
+    CHECK_NEAR(host.tempo(), 120.0f * vari_ratio(-5), 0.01);
+    CHECK_EQ(int(app_engine().project().settings.tempo_centi_bpm), 12000);
 }
 
 // The section's morph and ENERGY reach the knobs the UI shadows, so a turn takes over from where

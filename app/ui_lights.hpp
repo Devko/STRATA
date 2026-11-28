@@ -520,8 +520,9 @@
             if (due != tempo_due_seen_) {
                 tempo_due_seen_ = due;
                 const uint16_t centi = status.section_tempo.load(std::memory_order_relaxed);
-                if (enaga::clock::source() != ENAGA_CLOCK_INTERNAL ||
-                    !enaga::clock::set_tempo(float(centi) * 0.01f)) {
+                // Through set_clock_tempo, as VALUE's turn: the clock is the project's tempo
+                // times VariSpeed's ratio, so a section's BPM keeps the song's VariSpeed.
+                if (enaga::clock::source() != ENAGA_CLOCK_INTERNAL || !set_clock_tempo(centi)) {
                     clock_refused_ = true;
                     if (!bpm_skip_said_) {
                         bpm_skip_said_ = true;
