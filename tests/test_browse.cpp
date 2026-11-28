@@ -219,3 +219,96 @@ TEST(browse_same_name_ignores_case_and_nothing_else) {
     CHECK(!SampleList::same_name(nullptr, "A"));
     CHECK(!SampleList::same_name("A", nullptr));
 }
+
+// Every buffer edge exactly: a path that fills `max` to the byte fits, one byte more does not and
+// leaves the buffer empty; no room at all touches nothing.
+TEST(browse_buffers_fit_to_the_byte) {
+    char buf[64];
+    g_list.open_root(false);
+    // "/SAMPLES" is 8 characters and its terminator.
+    CHECK(g_list.path_of(0, buf, 9));
+    CHECK(std::strcmp(buf, "/SAMPLES") == 0);
+    std::memset(buf, 'x', sizeof buf);
+    CHECK(!g_list.path_of(0, buf, 8));
+    CHECK_EQ(buf[0], '\0');
+    std::memset(buf, 'x', sizeof buf);
+    CHECK(!g_list.path_of(0, buf, 1));
+    CHECK_EQ(buf[0], '\0');
+    std::memset(buf, 'x', sizeof buf);
+    CHECK(!g_list.path_of(0, buf, 0));
+    CHECK_EQ(buf[0], 'x');
+    CHECK(!g_list.path_of(0, nullptr, 9));
+    CHECK(!g_list.is_folder(g_list.count()));
+    CHECK(&SampleList::root(-1) == &SampleList::root(0));
+    CHECK(&SampleList::root(SampleList::kRoots) == &SampleList::root(SampleList::kRoots - 1));
+    // In a folder: "/S" + "/" + "A.WAV" + terminator is 9.
+    CHECK(g_list.open("/S"));
+    CHECK(g_list.add("A.WAV", false));
+    CHECK(g_list.path_of(0, buf, 9));
+    CHECK(std::strcmp(buf, "/S/A.WAV") == 0);
+    CHECK(!g_list.path_of(0, buf, 8));
+    // A name of 63 characters is the longest an entry holds.
+    char name[80];
+    std::memset(name, 'N', sizeof name);
+    name[SampleList::kEntryNameBytes - 1] = '\0';
+    CHECK(g_list.add(name, true));
+    name[SampleList::kEntryNameBytes - 1] = 'N';
+    name[SampleList::kEntryNameBytes] = '\0';
+    CHECK(!g_list.add(name, true));
+    CHECK_EQ(g_list.skipped(), 1);
+    // A new root starts the count again.
+    g_list.open_root(false);
+    CHECK_EQ(g_list.skipped(), 0);
+}
+
+TEST(browse_parent_and_folder_of_fit_to_the_byte) {
+    char buf[16];
+    SampleList::parent_of("/A/B", buf, 3);
+    CHECK(std::strcmp(buf, "/A") == 0);
+    std::memset(buf, 'x', sizeof buf);
+    SampleList::parent_of("/A/B", buf, 2);
+    CHECK_EQ(buf[0], '\0');
+    std::memset(buf, 'x', sizeof buf);
+    SampleList::parent_of("/A/B", buf, 1);
+    CHECK_EQ(buf[0], '\0');
+    std::memset(buf, 'x', sizeof buf);
+    SampleList::parent_of("/A/B", buf, 0);
+    CHECK_EQ(buf[0], 'x');
+    SampleList::parent_of("/A/B", nullptr, 3);    // nothing to write to: nothing happens
+    SampleList::parent_of("A/B", buf, 16);
+    CHECK(std::strcmp(buf, "A") == 0);
+    CHECK(SampleList::folder_of("/A/B.WAV", buf, 3));
+    CHECK(std::strcmp(buf, "/A") == 0);
+    std::memset(buf, 'x', sizeof buf);
+    CHECK(!SampleList::folder_of("/A/B.WAV", buf, 2));
+    CHECK_EQ(buf[0], '\0');
+    std::memset(buf, 'x', sizeof buf);
+    CHECK(!SampleList::folder_of("/A/B.WAV", buf, 1));
+    CHECK_EQ(buf[0], '\0');
+    std::memset(buf, 'x', sizeof buf);
+    CHECK(!SampleList::folder_of("/A/B.WAV", buf, 0));
+    CHECK_EQ(buf[0], 'x');
+    CHECK(!SampleList::folder_of("/A/B.WAV", nullptr, 3));
+    CHECK(!SampleList::folder_of(nullptr, buf, 16));
+    CHECK(SampleList::folder_of("A/B.WAV", buf, 16));
+    CHECK(std::strcmp(buf, "A") == 0);
+}
+
+TEST(browse_names_edges_one_letter_ties_and_the_first_character) {
+    // A one-letter folder is a name; z and Z are the same letter; the first letters count.
+    g_list.open("/SAMPLES");
+    CHECK(g_list.add("A", true));
+    CHECK(SampleList::same_name("z", "Z"));
+    CHECK(!SampleList::same_name("ab", "bb"));
+    CHECK(!SampleList::in_browsable_folder("XSAMPLES/A.WAV"));
+    // Two names equal but for case keep the order they came in.
+    CHECK(g_list.add("Kick.wav", false));
+    CHECK(g_list.add("KICK.WAV", false));
+    CHECK(std::strcmp(g_list.name(1), "Kick.wav") == 0);
+    CHECK(std::strcmp(g_list.name(2), "KICK.WAV") == 0);
+    // Trailing slashes go, down to the root slash itself.
+    CHECK(g_list.open("//"));
+    CHECK(std::strcmp(g_list.folder(), "/") == 0);
+    CHECK(g_list.open("/SAMPLES//"));
+    CHECK(std::strcmp(g_list.folder(), "/SAMPLES") == 0);
+}
