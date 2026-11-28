@@ -315,7 +315,9 @@
         if (next >= 0 && next < kPatternsPerBank) slot_cursor_ = next;
     }
 
-    void queue_shown_pattern(int slot) {
+    // `held`: queued with PROJECT held from another screen, where the slot alone would not say
+    // what happened, so the notice says QUEUED.
+    void queue_shown_pattern(int slot, bool held = false) {
         if (!project_index_valid(shown_bank_, slot)) return;
         // The audio side decides when it lands, from the tick the sequencer is actually on. With
         // the transport stopped it switches at once, because there is no end of a pass to wait
@@ -330,10 +332,12 @@
         char *out = notice_buffer_;
         *out++ = bank_letter(shown_bank_);
         append_padded(out, uint32_t(slot) + 1, 2);
-        append(out, " ");
+        append(out, held ? " QUEUED " : " ");
         append(out, queue_mode_name(queue_mode_));
         *out = 0;
-        notice(notice_buffer_);
+        // The chord's notice is logged too, for tests/scenario_queuehold.sh.
+        if (held) notice_logged(notice_buffer_);
+        else notice(notice_buffer_);
     }
 
     // --- PROJECT's CHAIN page ---------------------------------------------

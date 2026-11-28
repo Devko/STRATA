@@ -917,6 +917,78 @@ TEST(ui_project_slots_copy_paste_and_clear_a_pattern) {
     pump(2);
 }
 
+// Hold PROJECT + STEP n queues slot n of the shown bank from any screen, and the screen stays
+// (usability review, 2026-11-28). PROJECT opens on its release, only when no STEP came between.
+TEST(ui_hold_project_and_step_queues_a_pattern_from_any_screen) {
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    key(ENAGA_KEY_F4);                               // GRID
+    key(ENAGA_KEY_F5);
+    for (uint32_t t = 0; t <= 24 * 2; t += 24) {
+        host.deliver_tick(t, 0);
+        pump();
+    }
+    const bool trig4 = trig_at(0, 4);
+
+    // The press alone opens nothing: PROJECT waits for its release.
+    app.on_key(ENAGA_KEY_F3, true);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::grid));
+    step_down(4);
+    CHECK_EQ(UiProbe::notice(app), "A05 QUEUED END");
+    app.on_key(ENAGA_KEY_F3, false);                 // PROJECT up before the STEP
+    step_up(4);                                      // its release is the chord's, not GRID's
+    pump(2);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::grid));
+    CHECK(app_engine().queue().pending);
+    CHECK_EQ(int(app_engine().queue().bank), 0);
+    CHECK_EQ(int(app_engine().queue().slot), 4);
+    CHECK_EQ(trig_at(0, 4), trig4);                  // no trig toggled under the chord
+    CHECK_EQ(UiProbe::held_step(app), -1);
+
+    // The same from PERFORM, whose STEP keys are steps too; the last STEP wins.
+    shift_key(ENAGA_KEY_F7);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::perform));
+    app.on_key(ENAGA_KEY_F3, true);
+    step_down(1);
+    step_up(1);
+    step_down(2);
+    step_up(2);
+    app.on_key(ENAGA_KEY_F3, false);
+    pump(2);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::perform));
+    CHECK_EQ(int(app_engine().queue().slot), 2);
+    CHECK_EQ(UiProbe::notice(app), "A03 QUEUED END");
+
+    // A plain tap still opens PROJECT, on the release.
+    key(ENAGA_KEY_F3);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::project));
+
+    // FUNC + PROJECT is still SAMPLES, at once, and no STEP queues under it.
+    key(ENAGA_KEY_F4);
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_key(ENAGA_KEY_F3, true);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::samples));
+    app.on_key(ENAGA_KEY_F3, false);
+    app.on_key(ENAGA_KEY_F1, false);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::samples));
+
+    // A STEP held as a modifier first: PROJECT opens at once and ends the hold.
+    key(ENAGA_KEY_F4);
+    step_down(6);
+    CHECK_EQ(UiProbe::held_step(app), 6);
+    app.on_key(ENAGA_KEY_F3, true);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::project));
+    CHECK_EQ(UiProbe::held_step(app), -1);
+    app.on_key(ENAGA_KEY_F3, false);
+    step_up(6);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::project));
+
+    key(ENAGA_KEY_F6);
+    key(ENAGA_KEY_F6);
+    key(ENAGA_KEY_F4);
+    pump(2);
+}
+
 TEST(ui_func_len_held_repeats_until_a_key_comes_up) {
     Strata &app = fresh();
     pump(2);

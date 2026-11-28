@@ -44,12 +44,12 @@ constexpr Text kFuncKnobs = {"FUNC + KNOB OR PAD:", {
     "LOWER PAD  BAR MUTE",
     "STEP       TRIGLESS",
     "TURN A-C  EUCLID GRID",
-    "DJ TAPE FREEZE: MIXER",
-    "  PUSH VALUE+STEP",
     "WITHOUT FUNC:",
     "VALUE      TEMPO",
     "PUSH+TURN VALUE SWING",
     "LOWER PAD  TRACK",
+    "HOLD PROJECT+STEP",
+    "  QUEUE THAT SLOT",
 }};
 
 constexpr Text kUpperPads = {"UPPER PADS TRK1-7:", {
