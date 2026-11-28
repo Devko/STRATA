@@ -787,7 +787,7 @@ to reach `GUARD4` here at a 40-60% top line.
   bright, slightly barking strike that mellows as it rings; soft notes are rounder. `____`
 
 **W59. Chorus (3 min).** Beat playing, A01.
-- MIXER, SELECT_LEFT four times: `CHO 5-8`. Push C: `T7 CHORUS 64`, the chord track's bar stands
+- MIXER, SELECT_LEFT six times: `CHO 5-8`. Push C: `T7 CHORUS 64`, the chord track's bar stands
   half up and the chords sound wider and gently moving. Push C again: OFF, back to the dry
   chords. Turn C up to 127 and down: the chorus follows smoothly, no click. `____`
 - SELECT_RIGHT: `CHO`. Turn A (RAT) up: the sweeps on screen bunch up and the warble speeds up;
@@ -869,8 +869,8 @@ it switch, put a few trigs on track 3 that sound clearly different, then PROJECT
 
 **W65. Usability quick wins: MIXER groups, the KEYS track menu, JAM REC on FUNC+REC (5 min).**
 Beat playing, A01, a card with some space.
-- MIXER, then DOWN: `DCK 1-4`; DOWN again `WID 1-4`, then `DLY`, `REV`, `CHO 1-4`, `MST` and
-  round to `TRK 1-4`. UP from `TRK 1-4` is `MST`. LEFT/RIGHT still go one page. `____`
+- MIXER, then DOWN: `DCK 1-4`; DOWN again `WID 1-4`, then `DLY`, `REV`, `CHO 1-4`, `IN`, `MST`
+  and round to `TRK 1-4`. UP from `TRK 1-4` is `MST`. LEFT/RIGHT still go one page. `____`
 - HOME twice for KEYS, hold OK half a second: the track menu (`TRACK T1`, `>GENERATE`). The pads
   still play notes; UP/DOWN move the menu's row, not the track; OK on GENERATE writes a part.
   CLR: `KEYS`, the keyboard back. `____`
@@ -899,7 +899,6 @@ Beat playing, A01, a card with some space.
   at the end of the pattern. `____`
 - Tap PROJECT: PROJECT opens as the key comes up, no slower than before to the hand. FUNC +
   PROJECT: SAMPLES at once. `____`
-
 **W68. Your own sounds and copy / paste in SOUNDS (5 min).** Beat playing, A01, a card in.
 - Track 1 (KCK), EDIT, turn TUN and DEC somewhere new, OK: SOUNDS. FUNC + DOWN: `SAVE SOUND`
   offering `KCK 1`. OK: `SAVED KCK 1`, and `+KCK 1     NOW` at the end of the list, under the
@@ -914,7 +913,35 @@ Beat playing, A01, a card with some space.
   bass sound on its own notes, its pan and sends as they were. AS WAS: PLY and its stab are
   back. `____`
 
-**W69. Tap tempo, the nudge, PROG CHG OUT and the song position (8 min).** Beat playing on
+**W69. Line input as a mixer channel (6 min).** Beat playing, A01, a synth or phone on INPUT L
+and R (line level), headphones on.
+- MIXER, SELECT_LEFT four times: `IN`, the strip dim and `IN OFF`. The input is not heard. Push A:
+  `IN ON`, the synth fades in through the headphones, centred, at about the level it has
+  straight; the meter on the left moves with it. Push A again: `IN OFF`, it fades out, no click.
+  `____`
+- On: turn A (LVL) down and up, B (PAN) to the left, C (DLY) and D (REV) up: the synth goes into
+  the delay and the reverb. Delay to 0 while it rings: the echoes ring out. `____`
+- SELECT_RIGHT: `IN+`. B (DCK) to 100: the synth ducks under the kick. C (TON) down: darker; up
+  past the middle: thinner. D (SRC) one click: `IN LINE L`, the synth from the left jack in both
+  ears; back to `LINE`. Push D: `IN GAIN HIGH`, then `LOW` (the -20 dB pad: much quieter), then
+  `NORM`. `____`
+- How much later does the synth come out than it goes in? Play a short note on the synth with
+  the strip on and off (the synth's own out in one ear if you can): `____` (expect a few ms). Hiss
+  with the synth off, LVL 100, gain NORM: `____` (none / faint / audible). `____`
+- With the input on, the DJ filter (FUNC + VALUE), the kill EQ's LOW and REPEAT take the synth
+  too; JAM REC for a few bars: the file has the synth in it. `____`
+- RESAMPLE (FUNC+REC), B to `MIC`: the input switches to the mic; leave RESAMPLE: back to LINE
+  (the synth heard again). `____`
+- The top line with the input on reads `____ %`, off `____ %`. Save, power cycle, open: the strip
+  comes back on, as left. FUNC+HOME, NEW: the input is off. `____`
+
+
+**Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
+`W14: MAX 61.2`.
+
+---
+
+**W70. Tap tempo, the nudge, PROG CHG OUT and the song position (8 min).** Beat playing on
 GRID, CLOCK SRC INTERNAL. For the last two, a computer or a second unit on MIDI.
 - Tap VALUE four times at about 120: `TAP TEMPO`, then `TAP 120.x`, and the beat follows from the
   second tap. Taps at twice the pace start again rather than landing in between. In PERFORM a
@@ -929,11 +956,6 @@ GRID, CLOCK SRC INTERNAL. For the last two, a computer or a second unit on MIDI.
 - CLOCK SRC MIDI, a DAW sending clock with the chain on (three entries). Stop the DAW, move its
   playhead into the second entry's bars, play: STRATA comes in on that entry, on the beat. Back
   to bar 1 and play: entry 1. Chain off: the pattern's steps line up with the DAW's bars. `____`
-**Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
-`W14: MAX 61.2`.
-
----
-
 # The full walkthrough (first written 2026-11-22)
 
 Written for the v0.1.0 card and kept up to date section by section since. Sections 0-13 are

@@ -1636,7 +1636,7 @@ tracks 3 and 4 is separate and still works without a group.
 
 <p><img src="screens/mixer.png" width="256" alt="MIXER: the faders of tracks 1-4"> <img src="screens/mixer_dly.png" width="256" alt="MIXER's DLY page"></p>
 
-<sub>MIXER's first page, all eight faders with A-D on tracks 1-4, and the DLY page. The screen keys walk all seventeen: TRK 1-4, TRK 5-8, DCK 1-4, DCK 5-8, DUCK, WID 1-4, WID 5-8, DLY, DLY+, REV, REV+, ROUTE, CHO 1-4, CHO 5-8, CHO, MST, EQ. UP/DOWN jump a group at a time, to its first page: the levels (TRK), the duck (DCK), the widths (WID), the delay (DLY), the reverb (REV), the chorus (CHO 1-4) and the master (MST).</sub>
+<sub>MIXER's first page, all eight faders with A-D on tracks 1-4, and the DLY page. The screen keys walk all nineteen: TRK 1-4, TRK 5-8, DCK 1-4, DCK 5-8, DUCK, WID 1-4, WID 5-8, DLY, DLY+, REV, REV+, ROUTE, CHO 1-4, CHO 5-8, CHO, IN, IN+, MST, EQ. UP/DOWN jump a group at a time, to its first page: the levels (TRK), the duck (DCK), the widths (WID), the delay (DLY), the reverb (REV), the chorus (CHO 1-4), the line input (IN) and the master (MST).</sub>
 
 Each send has a second mode for long, washy sounds. They sit on the MIXER pages beside their
 send, `DLY+` after `DLY` and `REV+` after `REV`. **Push A** on either page (or turn A) flips the
@@ -1707,6 +1707,36 @@ parameter, because every track's 32 parameter slots are taken: a lock, a scene o
 move it. The sends are saved with the kit (and in the kit library), the chorus's four knobs with
 the project. A project or kit from before the chorus opens with no track sending to it.
 
+### Line input: IN and IN+
+
+<p><img src="screens/mixer_in.png" width="256" alt="MIXER's IN page with the input on"></p>
+
+Whatever is plugged into the SmplTrek's **INPUT** jacks can play through STRATA's mix as a
+channel of its own: an outboard synth, a drum machine, a phone. It gets a fader, pan, the three
+sends and the duck, and it goes through the master like the tracks do, so the DJ filter, the kill
+EQ, the performance mixer, the looper, REPEAT, the tape stop and **JAM REC** all take it too.
+
+- **IN** (MIXER, after CHO): **LVL** (A) the fader, 0-127 with 100 at unity; **PAN** (B);
+  **DLY** (C) and **REV** (D), the delay and reverb sends. **Push A** turns the input on and off;
+  the strip says `IN ON` / `IN OFF` and fades rather than clicks.
+- **IN+**: **CHO** (A) the chorus send; **DCK** (B) how far the kit's duck takes the input down,
+  so a synth pad pumps under the kick; **TON** (C) the tone knob the synth tracks have, flat in
+  the middle, a low-pass below it and a high-pass above; **SRC** (D) the jack: `LINE` (stereo, L
+  and R), `LINE L` (mono, the left jack), `MIC` (the built-in microphone, heard only with
+  headphones in), `DYN MIC`, `HI-Z` (a guitar) or `USB` (the computer's audio). **Push D** steps
+  the gain: `LOW` (the line input's -20 dB pad), `NORM`, `HIGH`.
+
+The page shows the input's level before the fader, so it reads even with the fader down: set the
+gain until the loudest notes come near the top, then the fader for the mix. The sends are
+post-fader, as on the tracks.
+
+The input is **off** in a new project and in every project from before it, so nothing is heard
+from the jacks by surprise. Its settings are saved with the project, not the kit: recalling a kit
+leaves the synth plugged in and playing. The input is routed while the strip is on; RESAMPLE's own
+input sources take over while that screen shows one, and the strip's jack comes back when you
+leave it. The input adds a few milliseconds of delay through the box, as any digital mixer does.
+The strip costs a little CPU while it is on and nothing while it is off.
+
 ### Freeze
 
 CPU is the SmplTrek's tight resource and memory is not, so a track can be **frozen**: it plays
@@ -1773,7 +1803,8 @@ guitar). C sets the input level, `LOW`, `NORM` or `HIGH` (on LINE, LOW is the -2
 input shows a meter under `FROM ...`; set the level so it does not reach `CLIP`. The take is the
 input alone, before anything STRATA plays, and otherwise works exactly like a master take: it
 starts on the next bar line with the transport running, lasts 1-8 bars, and lands in a file or
-a track. You do not hear the input through STRATA; listen to the source directly. Turning B or C
+a track. The input is heard through STRATA only while MIXER's IN strip is on ("Line input: IN
+and IN+"); otherwise listen to the source directly. Turning B or C
 makes the input quiet for about 10 ms, and Enaga puts the input back to LINE, NORM when STRATA
 stops.
 

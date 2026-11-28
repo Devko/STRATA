@@ -519,6 +519,7 @@ const Expect kTable[] = {
     {Cmd::set_sends, kDirtyProject, "set_sends"},
     {Cmd::set_master, kDirtyProject, "set_master"},
     {Cmd::set_duck, kDirtyKit, "set_duck"},
+    {Cmd::set_input, kDirtyProject, "set_input"},
     // The kill EQ's switches, in the same section as the master bytes.
     {Cmd::eq_kill, kDirtyProject, "eq_kill"},
     // The live-record quantize amount. PROJECT.BIN has had a field for it since M4 and nothing
@@ -825,8 +826,8 @@ TEST(storage_every_file_of_a_project_round_trips_through_the_card) {
 
     // The sizes tests/test_project.cpp pins from the serializer, reached here through the real
     // card protocol: a file that came out a different size means the two have drifted apart.
-    CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN")), 451);
-    CHECK_EQ(project_bytes(), 451u);
+    CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN")), 473);
+    CHECK_EQ(project_bytes(), 473u);
     CHECK_EQ(host.file_bytes(card_path("KIT.BIN")), 1506);
     CHECK_EQ(kit_bytes(), 1506u);
     CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN")), 5121);
@@ -1738,7 +1739,7 @@ TEST(storage_an_autosave_writes_every_file_and_leaves_the_project_dirty) {
         }
         CHECK(host.has_file(card_path(kFiles[i], true)));
     }
-    CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN", true)), 451);
+    CHECK_EQ(host.file_bytes(card_path("PROJECT.BIN", true)), 473);
     CHECK_EQ(host.file_bytes(card_path("KIT.BIN", true)), 1506);
     CHECK_EQ(host.file_bytes(card_path("PERFORM.BIN", true)), 5121);
 

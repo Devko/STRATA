@@ -183,6 +183,11 @@ constexpr MixerPage kMixerPages[] = {
     {"CHO 5-8", false, {-1, -1, -1, -1}},
     {"CHO", false, {int8_t(SendField::chorus_rate), int8_t(SendField::chorus_depth),
                     int8_t(SendField::chorus_level), int8_t(SendField::chorus_to_reverb)}},
+    // The line input's strip (core/project.hpp, InputField): the fader, pan and the two sends,
+    // then the chorus send, the duck, the tone and the jack. Project bytes, handled on their own
+    // like the duck's: `field` is unused. Push A on either turns the input on and off.
+    {"IN", false, {-1, -1, -1, -1}},
+    {"IN+", false, {-1, -1, -1, -1}},
     {"MST", true, {int8_t(MasterField::dj), int8_t(MasterField::compressor),
                    int8_t(MasterField::limit), int8_t(MasterField::level)}},
     // The kill EQ, next to the master it sits in. Push A, B or C to throw that band's kill
@@ -235,16 +240,42 @@ constexpr bool mixer_chorus_send_page(int page) {
     return page == kMixerChorusSendPage || page == kMixerChorusSendPage + 1;
 }
 
+// The line input's two pages, after the chorus and before the master: the scenarios that go
+// round from TRK 1-4 to MST and EQ still find them one and two presses away.
+constexpr int kMixerInputPage = kMixerChorusPage + 1;
+static_assert(kMixerPages[kMixerInputPage].name[0] == 'I' && kMixerPages[kMixerInputPage].name[2] == 0 &&
+                  kMixerPages[kMixerInputPage + 1].name[2] == '+',
+              "the line input's pages moved");
+constexpr bool mixer_input_page(int page) {
+    return page == kMixerInputPage || page == kMixerInputPage + 1;
+}
+// Which field each of the IN pages' four encoders moves, in InputField numbers.
+constexpr InputField kInputPageFields[2][4] = {
+    {InputField::level, InputField::pan, InputField::delay, InputField::reverb},
+    {InputField::chorus, InputField::duck, InputField::tone, InputField::source},
+};
+// The sources as the IN+ page names them, in core/project.hpp's numbering, and the route Enaga
+// takes for each (enaga_input_source).
+struct InputRoute {
+    const char *name;
+    int route;
+};
+constexpr InputRoute kInputRoutes[kInputSources] = {
+    {"LINE", ENAGA_INPUT_LINE_STEREO}, {"LINE L", ENAGA_INPUT_LINE_MONO}, {"MIC", ENAGA_INPUT_MIC},
+    {"DYN MIC", ENAGA_INPUT_DYNAMIC_MIC}, {"HI-Z", ENAGA_INPUT_HIZ},     {"USB", ENAGA_INPUT_USB},
+};
+
 static_assert(kMixerPages[kMixerEqPage].master &&
                   kMixerPages[kMixerEqPage].field[0] == int8_t(MasterField::eq_low),
               "kMixerEqPage no longer names the kill EQ's page");
 
 // MIXER's groups, for UP/DOWN (usability review, 2026-11-28): each group's first page, in page
-// order. Levels, the duck, the widths, the delay, the reverb (with ROUTE), the chorus, the
-// master. LEFT/RIGHT still walk page by page; UP/DOWN jump to the first page of the group before
+// order. Levels, the duck, the widths, the delay, the reverb (with ROUTE), the chorus, the line
+// input, the master. LEFT/RIGHT still walk page by page; UP/DOWN jump to the first page of the group before
 // or after the one showing, round the ends as LEFT/RIGHT go round.
 constexpr int kMixerGroupStart[] = {0, kMixerDuckDepthPage, kMixerWidthPage, kMixerDelayPage,
-                                    kMixerHallPage - 1, kMixerChorusSendPage, kMixerEqPage - 1};
+                                    kMixerHallPage - 1, kMixerChorusSendPage, kMixerInputPage,
+                                    kMixerEqPage - 1};
 constexpr int kMixerGroups = int(sizeof(kMixerGroupStart) / sizeof(kMixerGroupStart[0]));
 static_assert(kMixerPages[kMixerHallPage - 1].field[0] == int8_t(SendField::reverb_decay_s) &&
                   kMixerPages[kMixerEqPage - 1].field[0] == int8_t(MasterField::dj),
@@ -841,6 +872,9 @@ private:
     int take_level_ = ENAGA_INPUT_NORMAL;
     bool input_applied_ = false;
     int input_result_ = 0;
+    // The line input strip's route as last applied to the codec, source * kInputGains + gain, or
+    // -1 for none yet or one RESAMPLE changed since (service_input_route).
+    int input_route_applied_ = -1;
 
     int pressure_pad_ = -1;
     uint8_t pressure_sent_ = 0;

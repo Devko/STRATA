@@ -45,6 +45,7 @@ UNIT_CHECKLIST.md's ~550 boxes, 4 are ticked.
 | **PROJECT's slots and MACHINE redrawn to the drafts** (docs/SCREENS.md): a map of all 128 patterns (empty, used, playing, queued) and each of the shown bank's sixteen drawn as its steps; MACHINE's kit as pictures, every machine a picture of its sound, what it is for and what it costs | #175 | ○ (W44) | draw() 1.28 ms PROJECT, 2.50 ms MACHINE (emulator, cl6x) |
 | **Stereo width WID** on VA POLY, WAVE POLY and FM4: MIXER WID 1-4 / 5-8, 1-63 spread (chord notes across the field), 64-127 unison (two voices a note, hard L/R, 6-40 cents); push OFF / 48 / 96 | #216 | ○ (W60) | A kit setting, not lockable; unison halves a track's notes (3) and counts two voices a note against the 12; docs/BUDGET.md "Stereo width" |
 | **Chorus, send C**: a stereo chorus on MIXER; CHO 1-4 / 5-8 set each track's send (push: OFF or 64), CHO its RAT DEP LVL and C>R into the reverb | #214 | ○ (W59) | The send is a kit setting, not lockable; costs nothing while no track sends; docs/BUDGET.md "The chorus" |
+| **Line input as a mixer channel**: MIXER IN / IN+, the INPUT jacks through STRATA's mix with LVL, PAN, DLY, REV, CHO, DCK and TON; SRC picks the jack (LINE, LINE L, MIC, DYN MIC, HI-Z, USB), push D the gain | #242 | ○ (W69), E (scenario_linein.sh) | Off by default and in older projects; saved in the project, not the kit; through the master, the looper, REPEAT and JAM REC; latency and noise owed from the unit |
 | **EDIT and MIXER redrawn to the drafts** (docs/SCREENS.md): EDIT's knob line and a picture on every page of every machine; MIXER's eight-strip desk, duck, DLY, REV, ROUTE, MST with LUFS, EQ curve; lists with a lit cursor, the step page's lane, CHAIN's strip | #174 | ○ (W43) | draw() see docs/BUDGET.md "The screen"; GRID and PERFORM unchanged |
 | **Screens rebuilt to the mockups**: frame (badges, toasts, tabs), PERFORM, GRID, EDIT (graph rows 50-117, filter response, LFO trail, WAVE LIVE, GRAIN cloud), MIXER master (spectrum, vectorscope, CMP/LIM bars) | #171 | ○ (W42) | draw() 1.71 ms on PERFORM, 1.20 ms on MST (emulator, cl6x). Knob values in the small font and LUFS on MST came with #174 |
 | **Live screens 6**: MIXER MST/EQ spectrum (24 bands, peak dots) and vectorscope; live meters beside the faders | #170 | ○ (W41) | draw() 1.21 ms on MST (emulator, cl6x) |
@@ -208,21 +209,21 @@ FM4 and GRAIN machines.
 | Bounce: resample ONE track alone (B = `TRK 1`-`TRK 8`), mono, before its duck, fader, pan and sends | #109 | ○ (13m) | No emulator scenario: B is an encoder, the emulator presses keys only |
 | **Bounce to track**: a take to FILE is offered to a SAMPLE or GRAIN track (`PUT ON TRK 3 GRN`), one OK puts it there | #153 | ○ (13m) | `scenario_bounce` runs a take through Enaga's real file layer. Takes failed `DENIED` on the unit before #153 (Storage made `/RECORD`) |
 | **Freeze**: the track menu's FREEZE (hold OK in GRID), a track plays a 1-8 bar loop of its machine from RAM; chain, mix and sends stay live; instant unfreeze | #109 | ○ (13n), E (scenario_freeze.sh) | Not saved: a reload, NEW or kit recall unfreezes. Measured (cl6x): A05 held pad 20.3% to 10.1% average; A01 peaks 7 points lower |
-| Sample from the input: LINE, LINE L, MIC, DYN MIC, HI-Z, with level and meter | v0.1.0 | ○ (8c) | No monitoring through STRATA; MIC needs headphones in |
+| Sample from the input: LINE, LINE L, MIC, DYN MIC, HI-Z, with level and meter | v0.1.0 | ○ (8c) | Heard through STRATA only with the line input's strip on (MIXER IN); MIC needs headphones in |
 
 ## MIDI and sync
 
 | Feature | Since | Unit | Known limits / notes |
 | --- | --- | --- | --- |
 | Follows the unit's clock: internal, MIDI clock, SYNC IN; refuses tempo/transport under external clock | v0.1.0 | ○ (M7) | STRATA cannot set CLOCK SRC (Enaga has no setter). SYNC polarity not selectable (Enaga) |
-| Tap tempo on VALUE, nudge on FUNC + push VALUE + turn | Unreleased | ○ (W69) | Internal clock only; the nudge is 4% for 250 ms a detent |
+| Tap tempo on VALUE, nudge on FUNC + push VALUE + turn | Unreleased | ○ (W70) | Internal clock only; the nudge is 4% for 250 ms a detent |
 | MIDI OUT per track (OFF/1-16): steps, chords, ratchets, arp, note repeat, pads, KEYS, MIDI IN | v0.1.0 | ○ (8d) | **On Enaga 0.2.0 (v0.1.0-v0.3.1):** with USB connected to a computer not reading, DIN out stalls; unplug USB. Fixed in Enaga 0.3.0, which `main` needs |
 | Every note gets its note-off; second STOP sends All Notes Off | v0.1.0 | ○ (8d) | Slide is not sent as legato |
 | MIDI IN notes (ch 1-8 = tracks, others = selected), held to note-off | v0.1.0 | ○ (8d) | No pitch bend or aftertouch |
 | MIDI IN CC 16-31 = track parameters, CC 120/123 release | v0.1.0 | ○ (8d) | |
 | MIDI IN program change queues a pattern | v0.1.0 | ○ (8d) | |
-| MIDI IN song position pointer: chain entry and pass, or the pattern from the top | Unreleased | ○ (W69) | MIDI clock only; Enaga takes an SPP only while stopped |
-| PROG CHG OUT: each pattern change sends a program change on MIDI CH | Unreleased | ○ (W69) | Off by default; saved with the project |
+| MIDI IN song position pointer: chain entry and pass, or the pattern from the top | Unreleased | ○ (W70) | MIDI clock only; Enaga takes an SPP only while stopped |
+| PROG CHG OUT: each pattern change sends a program change on MIDI CH | Unreleased | ○ (W70) | Off by default; saved with the project |
 | Sending MIDI clock | — | — | Enaga's CLOCK OUT does it, not STRATA |
 
 ## Storage, projects and kits

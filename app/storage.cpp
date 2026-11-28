@@ -194,6 +194,8 @@ bool mutates_project(Cmd cmd) {
         case Cmd::launch:
         case Cmd::launch_pin:
         case Cmd::launch_capture:
+        // The line input's strip, PROJECT.BIN's section 9.
+        case Cmd::set_input:
             return true;
         default:
             return false;

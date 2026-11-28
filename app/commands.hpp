@@ -209,6 +209,11 @@ enum class Cmd : uint8_t {
     // The sidechain duck (core/project.hpp, KitDuck): a: DuckField, b: int8 delta; track is the
     // track whose depth moves for DuckField::depth. Kit bytes, so a kit save keeps them.
     set_duck,
+    // The line input's strip (core/project.hpp, ProjectSettings::input): a: InputField, b: an int8
+    // encoder delta onto the byte, clamped to the field's domain (input_field_sanitized); or
+    // c = 1: a push, which turns ON over, walks SRC and GAIN round by one, and is refused on
+    // the other fields. Decided on the audio side, as set_choke's step is. PROJECT.BIN bytes.
+    set_input,
 
     // --- performance, M5 ---------------------------------------------------
     //

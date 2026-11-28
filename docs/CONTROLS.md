@@ -46,7 +46,7 @@ HOME "system", PLAY "◀◀", STOP "▶▶", MIXER "fx", EDIT "rec src".
      second label.**
    - **Arrow pad:** the cursor on the screen. UP/DOWN rows, LEFT/RIGHT sideways. OK picks, CLR
      goes back (or clears, where there is something selected to clear).
-   - **Screen keys:** the screen's pages. EDIT SRC FLTR AMP FX LFO ARP ENV OSC; MIXER's seventeen; PROJECT,
+   - **Screen keys:** the screen's pages. EDIT SRC FLTR AMP FX LFO ARP ENV OSC; MIXER's nineteen; PROJECT,
      CHAIN, PATTERN, SETUP, PROJECTS; the step page's field pages; SAMPLES' and KIT's pages of
      eight. On GRID and KEYS, where A-D turn the current EDIT page, they turn that page. The
      one-page screens give them their one sideways setting: MACHINE and SOUNDS the track,
@@ -728,7 +728,7 @@ The screens and their pages, from `core/help.cpp`:
 | EDIT in MACRO LEARN | what a push does now, then the page's knobs |
 | KEYS | the pads as a piano, the page's knobs, the pad lights |
 | Step page | the three field pages, what each field is |
-| MIXER | the page that is up (TRK, DCK, DUCK, WID, DLY, DLY+, REV, REV+, ROUTE, CHO, MST, EQ) |
+| MIXER | the page that is up (TRK, DCK, DUCK, WID, DLY, DLY+, REV, REV+, ROUTE, CHO, IN, IN+, MST, EQ) |
 | PERFORM | macros, LEARN, scenes, morph, mutate |
 | PROJECT, CHAIN, PATTERN, SETUP | one page each |
 | LAUNCH | one page |

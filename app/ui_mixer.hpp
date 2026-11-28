@@ -102,6 +102,75 @@
         enaga::log(notice_buffer_);
     }
 
+    // --- the line input's strip (IN and IN+) -------------------------------------------------
+
+    uint8_t input_byte(InputField field) const {
+        return engine_.project().settings.input[int(field)];
+    }
+
+    // One encoder on IN or IN+: a DELTA, for the reason edit_mixer_field gives. Two counts a
+    // click on the knobs, as a send knob; one on the duck (a percent) and the jack (a choice).
+    void edit_input(int page, int slot, int delta) {
+        if (!mixer_input_page(page) || slot < 0 || slot >= 4) return;
+        const InputField field = kInputPageFields[page - kMixerInputPage][slot];
+        const int click = field == InputField::duck || field == InputField::source ? 1 : 2;
+        post_delta(Cmd::set_input, 0, 0, uint8_t(field), delta * click);
+        if (field == InputField::source) {
+            const int now = int(input_byte(field)) + delta;
+            input_source_notice(now < 0 ? 0 : (now >= int(kInputSources) ? int(kInputSources) - 1 : now));
+            return;
+        }
+        static const char *const names[kInputFields] = {"IN", "IN LEVEL", "IN PAN", "IN DELAY",
+                                                        "IN REVERB", "IN CHORUS", "IN DUCK",
+                                                        "IN TONE", "IN SOURCE", "IN GAIN"};
+        notice(names[int(field)]);
+    }
+
+    // Push A on IN or IN+: the input on or off, said as what it will be. Logged: the emulator
+    // cannot read the screen (tests/scenario_linein.sh).
+    void toggle_input() {
+        const bool on = input_byte(InputField::on) != 0;
+        post(Cmd::set_input, 0, 0, uint8_t(InputField::on), 0, 1);
+        notice_logged(on ? "IN OFF" : "IN ON");
+    }
+
+    // Push D on IN+: the jack's front-end level one on, LOW NORM HIGH, round.
+    void step_input_gain() {
+        const uint8_t now = input_byte(InputField::gain);
+        const uint8_t next = uint8_t(now + 1 < kInputGains ? now + 1 : 0);
+        post(Cmd::set_input, 0, 0, uint8_t(InputField::gain), 0, 1);
+        char *out = notice_buffer_;
+        append(out, "IN GAIN ");
+        append(out, kInputLevelNames[next]);
+        *out = 0;
+        notice_logged(notice_buffer_);
+    }
+
+    void input_source_notice(int source) {
+        char *out = notice_buffer_;
+        append(out, "IN ");
+        append(out, kInputRoutes[source].name);
+        *out = 0;
+        notice_logged(notice_buffer_);
+    }
+
+    // The input's route on the codec, as the strip says, whenever the strip is on and the route
+    // it asks for is not the one last applied (a turn of SRC or a push of GAIN, a project opened
+    // with the input on, the app started). Main context only: enaga::system::input talks to the
+    // codec and leaves the input quiet for about 10 ms. RESAMPLE's own input sources route it
+    // while that screen shows one (apply_input), and leaving RESAMPLE gives it back to the strip.
+    void service_input_route() {
+        if (input_byte(InputField::on) == 0 || mode_ == Mode::resample) return;
+        const int source = int(input_byte(InputField::source));
+        const int gain = int(input_byte(InputField::gain));
+        const int want = source * int(kInputGains) + gain;
+        if (want == input_route_applied_) return;
+        input_route_applied_ = want;
+        const int result = enaga::system::input(kInputRoutes[source < int(kInputSources) ? source : 0].route,
+                                                gain < int(kInputGains) ? gain : int(kInputGainNormal));
+        if (result != 0) notice_logged("INPUT REFUSED");
+    }
+
     // The duck's pages: on DCK 1-4 and DCK 5-8 an encoder is a track's depth, on DUCK the four
     // are the source, attack, hold and release. One click is one step of each: a percent, a
     // track, a millisecond, five milliseconds.
