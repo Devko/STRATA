@@ -168,7 +168,7 @@ TEST(usersounds_the_offered_name_is_free_and_counts_up) {
     CHECK(std::strcmp(name, "KCK 2") == 0);
     // All sixteen named KCK 1 .. KCK 16: the seventeenth is offered, always valid.
     for (int s = 0; s < kUserSoundSlots; s++) {
-        char each[kUserSoundNameChars + 1];
+        char each[16];   // room for any int, as -Wformat-truncation wants; "KCK 16" at most
         std::snprintf(each, sizeof each, "KCK %d", s + 1);
         CHECK(user_sound_store(bank, s, each, params));
     }
