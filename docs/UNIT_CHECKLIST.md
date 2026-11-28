@@ -1075,7 +1075,16 @@ slots, no chain.
 - FUNC+HOME, RELOAD PROJECT, OK: `OK AGAIN: RELOAD`; wait 3 s. PROJECT, SLOT, FUNC + LEFT:
   `LEFT AGAIN: CLEAR`; wait. Every confirmation on the unit reads `<KEY> AGAIN: <WHAT>`. `____`
 
-**W78. Everything up at once, and the review's fixes (8 min).** A project filled the way
+**W78. LOCK keeps launched tracks apart (4 min).** A01 playing, its track 3 with a few steps of
+its own; A07's track 3 a different part.
+- PROJECT twice (LAUNCH), track 3, STEP 7, wait for `T3 A07`. Hold FUNC + MUTATE: `LOCK A01
+  STORED`. CLR on track 3 (`T3 < OWN`): A01's own track 3 plays, the top line shows `L+`. `____`
+- Tap FUNC + MUTATE: `BACK TO LOCK A01`, track 3 plays A07's part again and LAUNCH shows A07 on
+  it. Tap again: `SWAPPED BACK A01`, track 3 plays A01's own part, unchanged. `____`
+- STEP 7 on track 3 again, tap FUNC + MUTATE twice, then CLR on track 3: A01's own track 3 is
+  still its own part, not A07's. Save, RELOAD PROJECT: the same. `____`
+
+**W79. Everything up at once, and the review's fixes (8 min).** A project filled the way
 `scenario_stack` does: GEN (DENSITY 100, RANGE 3 OCT, LEAP 100) on all eight tracks, PLAY.
 - The line input on (MIXER IN, push A), PERFORM, FUNC + turn A, B and C to the top (`REL ALL +64`,
   `LEN ALL 400%`, `ENERGY +64`), FUNC + turn VALUE to `VARISPEED +12.0`, FUNC + SEL> three times,
@@ -1091,15 +1100,6 @@ slots, no chain.
   captured slots are empty again; ARR UNDO once more: `NO ARR TO UNDO`. `____`
 - A launched lane on GRID: FUNC + UP (copy) says `COPIED`, not `READ ONLY`; paste on another
   track: that track plays the borrowed part. `____`
-**W78. LOCK keeps launched tracks apart (4 min).** A01 playing, its track 3 with a few steps of
-its own; A07's track 3 a different part.
-- PROJECT twice (LAUNCH), track 3, STEP 7, wait for `T3 A07`. Hold FUNC + MUTATE: `LOCK A01
-  STORED`. CLR on track 3 (`T3 < OWN`): A01's own track 3 plays, the top line shows `L+`. `____`
-- Tap FUNC + MUTATE: `BACK TO LOCK A01`, track 3 plays A07's part again and LAUNCH shows A07 on
-  it. Tap again: `SWAPPED BACK A01`, track 3 plays A01's own part, unchanged. `____`
-- STEP 7 on track 3 again, tap FUNC + MUTATE twice, then CLR on track 3: A01's own track 3 is
-  still its own part, not A07's. Save, RELOAD PROJECT: the same. `____`
-
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
 
