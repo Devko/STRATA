@@ -40,7 +40,7 @@ the top of `docs/UNIT_CHECKLIST.md` is the next pass.
    release). Features keep landing on `main`; 1.0 comes when Roland says so. No thread tags or
    releases on its own: a release runs from its own thread (`docs/release/RELEASING.md`).
 1. **On the unit: the walkthrough** at the top of `docs/UNIT_CHECKLIST.md`: N1-N7 (Enaga 0.4),
-   the smoke test S1-S20, then W1-W67, on a cl6x build from `main` with Enaga 0.4.0 firmware.
+   the smoke test S1-S20, then the W items, on a cl6x build from `main` with Enaga 0.4.0 firmware.
 2. **Write the readings down where they belong**: unit rows in `docs/BUDGET.md` (MAX from SETUP
    on A01 and on GENERATE, to pin both ratios), ticks in the reference half of
    `docs/UNIT_CHECKLIST.md`, the Unit column of `docs/FEATURES.md`, and anything odd as an issue
