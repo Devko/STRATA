@@ -25,7 +25,7 @@ the top of `docs/UNIT_CHECKLIST.md` is the next pass.
 
 | | |
 | --- | --- |
-| `make -C host test` | **3,923,641 checks, 0 failures** on `main` after #217 (2026-11-28): `core/`, `dsp/` and all of `app/`. The same under ASan and UBSan, with `ASAN_OPTIONS=detect_leaks=0` |
+| `make -C host test` | **4,876,128 checks, 0 failures** on this branch after the 2026-11-28 review fixes: `core/`, `dsp/` and all of `app/`. The same under ASan and UBSan, with `ASAN_OPTIONS=detect_leaks=0` |
 | CI | `.github/workflows/ci.yml` on every PR: the suite with GCC, again under ASan and UBSan at -O1, the layout check, the screenshots, and the repo checks (`audit_commands.sh`, `check_rules.sh`, `enaga_check.sh`, `check_scripts.sh`, the packaging and build-cache scripts' tests, the card builder's tests). A docs-only PR skips the test jobs. `tools/ci_local.sh` runs the same lanes in WSL. `enaga-upstream.yml` reports new Enaga releases weekly. No device build or scenario runs in CI |
 | `tools/build.sh` | links. Last measured image (cl6x, 2026-11-28): payload 1,691,888 bytes, bss 1,670,656; no BOOT / MCU / SPI sections. `tests/test_memory.cpp` reads these two figures from here, so update both together |
 | `tools/scenarios.sh` | every emulator scenario, run on Roland's PC only; each full pass and its worst peak is in `docs/SCENARIO_LOG.md`, what each change cost in `docs/BUDGET.md`. `tools/profile_guest.py` gives a scenario's guest profile by function |
