@@ -1,2 +1,0 @@
-# core/: portable C++20, no Enaga headers. Staged flat by tools/build.sh, so filenames
-# must be unique across core/, dsp/ and app/. Removed once real sources land (M1).
