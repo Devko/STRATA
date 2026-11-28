@@ -8,8 +8,8 @@
 # menu rows, REC and PLAY reach the engine on the C674x and the click costs nothing measurable.
 #
 # Keys (third_party/enaga/include/enaga/abi.h): F1 = 19, F4 = 27 (FUNC + HOME: the menu),
-# DOWN = 25, OK = 23, CLR = 30, F2 = 26 (REC), F5 = 22 (PLAY). From SAVE, DOWN x2 is CLICK (under
-# JAM REC) and DOWN from there COUNT-IN. A chord is the first key pressed and the second
+# DOWN = 25, OK = 23, CLR = 30, F2 = 26 (REC), F5 = 22 (PLAY). From SAVE, DOWN x3 is CLICK (under
+# JAM REC and ARR REC) and DOWN from there COUNT-IN. A chord is the first key pressed and the second
 # 5 M cycles later. The first press must come LATE (tests/scenario_m1.sh).
 set -euo pipefail
 
@@ -40,7 +40,7 @@ mkdir -p "$ENAGA_BUILD"
 LOG="$ENAGA_BUILD/scenario_click.log"
 
 echo "running the emulator for $CYCLES cycles: CLICK ON, COUNT-IN 1 BAR, REC, PLAY ..."
-python3 -B tools/enaga_cached.py emulate "$STAGE" --cycles "$CYCLES"     --key 19@300000000 --key 27@305000000     --key 25@335000000 --key 25@380000000     --key 23@600000000     --key 25@640000000     --key 23@680000000     --key 30@720000000     --key 26@780000000     --key 22@840000000     > "$LOG" 2>&1 || {
+python3 -B tools/enaga_cached.py emulate "$STAGE" --cycles "$CYCLES"     --key 19@300000000 --key 27@305000000     --key 25@335000000 --key 25@380000000 --key 25@425000000     --key 23@600000000     --key 25@640000000     --key 23@680000000     --key 30@720000000     --key 26@780000000     --key 22@840000000     > "$LOG" 2>&1 || {
     echo "FAIL: emulate.py exited non-zero" >&2
     tail -30 "$LOG" >&2
     exit 1

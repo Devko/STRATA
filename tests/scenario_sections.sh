@@ -17,7 +17,7 @@
 #   turn B +1, push B           -> NRG --
 #   turn A +1                   -> MRP SNAP
 #   CLR                         -> CHAIN
-#   FUNC + HOME, DOWN x9, OK    -> CHAIN ON: SECTION 1 S3 SNAP
+#   FUNC + HOME, DOWN x10, OK   -> CHAIN ON: SECTION 1 S3 SNAP
 #
 # Keys (third_party/enaga/include/enaga/abi.h): F5 = 22, F3 = 20, SELECT_RIGHT = 9, OK = 23,
 # push A = 1, push B = 0, CLR = 30, F1 = 19, F4 = 27, DOWN = 25. Encoders: A 0, B 1, D 3. A chord
@@ -54,7 +54,7 @@ keys=(--key 22@300000000 --key 20@380000000 --key 9@440000000 --key 23@500000000
 keys+=(--key 1@560000000 --turn 3:3@620000000 --key 9@680000000)
 keys+=(--turn 1:1@740000000 --key 0@800000000 --turn 0:1@860000000 --key 30@920000000)
 keys+=(--key 19@1000000000 --key 27@1005000000)
-for i in 0 1 2 3 4 5 6 7 8; do
+for i in 0 1 2 3 4 5 6 7 8 9; do
     keys+=(--key "25@$((1060000000 + i * 40000000))")
 done
 keys+=(--key 23@1460000000)

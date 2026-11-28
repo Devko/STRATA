@@ -4,7 +4,7 @@
 #
 #   PLAY
 #   F2                       -> REC on
-#   FUNC + HOME, DOWN x4     -> the FUNC menu, from SAVE to REC MODE (under COUNT-IN)
+#   FUNC + HOME, DOWN x5     -> the FUNC menu, from SAVE to REC MODE (under COUNT-IN)
 #   OK                       -> "REC ADDS NOTES", the row drawn with ADD
 #   OK                       -> "REC REPLACES"
 #   CLR                      -> back
@@ -49,6 +49,7 @@ python3 -B tools/enaga_cached.py emulate "$STAGE" --cycles "$CYCLES" \
     --key 26@360000000 \
     --key 19@420000000 --key 27@425000000 \
     --key 25@460000000 --key 25@495000000 --key 25@530000000 --key 25@565000000 \
+    --key 25@600000000 \
     --key 23@780000000 \
     --key 23@860000000 \
     --key 30@940000000 \
