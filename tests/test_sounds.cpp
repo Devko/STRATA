@@ -557,17 +557,18 @@ float band_pass_energy(const float *x, int n, float low_hz, float high_hz) {
 // libraries. These pin the two findings presets could fix, as properties of the sound rather
 // than as bytes: a later re-voicing can move every number as long as these still hold.
 TEST(sounds_techno_kicks_put_more_knock_in_the_attack_than_the_909) {
-    // The 909's first 20 ms was 20-35 dB short of the references above 250 Hz. The techno kicks,
-    // with the chain's drive their presets turn up, must beat it there by more than 3 dB.
+    // The 909's first 20 ms was 11-25 dB short of the references above 250 Hz. The techno kicks,
+    // with the chain's drive and the PNCH page their presets turn up, must beat it there by more
+    // than 6 dB (measured: 11-15).
     static float a[9600], b[9600];
     drum_hit<Kick>(named(MachineId::kick, "909"), a, 9600);
-    // The first 20 ms above 300 Hz against the first 100 ms under 150 Hz.
-    const float base = band_energy(a, 0, 960, 300.0f, true) / band_energy(a, 0, 4800, 150.0f, false);
+    // The first 20 ms above 300 Hz against the same 20 ms under 150 Hz: the knock against the body.
+    const float base = band_energy(a, 0, 960, 300.0f, true) / band_energy(a, 0, 960, 150.0f, false);
     static const char *const kTechno[] = {"TECHNO", "WHOUSE", "INDUS", "MINIM"};
     for (const char *name : kTechno) {
         drum_hit<Kick>(named(MachineId::kick, name), b, 9600);
-        const float knock = band_energy(b, 0, 960, 300.0f, true) / band_energy(b, 0, 4800, 150.0f, false);
-        CHECK(knock > 2.0f * base);   // at least 3 dB more of the attack above 300 Hz
+        const float knock = band_energy(b, 0, 960, 300.0f, true) / band_energy(b, 0, 960, 150.0f, false);
+        CHECK(knock > 4.0f * base);   // at least 6 dB more of the attack above 300 Hz
     }
 }
 

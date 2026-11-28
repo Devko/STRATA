@@ -32,7 +32,7 @@
 //
 // The PNCH page (the ASR page's four slots, 24-27, which no other drum reads) adds what the
 // techno benchmark (2026-11-28) found the model cannot reach: measured against 400+ techno kicks
-// from sample libraries, its first 20 ms was 20-35 dB short from 250 Hz to 4 kHz, and nothing of
+// from sample libraries, its first 20 ms was 11-25 dB short from 250 Hz to 4 kHz, and nothing of
 // it fell below f0. A layered techno kick is a low punch, a mid punch and a top; these are the
 // last two and the fall:
 //   KNK  knock: a second pitch envelope on top of FMA's, up to 15 x f0 more (four octaves above
@@ -150,6 +150,9 @@ private:
     float tick_decay_ = 0.986f;    // the tick's 1.5 ms, as a per-sample multiplier
     float drop_target_ = 1.0f;     // DRP: f0's ratio at the end of the fall, 1 (none) to 0.5
     float drop_rate_ = 0.0f;       // -1 / (the fall's time constant in frames)
+    // The bytes PNCH's coefficients were last made from (four PNCH, then DEC), so prepare() pays
+    // for its exponentials only when a knob moves. 0xFF: never made.
+    uint8_t punch_bytes_[5] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
     bool active_ = false;
 
     float body_[kBlock] = {};

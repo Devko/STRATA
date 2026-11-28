@@ -71,7 +71,7 @@ constexpr float kKnockTauOctaves = 4.0f;
 constexpr float kTickHz = 3000.0f;
 constexpr float kTickK = 1.4f;
 constexpr float kTickTau = 0.0015f;
-constexpr float kTickGain = 8.0f;
+constexpr float kTickGain = 2.0f;
 constexpr float kTickFloor = 1.0e-4f;
 
 // ln(100): EnvelopeShape::make wants the time to reach 1% of the target, where the reference
@@ -139,6 +139,7 @@ void Kick::init(float sample_rate) {
         SvfCoefficients::from_g(enaga::dsp::tan_pi(kClickHz * inv_rate_), kClickK);
     tick_coefficients_ = SvfCoefficients::from_g(enaga::dsp::tan_pi(kTickHz * inv_rate_), kTickK);
     tick_decay_ = exp(-inv_rate_ * reciprocal(kTickTau));
+    for (uint8_t &b : punch_bytes_) b = 0xFF;   // a new rate: PNCH's coefficients are made again
     for (Voice &v : voices_) {
         v = Voice{};
         v.click_band.reset();
@@ -172,14 +173,20 @@ void Kick::prepare(const TrackParams &params) {
     const float level = params.unit(11);
     out_gain_ = level * level;
 
-    // PNCH (kick.hpp): KNK KND TCK DRP, the ASR page's four slots.
+    // PNCH (kick.hpp): KNK KND TCK DRP, the ASR page's four slots. Made again only when one of
+    // them, or DEC, has moved: a kick with the page at 0 pays one compare a block.
+    const uint8_t bytes[5] = {params.get(kAsrFirst + 0), params.get(kAsrFirst + 1),
+                              params.get(kAsrFirst + 2), params.get(kAsrFirst + 3), params.get(8)};
+    bool same = true;
+    for (int i = 0; i < 5; i++) same = same && bytes[i] == punch_bytes_[i];
+    if (same) return;
+    for (int i = 0; i < 5; i++) punch_bytes_[i] = bytes[i];
     knock_amount_ = kKnockMax * params.unit(kAsrFirst + 0);
-    const float knock_tau = kick_knock_seconds(params.get(kAsrFirst + 1));
-    knock_decay_ = exp(-inv_rate_ * reciprocal(knock_tau));
+    knock_decay_ = bytes[0] == 0 ? 0.0f : exp(-inv_rate_ * reciprocal(kick_knock_seconds(bytes[1])));
     tick_gain_ = kTickGain * params.unit(kAsrFirst + 2);
     // The fall: down to 2^-DRP of f0 (an octave at the top), on the amplitude's own time
     // constant, so the pitch has fallen most of the way by the time the body has.
-    drop_target_ = exp2(-params.unit(kAsrFirst + 3));
+    drop_target_ = bytes[3] == 0 ? 1.0f : exp2(-params.unit(kAsrFirst + 3));
     drop_rate_ = -inv_rate_ * reciprocal(amp_tau);
 }
 

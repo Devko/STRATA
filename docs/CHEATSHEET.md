@@ -377,7 +377,7 @@ MNO VA mono · PLY VA poly · WMN wavetable mono · WPL wavetable poly · FM4 fo
 
 | Machine | SRC (A B C D) | AMP (A B C D) |
 | --- | --- | --- |
-| KCK | TUN tune, FMA FM amount, FMD FM decay, CLK click | DEC decay, TON tone, DRT dirt, LVL level |
+| KCK | TUN tune, FMA FM amount, FMD FM decay, CLK click | DEC decay, TON tone, DRT dirt, LVL level; PNCH: KNK knock, KND knock time, TCK tick, DRP pitch drop |
 | SNR | TUN, SNP snappy, TON noise tone, CLP clap mode | DEC, SPR clap spread, BDY body, LVL |
 | HAT | TUN, TON tone, NOI noise, DTN detune | DEC, CHO choke time, CHK choke group, LVL |
 | PRC | TUN, RAT ratio, IDX FM index, IDD index decay | DEC, SWP pitch sweep, SWT sweep time, LVL |
@@ -407,7 +407,7 @@ OFF-100% (SRC: the source, never ducked) · DUCK: SRC source track, ATK attack 1
 FBK feedback, TON tone, LVL · DLY+: TYP CLAS/LONG (push A flips it), MUL X1-X8 (LONG: time x MUL,
 up to 12 s), WOW tape wobble, DIF diffusion · REV: DEC decay, DMP damping, HPF high-pass, LVL ·
 REV+: TYP ROOM/HALL (push A), SIZ size, MOD sweep, SHM octave-up shimmer · ROUTE: PNG ping-pong,
-D>R delay into reverb, LCT the LONG delay's low cut · CHO 1-4, CHO 5-8: each track's chorus send, OFF-127 (push A-D: OFF or 64; saved in the kit) · CHO: RAT sweep 0.05-5 Hz, DEP depth, LVL return, C>R chorus into the reverb · IN: the line input, LVL (100 = 0 dB), PAN, DLY, REV sends (push A: on/off) · IN+: CHO send, DCK duck depth, TON tone, SRC jack LINE/LINE L/MIC/DYN MIC/HI-Z/USB (push D: gain LOW/NORM/HIGH; saved in the project) · MST master: DJ filter, CMP compressor, LIM limiter, LVL · EQ master kill EQ:
+D>R delay into reverb, LCT the LONG delay's low cut, RDK the reverb's return under the duck · CHO 1-4, CHO 5-8: each track's chorus send, OFF-127 (push A-D: OFF or 64; saved in the kit) · CHO: RAT sweep 0.05-5 Hz, DEP depth, LVL return, C>R chorus into the reverb · IN: the line input, LVL (100 = 0 dB), PAN, DLY, REV sends (push A: on/off) · IN+: CHO send, DCK duck depth, TON tone, SRC jack LINE/LINE L/MIC/DYN MIC/HI-Z/USB (push D: gain LOW/NORM/HIGH; saved in the project) · MST master: DJ filter, CMP compressor, LIM limiter, LVL · EQ master kill EQ:
 LOW (below 250 Hz), MID, HI (above 2.5 kHz), each flat at centre, KILL at the bottom, +6 dB at the top.
 
 **Lists:** queue modes END (end of pattern), 16, 32 (steps), NOW · repeat 1/4 1/8 1/16 1/32 1/4T

@@ -10,14 +10,24 @@ the project file format or the controls.
 
 - **Techno sounds, measured against sample libraries.** Every factory sound was benchmarked
   against 400+ techno one-shots and loops (octave bands over the whole hit and its first 20 ms).
-  KCK adds TECHNO, WHOUSE, INDUS and MINIM: the full sweep, full click and the chain's drive,
-  which put 6-9 dB more knock above 300 Hz into the attack than 909. SNR adds TCLAP. 125 factory
-  sounds in all.
+  KCK adds TECHNO, WHOUSE, INDUS and MINIM: the full sweep and click, the chain's drive, a long
+  body and the new PNCH page, within a few dB of the references in a four-on-the-floor loop and
+  5-13 dB under them at 1-4 kHz in the first 20 ms (909: 11-25 dB under). They are 4-6 dB louder
+  than the older kicks, as long modern kicks are. SNR adds TCLAP. 125 factory sounds in all.
+- **KICK's PNCH page** (EDIT, where the synths have ENV): **KNK** a fast second pitch sweep (the
+  mid punch), **KND** its time, **TCK** a 3 kHz tick (the top click), **DRP** a pitch fall below
+  TUN of up to an octave. The benchmark found the 909's first 20 ms 11-25 dB under techno kicks
+  from 250 Hz to 4 kHz. All four at 0 is the old kick, bit for bit, so saved projects are
+  unchanged.
+- **RDK, the reverb duck** (MIXER ROUTE, D): the reverb's return rides the kit's sidechain duck,
+  0-100%, for the rumble-techno kick into a long dark reverb. One new byte in PROJECT.BIN (999
+  bytes); an older project opens with RDK 0.
 
 ### Changed
 
 - **Re-voiced from the benchmark:** RUMBLE is now a rumble layer for a second kick track (no
-  click, driven, low-passed at 290 Hz; duck it from the main kick). CLAP4 and DARK are tuned down
+  click, driven, low-passed at 290 Hz, falling half an octave with DRP; duck it from the main
+  kick). CLAP4 and DARK are tuned down
   so their noise reaches 1 kHz instead of starting at 2 kHz over a boxy 200 Hz body. ACID and
   ACIDSQ open further (CUT 40 and 44) and drive harder: written around C3 they squelch in the
   mids where the old voicing boomed at the fundamental. Levels stay balanced with each list.

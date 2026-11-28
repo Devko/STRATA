@@ -664,9 +664,16 @@ distorted. Two voices, so a ratchet does not cut itself off.
 | --- | --- | --- | --- | --- |
 | SRC | **TUN** pitch, 25-120 Hz (55 Hz at 64) | **FMA** pitch-sweep amount, up to about +26 semitones | **FMD** sweep time, 8-128 ms | **CLK** click level |
 | AMP | **DEC** decay, 20-640 ms time constant | **TON** body low-pass: thud to open | **DRT** dirt: clean sine to soft-clipped | **LVL** |
+| PNCH | **KNK** knock: a fast second sweep, up to four octaves over the body | **KND** knock time, 1-16 ms | **TCK** tick: a 3 kHz click at the very front | **DRP** drop: the pitch keeps falling, up to an octave (in cents) |
 
 The trig note transposes the kick, so a kick follows the key. FMD in the middle of the knob is
 where the classic click lives. Add DRV on FLTR for more 909 grit.
+
+**PNCH** (the seventh EDIT page, where the synths have ENV) is what a layered techno kick adds
+on top of the 909 body: KNK is the mid punch you feel in the first few milliseconds, TCK the top
+click that cuts through on small speakers, DRP the fall that makes a long kick deep rather than a
+held note. All four at 0 is the kick as it always was, so older projects sound the same. The
+SOUNDS TECHNO, WHOUSE, INDUS and MINIM use the page; RUMBLE uses DRP.
 
 ### SNR: SNARE
 
@@ -1849,6 +1856,11 @@ mode; the old mode's echoes ring out underneath, so a switch never clicks.
   tail drifts, **SHM** (D) feeds the tail back an octave up: a rising shimmer over held chords.
   DEC, DMP, HPF and LVL work as in the classic mode, and D>R sends the LONG delay into the HALL
   for the biggest wash.
+- **RDK, the reverb duck** (`ROUTE`, D: 0-100%). The reverb's return rides the kit's sidechain
+  duck (MIXER `DUCK`: which track fires it, and its attack, hold and release). This is the
+  rumble-techno move: send the kick into a long, dark reverb (REV: HPF low, DMP high, a long DEC;
+  the kick's SNB up), turn RDK up, and the tail pulls away under every kick and swells back
+  between them. At 0 the reverb is never ducked, as before; a project from before it opens at 0.
 
 The modes and their knobs are saved with the project; a project from before they existed opens
 with both sends classic. Both cost more CPU than the classic modes while they sound (about

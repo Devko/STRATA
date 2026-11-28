@@ -8,8 +8,9 @@
 # ring into a running engine, so the beat must still be sounding with no overrun afterwards.
 #
 # Track 1 (KICK) is selected on a fresh project, and the list opens on the sound it plays now,
-# 909 on row 1. DOWN then OK loads 808; DOWN twice then OK loads PUNCH; LEFT (a page up: the first
-# row) then OK is AS WAS; CLR goes back to EDIT.
+# 909 on row 1. DOWN then OK loads 808; DOWN twice then OK loads PUNCH; DOWN seven times then OK
+# loads TECHNO, which plays with KICK's PNCH page up (knock, tick and drop), so the peak below
+# includes it; LEFT twice (a page up each, to the first row) then OK is AS WAS; CLR goes back to EDIT.
 #
 # Keys (third_party/enaga/include/enaga/abi.h): F5 = 22 PLAY, F8 = 28 EDIT, OK = 23, DOWN = 25,
 # LEFT = 24, CLR = 30. The first press comes late: the panel link is not streaming in the first
@@ -20,7 +21,7 @@ cd "$(dirname "$0")/.."
 # shellcheck source=tools/env.sh
 source tools/env.sh
 
-CYCLES=1100000000
+CYCLES=1500000000
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -42,15 +43,17 @@ STAGE="$ENAGA_BUILD/stage/STRATA"
 mkdir -p "$ENAGA_BUILD"
 LOG="$ENAGA_BUILD/scenario_sounds.log"
 
-echo "running the emulator for $CYCLES cycles: play, EDIT, SOUNDS, 808, PUNCH, AS WAS ..."
+echo "running the emulator for $CYCLES cycles: play, EDIT, SOUNDS, 808, PUNCH, TECHNO, AS WAS ..."
 python3 -B tools/enaga_cached.py emulate "$STAGE" --cycles "$CYCLES" \
     --key 22@300000000 \
     --key 28@340000000 \
     --key 23@380000000 \
     --key 25@420000000 --key 23@460000000 \
     --key 25@540000000 --key 25@580000000 --key 23@620000000 \
-    --key 24@700000000 --key 23@740000000 \
-    --key 30@800000000 \
+    --key 25@660000000 --key 25@700000000 --key 25@740000000 --key 25@780000000 \
+    --key 25@820000000 --key 25@860000000 --key 25@900000000 --key 23@940000000 \
+    --key 24@1100000000 --key 24@1140000000 --key 23@1180000000 \
+    --key 30@1240000000 \
     > "$LOG" 2>&1 || {
     echo "FAIL: emulate.py exited non-zero" >&2
     tail -30 "$LOG" >&2
@@ -87,8 +90,8 @@ check("run int" in log, "the transport started", f"log={log}")
 
 check("scr SOUNDS" in log, "OK in EDIT opened SOUNDS on the kick track", f"log={log}")
 loads = [line for line in log if line.startswith("snd ")]
-check(loads == ["snd 808", "snd PUNCH", "snd AS WAS"],
-      "808, then PUNCH, then AS WAS loaded in order", f"lines={loads}")
+check(loads == ["snd 808", "snd PUNCH", "snd TECHNO", "snd AS WAS"],
+      "808, then PUNCH, then TECHNO, then AS WAS loaded in order", f"lines={loads}")
 screens = [line for line in log if line.startswith("scr ")]
 check(bool(screens) and screens[-1].startswith("scr EDIT"), "CLR went back to EDIT",
       f"screens={screens}")

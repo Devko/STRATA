@@ -1144,7 +1144,7 @@ A01 at 130.0, no chain.
   tables, a few notes on each, then back two tables. The table played a moment ago sounds on
   its first note, not sub only for a moment while it is built again. `____`
 
-**W84. The techno sounds (4 min).** Beat playing, A01.
+**W84. The techno sounds, PNCH and RDK (8 min).** Beat playing, A01.
 - Track 1, SOUNDS: TECHNO, WHOUSE, INDUS, MINIM. Each knocks harder than 909 (a thud with a
   punch at its front, audible on small speakers too) and sits within a couple of dB of 909's
   level. `____`
@@ -1154,6 +1154,12 @@ A01 at 130.0, no chain.
   thud under a hiss. `____`
 - Track 6, SOUNDS ACID, transpose the bass up an octave (or play KEYS around C3): it squelches
   in the mids rather than booming. `____`
+- Track 1 back to 909, EDIT, RIGHT to the seventh page: it reads `PNCH`, KNK KND TCK DRP at 0
+  and the kick sounds exactly as before. KNK up: a harder knock at the front. TCK up: a click
+  on top. DRP up with DEC long: the boom falls lower as it fades. No clicks or crackle. `____`
+- MIXER ROUTE, D (RDK) to 100; the kick's SNB up to about 40; REV: HPF low, DMP high, DEC long.
+  The reverb tail drops away under each kick and swells back between them; RDK 0: a steady
+  wash. MAX stays where it was (within a point). `____`
 
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.

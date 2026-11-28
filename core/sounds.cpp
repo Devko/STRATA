@@ -56,21 +56,23 @@ constexpr SoundPreset kKickPresets[] = {
     {"BOOM", {55, 35, 100, 0}, FLAT, {127, 10, 0, 100}, NO_ASR, NO_OSC},
     // Hard: a big fast sweep into a fully dirty body, driven hard. Hard and industrial techno.
     {"HARD", {55, 110, 30, 120}, {120, 127, 20, 0}, {64, 110, 127, 44}, NO_ASR, NO_OSC},
-    // The techno benchmark (2026-11-28) measured the presets above against 400+ techno kicks from
-    // sample libraries: in its first 20 ms the 909 is 20-35 dB short of them from 250 Hz to 4 kHz,
-    // the knock that makes a kick punch. The four below use everything: the full sweep (FMA 127),
-    // full click, DRT at the top, the chain's drive hard, and the PNCH page (dsp/kick.hpp) --
-    // KNK's knock for 250 Hz-1 kHz, TCK's tick for 2-6 kHz. TECHNO's first 20 ms now sits 6-10 dB
-    // under the references from 1 to 4 kHz, where the 909 is 30-40 dB under. LVL sits low
-    // because the drive does the level: they land within about 2 dB of the list's loudest.
+    // The techno benchmark (2026-11-28) measured the presets above against techno kicks from
+    // sample libraries, twice: the first 20 ms (the knock), and the hit tiled four-on-the-floor
+    // (how it sits in a loop). The 909 is 11-25 dB short of them in the attack from 250 Hz to
+    // 4 kHz. The four below use the full sweep (FMA 127) and click, moderate drive, a long body
+    // (DEC 85-105, which is what brings the loop's balance to the references') and the PNCH page
+    // (dsp/kick.hpp): KNK's knock for 250 Hz-1 kHz, a little of TCK's tick. Scored against the
+    // references (mean dB off, attack + loop, 63 Hz-8 kHz) they land at 6-10 where the older kicks
+    // land at 13-27. Long and driven, they are 4-6 dB louder than the older kicks: a modern techno
+    // kick is.
     // Modern techno: the sweep over 27 ms (FMD 56), a 61 ms body. Closest to the references of all.
-    {"TECHNO", {55, 127, 56, 127}, {95, 127, 20, 0}, {64, 100, 127, 72}, {127, 60, 127, 20}, NO_OSC},
+    {"TECHNO", {55, 127, 56, 127}, {70, 127, 20, 0}, {95, 100, 60, 95}, {127, 50, 40, 10}, NO_OSC},
     // Warehouse: a faster sweep and a longer, darker body (DEC 82, about 190 ms to -20 dB).
-    {"WHOUSE", {55, 127, 48, 127}, {90, 127, 20, 0}, {82, 90, 127, 62}, {110, 80, 110, 40}, NO_OSC},
+    {"WHOUSE", {55, 127, 48, 127}, {60, 127, 20, 0}, {105, 90, 40, 90}, {110, 60, 30, 30}, NO_OSC},
     // Industrial: the fastest sweep, drive at the top, short. Hard and industrial techno.
-    {"INDUS", {55, 127, 36, 127}, {127, 127, 20, 0}, {58, 110, 127, 60}, {127, 50, 127, 0}, NO_OSC},
+    {"INDUS", {55, 127, 40, 127}, {105, 127, 20, 0}, {85, 110, 127, 85}, {127, 40, 80, 0}, NO_OSC},
     // Minimal: short and tight, less drive. Leaves room for a rolling bass between the hits.
-    {"MINIM", {55, 127, 40, 127}, {80, 127, 20, 0}, {44, 100, 100, 90}, {110, 50, 127, 0}, NO_OSC},
+    {"MINIM", {55, 127, 40, 127}, {50, 127, 20, 0}, {72, 100, 40, 115}, {100, 40, 60, 0}, NO_OSC},
 };
 
 // --- SNARE: TUN SNP TON CLP / DEC SPR BDY LVL (dsp/snare.cpp) ------------

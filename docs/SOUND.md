@@ -95,6 +95,30 @@ sits right after it in our insert chain.
 ([Ableton](https://www.ableton.com/en/blog/drop-it-kick-electronic-music/),
 [Perfect Circuit](https://perfectcircuit.com/signal/kick-drum-synthesis))
 
+### KICK's PNCH page — what the benchmark added (2026-11-28)
+
+Measured against 400+ techno kick one-shots from sample libraries (octave bands over the whole
+hit tiled in a loop and over its first 20 ms), the 909 model above is 11-25 dB short in the
+attack from 250 Hz to 4 kHz, and has nothing below f0. Commercial techno kicks are built in layers: a low punch (this
+model's body), a mid punch (a fast pitch sweep through 250 Hz-1 kHz), a top (a click at 2-6 kHz)
+and often a falling sub tail. The model's own click is a 1 ms gate, whose spectrum has nulls at
+1, 2 and 3 kHz, and DRT moves the waveform but barely the spectrum. So the PNCH page adds the
+missing layers rather than changing the reference's knobs:
+
+- **KNK / KND**: a second pitch envelope, `f0 * (1 + 3.5*FMA*fm_env + 15*KNK*knock_env)`, with a
+  1-16 ms time constant. The knock starts up to four octaves over the body and is gone before
+  FMD's sweep is.
+- **TCK**: white noise band-passed at 3 kHz (Q 0.7) under a 1.5 ms envelope, added after TON so
+  the body's low-pass never dulls it. Its own noise generator, so the click's never moves.
+- **DRP**: f0 falls towards `2^-DRP` of itself on the amplitude's time constant (control rate).
+
+All three at 0 run the reference exactly. The techno presets land within a few dB of the
+references in the loop and 5-13 dB under them at 1-4 kHz in the attack. Two lessons from tuning
+them: the body's length (DEC) sets the loop's balance more than anything on the page, and heavy
+drive or a loud tick overshoots the loop's mids and top by 10-20 dB while barely helping the
+attack. Measure the attack with a window that does not fade in over its first milliseconds
+(a Hann window there hides the tick).
+
 ### SNARE — follow `synthetic_snare_drum` (909), with 808 mode ratios available
 
 Author's comment: *"Uses a few magic numbers taken from the 909 schematics"* and
