@@ -746,7 +746,8 @@ bool WaveLibrary::step() {
 
 // The next wanted table that is not in, and a slot for it: a free one, else the one whose table
 // was wanted least recently and is not wanted now. A slot whose table was just taken out waits
-// two audio blocks, so no render still holds the old mapping when it is written.
+// two audio blocks, so no render still holds the old mapping when it is written; while it waits,
+// no other table is taken out.
 bool WaveLibrary::start_next() {
     int table = -1;
     for (int t = 0; t < kWaveTables && table < 0; t++) {
@@ -758,12 +759,17 @@ bool WaveLibrary::start_next() {
     for (int i = 0; i < slots_ && pick < 0; i++) {
         if (table_in_[i] < 0 && !settling_[i]) pick = i;
     }
+    bool waiting = false;   // a slot taken out, not yet settled
     for (int i = 0; i < slots_ && pick < 0; i++) {
-        if (settling_[i] && now - freed_at_[i] >= 2u) {
+        if (!settling_[i]) continue;
+        if (now - freed_at_[i] >= 2u) {
             settling_[i] = false;
             pick = i;
+        } else {
+            waiting = true;
         }
     }
+    if (pick < 0 && waiting) return false;   // that slot comes first: take no other table out
     if (pick < 0) {
         int victim = -1;
         for (int i = 0; i < slots_; i++) {
