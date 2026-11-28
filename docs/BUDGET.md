@@ -143,20 +143,23 @@ with cl6x. Its ceiling is the shared budget: unison counts two voices a note aga
 loses notes sooner. All 50 scenarios pass with cl6x with it on top of the chorus (2026-11-27);
 worst 34.20%, `genload`.
 
-### The line input (2026-11-28, owed)
+### The line input (2026-11-28, emulator, Enaga v0.4.0)
 
 The INPUT jacks as a mixer strip (MIXER IN / IN+, `Engine::run_input`): one more insert chain,
 stereo (`InsertChain::process_pair`) with TON, PAN, the two sends and the duck, plus one pass
 splitting the codec's interleaved block into the two scratch planes. Off, it costs one compare a
 block and the output is bit-exact with the strip absent (`linein_off_by_default_...`).
 `scenario_linein` turns it on over the default beat; `scenario_m7` is the same beat with it off,
-so the strip's cost is the difference. Host estimate: about a stereo POLY track's chain, under
-half a point with cl6x.
+so the strip's cost is the difference. Measured at `c7d3a04` on Roland's PC; `scenario_chorus`
+passes beside them at 23.61% cl6x, 47.81% GCC-only with the two pages moved.
 
 | | m7 (input off) | linein (input on) | the strip |
 | --- | --- | --- | --- |
-| cl6x | owed | owed | owed |
-| GCC only | owed | owed | owed |
+| cl6x | 23.59% | 23.74% | **+0.15 points** |
+| GCC only | 45.39% | 45.52% | +0.13 points |
+
+The strip's sends are 0 in the scenario, so the delay and reverb it would feed are not in the
+figure; they cost what they cost for any track. The unit's reading is W68's.
 
 ### The chorus, send C (2026-11-27, emulator)
 
