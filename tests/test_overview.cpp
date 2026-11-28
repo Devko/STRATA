@@ -212,3 +212,95 @@ TEST(overview_view_marks_slice_columns_as_bits) {
     CHECK(!wave_has_cut(view.cuts, kWaveColumns));
     for (int i = 0; i < WaveView::kMarks; i++) CHECK_EQ(int(view.mark[i]), int(WaveView::kNone));
 }
+
+// One frame is a sample: every column shows it.
+TEST(overview_of_a_single_frame_fills_every_column_with_it) {
+    g_pcm[0] = 10000;
+    const WaveOverview o = build(1, 1, 1);
+    CHECK(o.ready);
+    for (int c = 0; c < kWaveColumns; c++) {
+        CHECK_EQ(int(o.hi[c]), 10000 >> 8);
+        CHECK_EQ(int(o.lo[c]), 10000 >> 8);
+    }
+}
+
+// A falling ramp: each column's highest is its own, not one carried from the column before.
+TEST(overview_each_column_starts_its_range_afresh) {
+    const uint32_t total = 12400;
+    for (uint32_t f = 0; f < total; f++) g_pcm[f] = int16_t(-ramp(f, total) - 1);
+    const WaveOverview o = build(total, 1, 777);
+    for (int c = 0; c < kWaveColumns; c++) {
+        CHECK_EQ(int(o.hi[c]), int(g_pcm[uint32_t(c) * 100]) >> 8);
+        CHECK_EQ(int(o.lo[c]), int(g_pcm[uint32_t(c) * 100 + 99]) >> 8);
+    }
+}
+
+// A builder used again after a broken load starts clean.
+TEST(overview_a_builder_used_again_after_a_broken_load_starts_clean) {
+    OverviewBuilder builder;
+    WaveOverview out;
+    for (uint32_t f = 0; f < 50; f++) g_pcm[f] = -30000;
+    builder.begin(out, 12400);
+    builder.feed(g_pcm, 0, 50, 1);                 // half a column at -30000, then a gap
+    builder.feed(g_pcm, 60, 10, 1);
+    builder.finish(12400);
+    CHECK(!out.ready);
+    for (uint32_t f = 0; f < 12400; f++) g_pcm[f] = 1000;
+    builder.begin(out, 12400);
+    builder.feed(g_pcm, 0, 12400, 1);
+    builder.finish(12400);
+    CHECK(out.ready);
+    CHECK_EQ(int(out.lo[0]), 1000 >> 8);
+    CHECK_EQ(int(out.hi[0]), 1000 >> 8);
+}
+
+// Every refusal sticks: a wrong channel count, a null block of one frame or too many frames
+// mid-load, and the right frames after it still give no overview. After finish_head a stray
+// feed changes nothing.
+TEST(overview_a_refusal_mid_load_sticks_and_a_finished_head_is_final) {
+    fill_ramp(1000, 1);
+    for (int how = 0; how < 3; how++) {
+        OverviewBuilder builder;
+        WaveOverview out;
+        builder.begin(out, 1000);
+        builder.feed(g_pcm, 0, 500, 1);
+        if (how == 0) builder.feed(g_pcm + 500, 500, 10, 3);
+        if (how == 1) builder.feed(nullptr, 500, 1, 1);
+        if (how == 2) builder.feed(g_pcm + 500, 500, 501, 1);
+        builder.feed(g_pcm + 500, 500, 500, 1);
+        builder.finish(1000);
+        CHECK(!out.ready);
+    }
+    OverviewBuilder builder;
+    WaveOverview out;
+    builder.begin(out, 124000);
+    builder.feed(g_pcm, 0, 1000, 1);
+    builder.finish_head();
+    CHECK_EQ(int(out.filled), 1);
+    builder.feed(g_pcm, 1000, 1000, 1);
+    CHECK_EQ(int(out.hi[5]), 0);
+    CHECK_EQ(int(out.filled), 1);
+}
+
+// Shorter than the header, stretched from two columns: the first half shows the first, the
+// second half the second, exactly; and from one column, every column shows it.
+TEST(overview_a_short_file_stretches_its_columns_exactly) {
+    for (uint32_t f = 0; f < 100; f++) g_pcm[f] = -10000;
+    for (uint32_t f = 100; f < 150; f++) g_pcm[f] = 10000;
+    OverviewBuilder builder;
+    WaveOverview out;
+    builder.begin(out, 100 * kWaveColumns);
+    builder.feed(g_pcm, 0, 150, 1);
+    builder.finish(150);
+    CHECK(out.ready);
+    for (int j = 0; j < kWaveColumns; j++) {
+        const int want = (j < kWaveColumns / 2 ? -10000 : 10000) >> 8;
+        CHECK_EQ(int(out.lo[j]), want);
+        CHECK_EQ(int(out.hi[j]), want);
+    }
+    builder.begin(out, 1000);
+    builder.feed(g_pcm + 100, 0, 5, 1);
+    builder.finish(5);
+    CHECK(out.ready);
+    for (int j = 0; j < kWaveColumns; j++) CHECK_EQ(int(out.hi[j]), 10000 >> 8);
+}
