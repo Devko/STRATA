@@ -33,7 +33,7 @@ UNIT_CHECKLIST.md's ~550 boxes, 4 are ticked.
 
 | Feature | Since | Unit | Known limits / notes |
 | --- | --- | --- | --- |
-| Runs as an Enaga app on the SmplTrek (Enaga 0.4.0 on `main` since 2026-11-27; 0.3.0 since #139 and for v0.4.0; 0.2.0 for v0.1.0-v0.3.1; ABI 0, BOOT 1.0.17) | v0.1.0 | ✔ booted 2026-11-22; v0.3.1 runs on the unit (2026-11-24); a #139 build boots on 0.3.0 (2026-11-25) | Loader checks only the ABI number: a build for one Enaga release may load on another and misbehave. Lofi-12 XT / CyDrums untried |
+| Runs as an Enaga app on the SmplTrek (Enaga 0.4.0 on `main` since 2026-11-27; 0.3.0 since #139 and for v0.4.0; 0.2.0 for v0.1.0-v0.3.1; ABI 0, BOOT 1.0.17) | v0.1.0 | ✔ booted 2026-11-22; v0.3.1 runs on the unit (2026-11-24); a #139 build boots on 0.3.0 (2026-11-25) | Loader checks only the ABI number: a build for one Enaga release may load on another and misbehave. CyDrums: runs, per a community report (Reddit, 2026-11); Lofi-12 XT untried |
 | Everything on the SD card under `/ENAGA/DATA/STRATA/`; never writes the SPI flash | v0.1.0 | ○ (13) | |
 | Audio load on the top line | v0.1.0 | ✔ about 0–26% on the default beat | Flickers every block |
 | Held MAX readout (since PLAY), on SETUP since #171 (the bottom line before) | v0.1.0 | ✔ top line under 30% default beat; MAX 84.3% in heavy play | Clean A01 and A04 MAX figures (60 s each) still to record |

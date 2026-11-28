@@ -4,8 +4,9 @@ This manual explains how STRATA works and how to play it. It goes with
 [CHEATSHEET.md](CHEATSHEET.md), which lists every gesture, screen and abbreviation on one page:
 read this once, then keep the cheatsheet next to the unit.
 
-It describes the current build, written from the code. STRATA is an early beta: most of it has
-not been checked on the hardware yet, and where that matters this manual says so.
+It describes the current build, written from the code. STRATA is a beta close to 1.0: it runs
+on the unit, and where a feature has not yet been walked through on the hardware this manual
+says so.
 
 **Key names.** Keys are named as printed on the SmplTrek: FUNC, REC, PROJECT, HOME, PLAY, STOP,
 MIXER, EDIT, OK, CLR, the arrow pad (UP, DOWN, LEFT, RIGHT), the **screen keys** (the pair just
