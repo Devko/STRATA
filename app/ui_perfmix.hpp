@@ -209,6 +209,7 @@
             rnd_unit_ = engine_.live_rnd_unit();
             rnd_armed_ = engine_.live_rnd_armed();
             energy_ = engine_.energy();
+            transpose_ = engine_.transpose();
             // The mixer to rest over FX GLIDE (a lock holds no effect); a loop plays on.
             if (perf_target_fx() != PerfFx::none) perf_ride_to(perf_target_fx(), 0, false);
         }
