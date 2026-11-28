@@ -169,7 +169,9 @@ TEST(help_starts_on_the_screens_own_page) {
     // Each MIXER page its own knobs, the duck's included.
     CHECK(first_page_has(place_of(HelpScreen::mixer, 4, 0), "A SRC SOURCE TRACK"));
     CHECK(first_page_has(place_of(HelpScreen::mixer, 2, 0), "DUCK DEPTH 1-4"));
-    CHECK(first_page_has(place_of(HelpScreen::mixer, 16, 0), "KILL BAND"));
+    CHECK(first_page_has(place_of(HelpScreen::mixer, 18, 0), "KILL BAND"));
+    CHECK(first_page_has(place_of(HelpScreen::mixer, 15, 0), "PUSH A  IN ON OR OFF"));
+    CHECK(first_page_has(place_of(HelpScreen::mixer, 16, 0), "PUSH D  GAIN"));
     CHECK(first_page_has(place_of(HelpScreen::mixer, 5, 0), "64+  UNISON 2 VOICES"));
     CHECK(first_page_has(place_of(HelpScreen::mixer, 12, 0), "CHORUS SEND 1-4"));
     CHECK(first_page_has(place_of(HelpScreen::mixer, 14, 0), "D C>R INTO REVERB"));
