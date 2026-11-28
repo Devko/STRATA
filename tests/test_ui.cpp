@@ -7993,9 +7993,10 @@ STRATA_AUDIT(s_projects)
 STRATA_AUDIT(s_resample)
 STRATA_AUDIT(s_menu)
 STRATA_AUDIT(s_sounds)
+STRATA_AUDIT(s_launch)
 #undef STRATA_AUDIT
 // One audit per screen: a screen added to the enum needs its line above.
-static_assert(s_count == 15, "a new screen needs its STRATA_AUDIT line");
+static_assert(s_count == 16, "a new screen needs its STRATA_AUDIT line");
 
 // --- MUTATE on the unit: upper pad 7 "did nothing" ------------------------------------------
 
