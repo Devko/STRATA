@@ -1,0 +1,164 @@
+#!/usr/bin/env python3
+"""MIDI files to STRATA step tables. Stdlib only; runs on Windows or WSL.
+
+    midi2strata.py info  FILE...                  # tempo, length, range, polyphony per file
+    midi2strata.py show  FILE [--mode M]          # a bar-per-row grid, to choose loops by eye
+    midi2strata.py emit  SPEC.json -o OUT.inc     # C++ tables for a generator (imported.inc)
+
+SPEC.json lists the parts to import:
+
+    {"parts": [
+      {"name": "bass_a", "file": "D:/.../bass.mid", "mode": "mono",
+       "transpose": -12, "bars": 4, "offset_bars": 0, "micro": true,
+       "velocity": [70, 120], "max_length_steps": 16},
+      {"name": "clap",   "file": "...", "mode": "drums", "all_to": 1, "set_velocity": 110},
+      {"name": "chords", "file": "...", "mode": "poly"},
+      {"name": "drums",  "file": "...", "mode": "drums", "map": {"36": 0, "38": 1, "42": 2}},
+      {"name": "hat",    "file": "...", "mode": "drums", "all_to": 3}
+    ]}
+
+mode: mono (one note a step, highest; "pick": "low" for the lowest), poly (chords), drums (a
+GM-note -> track map, or every note to "all_to"), raw (every note as it is). The file paths
+are read at emit time and never copied: the .inc holds steps only. Third-party MIDI stays out
+of git, and so does an .inc made from it.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+import grid  # noqa: E402
+import smf   # noqa: E402
+
+
+def load(path: str) -> smf.Song:
+    return smf.read(path)
+
+
+def part_steps(spec: dict) -> tuple[list[grid.StepNote], str]:
+    song = load(spec["file"])
+    notes = song.notes
+    if "channel" in spec:
+        notes = [n for n in notes if n.channel == int(spec["channel"])]
+    beats_per_bar = song.numerator * 4 / song.denominator
+    offset = float(spec.get("offset_bars", 0)) * beats_per_bar
+    bars = spec.get("bars")
+    window = int(bars * beats_per_bar * 4) if bars else None
+    steps = grid.quantize(notes, offset_beats=offset, window_steps=window,
+                          micro=bool(spec.get("micro", True)),
+                          max_length_steps=spec.get("max_length_steps"))
+    mode = spec.get("mode", "mono")
+    note_ = ""
+    if mode == "mono":
+        steps = grid.mono(steps, spec.get("pick", "high"))
+    elif mode == "poly":
+        bad = grid.unmatched(steps)
+        steps = grid.poly(steps)
+        if bad:
+            note_ = f"no STRATA chord at steps {bad[:12]}{'...' if len(bad) > 12 else ''}: lowest note kept"
+    elif mode == "drums":
+        if "all_to" in spec:
+            track_of = {n: int(spec["all_to"]) for n in range(128)}
+        else:
+            track_of = {int(k): int(v) for k, v in spec["map"].items()}
+        steps = grid.drums(steps, track_of, int(spec.get("length", 8)))
+    elif mode != "raw":
+        raise SystemExit(f"{spec['name']}: unknown mode {mode}")
+    if spec.get("transpose"):
+        steps = grid.transpose(steps, int(spec["transpose"]))
+    if "velocity" in spec:
+        lo, hi = spec["velocity"]
+        steps = grid.scale_velocity(steps, int(lo), int(hi))
+    if "set_velocity" in spec:
+        steps = [grid.replace(s, vel=int(spec["set_velocity"])) for s in steps]
+    return steps, note_
+
+
+def cmd_info(args) -> int:
+    for path in args.files:
+        try:
+            song = load(path)
+        except (smf.SmfError, OSError) as e:
+            print(f"{os.path.basename(path)}: {e}")
+            continue
+        ns = song.notes
+        if not ns:
+            print(f"{os.path.basename(path)}: no notes")
+            continue
+        starts: dict[float, int] = {}
+        for n in ns:
+            starts[round(n.start * 4)] = starts.get(round(n.start * 4), 0) + 1
+        bars = song.length_beats() / (song.numerator * 4 / song.denominator)
+        print(f"{os.path.basename(path)}: {song.tempo_bpm:.0f} BPM {song.numerator}/{song.denominator}, "
+              f"{bars:.1f} bars, {len(ns)} notes, range {min(n.note for n in ns)}-{max(n.note for n in ns)}, "
+              f"max {max(starts.values())} at once, channels {sorted({n.channel for n in ns})}")
+    return 0
+
+
+def cmd_show(args) -> int:
+    spec = {"name": "show", "file": args.file, "mode": args.mode}
+    if args.bars:
+        spec["bars"] = args.bars
+    if args.mode == "drums":
+        by_note = {}
+        for n in load(args.file).notes:
+            by_note.setdefault(n.note, []).append(n)
+        for note in sorted(by_note):
+            one = grid.quantize(by_note[note], window_steps=spec.get("bars", 999) * 16)
+            cells = {s.step for s in one}
+            last = max(cells, default=0)
+            print(f"{note:3} {grid.GM_DRUMS.get(note, '?'):7}", end="")
+            print("".join("x" if i in cells else ("|" if i % 16 == 0 else ".") for i in range(last + 1)))
+        return 0
+    steps, note_ = part_steps(spec)
+    print(grid.show(steps))
+    if note_:
+        print(note_)
+    return 0
+
+
+def cmd_emit(args) -> int:
+    with open(args.spec, encoding="utf-8") as f:
+        spec = json.load(f)
+    out = ["// Generated by tools/midi_import/midi2strata.py from " + os.path.basename(args.spec) + ".",
+           "// Steps only; the source MIDI is not copied. Not for git if the MIDI is third-party.",
+           "#pragma once", ""]
+    for part in spec["parts"]:
+        steps, note_ = part_steps(part)
+        comment = f"{part['name']}: {os.path.basename(part['file'])}, {part.get('mode', 'mono')}, {len(steps)} steps"
+        if note_:
+            comment += "\n" + note_
+            print(f"{part['name']}: {note_}", file=sys.stderr)
+        out.append(grid.emit_cpp(part["name"], steps, comment))
+    text = "\n".join(out)
+    if args.output == "-":
+        sys.stdout.write(text)
+    else:
+        with open(args.output, "w", encoding="utf-8", newline="\n") as f:
+            f.write(text)
+        print(f"wrote {len(spec['parts'])} parts to {args.output}")
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    a = sub.add_parser("info")
+    a.add_argument("files", nargs="+")
+    a = sub.add_parser("show")
+    a.add_argument("file")
+    a.add_argument("--mode", default="raw", choices=["mono", "poly", "drums", "raw"])
+    a.add_argument("--bars", type=int)
+    a = sub.add_parser("emit")
+    a.add_argument("spec")
+    a.add_argument("-o", "--output", default="-")
+    args = ap.parse_args(argv)
+    return {"info": cmd_info, "show": cmd_show, "emit": cmd_emit}[args.cmd](args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
