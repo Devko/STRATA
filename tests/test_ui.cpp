@@ -13411,6 +13411,9 @@ TEST(ui_arr_rec_records_the_jam_into_the_chain_from_the_menu) {
     CHECK_EQ(UiProbe::notice(app), "ARR REDONE");
     CHECK_EQ(chain_length(app_engine().project()), 1);
     key(ENAGA_KEY_CLR);
+    // Back to bar 1 for the next test: a tick 0 resyncs the bar count, then the stop.
+    host.deliver_tick(0, 0);
+    pump();
     host.set_running(false);
     pump(2);
 }
