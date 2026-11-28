@@ -271,6 +271,28 @@ What it means: emulator figures understate voice-heavy content more than light b
 `genload`'s 33.90% is closer to 70-80% than to 45% on the unit. Owed: MAX from SETUP on A01 and
 on W56 on the same build, to pin both ratios.
 
+### The v0.6.0 release build (2026-11-28, emulator, Enaga v0.4.0)
+
+`main` at `ff70ff5` (#262), the code v0.6.0 is tagged on; its cl6x `APP.ENA` is 1,836,184 bytes
+(sha256 `344fdb60…`). All 67 scenarios pass with cl6x and with `ENAGA_TI_CGT=none`; the host
+suite (4,888,367 checks), the same under ASan and UBSan, `tools/audit_commands.sh`,
+`tools/check_rules.sh` and `tools/enaga_check.sh` are clean. Every scenario's figure is in
+`docs/SCENARIO_LOG.md`, "The latest full pass".
+
+| Scenario, peak load | cl6x | GCC-only |
+| --- | --- | --- |
+| `factory` (A01 then A04) | 23.84% | 45.54% |
+| `ambient` (LONG + HALL) | 25.84% | 55.55% |
+| `varispeed` | 32.15% | 56.21% |
+| `energy` | 34.60% | 62.07% |
+| `genload` | 35.40% | 64.46% |
+| `stack` (everything turned up) | **45.41%** (the worst) | **79.93%** (the worst) |
+| `audition` | 6.30% | 6.58% |
+
+Worst case 45.41% with cl6x, against the 60% target, and 0.16 points under the stack's first
+reading at `af72cfa`. On the unit's ratio for dense parts (2.0-2.4x) the stack could pass 60%,
+so its MAX on the unit is the reading the next walkthrough owes.
+
 ### The v0.5.0 release candidate build (2026-11-27, emulator, Enaga v0.4.0)
 
 `main` at 46cc054 (#208), the code v0.5.0 is tagged on; its cl6x `APP.ENA` is 1,607,560 bytes
