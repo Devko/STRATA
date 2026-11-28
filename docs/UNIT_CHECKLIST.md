@@ -797,6 +797,11 @@ to reach `GUARD4` here at a 40-60% top line.
   every note wide and thick, a slow beating between the sides. Push again: OFF, mono. `____`
 - Turn C slowly from 0 to 127: the chord widens, then at 64 turns into unison; no click at the
   zone edge, and notes already playing keep their place until the next chord. `____`
+- T7's sound: CUT about 50, RES high. Hold a chord (or let a long one ring) with WID at 0 and
+  turn C up one click: the chord spreads with no click on either side. Back to 0 and up again:
+  no click the second time either. `____`
+- T7 wide, DUCK on T7 (kick ducking it). RESAMPLE from T7: the take plays back steady, not
+  pumping, and pumps only once it is put back under the kick. `____`
 - Push D (track 8, SAMPLE): `T8 WIDTH: POLY ONLY`, the strip shows `---`. `____`
 - With T7 in unison, the top line reads `____ %`; MAX after a minute `____ %`. Save, power
   cycle, open: WID is kept. `____`
