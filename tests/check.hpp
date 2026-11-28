@@ -30,6 +30,9 @@ struct Registry {
     struct Entry {
         const char *name;
         void (*fn)();
+        // What the test costs against a typical one, for --shard's cuts (TEST_WEIGHTED). Most
+        // tests are 1; only one that takes seconds needs more, or its shard holds up the run.
+        unsigned weight;
     };
 
     static Entry entries[kMax];
@@ -38,13 +41,15 @@ struct Registry {
     static int failures;
     static const char *current;
 
-    static void add(const char *name, void (*fn)());
+    static void add(const char *name, void (*fn)(), unsigned weight = 1);
     static int run_all(int shard = 0, int shards = 1, unsigned timeout_s = 0);
     static int run_names(const char *path, unsigned timeout_s);
 };
 
 struct Register {
-    Register(const char *name, void (*fn)()) { Registry::add(name, fn); }
+    Register(const char *name, void (*fn)(), unsigned weight = 1) {
+        Registry::add(name, fn, weight);
+    }
 };
 
 // Value printing, chosen by overload so the header needs no RTTI and no iostreams.
@@ -107,6 +112,14 @@ void check_true(bool ok, const char *expression, const char *file, int line);
 #define TEST(name)                                                        \
     static void name();                                                   \
     static ::strata::test::Register strata_register_##name(#name, name);  \
+    static void name()
+
+// A test that costs about `weight` typical tests (a typical test is about 15 ms under ASan).
+// tools/test_shards.sh cuts the suite into blocks of equal weight, not of equal count, so a test
+// of several seconds gets a shard of its own instead of holding up the whole run.
+#define TEST_WEIGHTED(name, weight)                                                \
+    static void name();                                                            \
+    static ::strata::test::Register strata_register_##name(#name, name, weight);   \
     static void name()
 
 #define CHECK(cond) ::strata::test::check_true((cond), #cond, __FILE__, __LINE__)
