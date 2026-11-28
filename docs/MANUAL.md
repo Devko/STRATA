@@ -1106,6 +1106,24 @@ outside clock that keeps running, STRATA goes quiet at the end and waits for PLA
 STOP. The header shows which (`CHAIN 3/64 ON SONG`). Both are saved with the project; a project
 from before song mode loops, with no recalls.
 
+### Track Launch: one track from another pattern
+
+Play the bass of B07 under the drums of A01 without making a new pattern. Press PROJECT twice
+quickly for the **LAUNCH** page: a row for each track with the 16 slots of the shown bank. Pick
+the track with UP/DOWN or its lower pad (the pads make no sound here), then press a STEP key:
+that track plays the same track's part of that pattern from the next boundary, from its own step
+1 (`T3 < B07 AT END`). Hold several lower pads to launch on all of them. CLR sends the track back
+to its own part.
+
+A launched track is read only: its steps belong to the other pattern, so edits are refused
+(`T3 B07 READ ONLY`). When the mix is right, **hold OK**: CAPTURE writes what plays into the
+first empty slot of the bank and switches to it, every track on its own part again, ready to edit.
+
+A pattern change sends every track back to its own part, unless you **pin** it with push B: a
+pinned track keeps playing what it plays across pattern changes. Launches are saved with the
+project, not in the chain. On GRID a launched track's number is underlined and the info line
+says which pattern it plays (`<B07`).
+
 ### Recording
 
 REC toggles live and motion recording. With the transport running, pad hits, KEYS and MIDI notes

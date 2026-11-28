@@ -106,6 +106,8 @@ bool mutates_pattern(Cmd cmd) {
         case Cmd::set_scale:
         // A LOCK jump or swap-back puts a whole pattern back (core/lockstore.hpp).
         case Cmd::lock_tap:
+        // CAPTURE writes a slot of the bank it names (note_command's target_bank).
+        case Cmd::launch_capture:
             return true;
         default:
             return false;
@@ -183,6 +185,11 @@ bool mutates_project(Cmd cmd) {
         case Cmd::set_midi_out:
         // A LOCK tap puts the send and master bytes and the live mutes back.
         case Cmd::lock_tap:
+        // Track Launch: the lane sources and pins are PROJECT.BIN's section 8, and CAPTURE moves
+        // the live pattern onto the slot it wrote.
+        case Cmd::launch:
+        case Cmd::launch_pin:
+        case Cmd::launch_capture:
             return true;
         default:
             return false;
@@ -823,8 +830,8 @@ bool Storage::open_last() {
 
 void Storage::note_command(Cmd cmd, int live_bank, int target_bank) {
     // PROJECT's slot copy and clear write the bank under the cursor, not the live one.
-    const bool slot_edit =
-        cmd == Cmd::pattern_copy || cmd == Cmd::pattern_clear || cmd == Cmd::pattern_double;
+    const bool slot_edit = cmd == Cmd::pattern_copy || cmd == Cmd::pattern_clear ||
+                           cmd == Cmd::pattern_double || cmd == Cmd::launch_capture;
     const int bank = slot_edit && target_bank >= 0 ? target_bank : live_bank;
     if (mutates_pattern(cmd) && project_index_valid(bank, 0)) {
         bank_dirty_[bank] = true;
