@@ -216,6 +216,33 @@ pool into one free slot, then switches to it keeping each lane's origin, so noth
 LAUNCH is PROJECT's last page so the page walks in older tests and scenarios stay valid.
 `tests/scenario_launch.sh` drives it in the emulator; CAPTURE and held pads are host-tested only.
 
+## Tap tempo, the nudge, PROG CHG OUT and song position in
+
+The arithmetic is `core/taptempo.hpp` (taps, nudge) and `core/queue.hpp`'s `chain_locate`.
+**Tap tempo** hangs off `value_reset`: a VALUE tap that resets nothing, where `value_on_tempo()`
+says VALUE turns the tempo, is a tap, stamped at the press (`value_down_ms_`). It sets the tempo
+the way a VALUE turn does (`set_tempo`, `post_tempo`, `adopted_tempo_centi_`). **The nudge** is
+main context only: FUNC + push VALUE + turn sets the clock to `nudged_bpm` and `update()` puts
+`tempo_tenths_` back once `nudge_due`; nothing is posted, so the project's tempo and the
+tempo-synced delay never see it. FUNC + turn VALUE without the push is VariSpeed; the nudge and the end of it go through VariSpeed's ratio (the release through `set_clock_tempo`), and tap tempo sets the clock through `set_clock_tempo` as a turn does.
+
+**PROG CHG OUT** is sent from `Engine::switch_pattern`, so every path that changes the live
+pattern sends it, a program change IN included (same channel, same number: a MIDI loop back into
+STRATA lands on the pattern already playing, which `switch_pattern` ignores). The user's MIDI CH
+is read in the main context and posted as `Cmd::set_midi_channel` when it changes; a refused send
+is kept in `program_pending_` and retried each block. The byte sits on the end of PROJECT.BIN's
+MIDI section (section 6, 9 bytes), so a v0.5.0 build reads the eight channels and skips it.
+
+**Song position in.** Enaga does the MIDI parsing (`firmware/kernel/clock.c`): under CLOCK SRC
+MIDI an SPP while stopped sets the clock to `16ths x 24` and raises `ENAGA_TRANSPORT_LOCATE`; the
+CONTINUE that follows resumes there. `on_transport` posts `Cmd::locate` only when the source is
+MIDI, because under the internal clock LOCATE is STRATA's own restart (`locate(0)`), which
+`Cmd::restart` handles. `Engine::locate` walks the chain from tick 0 (`chain_locate`: entry, pass,
+and the start of the run of entries on the same pattern, since `chain_advance` keeps the origin
+across a repeated pattern), sets `origin_` and every lane origin to it and `tick_` to the
+position, so `resolve_tick` sees no jump. A pending queue lands at once (no chain) or is dropped
+(chain). The emulator cannot send MIDI in, so only the host suite and the unit (W72) cover it.
+
 ## Your own sounds and copy / paste in SOUNDS
 
 `core/usersounds.hpp` has the design and the file's bytes; `app/storage.hpp` ("your own sounds")

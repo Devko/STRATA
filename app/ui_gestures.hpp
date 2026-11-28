@@ -119,6 +119,28 @@
                 morph_set(int(morph_) + delta * (int(kMorphScale) / 64));
                 return;
             }
+            if (value_pushed_ && shift_) {
+                // FUNC + push VALUE + turn is the tempo nudge (core/taptempo.hpp): each detent
+                // holds the tempo 4% faster or slower for a quarter of a second, then it goes
+                // back, so the beat moves against a source that sends no clock and the tempo
+                // stays where it was set. Not saved. Beside swing (push + turn), the other
+                // timing move; FUNC + turn VALUE is VariSpeed (Roland, 2026-11-28).
+                if (enaga::clock::source() != ENAGA_CLOCK_INTERNAL) {
+                    clock_refused_ = true;
+                    notice("EXT CLOCK");
+                    return;
+                }
+                // Times VariSpeed's ratio, as every clock tempo is (set_clock_tempo), but straight
+                // to the clock: through set_clock_tempo a nudge near 300 BPM would pull
+                // VariSpeed back for good, where it only has to clamp for a quarter second.
+                nudge_turn(nudge_, delta, last_ms_);
+                float bpm = nudged_bpm(tempo_tenths_, nudge_.direction) * vari_ratio(vari_);
+                if (bpm < float(kTempoTenthsMin) * 0.1f) bpm = float(kTempoTenthsMin) * 0.1f;
+                if (bpm > float(kTempoTenthsMax) * 0.1f) bpm = float(kTempoTenthsMax) * 0.1f;
+                clock_refused_ = !enaga::clock::set_tempo(bpm);
+                notice_logged(nudge_.direction > 0 ? "NUDGE FASTER" : "NUDGE SLOWER");
+                return;
+            }
             if (value_pushed_) {
                 // VALUE pushed and turned is the pattern's swing, as the spec's key table says.
                 mark(GestureKind::length, 0, 0);
