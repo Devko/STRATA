@@ -310,7 +310,7 @@ SerializeResult find_sections(const uint8_t *buffer, uint32_t size, uint16_t ver
 
 // --- PROJECT.BIN sizes ----------------------------------------------------
 
-constexpr uint32_t kProjectSections = 8;
+constexpr uint32_t kProjectSections = 9;
 constexpr uint32_t kProjectSettingsBytes = 19;
 constexpr uint32_t kProjectChainBytes = uint32_t(kChainEntries) * 3;
 // The sends, the master bytes and the kill switches. The section GREW when the kill EQ came
@@ -345,14 +345,16 @@ constexpr uint32_t kProjectEvolveOffset = kProjectMidiOffset + kProjectMidiBytes
 // Track Launch: each lane's source, then the pin mask.
 constexpr uint32_t kProjectLaunchBytes = uint32_t(kTracks) + 1;
 constexpr uint32_t kProjectLaunchOffset = kProjectEvolveOffset + kProjectEvolveBytes;
-constexpr uint32_t kProjectTotalBytes = kHeaderBytes + kProjectLaunchOffset + kProjectLaunchBytes;
+// The line input's strip, one byte a field.
+constexpr uint32_t kProjectInputBytes = uint32_t(kInputFields);
+constexpr uint32_t kProjectInputOffset = kProjectLaunchOffset + kProjectLaunchBytes;
+constexpr uint32_t kProjectTotalBytes = kHeaderBytes + kProjectInputOffset + kProjectInputBytes;
 
-// How many of `wanted` at the END of the list a reader may do without. Six: the mixer, the
-// live, the song, the MIDI, the EVOLVE and the launch sections, none of which existed when the
-// format was first written, so a PROJECT.BIN from before them has two to seven sections and must
-// still load
-// (core/project.hpp).
-constexpr uint32_t kProjectOptionalSections = 6;
+// How many of `wanted` at the END of the list a reader may do without. Seven: the mixer, the
+// live, the song, the MIDI, the EVOLVE, the launch and the input sections, none of which existed
+// when the format was first written, so a PROJECT.BIN from before them has two to eight sections
+// and must still load (core/project.hpp).
+constexpr uint32_t kProjectOptionalSections = 7;
 
 static_assert(sizeof(ProjectSettings::mute_states) == 8,
               "the settings section is 19 bytes on the strength of 8 mute states");
@@ -502,6 +504,7 @@ SerializeResult project_write(const Project &project, uint8_t *buffer, uint32_t 
         {kSectionProjectMidi, kProjectMidiOffset, kProjectMidiBytes},
         {kSectionProjectEvolve, kProjectEvolveOffset, kProjectEvolveBytes},
         {kSectionProjectLaunch, kProjectLaunchOffset, kProjectLaunchBytes},
+        {kSectionProjectInput, kProjectInputOffset, kProjectInputBytes},
     };
 
     Writer w(buffer, capacity);
@@ -553,6 +556,7 @@ SerializeResult project_write(const Project &project, uint8_t *buffer, uint32_t 
     w.u8(s.evolve_amount);
     for (int t = 0; t < kTracks; t++) w.u8(s.lane_source[t]);
     w.u8(s.lane_pinned);
+    for (int i = 0; i < kInputFields; i++) w.u8(s.input[i]);
 
     if (!w.ok() || w.size() != kProjectTotalBytes) return SerializeResult::buffer_too_small;
     return finish_container(w, buffer, kProjectTotalBytes, written);
@@ -591,12 +595,13 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
         return why;
     };
 
-    // The six optional sections (mixer, live, song, MIDI, EVOLVE, launch) come LAST:
+    // The seven optional sections (mixer, live, song, MIDI, EVOLVE, launch, input) come LAST:
     // kProjectOptionalSections.
     const uint16_t wanted[kProjectSections] = {kSectionProjectSettings, kSectionProjectChain,
                                                kSectionProjectMixer, kSectionProjectLive,
                                                kSectionProjectSong, kSectionProjectMidi,
-                                               kSectionProjectEvolve, kSectionProjectLaunch};
+                                               kSectionProjectEvolve, kSectionProjectLaunch,
+                                               kSectionProjectInput};
     uint32_t offset[kProjectSections] = {};
     uint32_t length[kProjectSections] = {};
     const SerializeResult found =
@@ -802,6 +807,22 @@ SerializeResult project_read(Project &project, const uint8_t *buffer, uint32_t s
         const uint8_t pinned = r.u8();
         if (!r.ok()) return refuse(SerializeResult::truncated);
         s.lane_pinned = pinned;
+    }
+
+    // The line input: absent is an older file, where the input was never heard, so the strip
+    // takes the defaults (off) rather than whatever the reused buffer held. A section shorter
+    // than this build's is a file from before a field was appended: what it has is read, the rest
+    // defaults. Unlike the sections above, short is NOT damage here, because this section is
+    // meant to grow on the end.
+    {
+        const ProjectSettings defaults;
+        for (int i = 0; i < kInputFields; i++) s.input[i] = defaults.input[i];
+        if (offset[8] != 0) {
+            if (!r.seek(kHeaderBytes + offset[8])) return refuse(SerializeResult::malformed);
+            const int present = length[8] < kProjectInputBytes ? int(length[8]) : kInputFields;
+            for (int i = 0; i < present; i++) s.input[i] = input_field_sanitized(i, r.u8());
+            if (!r.ok()) return refuse(SerializeResult::truncated);
+        }
     }
 
     // The live pattern. Not a user setting but project state: docs/SPEC.md reopens the last
