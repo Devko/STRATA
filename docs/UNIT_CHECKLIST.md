@@ -801,7 +801,7 @@ to reach `GUARD4` here at a 40-60% top line.
 - With T7 in unison, the top line reads `____ %`; MAX after a minute `____ %`. Save, power
   cycle, open: WID is kept. `____`
 
-**W61. ENERGY in PERFORM (4 min).** Beat playing, A01.
+**W62. ENERGY in PERFORM (4 min).** Beat playing, A01.
 - PERFORM (FUNC + MIXER). FUNC + turn C down one click at a time: `ENERGY -2` .. `-64`. The hats
   thin first, then the percussion and snare, the bass, the pads; the kick holds until about -40
   and is gone at -64, where only the pads and textures remain. The live strip shows `EN-`, the
