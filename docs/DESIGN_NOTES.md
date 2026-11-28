@@ -78,8 +78,10 @@ and the project keeps its own tempo so a save is never the moved one. Internal c
 ## LIVE RND
 
 **LIVE RND** (CyDrums P1's live half, `core/liverand.hpp`, docs/CONTROLS.md "LIVE RND"): FUNC +
-turn D in PERFORM sets a unit (OFF, 1-16) for the armed tracks, FUNC + push D arms or disarms the
-selected one (all eight at start). It lives in `PerformState` (`rnd_unit`, `rnd_armed`) and the
+turn D in PERFORM sets a unit (OFF, 1-16) for the armed tracks, FUNC + lower pad arms or disarms
+that one. The set at start is every track but KICK's (D3): the UI computes it each time LIVE RND
+comes on from OFF until the set is chosen by hand (`rnd_armed_chosen_`, which a LOCK jump sets too),
+so the engine's `rnd_armed` default of 0xFF never reaches the sound. It lives in `PerformState` (`rnd_unit`, `rnd_armed`) and the
 scheduler asks `live_play_mode` for each track's mode every tick, so it reuses the track PLAY mode's RND
 draw and never writes the pattern; the recorder asks the same function. In a LOCK (`LiveState`
 grew two bytes), not saved. Default armed set is all eight: Roland may prefer the kick out by
@@ -177,8 +179,8 @@ to the pattern as last saved" is NOT built: it needs a copy of every pattern as 
 with no lock says `NO LOCK: HOLD STORES`. Undo is untouched by a jump. The emulator cannot press
 pads, so LOCK is host-tested only (tests/test_lockstore.cpp, tests/test_ui.cpp); UNIT_CHECKLIST
 20c walks it. FX GLIDE lives in the UI (`perf_ride_to`, `core/perffx.hpp` `perf_ride_at`); the
-UI tests run with it OFF (`fresh()`), and its own tests turn it on. FUNC + MUTATE, FUNC + push D and
-FUNC + VALUE only show a hint now (`notice_logged` in app/app.hpp), so LOCK can take FUNC +
+UI tests run with it OFF (`fresh()`), and its own tests turn it on. FUNC + MUTATE and FUNC + VALUE
+only showed a hint then (FUNC + push D too, the kill for all bands since D2) (`notice_logged` in app/app.hpp), so LOCK can take FUNC +
 MUTATE outright. The master DJ byte stayed on MIXER's MST page on purpose: an old project saved
 with it set must be able to put it back.
 

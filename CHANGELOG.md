@@ -8,6 +8,17 @@ the project file format or the controls.
 
 ### Added
 
+- **PERFORM shows its FUNC layer.** While FUNC is held in PERFORM the four gauges read `REL`,
+  `LEN`, `NRG` and `RND` with where REL ALL, LEN ALL, ENERGY and LIVE RND are, so the turn you are
+  about to make is on the screen. The FUNC help's second PERFORM page is PERFORM LIVE, and its
+  first page's last line ends `< LAST`: LEFT goes round to the last page.
+- **FUNC + push D kills all three bands**, on every screen (`KILL ALL`); with all three out, it
+  brings them back (`ALL BANDS BACK`).
+- **CAPTURE in GRID's track menu.** The track menu's last row, one UP from GENERATE, CAPTUREs what
+  plays, launched lanes and all, into the first free slot of the playing bank. An edit refused on
+  a launched lane says `T3 B07 READ ONLY` and then `HOLD OK: CAPTURE`, taking turns. The first
+  lower pad on LAUNCH says `PADS PICK LANES`, since it makes no sound there.
+
 - **WAVE scan modes: the SCAN page.** WAVE MONO and WAVE POLY have a ninth EDIT page, SCAN:
   MOD moves the wavetable position from POS towards END with each note (OFF, FWD, REV, LOOP,
   LREV, PING, RET, SINE, RAND, DRFT), SPD sets the speed free or synced like the LFO's RAT, END
@@ -145,6 +156,14 @@ the project file format or the controls.
 
 ### Changed
 
+- **LIVE RND's tracks are picked with FUNC + lower pad** in PERFORM (`T2 RND OUT 6 TRK`), since
+  FUNC + push D is the kill for all bands. LIVE RND comes on with every track in but the kick, so
+  the floor holds; once you have picked the tracks, it keeps your pick.
+- **CLR on LAUNCH only sends the lane home.** On a lane already on its own part it says
+  `T3 PLAYS ITS OWN` and LAUNCH stays; the screen keys leave.
+- **Every confirmation reads the same way**: the key to press again and what it does, `OK AGAIN:
+  DELETE`, `OK AGAIN: OPEN`, `CLR AGAIN: REMOVE`, `DOWN AGAIN: REPLACE`, `A AGAIN: HEAR`,
+  `OK AGAIN: RELOAD`; a delete started with push C asks `OK TWICE: DELETE`.
 - **A slimmer FUNC menu.** FUNC+HOME holds the project-wide rows only, in the order a jam reaches
   for them: SAVE, JAM REC, CLICK, COUNT-IN, REC MODE, QUANTIZE, AUTO-FILL, FX GLIDE, LOOP LEN,
   CHAIN, CHAIN END, then the file rows from SAVE AS down to LOAD DEMO (UP once from SAVE). The
@@ -154,7 +173,7 @@ the project file format or the controls.
   says `FROZEN: TRACK MENU`. The emulator scenarios `triplets`, `playmode` and `freeze` hold OK
   for the track menu through `tools/emu_drive.py`.
 - **Sample audition with the beat playing takes two pushes.** In SAMPLES, push A while the
-  transport runs only says `A AGAIN TO HEAR`; a second push on the same file within 2 s plays
+  transport runs only says `A AGAIN: HEAR`; a second push on the same file within 2 s plays
   it. The SmplTrek has no cue output, so the audition goes out with the beat, and one bump of
   the knob in a set should not put a file into the room. Stopped, one push hears it as before.
 - **The clap sounds like a clap.** Its noise moved from 5-10 kHz down to about 2-3 kHz, and each

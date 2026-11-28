@@ -127,6 +127,11 @@ HOME "system", PLAY "◀◀", STOP "▶▶", MIXER "fx", EDIT "rec src".
    The upper row is printed TRK 1-7. Roland preferred tracks on the lower row and tools above, so
    the pads stay as they are and every performance pad names itself on the screen when pressed;
    FUNC held alone shows the whole row.
+5. **A step that cannot be undone asks for a second press, always in the same words** (U3,
+   2026-11-28): `<KEY> AGAIN: <WHAT>`, the key to press again and what it will do, within 2 s:
+   `OK AGAIN: DELETE`, `OK AGAIN: OPEN`, `CLR AGAIN: REMOVE`, `DOWN AGAIN: REPLACE`, `A AGAIN:
+   HEAR`. A delete that starts on a push asks `OK TWICE: DELETE` first. tools/check_rules.sh
+   holds the wording.
 
 ## Function block
 
@@ -192,24 +197,25 @@ Printed labels (above), and the moves made while playing:
 | --- | --- |
 | FUNC + CLR / OK | undo / redo |
 | FUNC + UP / DOWN | copy / paste (editing screens; on PROJECT's slots a whole pattern, the paste twice). Card lists: read again / store here (KIT save, PROJECTS save as). SOUNDS: copy the track's sound (the PASTE row under AS WAS loads it, on any track) / store it as your own, named (on one of your own: replace it). ARPS: `ARPS: NOT SAVED`. FUNC + LEFT twice on PROJECT's slots clears the pattern under the cursor |
-| FUNC + lower pad | mute that track on the next bar (at once while stopped). Several pads before the bar all land; the same pad twice takes it back |
+| FUNC + lower pad | mute that track on the next bar (at once while stopped). Several pads before the bar all land; the same pad twice takes it back. In PERFORM: that track in or out of LIVE RND (below) |
 | FUNC + FILL / REPEAT / THROW | note repeat on/off / pitched-down repeat / reverb throw |
 | FUNC + push A / B / C | kill LOW / MID / HI |
+| FUNC + push D | kill all three bands; with all three out, all back (`KILL ALL`, `ALL BANDS BACK`). On every screen, PERFORM included |
 | FUNC + pad-row key | selected track's length; held, it repeats (after 0.4 s, 20 steps a second) |
 | FUNC + STEP | trigless step, on every playing screen, PERFORM included |
 | FUNC + A / B / C on GRID | Euclidean fill |
 | FUNC + MUTATE, held half a second | **LOCK**: store the live set as the playing pattern's lock (`LOCK A01 STORED`); again later overwrites it |
 | FUNC + turn A / B in PERFORM | **REL ALL** / **LEN ALL** (below) |
 | FUNC + turn C in PERFORM | **ENERGY**: from a sparse breakdown to the peak (below) |
-| FUNC + turn D / push D in PERFORM | **LIVE RND**: the unit / the selected track in or out (below) |
+| FUNC + turn D in PERFORM | **LIVE RND**: the unit (below) |
 | FUNC + turn VALUE | **VariSpeed**: the tempo and every machine's pitch together, on every screen (below) |
 | FUNC + MUTATE, tapped | Jump to that lock at once (`BACK TO LOCK A01`); tapped again, swap back to the state from just before the jump (`SWAPPED BACK A01`). No lock: `NO LOCK: HOLD STORES` |
 
 Retired 2026-11-25 (backlog D1, D5; CHANGELOG "Gestures that moved"): FUNC + VALUE (DJ filter,
 now slots 1-2), FUNC + hold push D (tape stop, slot 8) and FUNC + hold MUTATE (delay freeze,
 slot 5). Each now only names its slot (`TAPE STOP: SLOT 8`, `FREEZE: SLOT 5`), apart from
-FUNC + MUTATE, which is LOCK since the next change (below), and FUNC + push VALUE + turn, the tempo
-nudge since 2026-11-28; FUNC +
+FUNC + MUTATE, which is LOCK since the next change (below), FUNC + push VALUE + turn, the tempo
+nudge since 2026-11-28, and FUNC + push D, the kill for all bands since 2026-11-28 (D2); FUNC +
 push D with a STEP held toggles the slide of that step's D lock, as FUNC + push A-C do theirs.
 
 ## LOCK (FUNC + MUTATE)
@@ -256,6 +262,9 @@ changed meaning. C and D with FUNC are ENERGY and LIVE RND (below).
   jump or swap puts them where the lock had them.
 - **On screen**: PERFORM's line under the macros reads `FUNC+A/B REL/LEN ALL` at rest and
   `REL -12 LEN 71%` away from it; the live strip adds `RL-` / `RL+` and `LN-` / `LN+`.
+- **While FUNC is held** in PERFORM the four gauges are this layer (U1, 2026-11-28): `REL`,
+  `LEN`, `NRG` and `RND` under the letters, each gauge with its value (`-12`, `71`, `+40`, `4`,
+  `OFF`), lit away from rest; the hint line gives way to them. Let go, and the macros are back.
 - **LEN ALL leaves a note with no gate alone** (a drum, a pad hit, a held key, the arpeggiator's
   own GATE): REL ALL is what shortens drums.
 
@@ -263,13 +272,18 @@ changed meaning. C and D with FUNC are ENERGY and LIVE RND (below).
 
 CyDrums' P1, the live half (backlog Phase 5; the controls concept: "the PATTERN page plus one
 PERFORM knob gesture"), `core/liverand.hpp`. The pattern half is the track menu's PLAY. FUNC
-+ D in PERFORM was a duplicate of the macro (turn) and the tape stop's hint (push), so no gesture
-that did something changed meaning; FUNC + push D still names slot 8 on every other screen.
++ turn D in PERFORM was a duplicate of the macro, so no gesture that did something changed
+meaning. The armed set was on FUNC + push D until 2026-11-28 (D2), when that became the kill for
+all bands on every screen.
 
 | Gesture | Does | Says |
 | --- | --- | --- |
 | FUNC + turn D | The unit for every armed track: OFF, 1, 2, 4, 8, 16, one a click, stopping at both ends | `LIVE RND4 8 TRK`, `LIVE RND OFF` |
-| FUNC + push D | The selected track out of the armed set, or back in. All eight at start | `T1 RND OUT 7 TRK`, `T1 RND IN 8 TRK` |
+| FUNC + lower pad | That track out of the armed set, or back in. No mute, no track selected | `T2 RND OUT 6 TRK`, `T2 RND IN 7 TRK` |
+
+- **The kick stays** (D3, 2026-11-28): turned on from OFF, LIVE RND arms every track but those
+  playing KICK, so the floor holds while the rest jumps (`LIVE RND4 7 TRK` on the factory kit).
+  Once a FUNC + lower pad (or a LOCK jump) has chosen the set, it stays as chosen.
 
 - **What it plays**: exactly the track menu PLAY's RND mode of that size, from the same seeded draw (the
   pattern's seed, the track, the block, the pass), over the track's own mode while it is on.
@@ -280,7 +294,7 @@ that did something changed meaning; FUNC + push D still names slot 8 on every ot
   or swap puts both back. Live recording lands a hit on the step that was sounding.
 - **On screen**: PERFORM's line under the macros reads `LIVE RND4 FUNC+D`, or `REL -12 LEN 71% R4`
   with REL/LEN ALL away from rest; the track meters mark the armed tracks with a dot; the live
-  strip adds `RN4`. The FUNC help's third PERFORM page lists both gestures.
+  strip adds `RN4`. The FUNC help's second PERFORM page lists both gestures.
 
 ## ENERGY (FUNC + turn C in PERFORM)
 
@@ -359,11 +373,12 @@ the pads. There the pads stay the piano, and the arrows are the menu's until CLR
 | PLAY | the track's play mode: FWD, REV, PING, RND1, RND2, RND4, RND8, RND16. Which step sounds in each slot; the pattern is not changed. One undo level a change | `T3 PLAY RND4` |
 | FREEZE | OK: freeze the track (its loop from the next bar line), or unfreeze it; the menu stays open. LEFT/RIGHT: the loop's length. The row reads `1 BAR` (1 2 4 8), `WAIT` / `REC` while recording, `ON` frozen | `FREEZE ARMED`, `UNFROZEN` |
 | RELOAD SAMPLE | OK: load the track's sample again, the way back from a `FAIL` or a card that was out | `LOADING`, `NO SAMPLE` |
+| CAPTURE | OK: Track Launch's CAPTURE (LAUNCH, below) into the playing bank: what plays, launched lanes and all, becomes a pattern of its own in the first free slot, so a READ ONLY lane edits again. The row reads `TO A`, the bank; the menu stays open | `CAPTURING`, `CAPTURED A05` |
 
 UP/DOWN or A pick the row, LEFT/RIGHT or B change it, OK runs (and steps a setting forward), CLR
 closes. A lower pad still selects the track, so one menu walks GEN over a kit; the menu keeps its
-row between openings. The list wraps: from GENERATE, UP reaches RELOAD SAMPLE, FREEZE, PLAY and
-SPEED.
+row between openings. The list wraps: from GENERATE, UP reaches CAPTURE, RELOAD SAMPLE, FREEZE,
+PLAY and SPEED. While the menu is open in GRID, notices show as a toast over the page tabs' line.
 
 - **Drum or melodic** is the machine's: the VAs, WAVE, FM4, GRAIN, an unsliced SAMPLE and MID get
   notes; the drums and a sliced SAMPLE get a rhythm with accents and ghosts, their notes kept.
@@ -413,11 +428,11 @@ pattern of the project. PROJECT pressed twice quickly opens LAUNCH, PROJECT's la
 | Key | Does | Says |
 | --- | --- | --- |
 | STEP 1-16 | launch that slot of the shown bank on the selected lane, or on every held lower pad. The same STEP again while it is queued drops it | `T3 < B07 AT END`, `LAUNCH OFF` |
-| Lower pads | select the lane, held for a launch of several. **Silent** on this page | |
+| Lower pads | select the lane, held for a launch of several. **Silent** on this page; the first on a visit says why | `PADS PICK LANES` |
 | UP / DOWN | the lane | |
 | LEFT / RIGHT | the slot cursor | |
 | OK | tap: launch the cursor's slot. Hold (0.5 s): **CAPTURE** | |
-| CLR | the lane back to its own part; on a lane already on its own part, back to SLOT | `T3 < OWN` |
+| CLR | the lane back to its own part, and only that: on a lane already on its own part it says so and the page stays (U2); the screen keys leave | `T3 < OWN`, `T3 PLAYS ITS OWN` |
 | push B | PIN the lane: a pattern change leaves it playing what it plays | `T3 PINNED` |
 | FUNC + STEP | a whole-pattern change, as on SLOT | |
 | The bank keys | the shown bank | |
@@ -430,9 +445,12 @@ pattern of the project. PROJECT pressed twice quickly opens LAUNCH, PROJECT's la
   A pinned lane on its own part keeps playing the pattern being left. Launches queued for the same
   boundary land after the change, over the new pattern.
 - **Read only**: a launched lane plays another pattern's part, and edits to it (a trig, a lock,
-  LEN, speed, GEN, recording ...) are refused with `T3 B07 READ ONLY`. EVOLVE pauses on it.
+  LEN, speed, GEN, recording ...) are refused with `T3 B07 READ ONLY`, which on GRID and KEYS
+  takes turns with `HOLD OK: CAPTURE` (U2): the track menu's CAPTURE row makes it a pattern of its
+  own. EVOLVE pauses on it.
   Sounds, mutes and the mixer are the track's as ever: only the steps come from elsewhere.
-- **CAPTURE** (hold OK): what plays, every lane's part, is written to the first empty slot of the
+- **CAPTURE** (hold OK, or the CAPTURE row of the track menu in GRID and KEYS, which writes to the
+  playing bank): what plays, every lane's part, is written to the first empty slot of the
   shown bank and plays from there with every lane on its own part, so it edits again.
   `CAPTURED A02`; `NO FREE SLOT IN BANK` or `LOCKS FULL` when it cannot. Not undoable; the source
   patterns are untouched. Master length, swing, key, FEEL and the seed come from the playing
@@ -729,7 +747,7 @@ SAMPLES (the sample browser) lists seven rows and draws what the track plays und
 same picture, over the `NOW` line. **Push A hears the file under the cursor** without loading it
 (dsp/audition.hpp): streamed whole from its start, straight to the output, after every effect.
 With the transport running it takes a second push on the same file within 2 s (the first says
-`A AGAIN TO HEAR`): there is no cue output, so it would go out to the room with the beat.
+`A AGAIN: HEAR`): there is no cue output, so it would go out to the room with the beat.
 Push A again stops it; while one plays, UP/DOWN, turning A and the pages hear the file the cursor
 lands on; OK, CLR, another folder or leaving SAMPLES stops it. A one-pixel line under the heard
 file's name grows as it plays, and a toast reads `HEARING 3/12S` (`OPENING` until it sounds).
@@ -775,7 +793,8 @@ AMOUNT` on a kick's SRC, `A SRC SOURCE TRACK` on MIXER DUCK), and the gestures t
 (the step page, the hold-and-press LEN, MACRO LEARN, NOTE view, SLC AUTO, rename and delete,
 KEYS on the pads ...). While FUNC is still held, **the screen keys (or LEFT/RIGHT) turn the help's
 pages**, as they turn every screen's pages; the help's last line says
-`PAGE 1/11`. The last five pages are the same everywhere: FUNC + each function key,
+`PAGE 1/11`, and on the first page `< LAST`: the pages go round, so LEFT reaches the last. The
+last five pages are the same everywhere: FUNC + each function key,
 FUNC + a knob or pad, the upper pads, and the performance mixer's gestures and slots
 (`VALUE FX MIXER:`, `VALUE FX STEPS:`). Every hold starts on the screen's own page.
 
@@ -797,7 +816,7 @@ The screens and their pages, from `core/help.cpp`:
 | KEYS | the pads as a piano, the page's knobs, the pad lights |
 | Step page | the three field pages, what each field is |
 | MIXER | the page that is up (TRK, DCK, DUCK, WID, DLY, DLY+, REV, REV+, ROUTE, CHO, IN, IN+, MST, EQ) |
-| PERFORM | macros, LEARN, scenes, morph, mutate |
+| PERFORM | macros, LEARN, scenes, morph, mutate; second, PERFORM LIVE: the layer FUNC + turn reaches (REL ALL, LEN ALL, ENERGY, LIVE RND) |
 | PROJECT, CHAIN, PATTERN, SETUP | one page each |
 | SECTION (push A on CHAIN) | one page |
 | LAUNCH | one page |

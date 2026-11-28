@@ -192,7 +192,7 @@ Page 1 NOTE VEL LEN MICR, page 2 PROB COND RTCH RAMP, page 3 ACNT SLID CHRD.
 | CHAIN | Entry | Entry's pattern -/+ | Page | Bank A-H | A: repeats X1-X16, B: mute recall --/M1-M8; push A: SECTION view | Add entry / remove entry (twice; empty: back) | — (FUNC menu) |
 | SECTION | Entry | Entry's pattern -/+ | SECT / MOVE | Bank A-H | SECT: PAT REP MUT SCN, MOVE: MRP NRG BPM; push: field to -- | Back (hold: fill from what plays) / back | — |
 | PATTERN | Change field -/+ | Field LEN / SWG / FEEL / track 1-8 swing | Page | Bank A-H | A: LEN 1-64, B: SWG, C: track swing (PAT, 50-75), D: FEEL (OFF, DRIFT 1-6, WAVE 1-6) | — / back | — |
-| PERFORM | Mutation type | Macro A-D | Mutate amount (±10) | Step page | Macros A-D (push: MACRO LEARN; FUNC + A: REL ALL, FUNC + B: LEN ALL, FUNC + C: ENERGY, FUNC + D: LIVE RND, FUNC + push D: track in/out) | Capture scene / clear macro | — (auto-fill: FUNC menu) |
+| PERFORM | Mutation type | Macro A-D | Mutate amount (±10) | Step page | Macros A-D (push: MACRO LEARN; FUNC + A: REL ALL, FUNC + B: LEN ALL, FUNC + C: ENERGY, FUNC + D: LIVE RND; held FUNC names them on the gauges; FUNC + lower pad: track in/out of LIVE RND) | Capture scene / clear macro | — (auto-fill: FUNC menu) |
 | FUNC menu | Row | Change a setting row | — | — | A: row, B: change | Run the row / close | — |
 
 **STEP lights:** a trig is green as bright as its velocity (soft, medium, loud, accent), blinks with a condition or probability, is amber with locks; red = trigless, bright red = the playhead.
@@ -204,8 +204,8 @@ The screen keys walk the pages PROJECT, CHAIN, PATTERN, SETUP, PROJECTS; CLR on 
 them goes back to the slots. In SETUP, A sets the record quantize. Chain on/off,
 RELOAD PROJECT, NEW PROJECT and LOAD DEMO are in the FUNC menu (FUNC+HOME), the sample reload in
 the track menu (hold OK in GRID); the last
-three throw away unsaved work, so each needs OK twice within 2 s (OK AGAIN TO RELOAD, OK AGAIN
-FOR NEW, OK AGAIN FOR DEMO). NEW is empty; LOAD DEMO is the factory demo a first start plays.
+three throw away unsaved work, so each needs OK twice within 2 s (OK AGAIN: RELOAD, OK AGAIN:
+NEW, OK AGAIN: DEMO). NEW is empty; LOAD DEMO is the factory demo a first start plays.
 **FUNC menu (FUNC+HOME):** SAVE, JAM REC, CLICK, COUNT-IN, REC MODE, QUANTIZE, AUTO-FILL, FX
 GLIDE, LOOP LEN, CHAIN, CHAIN END, PROG CHG OUT, SAVE AS, OPEN PROJECT, KITS, NEW PROJECT, RELOAD PROJECT, CLEAR
 PATTERN, LOAD DEMO. It always opens on SAVE: DOWN once is JAM REC, twice CLICK; the list wraps, so
@@ -221,15 +221,15 @@ JAM REC: OK records the finished master to `/RECORD/JAM_<n>.WAV` (24-bit, about 
 up to 3 h 51 min) until OK again; a dot blinks before the load and the REC key a dim red meanwhile;
 no click or audition. FUNC+REC twice (RESAMPLE, then again) starts and stops it too.
 **PROJECTS:** UP/DOWN or A move, LEFT/RIGHT page by 8. OK twice within 2 s opens the project
-under the cursor (AGAIN TO OPEN; it throws away unsaved work and stops the transport).
+under the cursor (OK AGAIN: OPEN; it throws away unsaved work and stops the transport).
 FUNC+DOWN (or the menu's SAVE AS) is SAVE AS: A or LEFT/RIGHT move, B, VALUE or UP/DOWN change the character, OK saves
 under that name (NAME TAKEN if another project has it), CLR cancels. FUNC+UP reads the card again.
 Push B renames the project under the cursor (the same entry, titled RENAME; the open one too).
-Push C deletes it: DELETE? OK TWICE, then OK twice within 2 s; CLR or any other key keeps it; the
+Push C deletes it: OK TWICE: DELETE, then OK twice within 2 s; CLR or any other key keeps it; the
 open project cannot be deleted (PROJECT IS OPEN).
 **CHAIN:** a STEP key puts that slot of the shown bank into the entry under the cursor (or starts
 the chain); VALUE also sets repeats; OK adds a copy after the cursor (the playing pattern when
-empty), up to 64 entries. CLR twice within 2 s removes the entry under the cursor (`AGAIN TO REMOVE`, then `ENTRY REMOVED`; not undoable); on an empty chain CLR goes back. B recalls a mute state as the entry starts. The FUNC menu's CHAIN turns the chain on and off, and CHAIN END
+empty), up to 64 entries. CLR twice within 2 s removes the entry under the cursor (`CLR AGAIN: REMOVE`, then `ENTRY REMOVED`; not undoable); on an empty chain CLR goes back. B recalls a mute state as the entry starts. The FUNC menu's CHAIN turns the chain on and off, and CHAIN END
 switches SONG (play the chain once and stop, `SONG END`) and LOOP. Chain edits are not undoable.
 **SECTION (push A on CHAIN):** the entry's fields applied as it starts. MUT --/M1-M8/CAP (an
 exact mute mask), SCN --/1-16 (scene on side B), MRP --/SNAP/RIDE/BACK/SNAP A (morph to B at once,
@@ -245,8 +245,8 @@ whole groove along one four-bar curve; the number is the most a step moves, in 9
 the ENV page) by the same count (`REL ALL -12`, -64..+64); FUNC + turn B scales every sequenced
 note's length (`LEN ALL 71%`, 25-400%). 0 is rest and a detent; not saved; a LOCK holds both.
 **LIVE RND:** in PERFORM, FUNC + turn D shuffles every armed track in random blocks of 1, 2, 4, 8
-or 16 steps (`LIVE RND4 8 TRK`), OFF puts the programmed order back at once; FUNC + push D takes
-the selected track out or back in (all eight at start). Pattern untouched; not saved; in a LOCK.
+or 16 steps (`LIVE RND4 7 TRK`), OFF puts the programmed order back at once; FUNC + lower pad takes
+that track out or back in (every track but the kick at start). Pattern untouched; not saved; in a LOCK.
 **ENERGY:** in PERFORM, FUNC + turn C from a breakdown (-64: drums and lines out, pads keep their
 strongest hits; hats go first, kick last) to the peak (+64: quiet ghosts on empty off-beats, hats
 most, probabilities towards 100). `ENERGY -20`; 0 is rest and a detent; pattern untouched; in a LOCK.
@@ -260,16 +260,16 @@ wherever they are. The demo project has B ACID (bass filter), C DUB (chord and r
 track only); scene pad + CLR erases it. Mutes, mute states and the A/B scene choice are saved with
 the project.
 **KIT:** a kit is everything KIT.BIN holds: the eight machines, their parameters, the faders,
-the sample paths, and each track's SLC AUTO, LFO TRIG, MOD slots, choke group and arp settings. STEP 1-16 move the cursor to that slot (they never load). OK once shows OK AGAIN TO
+the sample paths, and each track's SLC AUTO, LFO TRIG, MOD slots, choke group and arp settings. STEP 1-16 move the cursor to that slot (they never load). OK once shows OK AGAIN:
 LOAD; OK again within 2 s recalls the kit, and the transport keeps playing. A recall cuts the tails
 and is not undoable, which is why it takes two presses. Tracks whose sample path changed reload
 their sample in the background; the others keep playing theirs. FUNC+DOWN saves the current kit
-into an empty slot at once, and over a stored kit on a second press (AGAIN TO OVERWRITE). The kits
+into an empty slot at once, and over a stored kit on a second press (DOWN AGAIN: REPLACE). The kits
 live in `/ENAGA/DATA/STRATA/KITS/KIT_01.BIN` ... `KIT_16.BIN`. A recalled kit makes the project
 UNSAVED until it is saved with FUNC+HOME, OK.
 **SAMPLES:** one OK loads the file into the track at once, the beat keeps playing and the cursor
 stays, so DOWN, OK tries the next. **Push A hears the file first** without loading it, whole
-from its start (`HEARING 3/12S`); with the beat playing push A twice (`A AGAIN TO HEAR`), since it goes out with the beat; while it plays, UP/DOWN hears the next; push A again stops. The top level holds `SAMPLES/` and `RECORD/`, and on a card with the stock firmware's folders also
+from its start (`HEARING 3/12S`); with the beat playing push A twice (`A AGAIN: HEAR`), since it goes out with the beat; while it plays, UP/DOWN hears the next; push A again stops. The top level holds `SAMPLES/` and `RECORD/`, and on a card with the stock firmware's folders also
 `POOL/` (`/SmplTrek/Pool/Audio`) and `SMPLTREK/` (the whole `/SmplTrek` tree, stock projects included). Only WAVs and
 folders are listed (no `._` files), at most 256 a folder. Picking a file makes the project UNSAVED.
 **MIDI out:** a track with a MIDI OUT channel (MACHINE, encoder B) sends every note it plays
