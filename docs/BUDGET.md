@@ -53,6 +53,25 @@ changes a platform constant fails the host tests rather than drifting silently.
 
 ## STRATA measurements
 
+### JAM REC (2026-11-28, emulator, Enaga v0.4.0)
+
+JAM REC writes the finished master to an Enaga recording stream every block: Enaga's
+`enaga_float_to_pcm` to 24-bit over 128 samples and a 384-byte copy into the ring; the card writes
+happen in Enaga's main loop, not in audio(). `scenario_jamrec` plays the default beat and records
+about four seconds of it; the same build's `scenario_m1` is the beat alone. Run on `aa5e8e3`
+with `jamrec m1 click freeze glide recmode audition`; all pass apart from `recmode`, whose eighth UP
+came 20 M cycles after the seventh and was dropped (fixed in the next commit, and it passes with the
+presses 35 M apart).
+
+| | cl6x | GCC-only |
+| --- | --- | --- |
+| default beat (`m1`) | 22.92% | 45.23% |
+| default beat with JAM REC running (`jamrec`) | **24.76%** (+1.84) | **46.31%** (+1.08) |
+
+Peaks, so the difference carries about half a point of the run-to-run spread. No new worst case:
+the worst stays `genload`. The card's write speed beside four sample streams is a unit question
+(UNIT_CHECKLIST W62). Image with cl6x: payload 1,655,768 bytes, bss 1,670,384.
+
 ### Stereo width, WID (2026-11-27, emulator)
 
 A POLY track with WID up renders in stereo (core/width.hpp): each voice into its own block and out
