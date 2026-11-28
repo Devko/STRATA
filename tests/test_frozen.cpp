@@ -164,3 +164,54 @@ TEST(frozen_the_read_loop_ramps_its_gain_across_the_run) {
     CHECK_EQ(dst[2], 0.0f);
     CHECK_EQ(dst[3], 1.0f);
 }
+
+// A fade that crosses the loop's end: the ramp carries on from where it was, frame by frame,
+// over the wrap (the second run starts at the gain the first one reached). Both ways: a start's
+// fade in and a stop's fade out.
+TEST(frozen_a_fade_across_the_loops_end_keeps_its_ramp) {
+    fill_loop();
+    FrozenLoop loop;
+    CHECK(loop.set(g_loop, kFrames, 1, 0, int32_t(kFrames) - 20, 0));   // 20 frames to the end
+    float out[kBlk];
+    for (float &x : out) x = 0.0f;
+    loop.render_add(out, kBlk, true);
+    int wrong = 0;
+    for (int i = 0; i < kBlk; i++) {
+        const float gain = float(i) / float(kBlk);
+        const float want = frame_value(kFrames - 20u + uint32_t(i)) * gain;
+        wrong += (out[i] - want > 1e-6f || want - out[i] > 1e-6f) ? 1 : 0;
+    }
+    CHECK_EQ(wrong, 0);
+    // Round to 20 before the end again and stop across it.
+    for (int b = 0; b < 200 && loop.position() != kFrames - 20u; b++) {
+        for (float &x : out) x = 0.0f;
+        loop.render_add(out, int(loop.position() < kFrames - 20u - kBlk || loop.position() > kFrames - 20u
+                                     ? kBlk : (kFrames - 20u) - loop.position()), true);
+    }
+    CHECK_EQ(loop.position(), kFrames - 20u);
+    for (float &x : out) x = 0.0f;
+    loop.render_add(out, kBlk, false);
+    wrong = 0;
+    for (int i = 0; i < kBlk; i++) {
+        const float gain = 1.0f - float(i) / float(kBlk);
+        const float want = frame_value(kFrames - 20u + uint32_t(i)) * gain;
+        wrong += (out[i] - want > 1e-6f || want - out[i] > 1e-6f) ? 1 : 0;
+    }
+    CHECK_EQ(wrong, 0);
+}
+
+TEST(frozen_cleared_it_forgets_its_loop_and_adds_nothing) {
+    fill_loop();
+    FrozenLoop loop;
+    CHECK(loop.set(g_loop, kFrames, 1, 0, 300, 0));
+    float out[kBlk] = {};
+    loop.render_add(out, kBlk, true);
+    loop.clear();
+    CHECK_EQ(loop.frames(), 0u);
+    CHECK_EQ(loop.position(), 0u);
+    for (float &x : out) x = 0.0f;
+    loop.render_add(out, kBlk, true);
+    loop.skip(kBlk);
+    for (int i = 0; i < kBlk; i++) CHECK_EQ(out[i], 0.0f);
+    CHECK_EQ(loop.position(), 0u);
+}
