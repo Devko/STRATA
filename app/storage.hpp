@@ -322,7 +322,7 @@ public:
         return e;
     }
 
-    // --- jam recording: JAM REC, the FUNC menu's last row ---
+    // --- jam recording: JAM REC, the FUNC menu's second row ---
     //
     // The whole jam to the card: the finished master (what RESAMPLE's MASTER take hears, so never
     // the click or the audition) to /RECORD/JAM_<n>.WAV, 48 kHz 24-bit stereo, for as long as it
@@ -334,7 +334,8 @@ public:
     //   1. request_jam_start() creates the file through an Enaga recording stream
     //      (Engine::jam_writer, a wav::Writer, into `jam_ring_`) and posts Cmd::jam_start.
     //   2. The audio side writes every block into it. Enaga moves the ring to the card in its main
-    //      loop; a block the ring has no room for is dropped whole and counted (jam_lost_frames).
+    //      loop; when the ring is full, the frames of a block that do not fit are dropped and
+    //      counted (jam_lost_frames), and the ones that fit are kept.
     //   3. A stop (the user, a full card, kJamMaxBytes, the card going) posts Cmd::jam_stop. The
     //      audio side stops writing and bumps Status::jam_epoch; only after seeing that is the
     //      file closed, which writes what the ring still holds and then the header.

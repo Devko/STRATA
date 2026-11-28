@@ -20,8 +20,10 @@ kind of thing everywhere: the arrow pad moves the cursor (OK picks, CLR goes bac
 keys turn the screen's pages, and the pad-row keys choose which sixteen the STEP keys mean (step
 page or bank). FUNC + a function key does what is printed under that key: REC "sampling"
 is RESAMPLE, PROJECT "pool" is the sample browser, HOME "system" is the **FUNC menu**, MIXER "fx"
-is PERFORM. The rare setup actions (save as, open, new, reload, kits, chain on/off, song mode,
-track speed, auto-fill, quantize) live in the FUNC menu, named on the screen. The upper pads are
+is PERFORM. The project-wide setup actions (save as, open, new, reload, kits, chain on/off, song
+mode, auto-fill, quantize, the click) live in the FUNC menu, named on the screen; the selected
+track's own settings (its speed, play order, freeze, sample reload) and GENERATE are in the track
+menu, OK held in GRID. The upper pads are
 printed TRK 1-7, but in STRATA they are the performance pads: each is lit in its own colour and
 names itself on the screen when pressed. Hold FUNC alone for a moment for help on the screen you
 are on: what the four knobs do there and the gestures it has. Keep holding FUNC and tap the screen
@@ -426,11 +428,15 @@ the selected track's pad pushes it up while you lean on it.
 remove hits, or nudge velocity, timing, probability or notes within the scale. It is one undo
 level: OK keeps it, CLR takes it back.
 
-### GEN and EVOLVE
+### The track menu: GEN, EVOLVE and the track's settings
 
 <p><img src="screens/trackmenu.png" width="256" alt="The track menu, held OK in GRID: GENERATE and its settings, EVOLVE, MODE, MUTATION, AMOUNT"></p>
 
-**Hold OK in GRID** for the track menu. **GENERATE** writes a new part on the selected track: on
+**Hold OK in GRID** (or in KEYS) for the track menu: everything that belongs to the selected track. A lower
+pad picks another track with the menu open. Its last four rows are the track's **SPEED** and
+**PLAY** (see "Length, speed and swing"), **FREEZE** (see "Freeze") and **RELOAD SAMPLE**, which
+loads the track's sample again after a `FAIL` or a card that was out; the list wraps, so UP from
+GENERATE reaches them. **GENERATE** writes a new part on the selected track: on
 a drum track a rhythm, busier on the beats than between them, with accents and ghost notes; on a
 melodic track a line in the pattern's key and scale too, starting on the root. DENSITY sets how
 busy, RANGE how many octaves the line may climb, LEAP how often it jumps, and WHAT whether to
@@ -570,7 +576,8 @@ are the white keys C to C, the upper pads above them the black keys (C#, D#, F#,
 two upper pads with no black key are octave down (between E and F) and octave up (after B). Pads
 play at the strength you hit them and hold the note while down; the pads in the scale light in
 the track's colour, the root brightest; the screen draws the same keyboard. LEFT/RIGHT change
-octave, UP/DOWN the track, and FUNC + a pad still mutes on the bar. The STEP keys are the track's
+octave, UP/DOWN the track, and FUNC + a pad still mutes on the bar. **Hold OK** for the track menu
+(GENERATE and EVOLVE, below), as in GRID; the pads stay the piano while it is open. The STEP keys are the track's
 steps, as on GRID, with the pad-row keys for the step page, so you can play a line on the pads and
 place or fix steps at the same time. Press **REC** (it lights red) while playing and what you play is
 recorded onto the selected track, quantized by the SETUP page's QUANTIZE amount (100% by
@@ -1041,12 +1048,12 @@ track. The FUNC menu's CLEAR PATTERN (OK twice) clears every track at once. Hold
 <p><img src="screens/pattern.png" width="256" alt="PROJECT's PATTERN page"></p>
 
 - `FUNC + pad-row keys`: the selected track's length, 1-64 steps.
-- The FUNC menu's TRACK SPEED row: its speed, 2x, 3/2, 1x, 3/4, 1/2, 1/4, 1/8 (LEFT/RIGHT).
+- The track menu's SPEED row (hold OK in GRID): its speed, 2x, 3/2, 1x, 3/4, 1/2, 1/4, 1/8 (LEFT/RIGHT).
   **3/2 is 16th-note triplets**: a step every 16 ticks, six to the beat, so a bar is 24 steps.
   Give the track LEN 24 for a one-bar triplet hat, or leave it at 16 for a part that drifts
   against the beat and comes round every two thirds of a bar. 3/4 is the eighth-note triplet.
   Swing still pushes the track's odd steps, on its own 16-tick grid.
-- The FUNC menu's TRACK PLAY row, under it: the order the track plays its steps in, without
+- The track menu's PLAY row, under it: the order the track plays its steps in, without
   changing them. **FWD** as written; **REV** backwards; **PING** forward one pass and backward
   the next (the two end steps sound twice at the turn, so a 16-step track still turns every
   bar); **RND1** a random step in every slot; **RND2, RND4, RND8, RND16** cut the track into
@@ -1090,6 +1097,10 @@ In PROJECT, the pad-row keys pick the **shown** bank, which is not necessarily
 the playing one; STEP 1-16 or the cursor plus OK queue a slot from it. CLR cancels a queued change
 (`QUEUE OFF`). The slots show the playing pattern bright, patterns with trigs mid grey, empty ones
 dark, and `05>` marks a queued slot.
+
+From any other screen, **hold PROJECT and press STEP 1-16**: that slot of the shown bank is
+queued (`A05 QUEUED END`) and the screen you are playing on stays up. PROJECT itself opens when
+the key comes up, and only if no STEP was pressed while it was held.
 
 The **CHAIN** page (PROJECT, screen key RIGHT) lists the entries, `>02 A05 X2 PLAY`. UP/DOWN move the
 cursor, a STEP key puts that slot of the shown bank into the entry, LEFT/RIGHT step the entry's
@@ -1145,16 +1156,16 @@ key as the rest of a POLY chord does; MID sends them as written unless the step 
 A seventh note is refused. The extra notes are kept in the step's locks, so a chord of six leaves
 two parameter locks free on that step.
 
-What a later pass does is **REC MODE** in the FUNC menu (after QUANTIZE): **REPLACE**, the
+What a later pass does is **REC MODE** in the FUNC menu (after COUNT-IN): **REPLACE**, the
 default, lets the first note of a new pass take the step over, its old notes and chord type gone,
 and the notes played with it join it; **ADD** adds every note to what the step holds, so a chord
 can be built up one pass at a time. The edit line says `REC+` under ADD. Transposing a range,
 MUTATE's note moves and turning NOTE move the whole chord. VA MONO, WAVE MONO, SAMPLE, GRAIN and
 the drums keep one note a step: the last one played.
 
-<p><img src="screens/menu_click.png" width="256" alt="The FUNC menu on CLICK, with REC MODE above and COUNT-IN below"></p>
+<p><img src="screens/menu_click.png" width="256" alt="The FUNC menu on CLICK, with JAM REC above and COUNT-IN below"></p>
 
-**CLICK and COUNT-IN** (FUNC menu). CLICK `ON` clicks every beat while the transport runs, a
+**CLICK and COUNT-IN** (FUNC menu, the two rows under JAM REC). CLICK `ON` clicks every beat while the transport runs, a
 higher click on each bar's first beat. COUNT-IN `1 BAR` or `2 BAR` makes a PLAY from stop with REC
 on click that many bars first (the notice counts `COUNT-IN 4` .. `1`), whether CLICK is on or not;
 the pattern then starts on step 1 on the next beat, and nothing is recorded during the clicks
@@ -1303,9 +1314,9 @@ order, so the groove stays on the grid and a hat still sits on its offbeat.
 All eight are in at the start. The usual move: select the kick (lower pad 1), FUNC + push D, and
 the four-on-the-floor holds while everything else jumps around it.
 
-It is the same shuffle as the FUNC menu's TRACK PLAY row (RND1-RND16), but for many tracks at
+It is the same shuffle as the track menu's PLAY row (RND1-RND16), but for many tracks at
 once and only while it is on: the pattern is never changed, so **turning back to OFF puts every
-track on its own steps at once**, exactly as programmed, in time. A track's own TRACK PLAY mode
+track on its own steps at once**, exactly as programmed, in time. A track's own PLAY mode
 comes back with it. The shuffle is seeded from the pattern, so the same pattern shuffles the same
 way every time you play it.
 
@@ -1330,8 +1341,9 @@ drums and lines are gone and only the pads and textures play, on their strongest
 sound of the hit before them on the same track, so a ghost on a tuned kick is the same kick and a
 ghost on a bass line repeats the note it follows. The hats fill most, then the percussion, the
 snare and the samples, and the lines; the kick only in the top half, and pads and MID tracks
-never. A track with nothing on it stays silent. Steps with a probability play more often too: a
-50% hat plays every pass at +64.
+never. A track with nothing on it stays silent. A ghost is one note even on a track whose arp is
+on, and it lights no step and no trig glow in GRID: the lights show the pattern, not the fill.
+Steps with a probability play more often too: a 50% hat plays every pass at +64.
 
 Each position of the knob plays the same groove every bar: turning one click further takes away
 (or adds) exactly one more set of hits, and turning back brings each one back where it was. The
@@ -1568,7 +1580,7 @@ tracks 3 and 4 is separate and still works without a group.
 
 <p><img src="screens/mixer.png" width="256" alt="MIXER: the faders of tracks 1-4"> <img src="screens/mixer_dly.png" width="256" alt="MIXER's DLY page"></p>
 
-<sub>MIXER's first page, all eight faders with A-D on tracks 1-4, and the DLY page. The screen keys walk all seventeen: TRK 1-4, TRK 5-8, DCK 1-4, DCK 5-8, DUCK, WID 1-4, WID 5-8, DLY, DLY+, REV, REV+, ROUTE, CHO 1-4, CHO 5-8, CHO, MST, EQ.</sub>
+<sub>MIXER's first page, all eight faders with A-D on tracks 1-4, and the DLY page. The screen keys walk all seventeen: TRK 1-4, TRK 5-8, DCK 1-4, DCK 5-8, DUCK, WID 1-4, WID 5-8, DLY, DLY+, REV, REV+, ROUTE, CHO 1-4, CHO 5-8, CHO, MST, EQ. UP/DOWN jump a group at a time, to its first page: the levels (TRK), the duck (DCK), the widths (WID), the delay (DLY), the reverb (REV), the chorus (CHO 1-4) and the master (MST).</sub>
 
 Each send has a second mode for long, washy sounds. They sit on the MIXER pages beside their
 send, `DLY+` after `DLY` and `REV+` after `REV`. **Push A** on either page (or turn A) flips the
@@ -1642,16 +1654,16 @@ the project. A project or kit from before the chorus opens with no track sending
 ### Freeze
 
 CPU is the SmplTrek's tight resource and memory is not, so a track can be **frozen**: it plays
-a loop of itself from RAM instead of computing its sound. FUNC+HOME opens the menu; **FREEZE** is
-near the end (UP four times from SAVE, since the list wraps). The row shows the selected track and the loop's length, `T7 1 BAR`;
-LEFT/RIGHT or B pick 1, 2, 4 or 8 bars. OK arms it (`FREEZE ARMED`, or `ARMED: PRESS PLAY`
-when stopped): from the next bar line the track's machine is recorded for that many bars, and
+a loop of itself from RAM instead of computing its sound. Select the track in GRID and hold OK
+for the track menu; **FREEZE** is two UPs from GENERATE, since the list wraps. The row shows the
+loop's length, `1 BAR`; LEFT/RIGHT or B pick 1, 2, 4 or 8 bars. OK arms it (`FREEZE ARMED`, or
+`ARMED: PRESS PLAY` when stopped) and the menu stays open, the row reading `WAIT`, then `REC`: from the next bar line the track's machine is recorded for that many bars, and
 then the screen says `FROZEN` and the track plays the recording.
 
 A frozen track keeps its **insert filter, drive, lo-fi, fader, pan, sends and duck**: they work
 on the loop live. What stops is everything that feeds the machine: notes, steps, locks, chords
-and the knobs on its SRC/AMP pages do nothing, and EDIT says `FROZEN: FUNC+HOME`. To change the
-part, unfreeze it: the FREEZE row reads `T7 ON`, and OK gives the machine back at once
+and the knobs on its SRC/AMP pages do nothing, and EDIT says `FROZEN: TRACK MENU`. To change the
+part, unfreeze it: the track menu's FREEZE row reads `ON`, and OK gives the machine back at once
 (`UNFROZEN`). The loop keeps in time with the bar lines; after a tempo change it jumps back into
 time at the start of its next loop rather than stretching. A frozen track is silent while
 stopped. Loading a project, NEW and recalling a kit unfreeze every track, and a freeze is not
@@ -1718,11 +1730,12 @@ muted track bounces as silence, so unmute it first.
 
 ### Recording the whole jam: JAM REC
 
-RESAMPLE keeps 30 seconds. To keep a whole set, use **JAM REC**, the FUNC menu's last row:
-FUNC+HOME, UP, OK. The menu closes with `JAM REC JAM 3`, a dot blinks in the top bar before the
-load, and everything that comes out of STRATA goes to `/RECORD/JAM_<n>.WAV` until you stop it:
-FUNC+HOME, UP, OK again (`JAM STOPPING`, then `SAVED JAM 3`). The row shows how long it has run,
-`4:07` or `1:02:33`.
+RESAMPLE keeps 30 seconds. To keep a whole set, use **JAM REC**: press **FUNC+REC twice**, once
+for RESAMPLE and again to start it (`JAM REC JAM 3`). A dot blinks in the top bar before the load,
+the REC key blinks a dim red, and everything that comes out of STRATA goes to
+`/RECORD/JAM_<n>.WAV` until you stop it with FUNC+REC on RESAMPLE again (`JAM STOPPING`, then
+`SAVED JAM 3`). RESAMPLE's last line shows how long it has run, `4:07` or `1:02:33`, and the key
+that stops it. The FUNC menu's JAM REC row, its second (FUNC+HOME, DOWN, OK), does the same, with the time on the row.
 
 It records what RESAMPLE's MASTER take hears: every track, the sends, the master effects,
 REPEAT and the tape stop. The metronome and the sample browser's audition are for you and are
@@ -1999,7 +2012,7 @@ sound crackles:
   out first) and GRAIN clouds get sparser. It steps back down one level a second once the load
   falls, and a second STOP clears it. Seeing `GUARD` often means the pattern asks for more than
   the box has: use the tips above.
-- **Freeze the dearest track.** FUNC+HOME, UP four times to FREEZE, OK: the selected track
+- **Freeze the dearest track.** Select it in GRID, hold OK, UP twice to FREEZE, OK: the track
   records its loop (1 bar; LEFT/RIGHT or B on the row for 2, 4 or 8) from the next bar line, then
   plays it from memory and stops computing. A six-voice POLY chord goes from the biggest cost
   in the project to almost nothing. See "Freeze" in section 5.
@@ -2022,7 +2035,7 @@ Shown on the PROJECT screen under the project name, and the track shows `X` on t
 | `NOT A WAV` / `BAD FORMAT` | Not a WAV STRATA reads | Export as 16 or 24-bit PCM WAV |
 | `TOO MANY CH` | More than two channels | Export as mono or stereo |
 | `EMPTY` | No audio in the file | |
-| `NO SAMPLE` | the FUNC menu's RELOAD SAMPLE on a track whose kit names no file | |
+| `NO SAMPLE` | the track menu's RELOAD SAMPLE on a track whose kit names no file | |
 | `NO CARD` | The card is missing or unusable | Reinsert it; samples reload by themselves |
 | `NO SWAP` | The sample handover did not complete | A bug: please report it |
 

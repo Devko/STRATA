@@ -248,7 +248,18 @@
                           state == 0u ? (take_offer_ >= 0 ? "OK PUTS  CLR KEEPS" : "OK ARMS  CLR CANCELS")
                                       : "CLR CANCELS",
                           10);
-        paint::small_text(px, 0, 113, "LEFT RIGHT: WHERE TO", 8);
+        // JAM REC, FUNC + REC again here: how long it has run, at the right of the last line, and
+        // the key that stops it in place of the arrows' hint; JAM OFF, dim, when none runs.
+        if (storage_.jam_running()) {
+            paint::small_text(px, 0, 113, "FUNC+REC: STOP JAM", 10);
+            out = line;
+            append_clock(out, storage_.jam_seconds());
+            *out = 0;
+            paint::small_badge(px, 124 - paint::small_width(line), 113, line);
+        } else {
+            paint::small_text(px, 0, 113, "LEFT RIGHT: WHERE TO", 8);
+            paint::small_text(px, 125 - paint::small_width("JAM OFF"), 113, "JAM OFF", 6);
+        }
     }
 
     // --- SAMPLES -----------------------------------------------------------------------------

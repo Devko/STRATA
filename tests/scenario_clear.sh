@@ -2,7 +2,8 @@
 # CLEAR PATTERN (FUNC menu, docs/CONTROLS.md) in the emulator, on the factory beat while it plays:
 #
 #   PLAY                                  -> the beat runs, track 1's grid line is not empty
-#   FUNC + HOME, DOWN x5, OK, OK           -> `g0000 u1`: track 1 empty, one undo level
+#   FUNC + HOME, UP x2, OK, OK             -> round from SAVE past LOAD DEMO to CLEAR PATTERN:
+#                                            `g0000 u1`: track 1 empty, one undo level
 #   FUNC + CLR                            -> the grid line is back, undo depth 0
 #
 # The emulator cannot read pattern memory, so this reads the app's `g<mask> u<depth>` log line
@@ -10,7 +11,7 @@
 # empty too is tests/test_ui.cpp's.
 #
 # Keys (third_party/enaga/include/enaga/abi.h): F1 = 19, F4 = 27, F5 = 22, OK = 23, CLR = 30,
-# DOWN = 25. A chord is FUNC pressed and the second key 5 M cycles later (tests/scenario_m6.sh).
+# UP = 17. A chord is FUNC pressed and the second key 5 M cycles later (tests/scenario_m6.sh).
 # The two OKs are 60 M cycles (0.16 s) apart, well inside the 2 s arm.
 set -euo pipefail
 
@@ -43,8 +44,7 @@ echo "running the emulator for $CYCLES cycles: PLAY, FUNC menu CLEAR PATTERN, FU
 python3 -B tools/enaga_cached.py emulate "$STAGE" --cycles "$CYCLES" \
     --key 22@300000000 \
     --key 19@400000000 --key 27@405000000 \
-    --key 25@460000000 --key 25@520000000 --key 25@580000000 \
-    --key 25@640000000 --key 25@700000000 \
+    --key 17@460000000 --key 17@520000000 \
     --key 23@760000000 --key 23@820000000 \
     --key 19@940000000 --key 30@945000000 \
     > "$LOG" 2>&1 || {

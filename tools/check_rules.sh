@@ -12,6 +12,9 @@
 #   4. Scenarios run the emulator through tools/enaga_cached.py, never Enaga's emulate.py
 #      directly: a direct call rebuilds the app and the firmware from scratch every run
 #      (scenario_clear and scenario_tune did, 243 s and 157 s of a 15-minute run, 2026-11-27).
+#   5. The walkthrough items of docs/UNIT_CHECKLIST.md (**W1.**, **W20b.**) are numbered
+#      once each, in order. Two PRs open side by side both take the next free number (W61 twice,
+#      2026-11-28), and .gitattributes merges the file without a conflict, so this is what notices.
 #
 # Only #include lines and calls are looked at, so a rule named in a comment does not trip it.
 #
@@ -48,5 +51,15 @@ report "filenames unique across core/ dsp/ app/" "$hits"
 
 hits=$(grep -nE 'tools/emulate\.py"? ' tests/scenario_*.sh | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' || true)
 report "scenarios emulate through tools/enaga_cached.py" "$hits"
+
+# Rule 5: per letter, the numbers in file order, a letter suffix (W20b) belonging to its number.
+hits=$(grep -noE '^\*\*[NSW][0-9]+[a-z]?\.' docs/UNIT_CHECKLIST.md | awk -F: '
+    { item = substr($2, 3, length($2) - 3); letter = substr(item, 1, 1); rest = substr(item, 2)
+      n = rest + 0; suffix = rest; sub(/^[0-9]+/, "", suffix)
+      if (seen[item]++) { print "line " $1 ": " item " is numbered twice"; next }
+      if (suffix == "" && (letter in last) && n != last[letter] + 1)
+          print "line " $1 ": " item " follows " letter last[letter]
+      if (suffix == "") last[letter] = n }' || true)
+report "UNIT_CHECKLIST items numbered once each, in order" "$hits"
 
 exit $fail

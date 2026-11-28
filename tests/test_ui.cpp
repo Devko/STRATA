@@ -133,6 +133,8 @@ struct UiProbe {
     static int macro_selected(const Strata &app) { return app.macro_selected_; }
     static int quantize(const Strata &app) { return app.quantize(); }
     static int menu_cursor(const Strata &app) { return app.menu_cursor_; }
+    static bool track_menu(const Strata &app) { return app.track_menu_; }
+    static int track_menu_cursor(const Strata &app) { return app.track_menu_cursor_; }
     static PerfFx perf_picked(const Strata &app) { return app.perf_picked_; }
     static uint8_t perf_amount(const Strata &app) { return app.perf_amount_; }
     static uint8_t loop_mix(const Strata &app) { return app.loop_mix_; }
@@ -222,11 +224,17 @@ struct UiProbe {
         app.slot_menu_ = false;
         app.slot_menu_cursor_ = 0;
         app.slot_ok_held_ = false;
+        app.track_menu_ = false;
+        app.track_menu_cursor_ = 0;
+        app.track_ok_held_ = false;
         app.clip_bank_ = 0;
         app.clip_slot_ = -1;
         app.slot_armed_ = Strata::SlotAction::none;
         app.menu_return_ = Mode::grid;
         app.menu_cursor_ = 0;
+        app.track_menu_ = false;
+        app.track_menu_cursor_ = 0;
+        app.track_ok_held_ = false;
         app.help_page_ = 0;
         app.chain_remove_armed_ = -1;
         app.card_armed_ = Strata::CardAction::none;
@@ -386,17 +394,44 @@ void open_keys() {
     for (int i = 0; i < 3 && UiProbe::mode(the_app()) != int(Mode::keys); i++) key(ENAGA_KEY_F4);
 }
 
-// The FUNC menu's rows, in order (app/app.hpp, MenuItem).
-enum MenuRow : int { kMenuSave, kMenuSaveAs, kMenuOpen, kMenuNew, kMenuReload, kMenuClear,
-                     kMenuKits, kMenuSample, kMenuSpeed, kMenuPlay, kMenuChain, kMenuSong,
-                     kMenuAutofill, kMenuQuantize, kMenuRecMode, kMenuClick, kMenuCountIn,
-                     kMenuGlide, kMenuFreeze, kMenuLoopLen, kMenuDemo, kMenuJam, kMenuRowCount };
+// The FUNC menu's rows, in order (app/ui_perfmix.hpp, MenuItem).
+enum MenuRow : int { kMenuSave, kMenuJam, kMenuClick, kMenuCountIn, kMenuRecMode, kMenuQuantize,
+                     kMenuAutofill, kMenuGlide, kMenuLoopLen, kMenuChain, kMenuSong, kMenuSaveAs,
+                     kMenuOpen, kMenuKits, kMenuNew, kMenuReload, kMenuClear, kMenuDemo,
+                     kMenuRowCount };
+
+// GRID's track menu's rows, in order (app/ui_trackmenu.hpp, TrackRow).
+enum TrackMenuRow : int { kTrackGenerate, kTrackDensity, kTrackRange, kTrackLeap, kTrackWhat,
+                          kTrackEvolve, kTrackMode, kTrackMutation, kTrackAmount, kTrackKeep,
+                          kTrackHome, kTrackSpeed, kTrackPlay, kTrackFreeze, kTrackSample,
+                          kTrackRowCount };
 
 // FUNC + HOME, then DOWN to `row`: the cursor starts on SAVE each time the menu opens.
 void menu_to(int row) {
     if (UiProbe::mode(the_app()) == int(Mode::menu)) key(ENAGA_KEY_CLR);
     shift_key(ENAGA_KEY_F4);
     for (int i = 0; i < row; i++) key(ENAGA_KEY_DOWN);
+}
+
+// GRID's track menu on `row`: HOME to GRID if it is elsewhere, hold OK, then DOWN to the row
+// (the menu keeps its row between openings, so this walks by the cursor, not a count).
+void track_menu_to(int row) {
+    Strata &app = the_app();
+    if (UiProbe::track_menu(app)) key(ENAGA_KEY_CLR);
+    if (UiProbe::mode(app) != int(Mode::grid) || UiProbe::step_page(app)) {
+        g_ms += 1000;                          // not a double tap (KEYS)
+        pump();
+        key(ENAGA_KEY_F4);
+    }
+    app.on_key(ENAGA_KEY_OK, true);
+    pump(600);
+    app.on_key(ENAGA_KEY_OK, false);
+    pump(2);
+    CHECK(UiProbe::track_menu(app));
+    for (int i = 0; i < kTrackRowCount && UiProbe::track_menu_cursor(app) != row; i++) {
+        key(ENAGA_KEY_DOWN);
+    }
+    CHECK_EQ(UiProbe::track_menu_cursor(app), row);
 }
 
 // Open the menu on `row` and press OK once.
@@ -913,6 +948,92 @@ TEST(ui_project_slots_copy_paste_and_clear_a_pattern) {
     shift_key(ENAGA_KEY_LEFT);
     pump(2);
     CHECK(!trig_at(0, 0));
+    key(ENAGA_KEY_F4);
+    pump(2);
+}
+
+// Hold PROJECT + STEP n queues slot n of the shown bank from any screen, and the screen stays
+// (usability review, 2026-11-28). PROJECT opens on its release, only when no STEP came between.
+TEST(ui_hold_project_and_step_queues_a_pattern_from_any_screen) {
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    key(ENAGA_KEY_F4);                               // GRID
+    key(ENAGA_KEY_F5);
+    for (uint32_t t = 0; t <= 24 * 2; t += 24) {
+        host.deliver_tick(t, 0);
+        pump();
+    }
+    const bool trig4 = trig_at(0, 4);
+
+    // The press alone opens nothing: PROJECT waits for its release.
+    app.on_key(ENAGA_KEY_F3, true);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::grid));
+    step_down(4);
+    CHECK_EQ(UiProbe::notice(app), "A05 QUEUED END");
+    app.on_key(ENAGA_KEY_F3, false);                 // PROJECT up before the STEP
+    step_up(4);                                      // its release is the chord's, not GRID's
+    pump(2);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::grid));
+    CHECK(app_engine().queue().pending);
+    CHECK_EQ(int(app_engine().queue().bank), 0);
+    CHECK_EQ(int(app_engine().queue().slot), 4);
+    CHECK_EQ(trig_at(0, 4), trig4);                  // no trig toggled under the chord
+    CHECK_EQ(UiProbe::held_step(app), -1);
+
+    // The same from PERFORM, whose STEP keys are steps too; the last STEP wins.
+    shift_key(ENAGA_KEY_F7);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::perform));
+    app.on_key(ENAGA_KEY_F3, true);
+    step_down(1);
+    step_up(1);
+    step_down(2);
+    step_up(2);
+    app.on_key(ENAGA_KEY_F3, false);
+    pump(2);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::perform));
+    CHECK_EQ(int(app_engine().queue().slot), 2);
+    CHECK_EQ(UiProbe::notice(app), "A03 QUEUED END");
+
+    // A plain tap still opens PROJECT, on the release; a second tap within 0.4 s is LAUNCH,
+    // where the chord still queues a whole pattern rather than launching a lane.
+    key(ENAGA_KEY_F3);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::project));
+    CHECK_EQ(UiProbe::project_page(app), 0);            // the slots;
+    key(ENAGA_KEY_F3);
+    CHECK_EQ(UiProbe::project_page(app), 5);            // LAUNCH;
+    app.on_key(ENAGA_KEY_F3, true);
+    step_down(3);
+    step_up(3);
+    app.on_key(ENAGA_KEY_F3, false);
+    pump(2);
+    CHECK_EQ(int(app_engine().queue().slot), 3);
+    CHECK_EQ(UiProbe::notice(app), "A04 QUEUED END");
+    CHECK_EQ(UiProbe::project_page(app), 5);            // LAUNCH;
+    key(ENAGA_KEY_CLR);                              // LAUNCH: CLR leaves for the slots
+    CHECK_EQ(UiProbe::project_page(app), 0);            // the slots;
+
+    // FUNC + PROJECT is still SAMPLES, at once, and no STEP queues under it.
+    key(ENAGA_KEY_F4);
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_key(ENAGA_KEY_F3, true);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::samples));
+    app.on_key(ENAGA_KEY_F3, false);
+    app.on_key(ENAGA_KEY_F1, false);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::samples));
+
+    // A STEP held as a modifier first: PROJECT opens at once and ends the hold.
+    key(ENAGA_KEY_F4);
+    step_down(6);
+    CHECK_EQ(UiProbe::held_step(app), 6);
+    app.on_key(ENAGA_KEY_F3, true);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::project));
+    CHECK_EQ(UiProbe::held_step(app), -1);
+    app.on_key(ENAGA_KEY_F3, false);
+    step_up(6);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::project));
+
+    key(ENAGA_KEY_F6);
+    key(ENAGA_KEY_F6);
     key(ENAGA_KEY_F4);
     pump(2);
 }
@@ -7021,13 +7142,12 @@ TEST(ui_the_menu_scrolls_runs_and_goes_back) {
     key(ENAGA_KEY_F4);
 }
 
-TEST(ui_the_menu_freeze_row_arms_a_freeze_of_the_selected_track_and_gives_it_back) {
-    // FREEZE (dsp/frozen.hpp): the row shows the selected track and the bars OK records, B and
+TEST(ui_the_track_menu_freeze_row_arms_a_freeze_of_the_selected_track_and_gives_it_back) {
+    // FREEZE (dsp/frozen.hpp), in GRID's track menu: the row shows the bars OK records, B and
     // LEFT/RIGHT set the bars, OK arms the freeze, and OK on a frozen or arming track undoes it.
     Strata &app = fresh();
-    key(ENAGA_KEY_F8);                                  // EDIT, track 1
-    menu_to(kMenuFreeze);
-    CHECK_EQ(UiProbe::menu_cursor(app), int(kMenuFreeze));
+    track_menu_to(kTrackFreeze);                        // track 1
+    CHECK(screen_has(app, ">FREEZE"));
     // B walks 1, 2, 4, 8 and round; the length outlives fresh(), so walk to 1 by the notice.
     for (int i = 0; i < 4 && std::strcmp(UiProbe::notice(app), "FREEZE 1 BAR") != 0; i++) {
         app.on_encoder(1, +1);
@@ -7040,9 +7160,10 @@ TEST(ui_the_menu_freeze_row_arms_a_freeze_of_the_selected_track_and_gives_it_bac
     key(ENAGA_KEY_OK);
     CHECK_EQ(UiProbe::notice(app), "ARMED: PRESS PLAY");
     CHECK_EQ(app_storage().freezing_track(), 0);
-    CHECK_EQ(UiProbe::mode(app), int(Mode::edit));      // the menu closed over EDIT
+    CHECK(UiProbe::track_menu(app));                    // the menu stays, the row says WAIT
     pump(2);
-    menu_run(kMenuFreeze);                              // again: the take is dropped
+    CHECK(screen_has(app, "WAIT"));
+    key(ENAGA_KEY_OK);                                  // again: the take is dropped
     CHECK_EQ(UiProbe::notice(app), "UNFROZEN");
     pump(2);
     CHECK_EQ(app_storage().freezing_track(), -1);
@@ -7051,11 +7172,25 @@ TEST(ui_the_menu_freeze_row_arms_a_freeze_of_the_selected_track_and_gives_it_bac
     // A MID track has nothing to freeze.
     post_cmd(Cmd::set_machine, uint8_t(MachineId::midi));          // track 1
     pump(2);
-    menu_run(kMenuFreeze);
+    key(ENAGA_KEY_OK);
     CHECK_EQ(UiProbe::notice(app), "MID HAS NO AUDIO");
     CHECK_EQ(app_storage().freezing_track(), -1);
     post_cmd(Cmd::set_machine, uint8_t(MachineId::kick));
     pump(2);
+    key(ENAGA_KEY_CLR);
+}
+
+// RELOAD SAMPLE, in GRID's track menu: a track with no sample says so; one with a sample loads.
+TEST(ui_the_track_menu_reload_sample_row_reloads_the_selected_track) {
+    Strata &app = fresh();
+    track_menu_to(kTrackSample);
+    CHECK(screen_has(app, ">RELOAD SAMPLE"));
+    check_layout(app, "track menu, RELOAD SAMPLE");
+    key(ENAGA_KEY_OK);
+    CHECK_EQ(UiProbe::notice(app), "NO SAMPLE");        // a kick has no sample
+    CHECK(UiProbe::track_menu(app));
+    key(ENAGA_KEY_CLR);
+    CHECK(!UiProbe::track_menu(app));
 }
 
 TEST(ui_layout_a_frozen_track_says_so_on_edit_and_in_the_menu) {
@@ -7066,22 +7201,23 @@ TEST(ui_layout_a_frozen_track_says_so_on_edit_and_in_the_menu) {
     key(ENAGA_KEY_F8);
     pump(400);
     check_layout(app, "EDIT, frozen");
-    menu_to(kMenuFreeze);
+    track_menu_to(kTrackFreeze);
     pump(400);
-    check_layout(app, "FUNC menu, FREEZE on");
+    CHECK(screen_has(app, "ON"));
+    check_layout(app, "track menu, FREEZE on");
     key(ENAGA_KEY_CLR);
     status.frozen.store(0u, std::memory_order_relaxed);
     key(ENAGA_KEY_F4);
 }
 
-// 16th-note triplets: TRACK SPEED one step faster than 1 is 3/2, a step every 16 ticks, and each
+// 16th-note triplets: SPEED one step faster than 1 is 3/2, a step every 16 ticks, and each
 // press logs its speed for tests/scenario_triplets.sh.
 TEST(ui_track_speed_reaches_the_triplet_speed_between_2_and_1) {
     fresh();
     FakeHost &host = FakeHost::the();
     const Pattern &pattern = app_engine().pattern();
     CHECK_EQ(int(pattern.tracks[0].speed), int(Speed::x1));
-    menu_to(kMenuSpeed);
+    track_menu_to(kTrackSpeed);
     key(ENAGA_KEY_LEFT);
     pump(2);
     CHECK_EQ(int(pattern.tracks[0].speed), int(Speed::x3_2));
@@ -7098,9 +7234,9 @@ TEST(ui_the_menu_setting_rows_change_with_left_right_b_and_ok) {
     Strata &app = fresh();
     const Pattern &pattern = app_engine().pattern();
 
-    // TRACK SPEED: the selected track's, X1 to the right is slower.
+    // SPEED, in GRID's track menu: the selected track's, X1 to the right is slower.
     const uint8_t speed = pattern.tracks[0].speed;
-    menu_to(kMenuSpeed);
+    track_menu_to(kTrackSpeed);
     key(ENAGA_KEY_RIGHT);
     pump(2);
     CHECK(pattern.tracks[0].speed != speed);
@@ -7126,7 +7262,7 @@ TEST(ui_the_menu_setting_rows_change_with_left_right_b_and_ok) {
     CHECK_EQ(int(app_engine().auto_fill()), fill);
 
     // QUANTIZE, by fives.
-    key(ENAGA_KEY_DOWN);
+    key(ENAGA_KEY_UP);
     CHECK_EQ(UiProbe::menu_cursor(app), int(kMenuQuantize));
     const int q = UiProbe::quantize(app);
     key(q >= 100 ? ENAGA_KEY_LEFT : ENAGA_KEY_RIGHT);
@@ -7581,13 +7717,36 @@ TEST(ui_layout_the_func_menu) {
     for (int i = 0; i < kMenuRowCount; i++) {
         key(ENAGA_KEY_DOWN);
         check_layout(app, "FUNC menu, scrolled");
+        // Project-wide rows only: the selected track's are in GRID's track menu.
+        CHECK(!screen_has(app, "SPEED"));
+        CHECK(!screen_has(app, "FREEZE"));
+        CHECK(!screen_has(app, "RELOAD SAMPLE"));
     }
-    for (int t = 0; t < kTracks; t++) {                  // the speed row's value at every speed
-        menu_to(kMenuSpeed);
+    key(ENAGA_KEY_CLR);
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_layout_the_track_menu) {
+    Strata &app = fresh();
+    worst_case_content(app);
+    track_menu_to(kTrackGenerate);
+    check_layout(app, "track menu, top");
+    for (int i = 0; i < kTrackRowCount; i++) {
+        key(ENAGA_KEY_DOWN);
+        check_layout(app, "track menu, scrolled");
+    }
+    for (int t = 0; t < kTracks; t++) {                  // SPEED and PLAY at every value
+        track_menu_to(kTrackSpeed);
         for (int i = 0; i < int(Speed::count); i++) {
             key(ENAGA_KEY_OK);
             pump(2);
-            check_layout(app, "FUNC menu, TRACK SPEED");
+            check_layout(app, "track menu, SPEED");
+        }
+        key(ENAGA_KEY_DOWN);
+        for (int i = 0; i < int(PlayMode::count); i++) {
+            key(ENAGA_KEY_OK);
+            pump(2);
+            check_layout(app, "track menu, PLAY");
         }
         key(ENAGA_KEY_CLR);
         key(ENAGA_KEY_DOWN);                              // next track (GRID rows)
@@ -7831,8 +7990,8 @@ const char *quiet_reason(int s, const Probe &p, bool func) {
         return "FUNC + LEFT/RIGHT: free";
     }
 
-    // docs/CONTROLS.md: the screen keys turn pages and have no FUNC job (TRACK SPEED, which
-    // was FUNC + screen key, is in the FUNC menu).
+    // docs/CONTROLS.md: the screen keys turn pages and have no FUNC job (the track speed, which
+    // was FUNC + screen key, is in GRID's track menu).
     if (func && p.kind == in_key &&
         (p.id == ENAGA_KEY_SELECT_LEFT || p.id == ENAGA_KEY_SELECT_RIGHT)) {
         return "FUNC + screen key: free";
@@ -7879,9 +8038,7 @@ const char *quiet_reason(int s, const Probe &p, bool func) {
         {s_chain, false, "UP", "an empty chain has no entry to move to"},
         {s_chain, false, "DOWN", "an empty chain has no entry to move to"},
         // docs/CHEATSHEET.md marks these "--": no job in that screen.
-        {s_keys, false, "OK", "no job"},
         {s_pattern, false, "OK", "no job"},
-        {s_mixer, false, "UP", "no job"}, {s_mixer, false, "DOWN", "no job"},
         {s_mixer, false, "OK", "no job"},
         // Knobs a screen does not use. Each is stopped from falling through to the sound
         // parameters of a screen that is not showing, which is deliberate (app/app.hpp).
@@ -7932,36 +8089,71 @@ bool is_rule(const char *why) {
 
 }  // namespace
 
-TEST(ui_audit_every_input_in_every_screen_shows_it_did_something) {
-    // First, that the screens hold still with no input at all: otherwise a meter or a clock
-    // moving would pass for an answer and the audit would prove nothing.
+// The control audit: every probe on every screen, plain and with FUNC. It was one test of 40% of
+// the suite's time; it is one test per screen, each weighted (TEST_WEIGHTED) so the shards spread
+// them, and each probe starts from fresh() anyway.
+TEST(ui_audit_every_screen_holds_still_with_no_input) {
+    // That the screens hold still with no input at all: otherwise a meter or a clock moving
+    // would pass for an answer and the audit would prove nothing.
     for (int s = 0; s < s_count; s++) {
         const Probe nothing = {in_none, 0, "nothing"};
         for (int func = 0; func < 2; func++) {
             const bool moved = visible(s, nothing, func != 0);
-            if (moved) std::printf("    %s%s moves with no input\n", func ? "FUNC+" : "", screen_name(s));
+            if (moved) {
+                std::printf("    %s%s moves with no input\n", func ? "FUNC+" : "", screen_name(s));
+            }
             CHECK(!moved);
         }
     }
+}
+
+namespace {
+
+void audit_screen(int s) {
     for (int func = 0; func < 2; func++) {
-        for (int s = 0; s < s_count; s++) {
-            for (const Probe &p : kProbes) {
-                const bool shows = visible(s, p, func != 0);
-                const char *why = quiet_reason(s, p, func != 0);
-                if (why != nullptr && is_rule(why) && shows) continue;
-                if (!shows && why == nullptr) {
-                    std::printf("    %s: %s%s changes nothing on screen or LEDs\n",
-                                screen_name(s), func ? "FUNC+" : "", p.name);
-                }
-                if (shows && why != nullptr) {
-                    std::printf("    %s: %s%s now shows something: drop it from the list\n",
-                                screen_name(s), func ? "FUNC+" : "", p.name);
-                }
-                CHECK(shows == (why == nullptr));
+        for (const Probe &p : kProbes) {
+            const bool shows = visible(s, p, func != 0);
+            const char *why = quiet_reason(s, p, func != 0);
+            if (why != nullptr && is_rule(why) && shows) continue;
+            if (!shows && why == nullptr) {
+                std::printf("    %s: %s%s changes nothing on screen or LEDs\n",
+                            screen_name(s), func ? "FUNC+" : "", p.name);
             }
+            if (shows && why != nullptr) {
+                std::printf("    %s: %s%s now shows something: drop it from the list\n",
+                            screen_name(s), func ? "FUNC+" : "", p.name);
+            }
+            CHECK(shows == (why == nullptr));
         }
     }
 }
+
+}  // namespace
+
+// About 2 s each under ASan, against about 15 ms for a typical test.
+#define STRATA_AUDIT(screen)                                                              \
+    TEST_WEIGHTED(ui_audit_every_input_shows_it_did_something_on_##screen, 120) {         \
+        audit_screen(screen);                                                             \
+    }
+STRATA_AUDIT(s_grid)
+STRATA_AUDIT(s_keys)
+STRATA_AUDIT(s_edit)
+STRATA_AUDIT(s_machine)
+STRATA_AUDIT(s_kit)
+STRATA_AUDIT(s_mixer)
+STRATA_AUDIT(s_perform)
+STRATA_AUDIT(s_project)
+STRATA_AUDIT(s_chain)
+STRATA_AUDIT(s_pattern)
+STRATA_AUDIT(s_setup)
+STRATA_AUDIT(s_projects)
+STRATA_AUDIT(s_resample)
+STRATA_AUDIT(s_menu)
+STRATA_AUDIT(s_sounds)
+STRATA_AUDIT(s_launch)
+#undef STRATA_AUDIT
+// One audit per screen: a screen added to the enum needs its line above.
+static_assert(s_count == 16, "a new screen needs its STRATA_AUDIT line");
 
 // --- MUTATE on the unit: upper pad 7 "did nothing" ------------------------------------------
 
@@ -9845,9 +10037,10 @@ TEST(ui_step_16_records_a_loop_value_mixes_it_and_clr_clears_it) {
     CHECK(std::strcmp(UiProbe::notice(app), "LOOP HOLDS BUFFER") == 0);
     pump(2);
     CHECK_EQ(int(app_engine().status().resample_state.load(std::memory_order_relaxed)), 0);
-    key(ENAGA_KEY_F4);
-    menu_run(kMenuFreeze);
+    track_menu_to(kTrackFreeze);
+    key(ENAGA_KEY_OK);
     CHECK(std::strcmp(UiProbe::notice(app), "LOOP HOLDS BUFFER") == 0);
+    key(ENAGA_KEY_CLR);
 
     // Push VALUE + CLR: everything off, the loop kept; again: the loop thrown away.
     value_key(app, ENAGA_KEY_CLR);
@@ -10670,16 +10863,16 @@ TEST(ui_samples_the_browser_shows_the_waveform_of_what_the_track_plays) {
 
 // --- play modes -------------------------------------------------------------
 
-// The FUNC menu's TRACK PLAY row, next to TRACK SPEED: the selected track's play mode, LEFT and
-// RIGHT along FWD .. RND16 with stops at the ends, OK round. One undo level a change.
-TEST(ui_the_menu_track_play_row_walks_the_play_modes_and_undoes) {
+// The track menu's PLAY row, under SPEED: the selected track's play mode, LEFT and RIGHT along
+// FWD .. RND16 with stops at the ends, OK round. One undo level a change.
+TEST(ui_the_track_menu_play_row_walks_the_play_modes_and_undoes) {
     Strata &app = fresh();
     const Pattern &pattern = app_engine().pattern();
     CHECK_EQ(int(pattern.tracks[0].play), int(PlayMode::fwd));
 
-    menu_to(kMenuPlay);
-    CHECK(screen_has(app, "TRACK PLAY"));
-    CHECK(screen_has(app, "T1 FWD"));
+    track_menu_to(kTrackPlay);
+    CHECK(screen_has(app, ">PLAY"));
+    CHECK(screen_has(app, "FWD"));
     key(ENAGA_KEY_LEFT);                                 // FWD is an end
     pump(2);
     CHECK_EQ(int(pattern.tracks[0].play), int(PlayMode::fwd));
@@ -10687,13 +10880,13 @@ TEST(ui_the_menu_track_play_row_walks_the_play_modes_and_undoes) {
     pump(2);
     CHECK_EQ(int(pattern.tracks[0].play), int(PlayMode::rev));
     CHECK_EQ(UiProbe::notice(app), "T1 PLAY REV");
-    CHECK(screen_has(app, "T1 REV"));
+    CHECK(screen_has(app, "REV"));
     for (int i = 0; i < 10; i++) {                       // stops on RND16
         key(ENAGA_KEY_RIGHT);
         pump(2);
     }
     CHECK_EQ(int(pattern.tracks[0].play), int(PlayMode::rnd16));
-    check_layout(app, "FUNC menu, TRACK PLAY");
+    check_layout(app, "track menu, PLAY");
     key(ENAGA_KEY_OK);                                   // OK goes round
     pump(2);
     CHECK_EQ(int(pattern.tracks[0].play), int(PlayMode::fwd));
@@ -12330,7 +12523,7 @@ TEST(ui_hold_ok_in_grid_opens_the_track_menu_for_gen_and_evolve) {
     CHECK(!screen_has(app, "OK: RUN"));
 }
 
-// JAM REC (app/storage.hpp, "jam recording"): the FUNC menu's last row, one UP from SAVE. OK
+// JAM REC (app/storage.hpp, "jam recording"): the FUNC menu's second row, one DOWN from SAVE. OK
 // starts the jam and closes the menu, the row then counts the time, a dot in the top bar blinks
 // on every screen, and OK again stops it; SAVED comes once the file is closed.
 TEST(ui_jam_rec_starts_and_stops_from_the_menu_and_shows_it_is_running) {
@@ -12338,7 +12531,7 @@ TEST(ui_jam_rec_starts_and_stops_from_the_menu_and_shows_it_is_running) {
     FakeHost &host = FakeHost::the();
     key(ENAGA_KEY_F8);                                  // EDIT
     shift_key(ENAGA_KEY_F4);
-    key(ENAGA_KEY_UP);                                  // the last row
+    key(ENAGA_KEY_DOWN);                                // the second row
     CHECK_EQ(UiProbe::menu_cursor(app), int(kMenuJam));
     CHECK(screen_has(app, "JAM REC"));
     CHECK(screen_has(app, "OFF"));
@@ -12388,6 +12581,114 @@ TEST(ui_jam_rec_starts_and_stops_from_the_menu_and_shows_it_is_running) {
     }
     CHECK_EQ(lit, 0);                                   // no dot once it has stopped
     host.remove_file(path);
+}
+
+// JAM REC on FUNC + REC twice (usability review, 2026-11-28): the first press is RESAMPLE, the
+// second starts the jam and stays there, the screen counts it and names the key that stops it, the
+// REC key blinks a dim red in time with the top bar's dot, and FUNC + REC again stops it.
+TEST(ui_jam_rec_on_func_rec_twice_starts_and_stops_it_from_resample) {
+    Strata &app = fresh();
+    key(ENAGA_KEY_F4);                                  // GRID
+    shift_key(ENAGA_KEY_F2);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::resample));
+    CHECK(!app_storage().jam_running());               // the first press is RESAMPLE alone
+    CHECK(screen_has(app, "JAM OFF"));
+    shift_key(ENAGA_KEY_F2);
+    CHECK(app_storage().jam_recording());
+    CHECK_EQ(UiProbe::mode(app), int(Mode::resample));  // still on RESAMPLE
+    CHECK(std::strncmp(UiProbe::notice(app), "JAM REC JAM ", 12) == 0);
+    pump(1100);                                         // a second and a bit
+    CHECK(screen_has(app, "FUNC+REC: STOP JAM"));
+    CHECK(screen_has(app, "0:01"));
+    check_layout(app, "JAM REC on RESAMPLE");
+
+    // The REC key: dim red for 600 ms of each second, dark for the rest; REC itself stays off.
+    int lit = 0;
+    for (int i = 0; i < 1000; i++) {
+        pump();
+        lit += UiProbe::key_red(app, ENAGA_KEY_F2) == 4 ? 1 : 0;
+    }
+    CHECK(lit >= 595 && lit <= 605);
+    CHECK(UiProbe::key_green(app, ENAGA_KEY_F2) > 0);   // and green: RESAMPLE
+
+    shift_key(ENAGA_KEY_F2);                            // stop
+    CHECK_EQ(UiProbe::notice(app), "JAM STOPPING");
+    CHECK_EQ(UiProbe::mode(app), int(Mode::resample));
+    bool saved = false;
+    for (int i = 0; i < 20 && !saved; i++) {
+        pump();
+        saved = std::strncmp(UiProbe::notice(app), "SAVED JAM ", 10) == 0;
+    }
+    CHECK(saved);
+    CHECK(!app_storage().jam_running());
+    CHECK(screen_has(app, "JAM OFF"));
+    pump(2);
+    CHECK_EQ(int(UiProbe::key_red(app, ENAGA_KEY_F2)), 0);
+    char path[64];
+    std::snprintf(path, sizeof path, "/RECORD/%s", app_storage().jam_name());
+    FakeHost::the().remove_file(path);
+}
+
+// MIXER's UP/DOWN (usability review, 2026-11-28): a group of pages at a time, to each group's
+// first page and round the ends, said in a toast; LEFT/RIGHT still walk page by page.
+TEST(ui_mixer_up_down_jump_between_the_groups_of_pages) {
+    Strata &app = fresh();
+    mixer_page(app, 0);
+    static const char *const kDown[] = {"DCK 1-4", "WID 1-4", "DLY", "REV", "CHO 1-4", "MST", "TRK 1-4"};
+    for (const char *name : kDown) {
+        key(ENAGA_KEY_DOWN);
+        CHECK_EQ(std::strcmp(kMixerPages[UiProbe::mixer_bank(app)].name, name), 0);
+        CHECK_EQ(UiProbe::notice(app), name);
+    }
+    key(ENAGA_KEY_UP);                                  // round the top: the master's group
+    CHECK_EQ(std::strcmp(kMixerPages[UiProbe::mixer_bank(app)].name, "MST"), 0);
+    key(ENAGA_KEY_RIGHT);                               // EQ, a page on
+    CHECK_EQ(UiProbe::mixer_bank(app), kMixerEqPage);
+    key(ENAGA_KEY_UP);                                  // from inside a group: the one before
+    CHECK_EQ(std::strcmp(kMixerPages[UiProbe::mixer_bank(app)].name, "CHO 1-4"), 0);
+    key(ENAGA_KEY_DOWN);
+    CHECK_EQ(std::strcmp(kMixerPages[UiProbe::mixer_bank(app)].name, "MST"), 0);
+    check_layout(app, "MIXER after a group jump");
+}
+
+// The track menu in KEYS (usability review, 2026-11-28): a hold of OK opens the same GEN and
+// EVOLVE menu over KEYS, a tap still does nothing, CLR goes back to KEYS, and leaving KEYS
+// (to GRID too) closes it.
+TEST(ui_hold_ok_in_keys_opens_the_track_menu) {
+    Strata &app = fresh();
+    key(ENAGA_KEY_F4);
+    open_keys();
+    CHECK_EQ(UiProbe::mode(app), int(Mode::keys));
+    key(ENAGA_KEY_OK);
+    CHECK_EQ(UiProbe::notice(app), "HOLD OK: TRACK MENU");   // the tap says where it is
+    pump(2);
+    CHECK(!screen_has(app, "GENERATE"));
+    app.on_key(ENAGA_KEY_OK, true);
+    pump(600);
+    app.on_key(ENAGA_KEY_OK, false);
+    pump(2);
+    CHECK(screen_has(app, ">GENERATE"));
+    CHECK_EQ(UiProbe::notice(app), "TRACK T1");
+    check_layout(app, "KEYS track menu");
+    key(ENAGA_KEY_DOWN);                                // the menu's row, not the track
+    CHECK(screen_has(app, ">DENSITY"));
+    CHECK_EQ(UiProbe::selected(app), 0);
+    key(ENAGA_KEY_CLR);
+    CHECK_EQ(UiProbe::notice(app), "KEYS");
+    pump(2);
+    CHECK(!screen_has(app, "OK: RUN"));
+    CHECK_EQ(UiProbe::mode(app), int(Mode::keys));
+
+    // Open again, then HOME: GRID, and the menu does not follow.
+    app.on_key(ENAGA_KEY_OK, true);
+    pump(600);
+    app.on_key(ENAGA_KEY_OK, false);
+    pump(2);
+    CHECK(screen_has(app, "OK: RUN"));
+    key(ENAGA_KEY_F4);
+    pump(2);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::grid));
+    CHECK(!screen_has(app, "OK: RUN"));
 }
 
 TEST(ui_jam_rec_without_a_card_says_why) {

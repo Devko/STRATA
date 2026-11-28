@@ -146,8 +146,8 @@ def walk(stage, out, part):
         emu.key(FUNC, True); go(320 * M); shot("help", wait=10 * M)
         emu.key(FUNC, False); go(30 * M)
         chord(FUNC, HOME); shot("menu", wait=TOAST)
-        for _ in range(6):                                   # up from SAVE to CLICK
-            tap(UP)
+        for _ in range(2):                                   # down from SAVE to CLICK
+            tap(DN)
         shot("menu_click", wait=60 * M)
         tap(CLR); go(30 * M)
         chord(FUNC, MIXER); shot("perform", burst=4)

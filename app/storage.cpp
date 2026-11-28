@@ -2813,11 +2813,10 @@ bool Storage::request_jam_start() {
         jam_message_ = "NO CARD";
         return false;
     }
-    // Numbered from the settings, saved at once: a restart in the middle of a jam must not hand
-    // the next one the same name and replace it.
+    // Numbered from the settings. The number is taken (and saved at once, so a restart in the
+    // middle of a jam does not hand the next one the same name) only once the file exists: a
+    // start the card refuses leaves the number for the next try.
     const int32_t next = settings_.get(kKeyJamSeq, 0) + 1;
-    settings_.set(kKeyJamSeq, next);
-    settings_.save();
     {
         char *out = jam_name_;
         const char *end = jam_name_ + sizeof jam_name_ - 1;
@@ -2853,6 +2852,8 @@ bool Storage::request_jam_start() {
         jam_name_[0] = '\0';
         return false;
     }
+    settings_.set(kKeyJamSeq, next);
+    settings_.save();
     // The epoch BEFORE the start: the bump that ends this jam is a change from it.
     jam_epoch_ = engine_->status().jam_epoch.load(std::memory_order_acquire);
     jam_frames_ = 0;
