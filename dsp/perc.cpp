@@ -365,7 +365,7 @@ void Perc::start(Voice &v) {
     // Latched at the hit, both of them: a lock that moves RAT on the next step must not bend a
     // tail that is still ringing, and the index ceiling depends on the note this hit took.
     v.ratio = ratio_;
-    const float f0 = clamp(base_hz_ * v.note_ratio, 10.0f, 4000.0f);
+    const float f0 = clamp(base_hz_ * v.note_ratio * pitch_mod_ratio_, 10.0f, 4000.0f);
     const float ceiling = index_ceiling(f0 * inv_rate_ * v.ratio);
     v.index = index_ * v.trigger_level;
     v.index = v.index > ceiling ? ceiling : v.index;
@@ -412,7 +412,7 @@ void Perc::run(Voice &v, float *out, int n) {
 
     // Note-dependent increments: still control rate, just once per voice per block rather than
     // once per machine, because the trig note moves the carrier and the modulator follows it.
-    const float f0 = clamp(base_hz_ * v.note_ratio, 10.0f, 4000.0f);
+    const float f0 = clamp(base_hz_ * v.note_ratio * pitch_mod_ratio_, 10.0f, 4000.0f);
     const float dt_carrier = clamp(f0 * inv_rate_, 0.0f, kMaxDt);
     const float dt_mod = clamp(dt_carrier * v.ratio, 0.0f, kMaxDt);
 

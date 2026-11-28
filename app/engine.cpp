@@ -1170,6 +1170,16 @@ bool Engine::apply_perform(const Command &command, int track, int step) {
             perform_.energy = energy_turn(int8_t(command.a), 0);    // held to the range
             break;
 
+        case Cmd::set_varispeed:
+            // The pitch half. The clock is the main context's (app/ has set Enaga's tempo); the
+            // machines take the semitones on the next run_lfos, and the delay's beat follows the
+            // clock from apply_mixer_bytes.
+            vari_tenths_ = vari_turn(int8_t(command.a), 0);         // held to the range
+            vari_semis_ = vari_semis(vari_tenths_);
+            vari_inv_ratio_ = vari_ratio(int8_t(-vari_tenths_));
+            apply_mixer_bytes();
+            break;
+
         case Cmd::set_macro:
             if (command.a < kMacros) {
                 macro_position_[command.a] = command.b > 127 ? uint8_t(127) : command.b;
@@ -2580,7 +2590,9 @@ void Engine::apply_mixer_bytes() {
                                : (settings.tempo_centi_bpm > kTempoCentiMax
                                       ? uint16_t(kTempoCentiMax)
                                       : settings.tempo_centi_bpm);
-    const float beat_seconds = 6000.0f * enaga::dsp::reciprocal(float(centi));
+    // VariSpeed runs the clock at the project's tempo times its ratio, so the beat is shorter by
+    // the same ratio (exactly 1 at rest).
+    const float beat_seconds = 6000.0f * enaga::dsp::reciprocal(float(centi)) * vari_inv_ratio_;
 
     sends_from_bytes(sends_, settings.sends, beat_seconds);
     master_from_bytes(master_, settings.master);
@@ -4150,12 +4162,16 @@ void Engine::run_lfos(uint32_t frames, bool running, uint32_t position, float fr
 
         // To the machine only when it changes, or when the track has a new machine: with the
         // LFO off and nothing sent before, two compares.
+        // VariSpeed rides on the same call (core/varispeed.hpp): for a synth it adds to the LFO's
+        // semitones, and every other machine has no LFO pitch here, so it gets VariSpeed alone.
         Machine *machine = machines_[t];
-        if (pitch_mod != pitch_mod_[t] || machine != pitch_mod_machine_[t]) {
-            if (machine != nullptr) machine->set_pitch_mod(pitch_mod);
+        const float sent = pitch_mod + vari_semis_;
+        if (sent != sent_pitch_[t] || machine != pitch_mod_machine_[t]) {
+            if (machine != nullptr) machine->set_pitch_mod(sent);
             pitch_mod_machine_[t] = machine;
-            pitch_mod_[t] = pitch_mod;
+            sent_pitch_[t] = sent;
         }
+        pitch_mod_[t] = pitch_mod;
     }
 }
 

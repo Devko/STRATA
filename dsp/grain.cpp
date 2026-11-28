@@ -336,7 +336,7 @@ void Granular::recompute_step() {
                   "a grain this long would overflow strata_grain_advance's fixed-point product, "
                   "and the bound it computes is the only thing keeping reads inside the buffer");
 
-    step_ = clamp(rate_ratio_ * pitch_ratio_ * note_ratio_, kStepMin, kStepMax);
+    step_ = clamp(rate_ratio_ * pitch_ratio_ * note_ratio_ * pitch_mod_ratio_, kStepMin, kStepMax);
     istep_ = int32_t(step_);
     const float fraction = (step_ - float(istep_)) * float(STRATA_GRAIN_FRAC_ONE);
     fstep_ = uint32_t(int32_t(clamp(fraction, 0.0f, float(STRATA_GRAIN_FRAC_MASK))));

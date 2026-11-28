@@ -160,6 +160,7 @@ FM4 and GRAIN machines.
 | **REL ALL / LEN ALL**: every track's release (FUNC + A) and every note's length (FUNC + B) in PERFORM | #152 | ○ (W29) | Live only; LEN ALL leaves gateless notes (drums, arp) alone |
 | **LIVE RND**: FUNC + turn D in PERFORM shuffles every armed track in blocks of 1-16 steps, FUNC + push D arms the selected track; OFF is the grid at once | #166 | ○ (W36) | Live only, in a LOCK; the pattern is never written |
 | **ENERGY**: FUNC + turn C in PERFORM thins every track in tier order down to a breakdown, or adds ghosts and lifts probabilities up to the peak | #224 | ○ (W62) | Live only, in a LOCK; the pattern is never written |
+| **VariSpeed**: FUNC + turn VALUE on every screen moves the tempo and every machine's pitch together, an octave each way in tenths of a semitone; FUNC + tap VALUE snaps back | Unreleased | ○ (W70) | Internal clock only. Not saved, not in a LOCK; the project keeps its tempo. MID notes are not moved. No CPU at rest; at +12 SAMPLE and GRAIN read twice as fast (scenario_varispeed) |
 | Pad pressure bends macro A | v0.1.0 | ○ ("Pad feel") | |
 | THROW to delay or reverb | v0.1.0 | ◐ | |
 | MUTATE (rotate, density, velocity, micro, chance, notes), OK keeps, CLR reverts | v0.1.0 | ○ (10) | |

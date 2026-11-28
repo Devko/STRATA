@@ -89,6 +89,7 @@ each line means.
 | FUNC+CLR / FUNC+OK | Undo / redo, in every mode and page |
 | VALUE turn | Tempo, 20-300 BPM in 0.1 steps (PERFORM: morph). With a performance effect picked: its amount (below) |
 | VALUE push + turn | Pattern swing |
+| FUNC + VALUE turn | **VariSpeed**: tempo and the pitch of every machine together, like a turntable, a tenth of a semitone a click, an octave each way (`VARISPEED +1.2 140.3`). Rest is a detent; FUNC + tap VALUE (no effect picked) snaps back. Not saved; internal clock only (`EXT CLOCK`) |
 | Push VALUE + STEP, CLR, LEFT/RIGHT | The performance mixer (below) |
 | FUNC + push A / B / C | Master kill EQ: kill LOW / MID / HI, again to bring it back (`KILL LOW`, `LOW BACK`). Performance only: not saved, and a load brings every band back |
 | FUNC + pad-row L/R | Selected track's length (polymeter), on every screen but the menu; hold to repeat |
@@ -131,7 +132,7 @@ a time; nothing of it is saved or undone.
 | Push VALUE + STEP 13 | The A/B morph on any screen (`MORPH 64`), the effect that was up left as it is. Again: let go, the morph stays (`MORPH KEPT: VALUE TEMPO`) |
 | Push VALUE + STEP 16 | The looper: records LOOP LEN bars (FUNC menu, 1/2/4/8, default 4) of the mix from the next bar line; then VALUE is the loop's mix, 0 live, 127 loop only (`LOOP MIX 64`). Again: leaves the looper (`LOOP OFF`; the loop is kept, silent, and VALUE + CLR throws it away for a new take; during the count-in or the take, `LOOP CANCELLED`). Effects picked after it play over the loop |
 | Push VALUE + LEFT / RIGHT | Previous / next effect, keeping the amount (crossfaded over FX GLIDE) |
-| Tap VALUE (let go within 0.5 s) | Back to 0, riding out over at most a 1/16: the effect's amount, the loop's mix; or the morph (`MORPH 0`, in PERFORM or with slot 13 picked). Never the tempo or swing. FUNC + tap: a cut |
+| Tap VALUE (let go within 0.5 s) | Back to 0, riding out over at most a 1/16: the effect's amount, the loop's mix; or the morph (`MORPH 0`, in PERFORM or with slot 13 picked). Never the tempo or swing. FUNC + tap: a cut; with no effect picked, VariSpeed back to 0 |
 | Push VALUE + CLR | Everything off, loop mix 0, riding (`FX OFF`); again: the loop is thrown away (`LOOP CLEARED`) |
 | FUNC menu FX GLIDE | How long those button jumps (and a slot change, leaving a playing loop, a LOCK jump) ride: OFF, 1/16, 1 BEAT (default), 1 BAR; back to 0 they take at most a 1/16. Turning VALUE never glides |
 | VALUE held | The STEP keys show the slots: dim amber, the effect that is up bright amber, the one VALUE is on bright green; STEP 16 red blinking armed, red recording, green holding a loop |
@@ -280,7 +281,7 @@ CC 120/123 let go of held notes. Program change 1-128 on your MIDI CH queues pat
 | --- | --- | --- |
 | Top line | `A01 3.2 130.0 > 24%  L  T1` | Live bank+slot (lit), bar.beat, tempo (`MIDI` / `SYNC` under an outside clock), `>` playing / `.` stopped, audio load, `L` / `L+` a LOCK, the selected track (lit) |
 | Under it | a 1 px line | How far the pattern is through its pass |
-| Under it | `K:L FX4 S40 M:AB RL- EN+ RN4 LP` | Live strip, small: what is off rest (kills, perf effect, morph %, macros, REL ALL, LEN ALL, ENERGY, LIVE RND, looper); not drawn at rest |
+| Under it | `K:L FX4 S40 M:AB RL- EN+ VS+ RN4 LP` | Live strip, small: what is off rest (kills, perf effect, morph %, macros, REL ALL, LEN ALL, ENERGY, VariSpeed, LIVE RND, looper); not drawn at rest |
 | Under it | a lit toast: `LOCK A01 STORED`, `SCENE A: STEP PICKS`, `CLOCK REFUSED` | A notice, LEARN, a scene or the MUTATE verdict, for a moment over the screen |
 | Right edge | 2 px column | Master meter: level, held peak dot, top pixel = limiter |
 | Bottom line | `SRC FLTR AMP ...`, `DROP 2`, `GUARD1` | The screen's pages as tabs, the one showing lit (the screen keys turn them); at the right DROP = edits lost to a full command ring, GUARD = the CPU guard shedding voices |

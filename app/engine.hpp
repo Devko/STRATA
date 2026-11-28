@@ -47,6 +47,7 @@
 #include "lockstore.hpp" // LOCK: FUNC + MUTATE stores, jumps and swaps back
 #include "launch.hpp"    // Track Launch: a lane playing another slot's part
 #include "moveall.hpp"   // REL ALL and LEN ALL: every track's release and note length
+#include "varispeed.hpp" // VariSpeed: every machine's pitch with the tempo
 #include "arp.hpp"       // the arpeggiator's notes
 #include "sample.hpp"
 #include "scale.hpp"       // the global key and scale: Cmd::set_root and set_scale
@@ -203,6 +204,8 @@ public:
     uint8_t live_rnd_armed() const { return perform_.rnd_armed; }
     // ENERGY (core/energy.hpp): -64 .. +64, 0 is rest.
     int8_t energy() const { return perform_.energy; }
+    // VariSpeed (core/varispeed.hpp): tenths of a semitone on every machine, 0 is rest.
+    int8_t varispeed() const { return vari_tenths_; }
     AutoFill auto_fill() const { return auto_fill_; }
     // EVOLVE (core/evolve.hpp): a track's period index (0 OFF) and the shared settings.
     uint8_t evolve_period(int track) const {
@@ -769,6 +772,13 @@ private:
     // machine hands the new one the current value, so none keeps a stale offset.
     float pitch_mod_[kTracks] = {};
     Machine *pitch_mod_machine_[kTracks] = {};
+    // What the machine was last handed: the LFO's semitones plus VariSpeed's.
+    float sent_pitch_[kTracks] = {};
+    // VariSpeed (Cmd::set_varispeed): the amount, its semitones for the machines, and the ratio
+    // the delay's beat is divided by so its echoes keep to the faster or slower clock.
+    int8_t vari_tenths_ = 0;
+    float vari_semis_ = 0.0f;
+    float vari_inv_ratio_ = 1.0f;
 
     // Every note-on a track's machine takes -- a step, a chord, an arp or roll hit, a pad or a
     // key -- goes through here: the screen's trig light, and LFO TRIG's restart.

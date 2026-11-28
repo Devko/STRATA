@@ -411,6 +411,11 @@ enum class Cmd : uint8_t {
     // absolute (the UI keeps the position, as it does REL ALL's). Performance, not edits: no
     // file, no undo; a LOCK holds it.
     set_energy,
+    // VariSpeed (core/varispeed.hpp), FUNC + turn VALUE. a: the amount as an int8, tenths of a
+    // semitone, -120 .. 120, absolute (the UI keeps it, with the clock it sets). The pitch of
+    // every machine and the delay's beat; Enaga's tempo is app/'s to set. Performance, not an
+    // edit: no file, no undo, not in a LOCK.
+    set_varispeed,
 
     // Sample audition (dsp/audition.hpp), push A in SAMPLES. `audition_start` is posted by the
     // card side once the file's stream is open and filled; what to play is in
