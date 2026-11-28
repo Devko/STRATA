@@ -91,13 +91,14 @@
         };
         if (func_help_showing()) {
             // The help's title takes this line (draw_func_help).
-        } else if ((step_page_ || mode_ != Mode::grid) && notice_showing() &&
+        } else if ((step_page_ || mode_ != Mode::grid || track_menu_) && notice_showing() &&
                    notice_screen_ == screen_key()) {
+            // (GRID's track menu draws over GRID's own notice line, so it takes the toast too.)
             // What just happened. GRID shows it in its edit-state line; every other screen had
             // nowhere for it, so a gesture there (F1 + F3's "again to save", an octave, a scene
             // captured) answered with nothing at all.
             out = line;
-            append_shown(out, notice_, kLineChars - 1);
+            append_shown(out, notice_shown(), kLineChars - 1);
             *out = 0;
             toast(line);
         } else if ((step_page_ || mode_ != Mode::grid) && macro_learn_ >= 0) {
@@ -627,7 +628,7 @@
             // Cut to the line: a notice is built in places all over this file, and one that ran
             // off the edge would lose its end, which is usually the part that says what to do.
             out = line;
-            append_shown(out, notice_, kLineChars);
+            append_shown(out, notice_shown(), kLineChars);
             *out = 0;
             canvas.text(0, y, line, 15);
             return;

@@ -31,10 +31,13 @@
     //   FREEZE        OK freezes it for the bars on the row (LEFT/RIGHT: 1, 2, 4, 8), or gives
     //                 it back (dsp/frozen.hpp)
     //   RELOAD SAMPLE OK: load its sample again, the way back from a FAIL or a pulled card
+    //   CAPTURE       OK: what plays, launched lanes and all, into the first free slot of the
+    //                 playing bank (Track Launch's CAPTURE, core/launch.hpp; U2, D4). Last, so
+    //                 UP from GENERATE reaches it: it is the answer to READ ONLY
     static constexpr uint32_t kTrackMenuHoldMs = 500;
     enum class TrackRow : uint8_t { generate, density, range, leap, what, evolve, mode, kind,
                                     amount, keep, home, speed, play, freeze, sample,
-                                    count };
+                                    capture, count };
     static constexpr int kTrackRows = int(TrackRow::count);
     static constexpr int kTrackRowsShown = 9;
 
@@ -54,6 +57,7 @@
             case TrackRow::speed:    return "SPEED";
             case TrackRow::play:     return "PLAY";
             case TrackRow::freeze:   return "FREEZE";
+            case TrackRow::capture:  return "CAPTURE";
             default:                 return "RELOAD SAMPLE";
         }
     }
@@ -101,6 +105,11 @@
                     append_number(out, uint32_t(kTakeBars[freeze_bars_index_]));
                     append(out, " BAR");
                 }
+                break;
+            case TrackRow::capture:
+                // Where it goes: the playing bank.
+                append(out, "TO ");
+                *out++ = bank_letter(int(engine_.project().bank));
                 break;
             default: break;
         }
@@ -249,6 +258,12 @@
                 // The one thing a user can do about a FAIL, and the only way back after a card
                 // has been out.
                 notice(storage_.request_sample(selected_) ? "LOADING" : "NO SAMPLE");
+                break;
+            case TrackRow::capture:
+                // As a held OK on LAUNCH, into the playing bank: the audio side answers
+                // CAPTURED or NO FREE SLOT IN BANK (service_launch). The menu stays.
+                post(Cmd::launch_capture, uint8_t(engine_.project().bank));
+                notice_logged("CAPTURING");
                 break;
             default:
                 track_row_change(+1, true);

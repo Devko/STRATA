@@ -1023,8 +1023,8 @@ TEST(ui_hold_project_and_step_queues_a_pattern_from_any_screen) {
     CHECK_EQ(int(app_engine().queue().slot), 3);
     CHECK_EQ(UiProbe::notice(app), "A04 QUEUED END");
     CHECK_EQ(UiProbe::project_page(app), 5);            // LAUNCH;
-    key(ENAGA_KEY_CLR);                              // LAUNCH: CLR leaves for the slots
-    CHECK_EQ(UiProbe::project_page(app), 0);            // the slots;
+    key(ENAGA_KEY_CLR);                              // LAUNCH: CLR only resets (U2)
+    CHECK_EQ(UiProbe::project_page(app), 5);
 
     // FUNC + PROJECT is still SAMPLES, at once, and no STEP queues under it.
     key(ENAGA_KEY_F4);
@@ -13591,6 +13591,11 @@ TEST(ui_launch_a_pad_selects_its_lane_silently_and_a_step_launches_on_it) {
     pump(4);
     CHECK_EQ(UiProbe::selected(app), 2);
     CHECK_EQ(int(triggered_on(2)), int(before));    // no sound on LAUNCH
+    CHECK_EQ(UiProbe::notice(app), "PADS PICK LANES");   // the first pad says why (U2)
+    app.on_pad_release(4);
+    pump(1600);
+    app.on_pad_press(4, 100);                       // once a visit
+    CHECK(!UiProbe::notice_showing(app));
     app.on_pad_release(4);
     pump(2);
 
@@ -13613,7 +13618,8 @@ TEST(ui_launch_a_pad_selects_its_lane_silently_and_a_step_launches_on_it) {
     CHECK_EQ(int(lane_source_of(1)), int(lane_source(0, 3)));
 }
 
-TEST(ui_launch_clr_sends_the_lane_home_then_leaves_for_slot) {
+// CLR only resets (U2): a lane on its own part already is said, and the page stays.
+TEST(ui_launch_clr_sends_the_lane_home_and_stays_on_launch) {
     Strata &app = fresh();
     to_launch_page(app);
     key(ENAGA_KEY_STEP1 + 4);
@@ -13625,7 +13631,8 @@ TEST(ui_launch_clr_sends_the_lane_home_then_leaves_for_slot) {
     CHECK_EQ(UiProbe::project_page(app), kLaunchPage);
     key(ENAGA_KEY_CLR);
     pump(2);
-    CHECK_EQ(UiProbe::project_page(app), 0);
+    CHECK_EQ(UiProbe::project_page(app), kLaunchPage);
+    CHECK_EQ(UiProbe::notice(app), "T1 PLAYS ITS OWN");
 }
 
 TEST(ui_launch_push_b_pins_and_the_arrows_move_lane_and_slot) {
@@ -13671,6 +13678,30 @@ TEST(ui_launch_grid_shows_the_borrowed_part_and_refuses_edits_on_it) {
     CHECK_EQ(trig_at(lane, 0), was);
     CHECK_EQ(UiProbe::notice(app), "T1 A07 READ ONLY");
     CHECK(screen_has(app, "READ ONLY"));
+    // And, taking turns with it, what to do about it (U2).
+    pump(800);
+    CHECK(screen_has(app, "HOLD OK: CAPTURE"));
+    CHECK(!screen_has(app, "READ ONLY"));
+    check_layout(app, "GRID, READ ONLY's second line");
+    pump(800);
+    CHECK(screen_has(app, "READ ONLY"));
+
+    // The track menu's last row, one UP from GENERATE, CAPTUREs what plays into a free slot of
+    // the playing bank: the lane is its own again, and A07's part plays in the new pattern.
+    app.on_key(ENAGA_KEY_OK, true);
+    pump(600);
+    app.on_key(ENAGA_KEY_OK, false);
+    CHECK(UiProbe::track_menu(app));
+    key(ENAGA_KEY_UP);
+    CHECK(screen_has(app, "CAPTURE"));
+    CHECK(screen_has(app, "TO A"));
+    check_layout(app, "GRID's track menu on CAPTURE");
+    key(ENAGA_KEY_OK);
+    pump(4);
+    CHECK(screen_has(app, "CAPTURED"));
+    CHECK_EQ(int(lane_borrowed_mask(app_engine().project())), 0);
+    CHECK(UiProbe::track_menu(app));
+    key(ENAGA_KEY_CLR);
 }
 
 TEST(ui_launch_a_held_ok_captures_into_a_free_slot) {

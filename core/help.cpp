@@ -716,8 +716,8 @@ constexpr Text kTrackMenu = {"HOLD OK: TRACK MENU", {
     "PLAY FWD REV PING RND",
     "FREEZE  LOOP IN RAM",
     "RELOAD SAMPLE",
+    "CAPTURE  LAUNCHED MIX",
     "UP/DN A ROW  LR B SET",
-    "OK RUN  CLR CLOSE",
 }};
 
 bool own_page(const HelpPlace &place, int page, char title[kHelpChars + 1],
