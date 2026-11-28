@@ -11,6 +11,7 @@ SPEC.json lists the parts to import:
       {"name": "bass_a", "file": "D:/.../bass.mid", "mode": "mono",
        "transpose": -12, "bars": 4, "offset_bars": 0, "micro": true,
        "velocity": [70, 120], "max_length_steps": 16},
+      {"name": "clap",   "file": "...", "mode": "drums", "all_to": 1, "set_velocity": 110},
       {"name": "chords", "file": "...", "mode": "poly"},
       {"name": "drums",  "file": "...", "mode": "drums", "map": {"36": 0, "38": 1, "42": 2}},
       {"name": "hat",    "file": "...", "mode": "drums", "all_to": 3}
@@ -72,6 +73,8 @@ def part_steps(spec: dict) -> tuple[list[grid.StepNote], str]:
     if "velocity" in spec:
         lo, hi = spec["velocity"]
         steps = grid.scale_velocity(steps, int(lo), int(hi))
+    if "set_velocity" in spec:
+        steps = [grid.replace(s, vel=int(spec["set_velocity"])) for s in steps]
     return steps, note_
 
 
