@@ -8,6 +8,14 @@ the project file format or the controls.
 
 ### Added
 
+- **WAVE scan modes: the SCAN page.** WAVE MONO and WAVE POLY have a ninth EDIT page, SCAN:
+  MOD moves the wavetable position from POS towards END with each note (OFF, FWD, REV, LOOP,
+  LREV, PING, RET, SINE, RAND, DRFT), SPD sets the speed free or synced like the LFO's RAT, END
+  where it heads and CRV the curve. The page draws the path. A slid note carries on its scan; a
+  chord scans together. Locks, scenes and macros reach it; LFOs and mod slots do not. SOUNDS gains
+  SCANLD and WOBBLE (WAVE MONO) and DRIFT and SWIRL (WAVE POLY). Projects saved before it load
+  with MOD OFF and sound as they did; the kit and the performance files gain an optional section.
+  New emulator scenario `wavescan`.
 - **Queue a pattern from any screen.** Hold PROJECT and press STEP n: slot n of the shown bank is
   queued (`A05 QUEUED END`) and the screen you play on stays up. PROJECT now opens when the key
   comes up, and not at all when a STEP was pressed while it was held. The FUNC help's FUNC + KNOB

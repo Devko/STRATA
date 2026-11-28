@@ -833,6 +833,7 @@ slide and glide on WMN, chords and the shared 12-voice budget on WPL.
 | AMP | **DEC** as MNO | | **MOT** envelope to position: 64 off, up to +15 or -15 frames | **LVL** |
 | ENV | **ATK** | **SUS** | **REL** | **FSU** as MNO |
 | OSC | **WRP** bends the cycle (0 = none; high notes bend less, to stay clean) | **DET** a second, detuned copy: OFF, up to 60 cents | **SUB** sub level | WMN: **GLD** glide; WPL: **DRV** drive |
+| SCAN | **MOD** scan mode (OFF and nine more, below) | **SPD** speed: 0-63 free (0.06-32 Hz, 28 = 1 Hz), 64-127 synced to the tempo, as the LFO's RAT | **END** where the scan heads, frame 0-15 as POS | **CRV** the curve: 64 LIN, above it slow to start, below it fast |
 
 The tables, from TBL 0 up:
 
@@ -857,7 +858,34 @@ The tables, from TBL 0 up:
 
 MOT above 64 moves the position up as the filter envelope rises and back as it falls; below 64 it
 moves it down. With PLK at POS 127 and MOT 0, each note starts bright and dulls like a string.
-The SOUNDS list (OK on MACHINE) has 8 WMN and 7 WPL starting points.
+The SOUNDS list (OK on MACHINE) has 14 WMN and 14 WPL starting points.
+
+<p><img src="screens/edit_scan.png" width="256" alt="EDIT, the SCAN page on WAVE MONO: PING between POS and END"></p>
+
+**Scanning: the SCAN page.** EDIT's ninth page moves the position between POS and END on its own,
+at SPD, starting again from POS with each note (a slid note carries on where the last one was).
+MOT still adds the envelope on top. The modes:
+
+| MOD | Movement, from POS towards END |
+| --- | --- |
+| OFF | none: the position is POS (and MOT) |
+| FWD | once to END, then holds there |
+| REV | starts at END, once back to POS, then holds there |
+| LOOP | to END, jumps back to POS, again |
+| LREV | the same backwards: END to POS, again |
+| PING | to END and back, again |
+| RET | to END and back to POS once, then holds at POS |
+| SINE | to END and back, eased at both ends, again |
+| RAND | jumps to a random frame between POS and END once a cycle |
+| DRFT | glides to a new random frame each cycle |
+
+One cycle of SPD is one sweep from POS to END (PING and SINE go there and back in one cycle). A
+synced SPD of 96 ticks is a beat, so LOOP at 96 restarts the sweep on every beat. END below POS
+scans downwards; END on POS has nowhere to go and plays as OFF. The page draws the path the scan
+takes over two cycles between dotted lines at POS and END. The chords of WPL scan together. WMN's
+WOBBLE and SCANLD and WPL's DRIFT and SWIRL in SOUNDS use it. The page is not on the other
+machines, and its four knobs cannot be the target of an LFO or a mod slot; a step can lock them
+and a scene can store them.
 
 ### FM4: four-operator FM
 

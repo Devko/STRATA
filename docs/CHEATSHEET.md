@@ -39,7 +39,7 @@ pads and the performance mixer.
 | GRID | HOME (from anywhere) | All 8 tracks; STEP keys edit the selected track |
 | KEYS | HOME twice quickly (double-tap) | The pads are a piano (lower white, upper black keys), the STEP keys steps, on the selected track |
 | FUNC menu | FUNC+HOME ("system") | The project-wide rows: save, JAM REC, click, count-in, REC MODE, quantize, auto-fill, FX glide, loop length, chain, song, save as, open, kits, new, reload, clear pattern, load demo |
-| EDIT | EDIT | The selected track's sound: pages SRC, FLTR, AMP, FX, LFO, ARP, and on the VA, WAVE, FM4 and GRAIN machines ENV and OSC |
+| EDIT | EDIT | The selected track's sound: pages SRC, FLTR, AMP, FX, LFO, ARP, and on the VA, WAVE, FM4 and GRAIN machines ENV and OSC, and SCAN on the WAVE machines |
 | MACHINE | FUNC+EDIT | Pick the machine on each track, and its MIDI OUT channel |
 | KIT | FUNC+EDIT twice, or the menu's KITS | Save and recall whole kits: 16 slots on the card, shared by all projects |
 | SAMPLES | FUNC+PROJECT ("pool"), or OK in EDIT or MACHINE on a SMP track, OK in MACHINE on a GRN track | Pick the track's WAV from `/SAMPLES` or `/RECORD` |
@@ -177,7 +177,7 @@ Page 1 NOTE VEL LEN MICR, page 2 PROB COND RTCH RAMP, page 3 ACNT SLID CHRD.
 | Mode | UP / DOWN | LEFT / RIGHT | Screen keys L/R | Pad-row L/R | A-D | OK / CLR | FUNC + arrow |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | GRID | Track | Step page 1-4 | EDIT page (for A-D) | Step page | Current EDIT page params | — / clear | Copy / paste |
-| EDIT | Track | Page SRC FLTR AMP FX LFO ARP ENV OSC | Page | Step page | The page's 4 params | SMP: open SAMPLES; drums, synths and GRN: open SOUNDS / clear | Copy / paste |
+| EDIT | Track | Page SRC FLTR AMP FX LFO ARP ENV OSC SCAN | Page | Step page | The page's 4 params | SMP: open SAMPLES; drums, synths and GRN: open SOUNDS / clear | Copy / paste |
 | KEYS | Track | Octave (OCT 0-7) | EDIT page (for A-D) | Step page | Current EDIT page params | — | Copy / paste |
 | MACHINE | Machine | Machine column (3 over) | Track | Step page | A: machine, B: MIDI OUT channel (OFF, 1-16) | SMP/GRN: open SAMPLES; drums and synths: open SOUNDS / — | Copy / paste |
 | KIT | Slot | Page of 8 slots | Page of 8 slots | — | A: slot | Recall (twice) / back to MACHINE | DOWN: save here, UP: read the card again |
@@ -302,6 +302,7 @@ CC 120/123 let go of held notes. Program change 1-128 on your MIDI CH queues pat
 | EDIT ARP | `X2 OCT`, `ARP OFF: TURN MOD`, `ARP RHY E5/16`, `PUSH: VAR RHY ACC RTC` | How many octaves the run climbs; the arp is off; a push set RHYTHM; none of the four is set |
 | EDIT ENV | `HOLDS: PAD OR LEN`, `SUS 0: ONE-SHOT`, `NOT ON THIS MACHINE` | Notes hold (SUS up); notes are one-shots; a machine with no ENV page |
 | EDIT OSC | `SAW + SUB DRIVEN`, `NOT ON THIS MACHINE` | What goes into the VA's filter; a machine with no OSC page |
+| EDIT SCAN | `EACH NOTE: POS TO END`, `SCAN OFF: TURN MOD`, `END = POS: NO TRAVEL` | The scan runs with each note; MOD is OFF; END on POS leaves nowhere to go |
 | PROJECT slots | `05>`, bright box | Queued slot; live slot (bright), has trigs (mid), empty (dark) |
 | PROJECT | `SMP OS.X- 12/64M` | Per track sample: O ready, S streamed from the card, . loading, X failed, - none; MiB used/budget |
 | Any | `STREAM LATE` | The card fell behind a streamed file; the gap played as silence |
@@ -322,12 +323,14 @@ CC 120/123 let go of held notes. Program change 1-128 on your MIDI CH queues pat
 **Machines:** KCK kick · SNR snare · HAT hat · PRC 2-op FM percussion · SMP sampler · GRN granular ·
 MNO VA mono · PLY VA poly · WMN wavetable mono · WPL wavetable poly · FM4 four-operator FM.
 
-**EDIT pages:** SRC source · FLTR filter (the insert chain's; on the VA and WAVE machines the voice's own) · AMP amplitude · FX effects (insert chain) · LFO the track's LFO · ARP its arpeggiator · ENV held notes and OSC oscillators (VA, WAVE, FM4 and GRAIN machines).
+**EDIT pages:** SRC source · FLTR filter (the insert chain's; on the VA and WAVE machines the voice's own) · AMP amplitude · FX effects (insert chain) · LFO the track's LFO · ARP its arpeggiator · ENV held notes and OSC oscillators (VA, WAVE, FM4 and GRAIN machines) · SCAN the wavetable scan (WAVE machines).
 **LFO page:** WAV shape SIN TRI RMP (rising) SAW (falling) SQR S+H · RAT rate, `0.06`-`32` Hz free on the lower half, `8B` (bars) to `1/32` synced on the upper (`.` dotted, `T` triplet) · DEP depth, 127 = about 64 either side (about 3 octaves on a cutoff, never under ~100 Hz) · DST the parameter it moves, or OFF. Lockable, scene- and macro-able like any parameter. **Push B = TRIG:** FREE, RETRIG (each note restarts it), ONE-SHOT (each note runs one cycle: TRI attack-decay, SAW decay, RMP rise and hold, SQR gate, S+H per note). On VA and WAVE an LFO on TUN glides. **Push C / D = MOD slot 1 / 2:** push again for the source (LFO, ENV = the LFO's shape once per note, VEL, PRS = pad pressure, RND = random per note, OFF), turn any knob of the track for the depth, OK. A dim line under a bar is a slot's range.
 **ENV page (VA and WAVE machines; FM4's is below):** ATK attack `3MS`-`5.0S` · SUS sustain `0%` (one-shot: DEC is the length) to `100%` · REL release `60MS`-`8.0S` · FSU filter sustain (0 = the sweep closes, up = stays open). SUS up: a note holds while the pad or key is held, or for the step's LEN (MONO counts LEN only then). Pad: SUS 70%, ATK 400MS, REL 2.0S, chord step LEN 16 STP. REC records how long a held note was held as its step's LEN.
 **OSC page (VA MONO, VA POLY):** WAV `SAW` (0-31), `SQR` (32) to `P08` (127, a thin pulse) · OS2 `OFF` (0), `D0`-`D60` a detuned second saw in cents (1-63: chorus to Reese), `S+0`-`S+24` a pulse synced to OSC 1 (64-127: the sync sweep) · SUB the sub an octave down (0 = off) · DRV drive into the filter, thicker and dirtier, not louder. RES (SRC) self-oscillates near the top.
 
 **OSC page (WAVE MONO, WAVE POLY):** WRP phase bend, 0 none · DET `OFF` or `D1`-`D60`, a second detuned reader in cents · SUB · WMN: GLD glide; WPL: DRV drive.
+
+**SCAN page (WAVE MONO, WAVE POLY):** moves the position from POS towards END with each note. MOD `OFF` `FWD` (once, holds) `REV` (from END, once) `LOOP` `LREV` (looped backwards) `PING` (there and back) `RET` (there and back once) `SINE` (eased there and back) `RAND` (a random frame a cycle) `DRFT` (glides to a random frame a cycle) · SPD the LFO's RAT: 0-63 free (28 = 1 Hz), 64-127 synced (96 ticks = a beat) · END frame 0-15 as POS · CRV `LIN` at 64, `+n` slow start, `-n` fast start.
 
 **FM4 pages:** ENV = ATK SUS REL ISU (index sustain). OSC = DET `OFF`/`D1`-`D25` the second pair sharp · FIN fine ratio, `0` at 64 · BRT index keytrack · CAR carrier ratio 1 0.5 2 3 4.
 
@@ -343,8 +346,8 @@ MNO VA mono · PLY VA poly · WMN wavetable mono · WPL wavetable poly · FM4 fo
 | GRN | POS position, SIZ grain size, DEN density, SPR spray | DEC (127 HOLD), PIT pitch, SHP grain shape, LVL; ENV: ATK SUS REL; OSC: SCN scan, PSP pitch spray |
 | MNO | TUN, MOD filter mode, TON tone; FLTR: CUT cutoff, RES resonance, ENV filter env amount, FDE filter decay | DEC, -, GLD glide, LVL (ENV page: ATK SUS REL FSU) |
 | PLY | TUN, MOD, TON; FLTR: CUT, RES, ENV, FDE | DEC, -, DET detune, LVL (ENV page: ATK SUS REL FSU) |
-| WMN | TBL table (CLS PWM SYN FMT RSW HRM FLD PHD FM1 TIN DGT VOW GRL EPN PLK MLT), POS position, TON; FLTR: CUT (LP24), RES, ENV, FDE | DEC, -, MOT envelope to position (`OFF` at 64, `+15`/`-15`), LVL (ENV and OSC pages) |
-| WPL | TBL, POS, TON; FLTR: CUT, RES, ENV, FDE | DEC, -, MOT, LVL (ENV and OSC pages; chords, shares the 12 POLY voices) |
+| WMN | TBL table (CLS PWM SYN FMT RSW HRM FLD PHD FM1 TIN DGT VOW GRL EPN PLK MLT), POS position, TON; FLTR: CUT (LP24), RES, ENV, FDE | DEC, -, MOT envelope to position (`OFF` at 64, `+15`/`-15`), LVL (ENV, OSC and SCAN pages) |
+| WPL | TBL, POS, TON; FLTR: CUT, RES, ENV, FDE | DEC, -, MOT, LVL (ENV, OSC and SCAN pages; chords, shares the 12 POLY voices) |
 | FM4 | ALG algorithm `A1`-`A8`, RAT modulator ratio, IDX index, FBK feedback | DEC, IEN index envelope, VEL velocity to index, LVL (ENV and OSC pages; chords, shares the 12 POLY voices) |
 
 **Insert chain (every track):** FLTR = DRV drive, CUT cutoff, RES resonance, MOD filter mode

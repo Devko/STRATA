@@ -1126,6 +1126,7 @@ scene or knob really did move: those prepare as before.
 | E12 | The ASR page | `tests/scenario_asr.sh`, then the held-chord `factory_kit` edit in "The ASR page" above, `scenario_factory.sh`, both compilers; revert | **done 2026-11-23:** off = A01 (26.15% / 49.32%); held +3.60 cl6x / +4.71 GCC (see "The ASR page") |
 | E13 | The OSC page and the VA rework | `tests/scenario_osc.sh` against `scenario_factory.sh` before it, then the worst-case `factory_kit` edit in "The OSC page" below, both compilers; revert | the factory beat should not rise; worst case at most ~0.1 point a voice over the old voice |
 | E14 | WAVE MONO and WAVE POLY | `tests/scenario_wave.sh` (tracks 6 and 7 switched to WMN and WPL on keys) against `scenario_factory.sh` on the same commit, both compilers; and the time from the switch to `wav FM1` (the first table ready) | see "WAVE MONO and WAVE POLY" below: about 1.0-1.4x a VA voice expected; a table is built on first use, a piece a pass |
+| E17 | WAVE scan | `tests/scenario_wavescan.sh` (track 6 to WMN, WOBBLE, the SCAN page) against `tests/scenario_wave.sh` on the same commit, both compilers | see "WAVE scan" below: within noise of `scenario_wave`; at most ~0.15 point a scanning voice |
 | E15 | FM4 | `tests/scenario_fm.sh` (track 7 switched to FM4 on keys) against `scenario_factory.sh` on the same commit, both compilers; and `tools/ti_loops.py` for `strata_fm_add` and `strata_fm_add_free` | see "FM4" below: about 1.6-1.8x a VA voice on the host; FBK 0 should pipeline far better on cl6x than FBK up |
 | E16 | The GRAIN rework | `tests/scenario_grain.sh` (track 8 switched to GRAIN, SHIMMR loaded on keys) against `scenario_factory.sh` on the same commit, both compilers | see "The GRAIN rework" below: no change to the hot loop, so SHIMMR should cost what a dense v0.3.0 cloud did (a few points), and nothing at all while the track is silent |
 | E5 | Load time of a 15 s 96 kHz stereo WAV (30 s of the file now loads too: `kSrcFrames` is 30 s of 96 kHz frames since 2026-11-22) | through the emulator's card, cl6x vs GCC | wall time to playable; screen should not stall |
@@ -1596,6 +1597,33 @@ FM and STRING, which follow, allocate under 0.1 MiB.
 | `scenario_factory.sh`, same commit | | |
 | `scenario_wave.sh` (WMN bass, WPL chord) | | |
 | cycles to `strata ready`, before / after | | |
+
+### WAVE scan (2026-11-28, host only)
+
+The SCAN page moves each WAVE voice's position at control rate: the reader loop is the same, it
+only reads another frame pair. Host, x86 GCC -O2, a six-note held chord on WAVE POLY (HARMONICS,
+POS 20 to END 120, SPD 3.3 Hz, CRV 90), nanoseconds per voice per 64-frame block, best of nine:
+
+| MOD | one reader | DET (two readers) |
+| --- | --- | --- |
+| OFF | 1,278 (1.00) | 1,481 (1.00) |
+| FWD (holds at END) | 1,264 (0.99) | 1,498 (1.01) |
+| LOOP | 1,306 (1.02) | 1,553 (1.05) |
+| SINE | 1,328 (1.04) | 1,568 (1.06) |
+| DRFT | 1,308 (1.02) | 1,557 (1.05) |
+
+The first version worked the shape out every control step and cost 12-24% of a voice with CRV
+off 64: CRV's power and SINE's cosine, four a block. It is now worked out every fourth step and
+ramped between, two a block. So a scanning voice costs up to about 6% more than a still one:
+scaled from the WAVE estimate above, about 0.15 points a voice with cl6x, under 2 points for all
+12 POLY voices scanning. MOD OFF costs nothing.
+
+**E17, to measure on Roland's PC (emulator):**
+
+| Build | cl6x | GCC only |
+| --- | --- | --- |
+| `scenario_wave.sh`, same commit | | |
+| `scenario_wavescan.sh` (WMN WOBBLE scanning, SCAN page drawn) | | |
 
 ### FM4 (2026-11-23, host only)
 
