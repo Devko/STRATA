@@ -9,8 +9,13 @@
 //
 //   1. trig state   -- off: nothing. trigless: locks apply, no note. on: carry on.
 //   2. condition    -- A:B, FILL, PRE, NEI, 1ST and their negations (see below).
-//   3. probability  -- 0-100%, drawn deterministically (see below).
+//   3. probability  -- 0-100%, drawn deterministically (see below); ENERGY above rest lifts it.
+//   3b. energy      -- ENERGY below rest drops the weaker trigs (core/energy.hpp).
 //   4. ratchet      -- 1-8 hits spread across the step, with a velocity ramp.
+//
+// An EMPTY step stops at stage 1, except that ENERGY above rest may give it a ghost: one hit,
+// with the note, length and locks of the trig before it on the track. A ghost never enters the
+// PRE/NEI chain.
 //
 // Condition is resolved BEFORE probability because PRE and NEI chain off the *condition*
 // result: a step whose condition passed but whose probability roll failed still counts as a
@@ -92,6 +97,11 @@ struct PerformState {
     // unit is on, an armed track plays that RND mode over its own; the pattern is not touched.
     uint8_t rnd_unit = 0;
     uint8_t rnd_armed = 0xFF;
+    // ENERGY (core/energy.hpp): -64 .. +64, 0 at rest. Below rest each track thins in its tier's
+    // order, above it empty steps may get ghosts. The tiers are the engine's to fill, one per
+    // track from its machine (energy_tier); the pattern is not touched.
+    int8_t energy = 0;
+    uint8_t energy_tier[kTracks] = {};
 };
 
 // --- the scheduler --------------------------------------------------------

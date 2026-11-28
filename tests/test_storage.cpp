@@ -609,6 +609,8 @@ const Expect kTable[] = {
     {Cmd::set_move_all, 0u, "set_move_all"},
     // LIVE RND is a performance move: no file (core/liverand.hpp).
     {Cmd::set_live_rnd, 0u, "set_live_rnd"},
+    // ENERGY too (core/energy.hpp).
+    {Cmd::set_energy, 0u, "set_energy"},
     // An audition is heard, not kept: the track and the project are untouched.
     {Cmd::audition_start, 0u, "audition_start"},
     {Cmd::audition_stop, 0u, "audition_stop"},

@@ -8,6 +8,13 @@ the project file format or the controls.
 
 ### Added
 
+- **ENERGY, one knob from breakdown to peak.** In PERFORM, FUNC + turn C (-64 .. +64, rest at 0
+  with a detent). Down, every track drops its weakest hits first, in an order: hats at once, then
+  percussion, snare and samples, the lines, the pads (which keep their strongest hits), and the
+  kick last. Up, empty off-beats get quiet ghosts with the sound of the hit before them (hats most,
+  the kick only near the top, pads never) and probabilities lift towards 100. Each position plays
+  the same groove every bar; the pattern is never written, and a LOCK holds it. New emulator
+  scenario `energy`.
 - **Starter content in the card builder.** strata.einblick.dev can now put something to play on
   the card with STRATA: ten starter projects to open and jam on (TECHNO, DEEP, DUB, DRIFT,
   ELECTRO, NIGHT, BREAKS, STEEL, SMASH, CHAOS; for 0.5.0 and newer), a sample pack of 105

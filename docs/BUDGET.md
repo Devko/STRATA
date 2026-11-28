@@ -53,6 +53,27 @@ changes a platform constant fails the host tests rather than drifting silently.
 
 ## STRATA measurements
 
+### ENERGY at +64 (2026-11-28, emulator, Enaga v0.4.0)
+
+ENERGY adds notes only above rest: ghosts on empty steps (hats most, perc, snare and samples,
+the mono lines; the kick above +32; never the pads). `scenario_energy` turns it to +64 against the
+default beat and keeps it there; `scenario_liverand` is the same beat, PLAY and PERFORM, without
+it. The first run of `scenario_energy` (one long walk) is the figure below; its functional checks
+were then split over two runs because the report keeps 16 log lines. The two-run version passes
+with cl6x at 33.87% and GCC-only at 60.93% (its peak run is shorter).
+
+| | cl6x | GCC-only |
+| --- | --- | --- |
+| `scenario_liverand` peak (the beat, no ENERGY) | 24.60% | 43.49% |
+| `scenario_energy` peak, ENERGY +64 | **34.27%** (the new worst scenario, from `genload`'s 34.20%) | 61.27% |
+| ENERGY +64 costs | +9.7 points | +17.8 points |
+
+Under 60% with cl6x, which ships. GCC-only it is over 60, as `genload` is (63.88%), so the
+scenario gives that build a 70% tripwire, a regression guard, not the budget. The cost is voice
+starts, not DSP: the hats and percussion fill most of their off-beats at the top. If the unit
+reads high, cut the hats' appetite first (`kFill` in core/energy.cpp). Down costs nothing; it
+only removes notes.
+
 ### Stereo width, WID (2026-11-27, emulator)
 
 A POLY track with WID up renders in stereo (core/width.hpp): each voice into its own block and out

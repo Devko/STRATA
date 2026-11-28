@@ -35,6 +35,7 @@
 #include "arp.hpp"          // the ARP page's names and clicks
 #include "engine.hpp"
 #include "help.hpp"         // the FUNC help's pages, one set per screen
+#include "energy.hpp"       // ENERGY: FUNC + C in PERFORM
 #include "liverand.hpp"     // LIVE RND: FUNC + D in PERFORM
 #include "paint.hpp"        // the drawing kit: lines, arcs, the small font, afterglow
 #include "spectrum.hpp"     // the output's spectrum for MIXER's master pages
@@ -814,6 +815,9 @@ private:
     // armed. Posted absolute, like REL ALL, and read back from the engine after a LOCK jump.
     uint8_t rnd_unit_ = kLiveRndOff;
     uint8_t rnd_armed_ = kLiveRndAllTracks;
+    // ENERGY (core/energy.hpp): where FUNC + C left it, posted absolute like REL ALL and read
+    // back from the engine after a LOCK jump.
+    int8_t energy_ = 0;
     uint16_t morph_ = 0;
     bool repeat_held_ = false;
     RepeatLength repeat_length_ = RepeatLength::sixteenth;
