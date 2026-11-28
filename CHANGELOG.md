@@ -68,6 +68,10 @@ the project file format or the controls.
 
 ### Fixed
 
+- **WAVE keeps the tables it played last.** With every wavetable slot taken, a new table takes
+  the slot of the one wanted least recently, which waits two audio blocks before it is written.
+  While it waited, STRATA went on taking out every other table not playing, so turning back to
+  a table played a moment ago built it again, its first notes sub only. It takes out one.
 - **The CPU guard no longer thins chords that were never in danger.** With generated parts on
   every track the unit read 40-60% and showed `GUARD1`-`GUARD4`, shedding POLY voices and grains
   with no block anywhere near an overrun. The guard averaged the load over 11 ms, which follows

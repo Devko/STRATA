@@ -864,6 +864,11 @@ it switch, put a few trigs on track 3 that sound clearly different, then PROJECT
   sound, and GRID now edits track 3. `____`
 - Launch something, save, power cycle, open: the launch is still playing. `____`
 
+**W65. WAVE keeps the tables it played last (2 min).** Beat playing, A01.
+- Lower pad 6, FUNC+EDIT, DOWN three times: `WMN`. EDIT, SRC: turn A slowly through all 16
+  tables, a few notes on each, then back two tables. The table played a moment ago sounds on
+  its first note, not sub only for a moment while it is built again. `____`
+
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
 
