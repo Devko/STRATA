@@ -270,14 +270,14 @@ constexpr Text kPerform2 = {"PERFORM MORE:", {
 constexpr Text kPerform3 = {"PERFORM LIVE:", {
     "FUNC+A     REL ALL",
     "FUNC+B     LEN ALL",
+    "FUNC+C     ENERGY",
+    "  - THINS  + FILLS",
     "FUNC+D     LIVE RND",
     "  OFF 1 2 4 8 16",
     "FUNC+PUSH D  TRACK",
     "  IN OR OUT OF RND",
-    "OFF  BACK TO THE GRID",
     "PATTERN NOT CHANGED",
-    "LOCK HOLDS ALL THREE",
-    nullptr,
+    "LOCK HOLDS THEM ALL",
 }};
 
 constexpr Text kProject = {"PROJECT:", {
@@ -419,7 +419,7 @@ constexpr Text kMenu = {"FUNC MENU:", {
     "NEW RELOAD CLEAR",
     "PATTERN  OK TWICE",
     "TRACK PLAY FWD-RND16",
-    nullptr,
+    "UP OK  JAM REC ON/OFF",
 }};
 
 // The MIXER's pages, in app/app.hpp's kMixerPages order (its static_assert holds the count).

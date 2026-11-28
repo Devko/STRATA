@@ -362,6 +362,20 @@
             *out = 0;
             enaga::log(line);
         }
+        // JAM REC: why a start was refused, why a jam stopped on its own, or SAVED once its file
+        // is closed. Logged, for tests/scenario_jamrec.sh and a unit log.
+        if (const char *jam = storage_.take_jam_message()) notice_logged(jam);
+        // Frames the card was too slow for, said once a second while they keep coming.
+        if (storage_.jam_running()) {
+            const uint32_t lost = storage_.jam_lost_frames();
+            if (lost != jam_lost_seen_ && uint32_t(last_ms_ - jam_lost_ms_) >= 1000u) {
+                jam_lost_seen_ = lost;
+                jam_lost_ms_ = last_ms_;
+                notice_logged("JAM: CARD TOO SLOW");
+            }
+        } else {
+            jam_lost_seen_ = 0;
+        }
         if (storage_.audition_sounding() != audition_sounding_seen_) {
             audition_sounding_seen_ = storage_.audition_sounding();
             enaga::log(audition_sounding_seen_ ? "aud play" : "aud end");

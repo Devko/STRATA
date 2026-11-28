@@ -67,6 +67,7 @@
 #include <cstdint>
 
 #include <enaga/files.hpp>  // files::Stream: a streamed sample's tail, read in audio()
+#include <enaga/wav.hpp>    // wav::Writer: JAM REC's file, written in audio()
 
 namespace strata {
 
@@ -196,6 +197,8 @@ public:
     // LIVE RND (core/liverand.hpp): the unit (0 OFF) and the armed tracks.
     uint8_t live_rnd_unit() const { return perform_.rnd_unit; }
     uint8_t live_rnd_armed() const { return perform_.rnd_armed; }
+    // ENERGY (core/energy.hpp): -64 .. +64, 0 is rest.
+    int8_t energy() const { return perform_.energy; }
     AutoFill auto_fill() const { return auto_fill_; }
     // EVOLVE (core/evolve.hpp): a track's period index (0 OFF) and the shared settings.
     uint8_t evolve_period(int track) const {
@@ -374,6 +377,16 @@ public:
     // For tests.
     const Audition &audition() const { return audition_; }
     bool audition_attached() const { return audition_on_; }
+
+    // --- JAM REC (app/storage.hpp, "jam recording") ---
+
+    // The jam's file. The main context creates it and posts Cmd::jam_start, the audio side writes
+    // the finished master into it every block until a Cmd::jam_stop, after which it bumps
+    // Status::jam_epoch, and only then does the main context close it.
+    enaga::wav::Writer &jam_writer() { return jam_; }
+    const enaga::wav::Writer &jam_writer() const { return jam_; }
+    // For tests: is the audio side writing it?
+    bool jam_attached() const { return jam_on_; }
 
 private:
     void apply_commands();
@@ -590,6 +603,11 @@ private:
     uint8_t audition_carry_ = 0;
     uint8_t audition_carry_bytes_[8] = {};
     uint8_t audition_epoch_ = 0;      // what Status::audition_epoch holds
+
+    // JAM REC. Audio side only, apart from the writer (rules above).
+    enaga::wav::Writer jam_;
+    bool jam_on_ = false;             // writing every block into jam_
+    uint8_t jam_epoch_ = 0;           // what Status::jam_epoch holds
 
     // The hat choke is a pair, and the pair is tracks 3 and 4 of the DEFAULT kit. Machine
     // switching makes that an assumption rather than a fact, so it is re-derived on every
