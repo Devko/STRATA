@@ -25,7 +25,7 @@ Lost? Hold FUNC alone for help on the screen you are on. FUNC+CLR undoes anythin
    EDIT: the selected track's sound. Screen keys L/R walk the pages, A-D turn.
    OK in EDIT opens SOUNDS: ready-made sounds for that track. AS WAS puts yours back.
    FUNC+EDIT (MACHINE): pick the machine on each track with A.
-   MIXER: levels, delay, reverb, the sidechain duck and the master.
+   MIXER: levels, the sidechain duck, stereo width, delay, reverb, chorus, the master.
 
 5. PERFORM
    Upper pads: FILL, REPEAT, MUTE, SCENE A, SCENE B, THROW, MUTATE.
