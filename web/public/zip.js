@@ -60,14 +60,24 @@ export function readZip(buffer) {
     p += 46 + nlen + xlen + clen;
     if (name.endsWith("/")) continue;
 
+    const rawBytes = () => {
+      if (flags & 1) throw new Error(`${name}: encrypted entries are not supported`);
+      if (view.getUint32(local, true) !== 0x04034b50) throw new Error(`${name}: broken local header`);
+      const start = local + 30 + view.getUint16(local + 26, true) + view.getUint16(local + 28, true);
+      return bytes.subarray(start, start + csize);
+    };
     entries.push({
       name,
       size: usize,
+      // The entry as it is stored, for copying it into another zip without inflating it:
+      // writeZip takes { name, size, crc, method, compressed }. Only for a zip already checked
+      // as a whole (the starter content's SHA-256), since nothing checks the CRC on the way.
+      stored() {
+        if (method !== 0 && method !== 8) throw new Error(`${name}: compression method ${method} is not supported`);
+        return { name, size: usize, crc, method, compressed: rawBytes() };
+      },
       async read() {
-        if (flags & 1) throw new Error(`${name}: encrypted entries are not supported`);
-        if (view.getUint32(local, true) !== 0x04034b50) throw new Error(`${name}: broken local header`);
-        const start = local + 30 + view.getUint16(local + 26, true) + view.getUint16(local + 28, true);
-        const raw = bytes.subarray(start, start + csize);
+        const raw = rawBytes();
         let out;
         if (method === 0) out = raw.slice();
         else if (method === 8) out = await inflateRaw(raw);
@@ -80,8 +90,10 @@ export function readZip(buffer) {
   return entries;
 }
 
-// files: [{ name, data: Uint8Array }]. Returns a Uint8Array holding a stored zip.
-// Every entry gets the same fixed time (2026-01-01 00:00), so a given input is byte-identical.
+// files: [{ name, data: Uint8Array }], stored; or [{ name, size, crc, method: 8, compressed }],
+// an entry already deflated (readZip's stored(), or web/tools/starter.mjs's own deflate), copied
+// as it is. Returns a Uint8Array holding the zip. Every entry gets the same fixed time
+// (2026-01-01 00:00), so a given input is byte-identical.
 export function writeZip(files) {
   const enc = new TextEncoder();
   const DOS_TIME = 0;
@@ -92,40 +104,43 @@ export function writeZip(files) {
 
   for (const f of files) {
     const name = enc.encode(f.name);
-    const crc = crc32(f.data);
-    const size = f.data.length;
-    if (size >= 0xffffffff) throw new Error(`${f.name}: too big for a zip without zip64`);
+    const deflated = f.compressed !== undefined && f.method === 8;
+    const body = f.compressed !== undefined ? f.compressed : f.data;
+    const crc = f.compressed !== undefined ? f.crc : crc32(f.data);
+    const size = f.compressed !== undefined ? f.size : f.data.length;
+    const csize = body.length;
+    if (size >= 0xffffffff || offset + csize >= 0xffffffff) throw new Error(`${f.name}: too big for a zip without zip64`);
 
     const lh = new DataView(new ArrayBuffer(30));
     lh.setUint32(0, 0x04034b50, true);
     lh.setUint16(4, 20, true);          // version needed
     lh.setUint16(6, 0x0800, true);      // UTF-8 names
-    lh.setUint16(8, 0, true);           // stored
+    lh.setUint16(8, deflated ? 8 : 0, true);
     lh.setUint16(10, DOS_TIME, true);
     lh.setUint16(12, DOS_DATE, true);
     lh.setUint32(14, crc, true);
-    lh.setUint32(18, size, true);
+    lh.setUint32(18, csize, true);
     lh.setUint32(22, size, true);
     lh.setUint16(26, name.length, true);
     lh.setUint16(28, 0, true);
-    locals.push(new Uint8Array(lh.buffer), name, f.data);
+    locals.push(new Uint8Array(lh.buffer), name, body);
 
     const ch = new DataView(new ArrayBuffer(46));
     ch.setUint32(0, 0x02014b50, true);
     ch.setUint16(4, 20, true);          // version made by
     ch.setUint16(6, 20, true);
     ch.setUint16(8, 0x0800, true);
-    ch.setUint16(10, 0, true);
+    ch.setUint16(10, deflated ? 8 : 0, true);
     ch.setUint16(12, DOS_TIME, true);
     ch.setUint16(14, DOS_DATE, true);
     ch.setUint32(16, crc, true);
-    ch.setUint32(20, size, true);
+    ch.setUint32(20, csize, true);
     ch.setUint32(24, size, true);
     ch.setUint16(28, name.length, true);
     ch.setUint32(42, offset, true);
     centrals.push(new Uint8Array(ch.buffer), name);
 
-    offset += 30 + name.length + size;
+    offset += 30 + name.length + csize;
   }
 
   const cdSize = centrals.reduce((n, b) => n + b.length, 0);
