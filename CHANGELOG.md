@@ -173,6 +173,17 @@ the project file format or the controls.
 
 ### Fixed
 
+- **A song no longer rewrites the project's tempo.** A section's BPM plays and shows on the
+  screen, but a save during or after the song keeps the tempo the project was set to.
+- **ARR REC writes a BPM only where the tempo changed.** A take at one tempo has no BPM in any
+  entry, so VALUE moves the whole recorded song instead of lasting until the next entry. A tempo
+  change in a take writes the new BPM there and the starting tempo on the take's first entry.
+- **The clock no longer jumps back to the old tempo** for a moment after a section's BPM, a turn
+  of VALUE or a tap, and a fast turn of VALUE keeps every click.
+- **Tap tempo needs three taps that agree.** Two stray taps of VALUE used to set and save a tempo
+  (1.2 s apart gave 50 BPM); nothing is set until two gaps agree within a quarter.
+- **VariSpeed held back by a fast tempo says so and comes back.** Near 300 BPM it is held to what
+  fits (`VARISPEED HELD +3.0`), and the amount set returns at a slower tempo.
 - **A section's BPM keeps VariSpeed.** With VariSpeed off rest, an entry's BPM set the clock to the
   plain tempo until VALUE was touched; it is now the tempo times VariSpeed's ratio, as VALUE's turn.
 - **A mute armed for the next bar (FUNC + pad) no longer lands on a project opened before that

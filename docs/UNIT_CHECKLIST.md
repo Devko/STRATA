@@ -1074,6 +1074,23 @@ slots, no chain.
 - FUNC+HOME, RELOAD PROJECT, OK: `OK AGAIN: RELOAD`; wait 3 s. PROJECT, SLOT, FUNC + LEFT:
   `LEFT AGAIN: CLEAR`; wait. Every confirmation on the unit reads `<KEY> AGAIN: <WHAT>`. `____`
 
+**W78. Tempo: sections, ARR REC, tap tempo and VariSpeed (5 min).** The factory beat stopped on
+A01 at 130.0, no chain.
+- On GRID, tap VALUE twice about a second apart: `TAP TEMPO` both times and the tempo stays
+  130.0. Two more taps at the same pace: `TAP 60.0` or near. Turn VALUE back to 130.0. `____`
+- Turn VALUE fast, several clicks in one flick, while the beat plays: the tempo moves by every
+  click and the beat never stumbles back to the old tempo. `____`
+- ARR REC (FUNC+HOME, DOWN, DOWN, OK), PLAY, two passes; turn VALUE to 140.0, two passes; STOP.
+  PROJECT, CHAIN, push A on entry 1: MOVE page BPM 130; entry 2: BPM 140. `____`
+- CHAIN END SONG, CHAIN ON, PLAY from stop: entry 2 plays at 140, the loop back to entry 1 at 130.
+  STOP, save, power cycle, open: the project opens at the tempo it was saved with, not at the last
+  section's. `____`
+- Record a take at one tempo only: no entry has a BPM, and VALUE during playback holds for the
+  whole song. `____`
+- FUNC + turn VALUE to +5.0 at 130. Give a chain entry BPM 280: as it plays, `VARISPEED HELD`
+  and a smaller amount; at the next entry with a slower BPM, `VARISPEED +5.0 ...` again.
+  FUNC + tap VALUE. `____`
+
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
 

@@ -89,7 +89,7 @@ each line means.
 | FUNC+CLR / FUNC+OK | Undo / redo, in every mode and page |
 | VALUE turn | Tempo, 20-300 BPM in 0.1 steps (PERFORM: morph). With a performance effect picked: its amount (below) |
 | VALUE push + turn | Pattern swing |
-| Tap VALUE, twice or more | Tap tempo where VALUE turns the tempo (`TAP 128.0`), from the last four taps; a 2 s gap starts again |
+| Tap VALUE, three times or more | Tap tempo where VALUE turns the tempo (`TAP 128.0`) once two gaps agree, from the last four taps; a 2 s gap starts again |
 | FUNC + SEL< / SEL> | **TRANSPOSE**: the melodic tracks (VAs, WAVEs, FM4, GRAIN, unsliced SAMPLE) a scale step down / up, -12..+12, on every screen (`TRANSPOSE +2 IN KEY`); the FUNC menu's TRANSPOSE row on SEMI makes it semitones, the key moving too (`TRANSPOSE +3 C`). Both screen keys together back to 0. Drums, sliced samples and MID stay. Not saved; in a LOCK |
 | FUNC + VALUE turn | **VariSpeed**: tempo and the pitch of every machine together, like a turntable, a tenth of a semitone a click, an octave each way (`VARISPEED +1.2 140.3`). Rest is a detent; FUNC + tap VALUE (no effect picked) snaps back. Not saved; internal clock only (`EXT CLOCK`) |
 | FUNC + push VALUE + turn | Nudge: 4% faster or slower for 250 ms a detent, then back to the set tempo (`NUDGE FASTER`) |
