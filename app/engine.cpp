@@ -1966,6 +1966,8 @@ bool Engine::apply_arrangement(const Command &command, int, int) {
         case Cmd::chain_edit: {
             const int at = int(command.step);
             bool done = false;
+            // During a take, an entry edited by hand is no longer the take's to extend.
+            if (arr_.on) arr_chain_edited(arr_);
             switch (ChainEdit(command.a)) {
                 case ChainEdit::set:
                     done = chain_set(project_, at, command.b, command.c, command.d, command.e);
@@ -2070,6 +2072,44 @@ bool Engine::apply_arrangement(const Command &command, int, int) {
             break;
         }
 
+        case Cmd::arr_rec:
+            if (command.a != 0) {
+                if (arr_.on) break;                  // already on: nothing to start
+                arr_start(project_, arr_, arr_backup_);
+                arr_undone_ = false;
+                // The chain is being written, so it is not followed: the jam plays on.
+                chain_.active = false;
+                project_.settings.chain_enabled = false;
+                // With the transport running the take starts here, mid-pass (the half rule
+                // decides whether this pass is kept); stopped, it starts with the next PLAY.
+                if (was_running_) {
+                    arr_pass_begin(arr_, arr_now(), tick_, uint32_t(master_loop_ticks(live())));
+                }
+                arr_origin_ = origin_;
+                arr_switched_ = false;
+                arr_publish();
+                status_.bump_arr_event(uint8_t(ArrEvent::started), 0);
+            } else if (arr_.on) {
+                arr_end(tick_, false);
+            }
+            break;
+
+        case Cmd::arr_undo:
+            if (!arr_undo(project_, arr_, arr_backup_)) {
+                status_.bump_refused();
+                status_.bump_arr_event(uint8_t(ArrEvent::no_undo), 0);
+                break;
+            }
+            arr_undone_ = !arr_undone_;
+            // The chain under a running player has been swapped: it stops being followed, as
+            // an emptied chain does, and the pattern plays on.
+            chain_.active = false;
+            project_.settings.chain_enabled = false;
+            arr_publish();
+            status_.bump_arr_event(uint8_t(arr_undone_ ? ArrEvent::undone : ArrEvent::redone),
+                                   uint8_t(chain_length(project_)));
+            break;
+
         case Cmd::cancel_queue:
             // Unconditional: cancelling a queue that is not armed is what the UI does when the
             // user presses the same pattern twice, and it is not an error. Queued launches go
@@ -2158,6 +2198,8 @@ bool Engine::apply_arrangement(const Command &command, int, int) {
         }
 
         case Cmd::set_chain:
+            // Playing the chain ends a take: the chain cannot be recorded and followed at once.
+            if (command.a != 0 && arr_.on) arr_end(tick_, false);
             if (command.a != 0) {
                 // Starting a chain jumps to its first entry (app/commands.hpp). chain_start
                 // leaves the player inactive for an empty chain, which is a refusal the UI
@@ -2290,6 +2332,14 @@ bool Engine::apply_project(const Command &command, int, int) {
             }
             lane_follows_ = 0xFF;
             chain_.active = false;
+            // A mute armed for the next bar (FUNC + pad) was for the project just left: landing
+            // on this one's mutes would flip a track nobody asked for.
+            mute_latch_ = MuteLatch{};
+            // ARR REC: a take and its undo belong to the project they were made in.
+            arr_ = ArrRec{};
+            arr_backup_.valid = false;
+            arr_undone_ = false;
+            arr_publish();
             // A project saved with its chain running reopens with it running. The flag was
             // written by every save and read by nothing, so the chain came back off while the
             // file -- and the next save -- said on. The saved live pattern still opens; the
@@ -2896,6 +2946,8 @@ void Engine::pattern_replaced(int bank, int slot) {
 void Engine::switch_pattern(int bank, int slot) {
     if (!project_index_valid(bank, slot)) return;
     if (bank == int(project_.bank) && slot == int(project_.slot)) return;
+    // ARR REC: the pass of the pattern being left ends here (resolve_tick's next tick).
+    arr_switched_ = true;
 
     // EVOLVE: in ORBIT the pattern being left goes back to HOME, so leaving it never leaves it
     // changed; DRIFT leaves it where it wandered. Either way every evolving track then re-homes
@@ -3206,6 +3258,59 @@ void Engine::morph_ride_tick(uint32_t tick) {
     }
 }
 
+// --- ARR REC (core/arrrec.hpp) ----------------------------------------------
+
+// What plays now, as a section holds it.
+ArrState Engine::arr_now() const {
+    return arr_state(project_.bank, project_.slot, mute_state_capture(muted_), scene_b_, morph_,
+                     int(perform_.energy), project_.settings.tempo_centi_bpm,
+                     enaga::clock::source() != ENAGA_CLOCK_INTERNAL);
+}
+
+// Once a tick while a take is on. `new_pass`: a pass of the pattern begins at this tick.
+void Engine::arr_tick(uint32_t tick, uint32_t previous, bool new_pass, bool jumped_back) {
+    const uint32_t loop = uint32_t(master_loop_ticks(live()));
+    if (!arr_.pass_open) {
+        // The first tick after PLAY (or of a take armed with the transport stopped).
+        arr_pass_begin(arr_, arr_now(), tick, loop);
+        return;
+    }
+    if (new_pass || jumped_back) {
+        // A transport that jumped back ended the pass where it was, not here.
+        const ArrPass ended = arr_pass_end(project_, arr_, jumped_back ? previous : tick);
+        if (ended == ArrPass::full) {
+            arr_end(tick, true);
+            return;
+        }
+        if (ended == ArrPass::added || ended == ArrPass::extended) {
+            status_.arr_passes.store(
+                uint8_t(status_.arr_passes.load(std::memory_order_relaxed) + 1),
+                std::memory_order_release);
+        }
+        arr_pass_begin(arr_, arr_now(), tick, loop);
+        arr_publish();
+        return;
+    }
+    // The pass's first ticks still count as its start: a mute a hair after the downbeat is the
+    // pass it was meant for (kQueueGraceTicks, the forgiveness a queued change gets).
+    if (tick - arr_.pass_from <= uint32_t(kQueueGraceTicks)) arr_.pass = arr_now();
+}
+
+// The take is over: STOP, ARR REC off, the chain started, or a 65th entry needed (`full`).
+void Engine::arr_end(uint32_t tick, bool full) {
+    const int written = arr_finish(project_, arr_, arr_backup_, tick);
+    arr_publish();
+    const ArrEvent event = written == 0 ? ArrEvent::empty
+                                        : (full ? ArrEvent::full : ArrEvent::ended);
+    status_.bump_arr_event(uint8_t(event), uint8_t(written));
+}
+
+void Engine::arr_publish() {
+    status_.arr_on.store(arr_.on ? 1 : 0, std::memory_order_relaxed);
+    status_.arr_written.store(arr_.written, std::memory_order_relaxed);
+    status_.arr_undo_ready.store(arr_backup_.valid ? 1 : 0, std::memory_order_relaxed);
+}
+
 Project &Engine::project_for_load() { return project_; }
 
 // Rebuild the scheduler's derived timing after anything that changes a track's length, speed or
@@ -3303,6 +3408,7 @@ void Engine::resolve_tick(uint32_t tick, uint32_t frame) {
     // happens now, at this tick, from the new pattern's step 1: the same reading a change queued
     // with the clock stopped gets (Cmd::queue_pattern).
     const bool jumped_back = tick < tick_;
+    const uint32_t previous_tick = tick_;
     tick_ = tick;
     // A finished song plays again from a transport that went back (a stop and PLAY).
     if (jumped_back) song_over_ = false;
@@ -3313,6 +3419,11 @@ void Engine::resolve_tick(uint32_t tick, uint32_t frame) {
         origin_ = 0;
         boundary_known_ = false;
     }
+    // And any jump back re-derives the end of the pass: the one known was measured on the old
+    // position. With the origin at 0 (a plain STOP and PLAY), the stale boundary used to stand,
+    // so the first pass after a PLAY lasted until the tick the old run would have ended it on,
+    // and a chain started on the pattern already playing held its first entry that much longer.
+    if (jumped_back) boundary_known_ = false;
     for (int t = 0; t < kTracks; t++) {
         if (tick < lane_origin_[t]) lane_origin_[t] = 0;
     }
@@ -3348,6 +3459,7 @@ void Engine::resolve_tick(uint32_t tick, uint32_t frame) {
     // rather than derived.
     // Passes are counted from the pattern's own start, `origin_`, not from tick 0.
     const uint32_t loop = uint32_t(master_loop_ticks(live()));
+    bool crossed_boundary = false;
     if (!boundary_known_) {
         next_boundary_ = origin_ + ((tick - origin_) / loop + 1) * loop;
         boundary_known_ = true;
@@ -3355,7 +3467,16 @@ void Engine::resolve_tick(uint32_t tick, uint32_t frame) {
         const uint32_t crossed = next_boundary_;
         next_boundary_ = origin_ + ((tick - origin_) / loop + 1) * loop;
         cross_boundary(crossed);
+        crossed_boundary = true;
     }
+    // ARR REC: a pass begins on a boundary, on a pattern switch, and wherever the pattern's
+    // start moved to (a queued change, even to the pattern already playing, restarts it).
+    if (arr_.on) {
+        arr_tick(tick, previous_tick, crossed_boundary || arr_switched_ || origin_ != arr_origin_,
+                 jumped_back);
+    }
+    arr_switched_ = false;
+    arr_origin_ = origin_;
     // A section's morph ride (MRP RIDE / BACK), after the boundary that may have started it.
     morph_ride_tick(tick);
     // EVOLVE's turns, in the last ticks before the boundary (evolve_lead says why).
@@ -4408,6 +4529,8 @@ void Engine::process(const float *in, float *out, uint32_t frames) {
     if (was_running_ && !clock_now.running) {
         count_in_end_ = 0;
         click_.stop();
+        // ARR REC: STOP ends the take, the pass in progress by the half rule.
+        if (arr_.on) arr_end(tick_, false);
     }
     was_running_ = clock_now.running != 0;
     // Everything below that follows the beat (the LFOs' sync, the master effects' phase) follows

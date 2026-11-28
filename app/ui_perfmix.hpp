@@ -15,9 +15,9 @@
     // Project-wide rows only, ordered by how often a jam reaches for them: the live toggles
     // first, the file actions at the bottom. The selected track's rows (SPEED, PLAY, FREEZE,
     // RELOAD SAMPLE) are in GRID's track menu (app/ui_trackmenu.hpp).
-    enum class MenuItem : uint8_t { save, jam, click, count_in, rec_mode, quantize, autofill,
-                                    glide, loop_len, chain, song, prog_out, save_as, open, kits, fresh,
-                                    reload, clear, demo, count };
+    enum class MenuItem : uint8_t { save, jam, arr, click, count_in, rec_mode, quantize,
+                                    autofill, glide, loop_len, chain, song, arr_undo, prog_out,
+                                    save_as, open, kits, fresh, reload, clear, demo, count };
     static constexpr int kMenuItems = int(MenuItem::count);
     static constexpr int kMenuRows = 9;
 
@@ -42,6 +42,8 @@
             case MenuItem::glide:    return "FX GLIDE";
             case MenuItem::demo:     return "LOAD DEMO";
             case MenuItem::jam:      return "JAM REC";
+            case MenuItem::arr:      return "ARR REC";
+            case MenuItem::arr_undo: return "ARR UNDO";
             default:                 return "?";
         }
     }
@@ -87,6 +89,18 @@
                 // How long a button's jump in the performance mixer rides (core/perffx.hpp).
                 append(out, perf_glide_name(perf_glide_));
                 break;
+            case MenuItem::arr:
+                // OFF, ON, or ON and the sections written so far: ON 7.
+                if (!arr_on()) {
+                    append(out, "OFF");
+                } else {
+                    append(out, "ON");
+                    if (arr_written() > 0) {
+                        *out++ = ' ';
+                        append_number(out, uint32_t(arr_written()));
+                    }
+                }
+                break;
             case MenuItem::jam:
                 // OFF, or how long the jam has run, as a clock: 4:07, 1:02:33.
                 if (storage_.jam_running()) append_clock(out, storage_.jam_seconds());
@@ -116,6 +130,62 @@
     // while the jam records, steady while its file is being closed, dark otherwise.
     bool jam_mark_on() const {
         return storage_.jam_running() && (!storage_.jam_recording() || last_ms_ % 1000u < 600u);
+    }
+
+    // --- ARR REC (core/arrrec.hpp): the jam written into the chain -------------------------------
+
+    bool arr_on() const { return engine_.status().arr_on.load(std::memory_order_relaxed) != 0; }
+    int arr_written() const {
+        return int(engine_.status().arr_written.load(std::memory_order_relaxed));
+    }
+
+    // The REC key's blink and the strip's ARR mark: a take on, blinking in time with JAM REC's.
+    bool arr_mark_on() const { return arr_on() && last_ms_ % 1000u < 600u; }
+
+    // ARR REC's row: a take on, or over. On closes the menu, so the music is back on the screen
+    // with ARR in the strip; what the take wrote comes as its own notice (service_arr).
+    void toggle_arr(bool from_menu) {
+        const bool on = !arr_on();
+        post(Cmd::arr_rec, 0, 0, on ? 1 : 0);
+        if (on && from_menu) close_menu(false);
+    }
+
+    // What the audio side did with ARR REC or ARR UNDO, said once, and the chain it wrote marked
+    // for the next save: a pass written by a take comes with no command.
+    void service_arr() {
+        const Status &status = engine_.status();
+        const uint8_t passes = status.arr_passes.load(std::memory_order_acquire);
+        const uint8_t event = status.arr_event.load(std::memory_order_acquire);
+        if (passes != arr_passes_seen_ || event != arr_event_seen_) {
+            arr_passes_seen_ = passes;
+            storage_.note_command(Cmd::chain_edit,
+                                  int(status.live_bank.load(std::memory_order_relaxed)));
+        }
+        if (event == arr_event_seen_) return;
+        arr_event_seen_ = event;
+        const uint32_t count = status.arr_arg.load(std::memory_order_relaxed);
+        char *out = notice_buffer_;
+        switch (ArrEvent(status.arr_last.load(std::memory_order_relaxed))) {
+            case ArrEvent::started:
+                append(out, enaga::clock::running() ? "ARR REC ON" : "ARR: PRESS PLAY");
+                break;
+            case ArrEvent::ended:
+            case ArrEvent::full:
+                if (ArrEvent(status.arr_last.load(std::memory_order_relaxed)) == ArrEvent::full) {
+                    append(out, "ARR FULL ");
+                } else {
+                    append(out, "ARR ");
+                }
+                append_number(out, count);
+                append(out, count == 1 ? " SECTION" : " SECTIONS");
+                break;
+            case ArrEvent::empty:   append(out, "ARR NOTHING KEPT"); break;
+            case ArrEvent::undone:  append(out, "ARR UNDONE"); break;
+            case ArrEvent::redone:  append(out, "ARR REDONE"); break;
+            case ArrEvent::no_undo: append(out, "NO ARR TO UNDO"); break;
+        }
+        *out = 0;
+        notice_logged(notice_buffer_);
     }
 
     // JAM REC, from the menu's row (OK) or FUNC + REC on RESAMPLE: start the jam, or stop it. From
@@ -755,6 +825,10 @@
                 notice_logged(notice_buffer_);
                 break;
             }
+            case MenuItem::arr:
+                // A switch: either arrow, B or OK flips it. OK closes the menu on a start.
+                toggle_arr(wrap);
+                break;
             case MenuItem::glide: {
                 // OFF, 1/16, 1 BEAT, 1 BAR; it wraps like AUTO-FILL.
                 const int count = int(PerfGlide::count);
@@ -817,6 +891,10 @@
                 break;
             case MenuItem::jam:
                 toggle_jam(true);
+                break;
+            case MenuItem::arr_undo:
+                // One level, both ways: the audio side says which (service_arr).
+                post(Cmd::arr_undo);
                 break;
             default:
                 menu_value(+1, true);

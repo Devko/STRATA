@@ -2010,6 +2010,323 @@ TEST(engine_section_edits_copy_and_quick_fill) {
     section_chain_done();
 }
 
+// --- ARR REC (core/arrrec.hpp) ----------------------------------------------------------------
+
+namespace {
+
+constexpr uint32_t kArrPass = 1536u;   // a pass of the blank project's 64-step patterns
+
+uint8_t arr_event_count() { return strata::test::engine().status().arr_event.load(); }
+ArrEvent arr_last() { return ArrEvent(strata::test::engine().status().arr_last.load()); }
+int arr_arg() { return int(strata::test::engine().status().arr_arg.load()); }
+
+// A chain to keep, A06 X3, loaded as a file would load it.
+Engine &arr_project() {
+    Engine &engine = clean();
+    Project &incoming = engine.project_for_load();
+    incoming.settings.chain_length = 1;
+    incoming.chain[0] = ChainEntry{0, 5, 3, 0};
+    for (int i = 1; i < kChainEntries; i++) incoming.chain[i] = ChainEntry{};
+    for (int i = 0; i < kChainEntries; i++) incoming.chain_extra[i] = SectionExtra{};
+    post(Cmd::project_loaded);
+    pump();
+    return engine;
+}
+
+void arr_done() {
+    post(Cmd::arr_rec, 0, 0, 0);
+    post(Cmd::set_chain, 0, 0, 0);
+    post(Cmd::set_energy, 0, 0, 0);
+    for (uint8_t t = 0; t < kTracks; t++) post(Cmd::set_mute, t, 0, 0, 0);
+    FakeHost::the().set_running(false);
+    pump();
+}
+
+}  // namespace
+
+TEST(engine_arr_rec_writes_a_jam_into_the_chain_pass_by_pass) {
+    Engine &engine = arr_project();
+    CHECK_EQ(int(master_loop_ticks(engine.project().live())), int(kArrPass));
+    const Status &status = engine.status();
+    const uint8_t events = arr_event_count();
+
+    // Armed with the transport stopped: the chain is kept and emptied, nothing is recorded yet.
+    post(Cmd::arr_rec, 0, 0, 1);
+    pump();
+    CHECK_EQ(int(status.arr_on.load()), 1);
+    CHECK_EQ(int(status.arr_undo_ready.load()), 1);
+    CHECK_EQ(chain_length(engine.project()), 0);
+    CHECK_EQ(int(uint8_t(arr_event_count() - events)), 1);
+    CHECK(arr_last() == ArrEvent::started);
+
+    // Intro: A01 with track 1 muted, two passes.
+    post(Cmd::set_mute, 0, 0, 1, 0);
+    FakeHost::the().set_running(true);
+    pump();
+    tick_at(0);
+    tick_at(kArrPass / 2);
+    // A mute inside the first pass belongs to the next one.
+    post(Cmd::set_mute, 2, 0, 1, 0);
+    pump();
+    tick_at(kArrPass);
+    CHECK_EQ(chain_length(engine.project()), 1);
+    CHECK_EQ(int(engine.project().chain_extra[0].mask), 0x01);
+    // ...and a mute a few ticks after the boundary still belongs to the pass it was meant for:
+    // track 3 back in at tick +4.
+    post(Cmd::set_mute, 2, 0, 0, 0);
+    pump();
+    tick_at(kArrPass + 4);
+    tick_at(2 * kArrPass);
+    CHECK_EQ(chain_length(engine.project()), 1);
+    CHECK_EQ(int(engine.project().chain[0].repeats), 2);
+
+    // ENERGY down for one pass.
+    post(Cmd::set_energy, 0, 0, uint8_t(int8_t(-30)));
+    pump();
+    tick_at(2 * kArrPass + 1);
+    tick_at(3 * kArrPass);
+    CHECK_EQ(chain_length(engine.project()), 2);
+    CHECK_EQ(section_energy(engine.project().chain_extra[1].energy), -30);
+    CHECK_EQ(int(engine.project().chain_extra[1].mask), 0x01);
+
+    // A queued change to A02 at the end of the pass: the pass ends with the switch.
+    // (Queued past the grace window: a press just after a boundary lands at once.)
+    post(Cmd::set_energy, 0, 0, 0);
+    pump();
+    tick_at(3 * kArrPass + 1);
+    tick_at(3 * kArrPass + 100);
+    post(Cmd::queue_pattern, 0, 0, 0, 1, uint8_t(QueueMode::end_of_pattern));
+    pump();
+    tick_at(4 * kArrPass);
+    CHECK_EQ(live_slot(), 1);
+    CHECK_EQ(chain_length(engine.project()), 3);
+    CHECK_EQ(int(engine.project().chain[2].slot), 0);
+    CHECK_EQ(section_energy(engine.project().chain_extra[2].energy), 0);
+    tick_at(4 * kArrPass + 1);
+    tick_at(5 * kArrPass);
+    CHECK_EQ(chain_length(engine.project()), 4);
+    CHECK_EQ(int(engine.project().chain[3].slot), 1);
+    CHECK_EQ(int(status.arr_written.load()), 4);
+
+    // STOP three quarters into the next pass of A02: kept, as a repeat, and the take is over.
+    tick_at(5 * kArrPass + kArrPass * 3 / 4);
+    FakeHost::the().set_running(false);
+    pump();
+    CHECK_EQ(int(status.arr_on.load()), 0);
+    CHECK(arr_last() == ArrEvent::ended);
+    CHECK_EQ(arr_arg(), 4);
+    CHECK_EQ(chain_length(engine.project()), 4);
+    const int repeats[] = {2, 1, 1, 2};
+    for (int i = 0; i < 4; i++) {
+        CHECK_EQ(int(engine.project().chain[i].repeats), repeats[i]);
+        CHECK_EQ(int(engine.project().chain_extra[i].cap), 1);
+        CHECK_EQ(int(engine.project().chain_extra[i].bpm),
+                 int(engine.project().settings.tempo_centi_bpm));
+    }
+    arr_done();
+}
+
+TEST(engine_arr_rec_replays_as_it_was_played) {
+    Engine &engine = arr_project();
+    post(Cmd::arr_rec, 0, 0, 1);
+    post(Cmd::set_mute, 1, 0, 1, 0);
+    FakeHost::the().set_running(true);
+    pump();
+    tick_at(0);
+    tick_at(kArrPass);
+    post(Cmd::set_mute, 1, 0, 0, 0);
+    post(Cmd::set_energy, 0, 0, 20);
+    pump();
+    tick_at(kArrPass + 1);
+    tick_at(2 * kArrPass);
+    post(Cmd::arr_rec, 0, 0, 0);
+    pump();
+    CHECK_EQ(chain_length(engine.project()), 2);
+    CHECK_EQ(int(engine.project().chain_extra[0].mask), 0x02);
+    CHECK_EQ(int(engine.project().chain_extra[1].mask), 0x00);
+    CHECK_EQ(section_energy(engine.project().chain_extra[1].energy), 20);
+
+    // The hands left elsewhere; the chain puts each section back as it starts.
+    post(Cmd::set_mute, 1, 0, 0, 0);
+    post(Cmd::set_energy, 0, 0, 0);
+    FakeHost::the().set_running(false);
+    pump();
+    FakeHost::the().set_running(true);
+    tick_at(0);
+    post(Cmd::set_chain, 0, 0, 1);
+    pump();
+    CHECK(engine.muted(1));
+    CHECK_EQ(int(engine.energy()), 0);
+    tick_at(1);
+    tick_at(kArrPass);
+    CHECK(!engine.muted(1));
+    CHECK_EQ(int(engine.energy()), 20);
+    arr_done();
+}
+
+TEST(engine_arr_rec_turned_on_mid_pass_keeps_the_pass_by_the_half_rule) {
+    Engine &engine = arr_project();
+    FakeHost::the().set_running(true);
+    pump();
+    tick_at(0);
+    tick_at(kArrPass / 4);
+    post(Cmd::arr_rec, 0, 0, 1);              // three quarters of the pass still to come
+    pump();
+    tick_at(kArrPass);
+    CHECK_EQ(chain_length(engine.project()), 1);
+    tick_at(kArrPass + 1);
+    tick_at(kArrPass + kArrPass / 4);
+    post(Cmd::arr_rec, 0, 0, 0);              // off a quarter in: that pass is dropped
+    pump();
+    CHECK_EQ(chain_length(engine.project()), 1);
+    CHECK_EQ(int(engine.project().chain[0].repeats), 1);
+    CHECK(arr_last() == ArrEvent::ended);
+    arr_done();
+}
+
+TEST(engine_arr_rec_that_wrote_nothing_gives_the_chain_back) {
+    Engine &engine = arr_project();
+    FakeHost::the().set_running(true);
+    pump();
+    tick_at(0);
+    tick_at(100);
+    post(Cmd::arr_rec, 0, 0, 1);
+    pump();
+    CHECK_EQ(chain_length(engine.project()), 0);
+    tick_at(200);
+    post(Cmd::arr_rec, 0, 0, 0);
+    pump();
+    CHECK(arr_last() == ArrEvent::empty);
+    CHECK_EQ(chain_length(engine.project()), 1);
+    CHECK_EQ(int(engine.project().chain[0].slot), 5);
+    CHECK_EQ(int(engine.status().arr_undo_ready.load()), 0);
+    arr_done();
+}
+
+TEST(engine_arr_undo_swaps_the_take_and_the_chain_before_it) {
+    Engine &engine = arr_project();
+    // Nothing to undo yet.
+    post(Cmd::arr_undo);
+    pump();
+    CHECK(arr_last() == ArrEvent::no_undo);
+    post(Cmd::arr_rec, 0, 0, 1);
+    FakeHost::the().set_running(true);
+    pump();
+    tick_at(0);
+    tick_at(kArrPass);
+    // Not during a take.
+    post(Cmd::arr_undo);
+    pump();
+    CHECK(arr_last() == ArrEvent::no_undo);
+    CHECK_EQ(int(engine.status().arr_on.load()), 1);
+    post(Cmd::arr_rec, 0, 0, 0);
+    pump();
+    CHECK_EQ(chain_length(engine.project()), 1);
+    CHECK_EQ(int(engine.project().chain[0].slot), 0);
+    post(Cmd::arr_undo);
+    pump();
+    CHECK(arr_last() == ArrEvent::undone);
+    CHECK_EQ(int(engine.project().chain[0].slot), 5);
+    CHECK_EQ(int(engine.project().chain[0].repeats), 3);
+    post(Cmd::arr_undo);
+    pump();
+    CHECK(arr_last() == ArrEvent::redone);
+    CHECK_EQ(int(engine.project().chain[0].slot), 0);
+    // A load drops it.
+    post(Cmd::project_loaded);
+    pump();
+    CHECK_EQ(int(engine.status().arr_undo_ready.load()), 0);
+    arr_done();
+}
+
+TEST(engine_arr_rec_stops_following_the_chain_and_playing_it_ends_the_take) {
+    Engine &engine = arr_project();
+    FakeHost::the().set_running(true);
+    tick_at(0);
+    post(Cmd::set_chain, 0, 0, 1);
+    pump();
+    CHECK(engine.chain().active);
+    CHECK_EQ(live_slot(), 5);
+    post(Cmd::arr_rec, 0, 0, 1);
+    pump();
+    CHECK(!engine.chain().active);
+    CHECK(!engine.project().settings.chain_enabled);
+    tick_at(1);
+    tick_at(kArrPass);
+    tick_at(kArrPass + 1);
+    tick_at(2 * kArrPass);
+    CHECK_EQ(live_slot(), 5);                 // the jam plays on where it was
+    CHECK_EQ(chain_length(engine.project()), 1);
+    CHECK_EQ(int(engine.project().chain[0].repeats), 2);
+    // Turning the chain on ends the take and plays what it wrote.
+    post(Cmd::set_chain, 0, 0, 1);
+    pump();
+    CHECK_EQ(int(engine.status().arr_on.load()), 0);
+    CHECK(arr_last() == ArrEvent::ended);
+    CHECK(engine.chain().active);
+    arr_done();
+}
+
+TEST(engine_arr_rec_records_no_tempo_under_an_outside_clock) {
+    Engine &engine = arr_project();
+    FakeHost::the().set_source(ENAGA_CLOCK_MIDI);
+    post(Cmd::arr_rec, 0, 0, 1);
+    FakeHost::the().set_running(true);
+    pump();
+    tick_at(0);
+    tick_at(kArrPass);
+    CHECK_EQ(chain_length(engine.project()), 1);
+    CHECK_EQ(int(engine.project().chain_extra[0].bpm), 0);
+    FakeHost::the().set_source(ENAGA_CLOCK_INTERNAL);
+    arr_done();
+}
+
+TEST(engine_a_pass_after_stop_and_play_ends_on_its_own_boundary) {
+    // A plain STOP and PLAY puts the clock back to 0 with the pattern's origin already at 0, and
+    // the end of the pass known from the old run stood: a chain started on the pattern already
+    // playing (no switch to re-derive it) held its first entry until the old run's boundary.
+    Engine &engine = clean();
+    Project &incoming = engine.project_for_load();
+    incoming.settings.chain_length = 2;
+    incoming.chain[0] = ChainEntry{0, 0, 1, 0};
+    incoming.chain[1] = ChainEntry{0, 1, 1, 0};
+    for (int i = 2; i < kChainEntries; i++) incoming.chain[i] = ChainEntry{};
+    for (int i = 0; i < kChainEntries; i++) incoming.chain_extra[i] = SectionExtra{};
+    post(Cmd::project_loaded);
+    pump();
+    FakeHost::the().set_running(true);
+    tick_at(0);
+    tick_at(1536 * 2 + 100);                     // two passes in: the next end is 4608
+    FakeHost::the().set_running(false);
+    pump();
+    FakeHost::the().set_running(true);
+    tick_at(0);
+    post(Cmd::set_chain, 0, 0, 1);
+    pump();
+    CHECK_EQ(live_slot(), 0);
+    tick_at(1);
+    tick_at(1536);
+    CHECK_EQ(live_slot(), 1);
+    post(Cmd::set_chain, 0, 0, 0);
+    FakeHost::the().set_running(false);
+    pump();
+}
+
+TEST(engine_a_mute_armed_for_the_bar_does_not_survive_a_project_load) {
+    Engine &engine = clean();
+    post(Cmd::set_mute, 1, 0, 1, 1);             // FUNC + pad: track 2 at the next bar
+    pump();
+    post(Cmd::project_loaded);
+    pump();
+    FakeHost::the().set_running(true);
+    tick_at(0);
+    tick_at(kTicksPerBar);
+    tick_at(2 * kTicksPerBar);
+    CHECK(!engine.muted(1));
+    FakeHost::the().set_running(false);
+    pump();
+}
+
 TEST(engine_starting_an_empty_chain_is_refused) {
     Engine &engine = clean();
     CHECK_EQ(chain_length(engine.project()), 0);

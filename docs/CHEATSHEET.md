@@ -38,7 +38,7 @@ pads and the performance mixer.
 | --- | --- | --- |
 | GRID | HOME (from anywhere) | All 8 tracks; STEP keys edit the selected track |
 | KEYS | HOME twice quickly (double-tap) | The pads are a piano (lower white, upper black keys), the STEP keys steps, on the selected track |
-| FUNC menu | FUNC+HOME ("system") | The project-wide rows: save, JAM REC, click, count-in, REC MODE, quantize, auto-fill, FX glide, loop length, chain, song, save as, open, kits, new, reload, clear pattern, load demo |
+| FUNC menu | FUNC+HOME ("system") | The project-wide rows: save, JAM REC, ARR REC, click, count-in, REC MODE, quantize, auto-fill, FX glide, loop length, chain, song, ARR UNDO, PROG CHG OUT, save as, open, kits, new, reload, clear pattern, load demo |
 | EDIT | EDIT | The selected track's sound: pages SRC, FLTR, AMP, FX, LFO, ARP, and on the VA, WAVE, FM4 and GRAIN machines ENV and OSC, and SCAN on the WAVE machines |
 | MACHINE | FUNC+EDIT | Pick the machine on each track, and its MIDI OUT channel |
 | KIT | FUNC+EDIT twice, or the menu's KITS | Save and recall whole kits: 16 slots on the card, shared by all projects |
@@ -206,9 +206,10 @@ RELOAD PROJECT, NEW PROJECT and LOAD DEMO are in the FUNC menu (FUNC+HOME), the 
 the track menu (hold OK in GRID); the last
 three throw away unsaved work, so each needs OK twice within 2 s (OK AGAIN TO RELOAD, OK AGAIN
 FOR NEW, OK AGAIN FOR DEMO). NEW is empty; LOAD DEMO is the factory demo a first start plays.
-**FUNC menu (FUNC+HOME):** SAVE, JAM REC, CLICK, COUNT-IN, REC MODE, QUANTIZE, AUTO-FILL, FX
-GLIDE, LOOP LEN, CHAIN, CHAIN END, PROG CHG OUT, SAVE AS, OPEN PROJECT, KITS, NEW PROJECT, RELOAD PROJECT, CLEAR
-PATTERN, LOAD DEMO. It always opens on SAVE: DOWN once is JAM REC, twice CLICK; the list wraps, so
+**FUNC menu (FUNC+HOME):** SAVE, JAM REC, ARR REC, CLICK, COUNT-IN, REC MODE, QUANTIZE, AUTO-FILL,
+FX GLIDE, LOOP LEN, CHAIN, CHAIN END, ARR UNDO, PROG CHG OUT, SAVE AS, OPEN PROJECT, KITS, NEW
+PROJECT, RELOAD PROJECT, CLEAR PATTERN, LOAD DEMO. It always opens on SAVE: DOWN once is JAM REC,
+twice ARR REC, three times CLICK; the list wraps, so
 UP once is LOAD DEMO, twice CLEAR PATTERN. UP/DOWN or A
 scroll, OK runs the row (NEW, RELOAD, CLEAR PATTERN and LOAD DEMO need OK twice), LEFT/RIGHT or B change a
 setting row (OK steps it too), CLR or FUNC+HOME close it. **Track menu (hold OK in GRID):**
@@ -220,6 +221,12 @@ before a PLAY from stop with REC on (`COUNT-IN 4` .. `1`); internal clock only; 
 JAM REC: OK records the finished master to `/RECORD/JAM_<n>.WAV` (24-bit, about 1 GB an hour,
 up to 3 h 51 min) until OK again; a dot blinks before the load and the REC key a dim red meanwhile;
 no click or audition. FUNC+REC twice (RESAMPLE, then again) starts and stops it too.
+ARR REC: OK on, the chain kept for undo and emptied; each pass of the jam is written into it
+(the same again: one more repeat; a change of pattern, mutes, scene, morph side, ENERGY or tempo:
+a new entry with MUT CAP, SCN, MRP, NRG, BPM; X16 then a new entry). STOP, OK again or CHAIN ON
+end it (`ARR 23 SECTIONS`; 64 entries: `ARR FULL`); nothing kept gives the old chain back. A
+change in a pass shows from the next one; a pass cut before half is dropped. Strip `ARR7`, the
+REC key blinks. ARR UNDO swaps the chain from before the take back in, and again the take.
 **PROJECTS:** UP/DOWN or A move, LEFT/RIGHT page by 8. OK twice within 2 s opens the project
 under the cursor (AGAIN TO OPEN; it throws away unsaved work and stops the transport).
 FUNC+DOWN (or the menu's SAVE AS) is SAVE AS: A or LEFT/RIGHT move, B, VALUE or UP/DOWN change the character, OK saves
@@ -292,7 +299,7 @@ every pattern change sends its number 0-127 as a program change on your MIDI CH.
 | --- | --- | --- |
 | Top line | `A01 3.2 130.0 > 24%  L  T1` | Live bank+slot (lit), bar.beat, tempo (`MIDI` / `SYNC` under an outside clock), `>` playing / `.` stopped, audio load, `L` / `L+` a LOCK, the selected track (lit) |
 | Under it | a 1 px line | How far the pattern is through its pass |
-| Under it | `K:L FX4 S40 M:AB RL- EN+ VS+ RN4 LP` | Live strip, small: what is off rest (kills, perf effect, morph %, macros, REL ALL, LEN ALL, ENERGY, VariSpeed, LIVE RND, looper); not drawn at rest |
+| Under it | `ARR7 K:L FX4 S40 M:AB RL- EN+ VS+ RN4 LP` | Live strip, small: an ARR REC take and its sections so far, then what is off rest (kills, perf effect, morph %, macros, REL ALL, LEN ALL, ENERGY, VariSpeed, LIVE RND, looper); not drawn at rest |
 | Under it | a lit toast: `LOCK A01 STORED`, `SCENE A: STEP PICKS`, `CLOCK REFUSED` | A notice, LEARN, a scene or the MUTATE verdict, for a moment over the screen |
 | Right edge | 2 px column | Master meter: level, held peak dot, top pixel = limiter |
 | Bottom line | `SRC FLTR AMP ...`, `DROP 2`, `GUARD1` | The screen's pages as tabs, the one showing lit (the screen keys turn them); at the right DROP = edits lost to a full command ring, GUARD = the CPU guard shedding voices |

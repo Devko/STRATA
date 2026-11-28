@@ -8,6 +8,18 @@ the project file format or the controls.
 
 ### Added
 
+- **ARR REC: a jam written into the chain.** A FUNC menu row under JAM REC. On, it keeps the
+  chain for undo, empties it, and from the next PLAY (or at once, mid-pass) writes every pass of
+  the jam into it as song sections: the same pattern with the same mutes, scene, morph side,
+  ENERGY and tempo adds a repeat, anything else starts a new entry holding them (MUT CAP, SCN,
+  MRP SNAP or SNAP A, NRG, BPM). A change made in a pass shows from the next one; one in the
+  first few ticks of a pass counts for that pass. X16 starts a new entry of the same; the take
+  ends at 64 entries (`ARR FULL 64 SECTIONS`), on STOP, on OK again, or when the chain is turned
+  on (`ARR 23 SECTIONS`). A pass cut short counts when at least half of it was played. A take
+  that kept nothing gives the old chain back (`ARR NOTHING KEPT`). ARR UNDO, a row under CHAIN
+  END, swaps the chain from before the take back in, and again swaps the take back. While a take
+  runs the live strip reads `ARR7` and the REC key blinks as for JAM REC. Under an outside clock
+  the sections carry no BPM. Independent of JAM REC. New emulator scenario `arrrec`.
 - **WAVE scan modes: the SCAN page.** WAVE MONO and WAVE POLY have a ninth EDIT page, SCAN:
   MOD moves the wavetable position from POS towards END with each note (OFF, FWD, REV, LOOP,
   LREV, PING, RET, SINE, RAND, DRFT), SPD sets the speed free or synced like the LFO's RAT, END
@@ -134,6 +146,13 @@ the project file format or the controls.
 
 ### Fixed
 
+- **A section's BPM keeps VariSpeed.** With VariSpeed off rest, an entry's BPM set the clock to the
+  plain tempo until VALUE was touched; it is now the tempo times VariSpeed's ratio, as VALUE's turn.
+- **A mute armed for the next bar (FUNC + pad) no longer lands on a project opened before that
+  bar.**
+- **The first pass after STOP and PLAY ends on its own boundary.** It lasted until the tick the
+  previous run would have ended it on, so a chain started on the pattern already playing held its
+  first entry longer than its repeats.
 - **A JAM REC start the card refuses no longer uses up a number.** The jam's number is taken
   only once its file exists, so the next jam that starts is the next after the last real one.
 - **The CPU guard no longer thins chords that were never in danger.** With generated parts on
