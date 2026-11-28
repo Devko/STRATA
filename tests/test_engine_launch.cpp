@@ -219,20 +219,88 @@ TEST(engine_launch_capture_says_when_the_bank_is_full) {
     CHECK_EQ(int(e.project().bank), 0);
 }
 
-TEST(engine_launch_a_lock_stores_what_you_hear) {
+// LOCK keeps the lanes apart from the pattern (review H1, Roland 2026-11-28). A01's own track 3
+// has a trig on step 5 that is silent while lane 3 plays B07; no jump or swap-back may write
+// B07's part over it, and each puts the lane's source back.
+namespace {
+
+void a01_own_track_3() {
+    Project &project = engine().project_for_load();
+    project.patterns[0][0].tracks[2].steps[4].flags = kStepTrig;
+}
+
+bool a01_track_3_untouched() {
+    const TrackPattern &own = engine().project().patterns[0][0].tracks[2];
+    return (own.steps[4].flags & kStepTrig) != 0 && (own.steps[0].flags & kStepTrig) == 0 &&
+           (own.steps[1].flags & kStepTrig) == 0;
+}
+
+uint8_t lock_state_settled() {
+    pump(Engine::kLockCheckBlocks + 1);
+    return engine().status().lock_state.load(std::memory_order_relaxed);
+}
+
+}  // namespace
+
+TEST(engine_launch_a_lock_brings_back_the_launch_and_leaves_the_own_part) {
     Engine &e = blank_set();
+    a01_own_track_3();
     launch(0x04, lane_source(1, 6), QueueMode::immediate);
     post(Cmd::lock_store);
     pump();
-    // Back on A01's own parts, then the lock: track 3 plays B07's part as A01's own.
-    post(Cmd::launch, 0, 0, 0x04, kLaneOwn, uint8_t(QueueMode::immediate));
-    pump();
+    CHECK(a01_track_3_untouched());
+    CHECK_EQ(int(lock_state_settled()), int(kLockHas));
+    // Lane 3 home: what you hear differs from the lock.
+    launch(0x04, kLaneOwn, QueueMode::immediate);
     CHECK(!lane_borrowed(e.project(), 2));
-    CHECK((e.pattern().tracks[2].steps[1].flags & kStepTrig) == 0);
+    CHECK_EQ(int(lock_state_settled()), int(kLockHas | kLockChanged));
+    // The jump launches B07 on lane 3 again; A01's own part stays as it is.
     post(Cmd::lock_tap);
     pump();
-    CHECK((e.pattern().tracks[2].steps[1].flags & kStepTrig) != 0);
+    CHECK(lane_borrowed(e.project(), 2));
+    CHECK_EQ(int(e.project().settings.lane_source[2]), int(lane_source(1, 6)));
+    CHECK(a01_track_3_untouched());
+    CHECK((e.lane(2).tracks[2].steps[1].flags & kStepTrig) != 0);   // B07's part plays
+    // The swap-back is a round trip: lane 3 home, A01 untouched.
+    post(Cmd::lock_tap);
+    pump();
+    CHECK_EQ(int(e.status().lock_last.load()), int(LockTap::swapped));
     CHECK(!lane_borrowed(e.project(), 2));
+    CHECK(a01_track_3_untouched());
+    CHECK((e.lane(2).tracks[2].steps[4].flags & kStepTrig) != 0);
+}
+
+TEST(engine_launch_a_jump_from_a_launch_keeps_it_for_the_swap_back) {
+    Engine &e = blank_set();
+    a01_own_track_3();
+    post(Cmd::lock_store);    // every lane on its own part
+    pump();
+    launch(0x04, lane_source(1, 6), QueueMode::immediate);
+    post(Cmd::lock_tap);
+    pump();
+    CHECK_EQ(int(e.status().lock_last.load()), int(LockTap::jumped));
+    CHECK(!lane_borrowed(e.project(), 2));
+    CHECK(a01_track_3_untouched());   // B07's part was not baked in by the jump's back state
+    post(Cmd::lock_tap);
+    pump();
+    CHECK(lane_borrowed(e.project(), 2));
+    CHECK_EQ(int(e.project().settings.lane_source[2]), int(lane_source(1, 6)));
+    CHECK(a01_track_3_untouched());
+    // And B07 itself is untouched by any of it.
+    CHECK(e.project().patterns[1][6].tracks[2].steps[4].flags == 0);
+}
+
+TEST(engine_launch_a_jump_keeps_the_pins) {
+    Engine &e = blank_set();
+    post(Cmd::lock_store);
+    pump();
+    post(Cmd::launch_pin, 2);
+    pump();
+    launch(0x04, lane_source(1, 6), QueueMode::immediate);
+    post(Cmd::lock_tap);
+    pump();
+    CHECK(!lane_borrowed(e.project(), 2));
+    CHECK_EQ(int(e.project().settings.lane_pinned), 0x04);
 }
 
 TEST(engine_launch_a_landing_is_reported_so_the_project_saves) {
