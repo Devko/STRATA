@@ -1100,6 +1100,7 @@ its own; A07's track 3 a different part.
   captured slots are empty again; ARR UNDO once more: `NO ARR TO UNDO`. `____`
 - A launched lane on GRID: FUNC + UP (copy) says `COPIED`, not `READ ONLY`; paste on another
   track: that track plays the borrowed part. `____`
+
 **Done.** Reply with the numbers: `all pass`, or for example `W3 fail: reads 055`,
 `W14: MAX 61.2`.
 
