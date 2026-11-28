@@ -521,3 +521,86 @@ TEST(midi_out_va_poly_arpeggiates_a_steps_extra_notes) {
     CHECK_EQ(ons(2, 63), 1);
     CHECK_EQ(ons(2, 67), 1);
 }
+
+// --- PROG CHG OUT ---------------------------------------------------------------------------
+
+namespace {
+
+int programs(int channel, int program = -1) { return host().midi_messages(0xC0, channel, program); }
+
+}  // namespace
+
+TEST(midi_out_prog_chg_out_sends_the_new_patterns_number_on_the_midi_channel) {
+    start();
+    post(Cmd::set_midi_channel, 0, 0, 4);          // MIDI CH 5
+    post(Cmd::set_program_out, 0, 0, 1);
+    pump();
+    host().clear_midi();
+    post(Cmd::queue_pattern, 0, 0, 2, 5, uint8_t(QueueMode::end_of_pattern));   // C06, stopped
+    pump();
+    CHECK_EQ(programs(5, 2 * 16 + 5), 1);
+    CHECK_EQ(host().midi_count(), 1);
+
+    // Asking for the pattern already playing changes nothing and sends nothing.
+    post(Cmd::queue_pattern, 0, 0, 2, 5, uint8_t(QueueMode::end_of_pattern));
+    pump();
+    CHECK_EQ(host().midi_count(), 1);
+
+    post(Cmd::set_program_out, 0, 0, 0);
+    post(Cmd::queue_pattern, 0, 0, 0, 0, uint8_t(QueueMode::end_of_pattern));
+    pump();
+    CHECK_EQ(host().midi_count(), 1);              // off: nothing more
+}
+
+TEST(midi_out_prog_chg_out_is_off_by_default) {
+    start();
+    post(Cmd::queue_pattern, 0, 0, 7, 15, uint8_t(QueueMode::end_of_pattern));
+    pump();
+    CHECK_EQ(host().midi_count(), 0);
+    post(Cmd::queue_pattern, 0, 0, 0, 0, uint8_t(QueueMode::end_of_pattern));
+    pump();
+}
+
+TEST(midi_out_prog_chg_out_follows_a_queued_change_landing_while_playing) {
+    start();
+    post(Cmd::set_midi_channel, 0, 0, 0);
+    post(Cmd::set_program_out, 0, 0, 1);
+    host().set_running(true);
+    host().deliver_tick(0, 0);
+    pump();
+    host().deliver_tick(50, 0);                    // past the grace window after tick 0
+    pump();
+    host().clear_midi();
+    post(Cmd::queue_pattern, 0, 0, 0, 1, uint8_t(QueueMode::after_16));
+    host().deliver_tick(100, 0);
+    pump();
+    CHECK_EQ(programs(1), 0);                      // not yet: it waits for the boundary
+    host().deliver_tick(384, 0);
+    pump();
+    CHECK_EQ(programs(1, 1), 1);
+    post(Cmd::set_program_out, 0, 0, 0);
+    post(Cmd::stop, 0, 0, 0);
+    host().set_running(false);
+    post(Cmd::queue_pattern, 0, 0, 0, 0, uint8_t(QueueMode::end_of_pattern));
+    pump();
+}
+
+TEST(midi_out_a_full_queue_delays_a_program_change_but_does_not_lose_it) {
+    start();
+    post(Cmd::set_midi_channel, 0, 0, 15);
+    post(Cmd::set_program_out, 0, 0, 1);
+    pump();
+    host().clear_midi();
+    host().set_midi_full(true);
+    post(Cmd::queue_pattern, 0, 0, 1, 0, uint8_t(QueueMode::end_of_pattern));
+    pump(3);
+    CHECK_EQ(programs(16), 0);
+    host().set_midi_full(false);
+    pump();
+    CHECK_EQ(programs(16, 16), 1);
+    pump(3);
+    CHECK_EQ(programs(16, 16), 1);                 // once
+    post(Cmd::set_program_out, 0, 0, 0);
+    post(Cmd::queue_pattern, 0, 0, 0, 0, uint8_t(QueueMode::end_of_pattern));
+    pump();
+}

@@ -237,10 +237,19 @@
         // which is what keeps the conditions and the playheads in step with the outside
         // transport. A STOP that F6 made arrives here too; releasing twice is harmless. The next
         // F6 press is then the one that cuts the tails.
-        (void)position;
         if (what == ENAGA_TRANSPORT_START || what == ENAGA_TRANSPORT_LOCATE) {
             stop_armed_ = false;
             clear_rec_passes();          // the pass count starts again: old marks would match
+        }
+        // A song position pointer at MIDI IN: Enaga located its clock (only while stopped), and
+        // the CONTINUE that follows plays from there. The engine puts the pattern, or the chain
+        // and its entry, where that position falls (Engine::locate). Only under MIDI clock: under
+        // the internal clock a LOCATE is STRATA's own restart, which Cmd::restart already covers.
+        if (what == ENAGA_TRANSPORT_LOCATE && enaga::clock::source() == ENAGA_CLOCK_MIDI) {
+            Command command;
+            command.cmd = Cmd::locate;
+            command.u = position;
+            post_command(command);
         }
         if (what == ENAGA_TRANSPORT_STOP) {
             count_in_armed_ = 0;         // a STOP ends a count-in (Engine::process)
@@ -485,6 +494,20 @@
                 if (!clock_refused_ || !enaga::clock::running()) enaga::clock::locate(0);
                 notice("SONG END");
             }
+        }
+
+        // The user's MIDI CH, for PROG CHG OUT: Enaga's setting, which only this context reads.
+        {
+            const int channel = enaga::midi::channel() & 0x0F;
+            if (channel != posted_midi_channel_) {
+                posted_midi_channel_ = channel;
+                post(Cmd::set_midi_channel, 0, 0, uint8_t(channel));
+            }
+        }
+
+        // A tempo nudge (FUNC + turn VALUE) that has run out: back to the set tempo.
+        if (nudge_due(nudge_, last_ms_)) {
+            clock_refused_ = !enaga::clock::set_tempo(float(tempo_tenths_) * 0.1f);
         }
 
         // The tempo a LOADED project brought with it. PROJECT.BIN has always had the field and

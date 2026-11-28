@@ -487,6 +487,14 @@ private:
     };
     EnagaMidi midi_sink_;
     MidiOut midi_out_;
+    // PROG CHG OUT: the user's MIDI CH (0-15, from the main context) and a program change still
+    // to send, -1 for none. Kept until the queue takes it, as a refused note-off is: a lost
+    // program change leaves the other gear on the wrong pattern for the rest of the set.
+    uint8_t midi_channel_ = 0;
+    int16_t program_pending_ = -1;
+    void send_program_pending();
+    // Cmd::locate: the pattern or chain put where an outside song position falls.
+    void locate(uint32_t tick);
 
     // Send `count` notes of one trig to the track's MIDI OUT channel, if it has one.
     void send_midi_notes(int track, const uint8_t *notes, int count, uint8_t velocity,

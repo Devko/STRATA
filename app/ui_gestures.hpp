@@ -126,11 +126,20 @@
                 return;
             }
             if (shift_) {
-                // FUNC + VALUE was the master DJ filter until 2026-11-25 (backlog D1): the
-                // filter's live home is the mixer's slots 1 and 2, and its setting MIXER's MST
-                // page, where a project saved with it set can still put it back. Free for now,
-                // so it says where the filter went rather than turning the tempo.
-                notice_logged("DJ FILTER: SLOT 1/2");
+                // FUNC + VALUE is the tempo nudge (core/taptempo.hpp): each detent holds the
+                // tempo 4% faster or slower for a quarter of a second, then it goes back, so the
+                // beat moves against a source that sends no clock and the tempo stays where it
+                // was set. Not saved. (It was the master DJ filter until 2026-11-25, backlog D1;
+                // the filter lives in the mixer's slots 1 and 2.)
+                if (enaga::clock::source() != ENAGA_CLOCK_INTERNAL) {
+                    clock_refused_ = true;
+                    notice("EXT CLOCK");
+                    return;
+                }
+                nudge_turn(nudge_, delta, last_ms_);
+                clock_refused_ =
+                    !enaga::clock::set_tempo(nudged_bpm(tempo_tenths_, nudge_.direction));
+                notice_logged(nudge_.direction > 0 ? "NUDGE FASTER" : "NUDGE SLOWER");
                 return;
             }
             // REFUSED under an external clock, rather than moved and then ignored. docs/SPEC.md:

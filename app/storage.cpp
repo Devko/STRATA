@@ -183,6 +183,8 @@ bool mutates_project(Cmd cmd) {
         case Cmd::set_rec_mode:
         // Each track's MIDI OUT channel, PROJECT.BIN's fifth section.
         case Cmd::set_midi_out:
+        // And PROG CHG OUT, on the end of the same section.
+        case Cmd::set_program_out:
         // A LOCK tap puts the send and master bytes and the live mutes back.
         case Cmd::lock_tap:
         // Track Launch: the lane sources and pins are PROJECT.BIN's section 8, and CAPTURE moves

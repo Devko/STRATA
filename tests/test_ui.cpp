@@ -172,6 +172,8 @@ struct UiProbe {
         app.loop_mix_ = 0;
         app.perf_step_keys_ = 0;
         app.value_alone_ = false;
+        app.tap_ = TapTempo{};            // a tap count the last test left half done
+        app.nudge_ = Nudge{};
         app.len_repeat_key_ = -1;
         app.rolling_pads_ = 0;
         app.mutation_pending_ = false;
@@ -396,7 +398,7 @@ void open_keys() {
 
 // The FUNC menu's rows, in order (app/ui_perfmix.hpp, MenuItem).
 enum MenuRow : int { kMenuSave, kMenuJam, kMenuClick, kMenuCountIn, kMenuRecMode, kMenuQuantize,
-                     kMenuAutofill, kMenuGlide, kMenuLoopLen, kMenuChain, kMenuSong, kMenuSaveAs,
+                     kMenuAutofill, kMenuGlide, kMenuLoopLen, kMenuChain, kMenuSong, kMenuProgOut, kMenuSaveAs,
                      kMenuOpen, kMenuKits, kMenuNew, kMenuReload, kMenuClear, kMenuDemo,
                      kMenuRowCount };
 
@@ -1150,7 +1152,9 @@ TEST(ui_func_fill_turns_note_repeat_on_and_a_held_pad_rolls) {
 TEST(ui_the_retired_chords_say_where_their_moves_went_and_do_nothing_else) {
     // Backlog D1 and D5 (2026-11-25): FUNC + VALUE (the DJ filter), FUNC + push D (the tape
     // stop) and FUNC + MUTATE (the delay freeze) retired for the mixer's slots 1-2, 8 and 5.
-    // Each names the slot, and none falls through to the tempo, a page's push or a mutation.
+    // FUNC + VALUE is the tempo nudge since 2026-11-28; the other two name their slot, and none
+    // falls through to a page's push or a mutation. The nudge moves neither the DJ filter nor
+    // the set tempo.
     Strata &app = fresh();
     pump(2);
     const uint8_t undo_before = undo_depth();
@@ -1161,7 +1165,7 @@ TEST(ui_the_retired_chords_say_where_their_moves_went_and_do_nothing_else) {
     pump(2);
     CHECK_EQ(int(app_engine().project().settings.master[int(MasterField::dj)]), 64);
     CHECK_EQ(UiProbe::tempo_tenths(app), tempo);
-    CHECK_EQ(UiProbe::notice(app), "DJ FILTER: SLOT 1/2");
+    CHECK_EQ(UiProbe::notice(app), "NUDGE FASTER");
 
     app.on_key(ENAGA_KEY_PUSH_D, true);
     pump(2);
@@ -12856,4 +12860,165 @@ TEST(ui_launch_a_held_ok_captures_into_a_free_slot) {
     CHECK_EQ(int(lane_borrowed_mask(app_engine().project())), 0);
     // The hold did not also launch the cursor's slot.
     CHECK_EQ(int(lane_source_of(UiProbe::selected(app))), int(kLaneOwn));
+}
+
+// --- tap tempo, the nudge, PROG CHG OUT and the song position (the MIDI batch) ---------------
+
+namespace {
+
+// A VALUE tap `after` ms after the last pass of the main context.
+void tap_value_after(Strata &app, uint32_t after) {
+    g_ms += after - 1;
+    pump();
+    app.on_key(ENAGA_KEY_PUSH_VALUE, true);
+    app.on_key(ENAGA_KEY_PUSH_VALUE, false);
+}
+
+}  // namespace
+
+TEST(ui_value_taps_set_the_tempo_and_it_is_saved) {
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    pump(2);
+    const uint32_t before = UiProbe::tempo_tenths(app);
+    tap_value_after(app, 3000);                    // the first tap only starts the count
+    CHECK_EQ(UiProbe::notice(app), "TAP TEMPO");
+    CHECK_EQ(UiProbe::tempo_tenths(app), before);
+    tap_value_after(app, 500);
+    CHECK_EQ(UiProbe::tempo_tenths(app), 1200u);
+    CHECK_EQ(UiProbe::notice(app), "TAP 120.0");
+    CHECK_NEAR(host.tempo(), 120.0f, 0.01f);
+    tap_value_after(app, 500);
+    tap_value_after(app, 400);                     // the mean of 500 500 400: 128.6
+    CHECK_EQ(UiProbe::tempo_tenths(app), 1286u);
+    pump(2);
+    CHECK_EQ(int(app_engine().project().settings.tempo_centi_bpm), 12860);
+    check_layout(app, "GRID after tap tempo");
+
+    // A turn of VALUE carries on from the tapped tempo.
+    app.on_encoder(4, int(before) - 1286);
+    pump(2);
+    CHECK_EQ(UiProbe::tempo_tenths(app), before);
+}
+
+TEST(ui_value_taps_are_refused_under_an_outside_clock) {
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    pump(2);
+    const uint32_t before = UiProbe::tempo_tenths(app);
+    host.set_source(ENAGA_CLOCK_MIDI);
+    tap_value_after(app, 3000);
+    CHECK_EQ(UiProbe::notice(app), "EXT CLOCK");
+    tap_value_after(app, 500);
+    CHECK_EQ(UiProbe::notice(app), "EXT CLOCK");
+    CHECK_EQ(UiProbe::tempo_tenths(app), before);
+    host.set_source(ENAGA_CLOCK_INTERNAL);
+}
+
+TEST(ui_a_value_tap_in_perform_is_still_the_morphs_reset_not_a_tap) {
+    Strata &app = fresh();
+    pump(2);
+    const uint32_t before = UiProbe::tempo_tenths(app);
+    shift_key(ENAGA_KEY_F7);
+    CHECK_EQ(UiProbe::mode(app), int(Mode::perform));
+    tap_value_after(app, 3000);
+    tap_value_after(app, 500);
+    CHECK_EQ(UiProbe::notice(app), "MORPH 0");
+    CHECK_EQ(UiProbe::tempo_tenths(app), before);
+    key(ENAGA_KEY_F4);
+}
+
+TEST(ui_func_value_nudges_the_tempo_for_a_moment_and_lets_it_go) {
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    pump(2);
+    const uint32_t tempo = UiProbe::tempo_tenths(app);
+    const float set = float(tempo) * 0.1f;
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_encoder(4, -1);
+    app.on_key(ENAGA_KEY_F1, false);
+    CHECK_EQ(UiProbe::notice(app), "NUDGE SLOWER");
+    CHECK_NEAR(host.tempo(), set * 0.96f, 0.01f);
+    pump(100);                                     // inside the quarter second: still held
+    CHECK_NEAR(host.tempo(), set * 0.96f, 0.01f);
+    g_ms += 200;
+    pump(2);
+    CHECK_NEAR(host.tempo(), set, 0.01f);          // let go: the set tempo again
+    CHECK_EQ(UiProbe::tempo_tenths(app), tempo);
+    CHECK_EQ(int(app_engine().project().settings.tempo_centi_bpm), int(tempo * 10));
+
+    host.set_source(ENAGA_CLOCK_MIDI);             // not STRATA's tempo to bend
+    app.on_key(ENAGA_KEY_F1, true);
+    app.on_encoder(4, 1);
+    app.on_key(ENAGA_KEY_F1, false);
+    CHECK_EQ(UiProbe::notice(app), "EXT CLOCK");
+    host.set_source(ENAGA_CLOCK_INTERNAL);
+}
+
+TEST(ui_the_menus_prog_chg_out_row_switches_program_changes_out) {
+    Strata &app = fresh();
+    FakeHost::the().set_midi_channel(9);
+    pump(2);
+    CHECK(!app_engine().project().settings.program_out);
+    menu_run(kMenuProgOut);
+    pump(2);
+    CHECK(app_engine().project().settings.program_out);
+    CHECK_EQ(UiProbe::notice(app), "PROG OUT CH 10");
+    check_layout(app, "FUNC menu, PROG CHG OUT");
+    key(ENAGA_KEY_OK);
+    pump(2);
+    CHECK(!app_engine().project().settings.program_out);
+    CHECK_EQ(UiProbe::notice(app), "PROG OUT OFF");
+    key(ENAGA_KEY_CLR);
+    key(ENAGA_KEY_F4);
+    FakeHost::the().set_midi_channel(0);
+}
+
+TEST(ui_the_midi_channel_reaches_the_engine_for_program_changes) {
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    host.set_midi_channel(6);
+    pump(2);
+    post_cmd(Cmd::set_program_out, 1);
+    pump(2);
+    host.clear_midi();
+    app.on_midi(midi(0xC6, 20, 0));                // a program change in, on MIDI CH 7: B05
+    pump(2);
+    CHECK_EQ(int(app_engine().project().slot), 4);
+    CHECK_EQ(host.midi_messages(0xC0, 7, 20), 1);  // and out again, on the same channel
+    post_cmd(Cmd::set_program_out, 0);
+    post_cmd(Cmd::queue_pattern, 0, 0, uint8_t(QueueMode::end_of_pattern));
+    host.set_midi_channel(0);
+    pump(2);
+}
+
+TEST(ui_a_song_position_under_midi_clock_moves_the_chain_and_not_under_the_internal_clock) {
+    Strata &app = fresh();
+    FakeHost &host = FakeHost::the();
+    Project &incoming = app_engine().project_for_load();
+    incoming.settings.chain_length = 2;
+    incoming.chain[0] = ChainEntry{0, 0, 1, 0};
+    incoming.chain[1] = ChainEntry{0, 1, 1, 0};
+    for (int i = 2; i < kChainEntries; i++) incoming.chain[i] = ChainEntry{};
+    post_cmd(Cmd::project_loaded);
+    pump(2);
+    post_cmd(Cmd::set_chain, 1);
+    pump(2);
+    CHECK_EQ(int(app_engine().project().slot), 0);
+
+    // Under the internal clock a LOCATE is STRATA's own (a restart): it moves nothing here.
+    app.on_transport(ENAGA_TRANSPORT_LOCATE, 1600);
+    pump(2);
+    CHECK_EQ(int(app_engine().project().slot), 0);
+
+    host.set_source(ENAGA_CLOCK_MIDI);
+    app.on_transport(ENAGA_TRANSPORT_LOCATE, 1600);   // the second entry
+    pump(2);
+    CHECK_EQ(int(app_engine().project().slot), 1);
+    CHECK_EQ(int(app_engine().chain().entry), 1);
+
+    host.set_source(ENAGA_CLOCK_INTERNAL);
+    post_cmd(Cmd::set_chain, 0);
+    post_cmd(Cmd::queue_pattern, 0, 0, uint8_t(QueueMode::end_of_pattern));
+    pump(2);
 }
