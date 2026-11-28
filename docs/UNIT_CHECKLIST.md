@@ -330,7 +330,7 @@ for a second; it shows that screen's help, with `PAGE 1/11` at its foot.
 
 **W20b. Gestures that moved, MUTE BUS and MORPH (#145, 3 min).** A01 playing, the chord's SnA up.
 - FUNC + turn VALUE is VariSpeed since (W70): the DJ filter does not move. FUNC + push D is
-  the kill for all bands since (W74). FUNC + MUTATE is LOCK now (W20c): tapped with no lock it says
+  the kill for all bands since (W75). FUNC + MUTATE is LOCK now (W20c): tapped with no lock it says
   `NO LOCK: HOLD STORES` and freezes or mutates nothing.
 - Push VALUE + STEP 7 (`7 MUTE BUS`), turn VALUE up slowly: every track fades out evenly and the
   delay and reverb ring on. At the top only the tails. Back to 0: the beat at its own level,
@@ -533,7 +533,7 @@ sustained in it (a pad, a voice, a chord) in `/SAMPLES` first; `unit-test/STRATA
   it stops there; the line under the macros reads `LIVE RND16 FUNC+D` and the live strip `RN16`. RND 1:
   every part scatters; RND 4: the beats of each bar trade places, still on the grid. Musical at
   which units, for techno and for ambient? `____`
-- The kick went straight from the first click while the rest jumps (it starts out, W74); no dot
+- The kick went straight from the first click while the rest jumps (it starts out, W75); no dot
   under meter 1. FUNC + lower pad 1: `T1 RND IN 8 TRK`, the kick jumps too. Again:
   `T1 RND OUT 7 TRK`. `____`
 - FUNC + turn D all the way back: `LIVE RND OFF`, and the beat is exactly A01 again from the next
@@ -905,14 +905,18 @@ Beat playing, A01, a card with some space.
   offering `KCK 1`. OK: `SAVED KCK 1`, and `+KCK 1     NOW` at the end of the list, under the
   cursor. The beat never stops or stutters. `____`
 - Down to 909, OK: the factory kick. Back to `+KCK 1`, OK: your kick again, as you left it. `____`
+- On the FX page turn PAN hard left, on the LFO page push RAT to `RETRIG` and give the LFO some
+  depth, then FUNC + DOWN on `+KCK 1`, OK (REPLACE). Pan back to the middle and TRIG to `FREE`,
+  OK on `+KCK 1`: the kick is hard left again and its LFO restarts on every hit. AS WAS: middle,
+  FREE. `____`
 - Push B on `+KCK 1`, UP once, OK: `+LCK 1`. Push C, OK, OK: `DELETED`, the row is gone. Push B
   on a factory sound: `YOUR OWN SOUNDS ONLY`. `____`
 - Save one again, then switch the unit off and on: it is still in the list, in this project and
   after NEW. On the PC the card has `ENAGA/DATA/STRATA/SOUNDS/KCK.BIN`. `____`
 - Track 6 (MNO), SOUNDS, FUNC + UP: `COPIED T6 MNO`. Screen key right to track 7 (PLY):
   `PASTE T6 MNO` under AS WAS, `SWITCHES MACHINE` under the bars. OK: track 7 plays track 6's
-  bass sound on its own notes, its pan and sends as they were. AS WAS: PLY and its stab are
-  back. `____`
+  bass sound on its own notes, with track 6's pan, sends, LFO and arp. AS WAS: PLY and its
+  stab are back, with its own pan and sends. `____`
 
 **W69. Line input as a mixer channel (6 min).** Beat playing, A01, a synth or phone on INPUT L
 and R (line level), headphones on.
@@ -1000,7 +1004,27 @@ GRID, CLOCK SRC INTERNAL. For the last two, a computer or a second unit on MIDI.
   or zipper on the sweeps. 30 s with WOBBLE on track 6 and DRIFT on track 7: **MAX `____ %`**
   (against W23's). FUNC+HOME, RELOAD PROJECT puts the beat back.
 
-**W74. PERFORM's FUNC layer, Track Launch polish and the confirmations (6 min).** A01 playing.
+**W74. ARR REC: a jam into the chain (6 min).** A project with a chain of its own, the beat
+stopped on A01, scenes 3 and 4 as in W71.
+- FUNC+HOME, DOWN, DOWN: `ARR REC OFF`. OK: the menu closes, `ARR: PRESS PLAY`, the strip reads
+  `ARR`, the REC key blinks dim red. `____`
+- PLAY. Two passes as it is; then mute track 1 in the middle of a pass; one pass later turn
+  ENERGY down (FUNC + C in PERFORM); then queue A02 (END) and play two passes of it with the
+  morph pushed to B. The strip counts up (`ARR1` .. `ARR4`). `____`
+- Mute a track just after a downbeat (a hair late): that pass is written with it muted. `____`
+- STOP: `ARR 4 SECTIONS` (or as many as you made). PROJECT, CHAIN: one entry per change, X2 on
+  the first, `C` marks (CAP) under each; push A on one: MUT CAP, SCN, MRP SNAP or SNAP A, NRG and
+  BPM filled in. `____`
+- CHAIN END SONG, CHAIN ON, PLAY from stop: the jam plays back as played, mute and breakdown at
+  the pass lines, the morph on B in A02, and the song stops at the end. `____`
+- FUNC menu ARR UNDO: `ARR UNDONE`, the chain you had before. OK again: `ARR REDONE`. `____`
+- ARR REC on and straight off again: `ARR NOTHING KEPT`, the chain unchanged; ARR UNDO says
+  `NO ARR TO UNDO`. `____`
+- One pattern left playing for 17 passes: X16 and then X1 of the same. `____`
+- CLOCK SRC MIDI with a running outside clock: record two sections; their BPM reads `--`. Back to
+  INTERNAL. With JAM REC also running, both blink and both keep recording. `____`
+- Save, power cycle, open: the recorded chain is there. `____`
+**W75. PERFORM's FUNC layer, Track Launch polish and the confirmations (6 min).** A01 playing.
 - PERFORM, hold FUNC: the gauges read `REL LEN NRG RND` with `0 100 0 OFF` and the hint line is
   gone. Still holding, turn A, C and D: each gauge moves and lights, the value under it follows.
   Let go: the macros are back. Readable at a glance on the OLED? `____`
@@ -1545,7 +1569,7 @@ Since #145 both live only in the performance mixer (slots 8 and 5); their FUNC c
       **no click**.
 - [ ] **U8.** Hold a tape stop for 10 s: **MAX `________ %`** against U1's `________ %`.
 - [ ] Lock D on a step (hold STEP, turn D). Hold that STEP, then FUNC, push D: `LOCK CLEARED`.
-      Without a STEP held, FUNC + push D is the kill for all bands (W74) and stops nothing.
+      Without a STEP held, FUNC + push D is the kill for all bands (W75) and stops nothing.
 - [ ] Turn the chord's SnA (delay send) up and play a few chord stabs. **Push VALUE + STEP 5,
       turn VALUE to the top**: `FRZ` on PERFORM's bar line. The echo keeps looping at the same
       level; new stabs are not echoed. Turn down: the loop fades into the delay's tail.

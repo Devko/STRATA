@@ -161,6 +161,9 @@ bool mutates_project(Cmd cmd) {
         case Cmd::set_tempo:
         case Cmd::set_chain:
         case Cmd::chain_edit:
+        // ARR REC empties the chain as a take starts; ARR UNDO swaps it (core/arrrec.hpp).
+        case Cmd::arr_rec:
+        case Cmd::arr_undo:
         case Cmd::queue_pattern:
         case Cmd::set_mute:
         case Cmd::set_root:
@@ -1613,9 +1616,9 @@ bool Storage::sound_bank_editable(uint8_t machine) const {
 }
 
 bool Storage::request_sound_store(uint8_t machine, int slot, const char *name,
-                                  const uint8_t *params) {
+                                  const uint8_t *params, const UserSoundExtras &extras) {
     if (!sound_bank_editable(machine)) return false;
-    if (!user_sound_store(sound_bank_, slot, name, params)) return false;
+    if (!user_sound_store(sound_bank_, slot, name, params, extras)) return false;
     sound_write_pending_ = true;
     return true;
 }

@@ -278,11 +278,20 @@ the protocol. The decisions behind it:
   this one still reads it, and a record with fewer bytes takes the machine's defaults for the rest.
   A file this build cannot read is never written over (`failed`), so nothing a newer build or a
   damaged card holds is lost by saving.
-- **The whole kKitParams bytes are kept; loading writes what a factory sound writes**
-  (`user_sound_owns` = `sound_preset_writes`), so the FX page, LFO and ARP stay the track's, as
-  Roland chose for the factory sounds. Kept whole so a later build may choose to load more.
+- **A saved sound is all of the sound** (Roland, 2026-11-28: "save should have all parameter of
+  a sound"): loading writes every real parameter (`user_sound_owns` = `kit_param_real`), FX, LFO
+  and ARP included, and the kit settings of the LFO and ARP pages (`UserSoundExtras`: TRIG, the
+  mod slots, VAR, RHYTHM, ACCENT, RATCHET), which travel in the file's optional section 2 (a file
+  without it loads them as a fresh track's) and reach the engine by the commands their pages post.
+  A factory sound still writes only `sound_preset_writes`. The mixer's settings (fader, chorus,
+  WID, duck, choke group) stay the track's: they are how it sits beside the others.
+- **AS WAS after a saved sound or paste puts back everything** (`Engine::sound_back_all_`, set
+  when `Cmd::sound_bytes` lands): every parameter and the kit settings as they were when the list
+  opened. After factory sounds only, it puts back just their bytes, so a pan move made while
+  trying them stays.
 - **Loading goes as bytes, not a preset index**: `Cmd::sound_bytes` carries eight a command (b-e
-  and `u`), four commands a sound, posted together so they land in one block. No shared buffer
+  and `u`), six commands a sound, then the seven kit-setting commands, posted together so they
+  land in one block. No shared buffer
   between the contexts is needed.
 - **Copy is a clipboard row, not a target picker**: FUNC+UP takes the track's sound into the UI's
   clipboard and OK on the PASTE row loads it, so "paste" is the list's own OK. Pasting onto
@@ -323,3 +332,32 @@ once a run. Every edit is a `ChainEdit` the audio side applies as a delta to the
 record. Quick fill (hold OK) writes SNAP or SNAP A, the morph's nearer side, so a filled section
 brings the morph back after one that moved it.
 `tests/scenario_sections.sh` drives the view and a section in the emulator.
+
+## ARR REC
+
+The second step of the arrangement concept (Roland, 2026-11-28). `core/arrrec.hpp` is plain
+arithmetic on a `Project`: `arr_pass_begin` / `arr_pass_end` with ticks the caller passes, so the
+host tests run synthetic jams. The engine owns the take and its `ArrBackup` (one level, 776 bytes)
+on the audio side, where the chain is written; the main context sees `Status::arr_*`.
+
+A pass begins wherever `resolve_tick` sees one begin: a boundary crossed, `switch_pattern` (a
+flag, so a LOCK jump or a NOW change counts), or `origin_` moved (a queued change restarts the
+pattern without crossing, even to the pattern already playing). A transport that jumped back
+ends the pass at the tick before the jump. The pass's state is taken at its start and again on
+each of its first `kQueueGraceTicks`, so a late press belongs to the pass it was meant for, the
+same forgiveness as the queue. One rule decides every cut pass: written when at least half of it
+was recorded, compared as `played * 2 >= loop` (no integer divide on the C674x).
+
+Comparing a pass with the chain's last entry uses the morph's side (past half way is B), as
+quick fill does, so a small wiggle of the morph does not split a section. BPM is `--` under an
+outside clock, whose drift would otherwise split a section every pass. A take that wrote
+nothing restores the backup at once. ARR UNDO swaps rather than restores, so it is its own
+redo. The backup is dropped by the next take and by a project load, and kept across a save
+(an autosave would otherwise take the undo away at a random moment; the concept said "until a
+save"). Starting the chain ends a take, and so does STOP (`was_running_` falling). The passes
+come with no command, so the UI marks PROJECT.BIN dirty from `Status::arr_passes`.
+
+Found on the way: a jump back of the transport left `boundary_known_` set when the origin was
+already 0 (a plain STOP and PLAY), so the first pass ran to the old run's boundary. Fixed in
+`resolve_tick`; `engine_a_pass_after_stop_and_play_ends_on_its_own_boundary`.
+`tests/scenario_arrrec.sh` records a jam in the emulator. Track Launch capture is the third step.

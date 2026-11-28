@@ -848,6 +848,9 @@ private:
     uint8_t section_event_seen_ = 0;
     uint8_t tempo_due_seen_ = 0;
     bool bpm_skip_said_ = false;
+    // ARR REC: Status::arr_event and Status::arr_passes as last acted on.
+    uint8_t arr_event_seen_ = 0;
+    uint8_t arr_passes_seen_ = 0;
     uint32_t stream_late_said_ms_ = 0;
 
     // The card side: projects, autosave and the sample loader, all in this context. It owns the
@@ -1132,6 +1135,7 @@ private:
         uint8_t machine = 0;
         uint8_t track = 0;
         uint8_t params[kKitParams] = {};
+        UserSoundExtras extras;
     };
     SoundClip sound_clip_;
     // The name entry SOUNDS opened: which bank slot, for which machine, and (a save) the bytes
@@ -1139,6 +1143,7 @@ private:
     int sound_entry_slot_ = -1;
     uint8_t sound_entry_machine_ = 0;
     uint8_t sound_entry_params_[kKitParams] = {};
+    UserSoundExtras sound_entry_extras_ = {};
     int sound_delete_armed_ = -1;               // push C on this slot; OK twice deletes it
     int sound_delete_oks_ = 0;
     uint32_t sound_delete_ok_at_ms_ = 0;

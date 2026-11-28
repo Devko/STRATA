@@ -9,7 +9,7 @@
 #                               to ride, but the ride code runs on the C674x)
 #   push VALUE + STEP 10     -> "FX OFF: VALUE TEMPO", now on the RELEASE (a held STEP is the
 #                               momentary push)
-#   FUNC + HOME, DOWN x7     -> the FUNC menu, from SAVE to FX GLIDE (under AUTO-FILL)
+#   FUNC + HOME, DOWN x8     -> the FUNC menu, from SAVE to FX GLIDE (under AUTO-FILL)
 #   RIGHT                    -> "FX GLIDE 1 BAR", and the menu drawn with the new row
 #   CLR                      -> back
 #
@@ -56,9 +56,9 @@ python3 -B tools/enaga_cached.py emulate "$STAGE" --cycles "$CYCLES" \
     --key 4@540000000 --key 41@545000000 \
     --key 19@620000000 --key 27@625000000 \
     --key 25@650000000 --key 25@680000000 --key 25@710000000 --key 25@740000000 \
-    --key 25@770000000 --key 25@800000000 --key 25@830000000 \
-    --key 18@860000000 \
-    --key 30@920000000 \
+    --key 25@770000000 --key 25@800000000 --key 25@830000000 --key 25@860000000 \
+    --key 18@890000000 \
+    --key 30@940000000 \
     > "$LOG" 2>&1 || {
     echo "FAIL: emulate.py exited non-zero" >&2
     tail -30 "$LOG" >&2

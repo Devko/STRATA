@@ -164,6 +164,7 @@ FUNC + EDIT twice is KIT.
 | --- | --- | --- |
 | SAVE | saves the project, closes the menu | |
 | JAM REC | starts recording the finished master to `/RECORD/JAM_<n>.WAV` and closes the menu (`JAM REC JAM 3`); OK again stops it (`JAM STOPPING`, then `SAVED JAM 3` once the file is closed). FUNC + HOME, DOWN, OK. FUNC + REC on RESAMPLE does the same and stays on RESAMPLE, whose last line shows the time and `FUNC+REC: STOP JAM` (`JAM OFF` when none runs) | `OFF`, or how long it has run, `4:07`, `1:02:33` |
+| ARR REC | starts a take (`ARR REC ON`, or `ARR: PRESS PLAY` with the transport stopped) and closes the menu; OK again ends it (`ARR 23 SECTIONS`). FUNC + HOME, DOWN, DOWN, OK. See ARR REC below | `OFF`, `ON`, or `ON 7`: the sections written so far |
 | CLICK | | the metronome, `ON` / `OFF`: a click on every beat while the transport runs, higher on a bar's first. Not saved |
 | COUNT-IN | | `OFF`, `1 BAR`, `2 BAR`: a PLAY from stop with REC on clicks that many bars first (`COUNT-IN 4` .. `1`), then the pattern starts on step 1. Internal clock only. Not saved |
 | REC MODE | | `REPLACE` (default) / `ADD`: what a note recorded onto a chord track's step does. REPLACE: the first note of a pass on a step takes it over (its notes and chord type go), the rest of that pass's notes join it. ADD: every note joins the step's notes. Saved with the project |
@@ -173,6 +174,7 @@ FUNC + EDIT twice is KIT.
 | LOOP LEN | | the performance mixer's looper: `4 BAR` (1 2 4 8), what push VALUE + STEP 16 records |
 | CHAIN | | ON / OFF |
 | CHAIN END | | SONG (play once) / LOOP |
+| ARR UNDO | swaps the chain the last ARR REC take replaced back in (`ARR UNDONE`); OK again brings the take back (`ARR REDONE`). `NO ARR TO UNDO` with none, or during a take | |
 | SAVE AS | PROJECTS page with the name entry open | |
 | OPEN PROJECT | PROJECTS page; OK twice there opens | |
 | KITS | the kit browser | |
@@ -278,7 +280,7 @@ all bands on every screen.
 
 | Gesture | Does | Says |
 | --- | --- | --- |
-| FUNC + turn D | The unit for every armed track: OFF, 1, 2, 4, 8, 16, one a click, stopping at both ends | `LIVE RND4 8 TRK`, `LIVE RND OFF` |
+| FUNC + turn D | The unit for every armed track: OFF, 1, 2, 4, 8, 16, one a click, stopping at both ends | `LIVE RND4 7 TRK`, `LIVE RND OFF` |
 | FUNC + lower pad | That track out of the armed set, or back in. No mute, no track selected | `T2 RND OUT 6 TRK`, `T2 RND IN 7 TRK` |
 
 - **The kick stays** (D3, 2026-11-28): turned on from OFF, LIVE RND arms every track but those
@@ -461,6 +463,38 @@ pattern of the project. PROJECT pressed twice quickly opens LAUNCH, PROJECT's la
   blinks, and the info line ends `<B07`.
 - **Saved** in the project (PROJECT.BIN section 8): each lane's source and the pins. Not in the
   chain. A project from before this opens with every lane on its own part.
+
+## ARR REC: a jam written into the chain (the FUNC menu)
+
+The arrangement concept, Roland's decisions of 2026-11-28, `core/arrrec.hpp`. ARR REC records the
+structure of a jam, not its audio (JAM REC does that; the two are independent and can run
+together).
+
+| Key | Does | Says |
+| --- | --- | --- |
+| FUNC + HOME, DOWN, DOWN, OK | ARR REC on: the chain is kept for ARR UNDO and emptied, and the chain stops being followed; the menu closes. Recording starts with the next PLAY, or at once with the transport running | `ARR: PRESS PLAY` / `ARR REC ON` |
+| the same row, OK (or LEFT/RIGHT, B) | ARR REC off: the take is over | `ARR 23 SECTIONS` |
+| STOP | ends the take too | `ARR 23 SECTIONS` |
+| FUNC menu CHAIN ON | ends the take and plays what it wrote | `ARR 23 SECTIONS` |
+| FUNC menu ARR UNDO, OK | the chain from before the take; again, the take | `ARR UNDONE` / `ARR REDONE` |
+
+- **A pass at a time.** At the end of each pass of the playing pattern, the pass is compared with
+  the chain's last entry: the same pattern with the same mute mask, scene on side B, morph side
+  (past half way is B), ENERGY and tempo adds a repeat; anything else starts a new entry holding
+  them as section fields (MUT CAP, SCN, MRP SNAP or SNAP A, NRG, BPM). A pass is what played at
+  its start: a mute or an ENERGY move inside a pass shows from the next one, except in the pass's
+  first 12 ticks (half a sixteenth, the queue's grace), which still count for it.
+- **X16** is an entry's most: a seventeenth pass of the same starts a new entry of it. **64
+  entries** end the take when a new one is needed (`ARR FULL 64 SECTIONS`).
+- **Passes cut short** (a pattern change at once or on a 16 / 32 grid, a LOCK jump, STOP, ARR REC
+  off, a take turned on mid-pass) are written when at least half of the pass was recorded.
+- **A take that kept nothing** puts the old chain back (`ARR NOTHING KEPT`), with nothing to undo.
+- **ARR UNDO** keeps one chain: the next take replaces it, and opening a project drops it.
+- **Under an outside clock** the sections carry no BPM, so the song follows the clock it plays to.
+- **While a take runs** the live strip starts with `ARR` and the sections written (`ARR7`), the
+  menu row reads `ON 7`, and the REC key blinks dim red, in time with JAM REC's blink.
+- Editing the chain by hand during a take is allowed; the next pass then starts a new entry.
+- The take's passes mark the project for the next save, as an edit would.
 
 ## SECTION: a chain entry as a song section (push A on CHAIN)
 
