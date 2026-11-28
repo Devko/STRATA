@@ -85,7 +85,7 @@ mismatch starts and then misbehaves.
 
 | STRATA | Enaga firmware |
 | --- | --- |
-| v0.5.0 (the current release, the release candidate for 1.0), and a build from `main` | [v0.4.0](https://github.com/seawaffle/enaga/releases/tag/v0.4.0) |
+| v0.6.0 (the current release), v0.5.0 (the release candidate for 1.0), and a build from `main` | [v0.4.0](https://github.com/seawaffle/enaga/releases/tag/v0.4.0) |
 | v0.4.0 | [v0.3.0](https://github.com/seawaffle/enaga/releases/tag/v0.3.0) |
 | v0.1.0 to v0.3.1 | [v0.2.0](https://github.com/seawaffle/enaga/releases/tag/v0.2.0) |
 
@@ -143,9 +143,12 @@ The [user manual](MANUAL.md) starts with a first-beat tutorial, and the
 
 ## Updating
 
-- **From STRATA 0.4.0 or earlier to 0.5.0:** the Enaga version changes (to 0.4.0), so do
+- **From STRATA 0.5.0 to 0.6.0:** step 2 only, since both run on Enaga 0.4.0. Some gestures
+  moved (FUNC + VALUE is VariSpeed, FUNC + the screen keys TRANSPOSE, and four FUNC menu rows
+  went to GRID's track menu): the changelog's "Upgrading from 0.5.0" lists them.
+- **From STRATA 0.4.0 or earlier to 0.5.0 or later:** the Enaga version changes (to 0.4.0), so do
   step 1, then step 2. The changelog's "Upgrading from 0.4.0" says what sounds different, and
-  that **a project saved by 0.5.0 plays its LFOs wrong on 0.4.0**: keep a copy of
+  that **a project saved by 0.5.0 or later plays its LFOs wrong on 0.4.0**: keep a copy of
   `/ENAGA/DATA/STRATA/` before you update if you may go back.
 - **Between releases on the same Enaga version** (see the table above): step 2 only.
 

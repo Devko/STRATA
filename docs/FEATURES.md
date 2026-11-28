@@ -12,7 +12,8 @@ and how sure we are of it. Update a row when its status changes.
   [v0.3.1](https://github.com/Devko/STRATA/releases/tag/v0.3.1); `#139` ... `#178` = released in
   [v0.4.0](https://github.com/Devko/STRATA/releases/tag/v0.4.0); `#179` ... `#209` = released in
   [v0.5.0](https://github.com/Devko/STRATA/releases/tag/v0.5.0), the release candidate for 1.0;
-  `#210` and later = on `main`, not released yet; `WIP` = being built, not on `main`.
+  `#210` ... `#262` = released in [v0.6.0](https://github.com/Devko/STRATA/releases/tag/v0.6.0);
+  `#263` and later, and `Unreleased`, = on `main`, not released yet; `WIP` = being built, not on `main`.
 - **Unit:** what the SmplTrek itself has confirmed.
   - **✔** confirmed on the unit (recorded in BUDGET.md or ticked in UNIT_CHECKLIST.md).
   - **◐** used on the unit in the free-play session of 2026-11-22 (controls-remap build, cl6x,
@@ -64,12 +65,12 @@ UNIT_CHECKLIST.md's ~550 boxes, 4 are ticked.
 | Controls concept from the panel: one job per button group ([CONTROLS.md](CONTROLS.md)) | v0.1.0 | ◐ (2, 5) | |
 | FUNC + function key = its printed second label (sampling, pool, system, ◀◀, ▶▶, fx, rec src) | v0.1.0 | ◐ (2) | |
 | FUNC menu (FUNC+HOME): save, save as, open, new, reload, kits, chain, song/loop, auto-fill, quantize, REC MODE; loop length (#116), load demo (#140), FX glide (#149) | v0.1.0 | ◐ (14, W12, W13, W20c) | |
-| **Slimmer FUNC menu**: project-wide rows only, live toggles first and file actions last; the selected track's SPEED, PLAY, FREEZE and RELOAD SAMPLE moved to GRID's track menu (hold OK) | Unreleased | ○ (W66) | Usability review finding 2 |
+| **Slimmer FUNC menu**: project-wide rows only, live toggles first and file actions last; the selected track's SPEED, PLAY, FREEZE and RELOAD SAMPLE moved to GRID's track menu (hold OK) | v0.6.0 | ○ (W66) | Usability review finding 2 |
 | NEW PROJECT is empty (factory sounds and mixer, pans centred, no steps, scenes or macros); LOAD DEMO loads the factory demo | #140 | ○ (W12) | |
 | **CLEAR PATTERN** in the FUNC menu: every track in one press, OK twice, one undo | #86 | ○ (W16) | Keeps sounds, lengths, speeds and swing |
 | **Help for the screen that is up**: its knobs in words and its gestures, every screen and EDIT/MIXER page, then five shared pages (FUNC + key, FUNC + knob or pad, upper pads, the performance mixer); screen keys turn its pages while FUNC is held; a quick FUNC tap says `HOLD FUNC: HELP`, an OK tap in GRID `HOLD OK: TRACK MENU` | #107, WIP | ○ (W19, W52) | Text only; it says what the build does, so a changed gesture changes `core/help.cpp` too |
-| **PERFORM names its FUNC layer**: while FUNC is held the gauges read REL LEN NRG RND with their values; the FUNC help puts PERFORM LIVE second | Unreleased | ○ (W77) | |
-| **One confirmation wording**: every two-press step reads `<KEY> AGAIN: <WHAT>` (`OK AGAIN: DELETE`), held by tools/check_rules.sh | Unreleased | ○ (W77) | |
+| **PERFORM names its FUNC layer**: while FUNC is held the gauges read REL LEN NRG RND with their values; the FUNC help puts PERFORM LIVE second | v0.6.0 | ○ (W77) | |
+| **One confirmation wording**: every two-press step reads `<KEY> AGAIN: <WHAT>` (`OK AGAIN: DELETE`), held by tools/check_rules.sh | v0.6.0 | ○ (W77) | |
 | HOME = GRID, HOME twice = KEYS | v0.1.0 | ◐ | |
 | Lit, self-naming performance pads; mode keys green/red by screen | v0.1.0 | ○ (W8, W20c) | Upper pads are printed TRK 1-7 but are performance pads (Roland's choice) |
 | Arrow-key navigation model (UP/DOWN rows, LEFT/RIGHT sideways, OK picks, CLR back) | v0.1.0 | ○ (5, "Arrow keys") | |
@@ -114,7 +115,7 @@ FM4 and GRAIN machines.
 | --- | --- | --- | --- |
 | Up to 64 steps a track, per-track length and speed (2x ... 1/8): polymeter | v0.1.0 | ○ (M3) | |
 | **Speed 3/2: 16th-note triplets** (16 ticks a step, 24 to the bar) in the track menu's SPEED, between 2 and 1 | #213 | ○ (W57) | Older builds play a 3/2 track at 1x. The arp, rolls and REPEAT had 1/16T already |
-| **Track Launch**: each track can play the same track's part of another pattern (LAUNCH, PROJECT twice), queued on the boundary; read only until CAPTURE (hold OK on LAUNCH, or the track menu's CAPTURE row), COPY reads the borrowed part; PIN; saved in the project | Unreleased | ○ (W64, W77, W82) | Not in the chain. CAPTURE is not undoable. The emulator cannot press pads, so the held-pad launch is host-tested only |
+| **Track Launch**: each track can play the same track's part of another pattern (LAUNCH, PROJECT twice), queued on the boundary; read only until CAPTURE (hold OK on LAUNCH, or the track menu's CAPTURE row), COPY reads the borrowed part; PIN; saved in the project | v0.6.0 | ○ (W64, W77, W82) | Not in the chain. CAPTURE is not undoable. The emulator cannot press pads, so the held-pad launch is host-tested only |
 | Steps, trigless steps (FUNC + tap), STEP LED colours | v0.1.0 | ◐ | |
 | Step page: NOTE, VEL, LEN, MICR (±11 ticks), PROB, COND, RTCH 1-8, RAMP, ACNT, SLID, CHRD | v0.1.0 | ○ (6) | LEN is the note length on VA POLY, on VA MONO once SUS is up, and for MIDI out; ignored by drums, SAMPLE and GRAIN |
 | Trig conditions: a:b, FILL, PRE, NEI, 1ST and their NOTs; seeded | v0.1.0 | ○ (M3) | |
@@ -143,12 +144,12 @@ FM4 and GRAIN machines.
 | **Arp VAR, RHYTHM, ACCENT, RATCHET** (push A-D on the ARP page): CONV DIVG THUMB PINKY; 11 rest patterns (rests hold the note); 7 accent patterns and CYC; ratchets 2-4 on fixed slots or by chance | #184 | ○ (W51) | Kit settings (KIT.BIN section 12), not lockable or scene-able |
 | **ARPS**: OK on the ARP page loads one of 14 factory arps (all eight settings) into one track, AS WAS puts it back | #184 | ○ (W51) | Any machine |
 | Banks A-H x 16 patterns, queued changes (END, 16, 32, NOW) | v0.1.0 | ◐ (3b) | |
-| **Queue from any screen**: hold PROJECT + STEP n queues slot n of the shown bank and the screen stays; PROJECT opens on its release | Unreleased | ○ (W67) | The bank is the one PROJECT last showed |
+| **Queue from any screen**: hold PROJECT + STEP n queues slot n of the shown bank and the screen stays; PROJECT opens on its release | v0.6.0 | ○ (W67) | The bank is the one PROJECT last showed |
 | Chain of up to 64 entries, repeats X1-X16 | v0.1.0 | ○ (3b, 12) | |
 | **Song mode**: per-entry mute recall, SONG plays once and stops | v0.1.0 | ○ (13i) | |
-| **Song sections**: a chain entry's SCN, MRP (SNAP, RIDE, BACK, SNAP A), NRG, BPM, TRN and MUT CAP, applied as it starts; the SECTION view (push A on CHAIN) with quick fill (hold OK); saved in PROJECT.BIN section 10 | Unreleased | ○ (W71), E (scenario_sections.sh) | BPM is skipped under an outside clock. Quick fill writes SNAP or SNAP A, whichever side the morph is nearer. TRN (W82) is byte 7, which older builds ignore: they play the entry untransposed. No kit per section |
-| **ARR REC**: a jam written into the chain a pass at a time (a repeat when nothing changed, a new section entry with MUT CAP, SCN, MRP SNAP/SNAP A, NRG, TRN, BPM when something did; X16 split; 64 entries); ARR UNDO swaps the chain from before back in, one level | Unreleased | ○ (W74), E (scenario_arrrec.sh) | A pass is what played at its start (12 ticks of grace); a cut pass counts from half. No BPM under an outside clock. Track Launch: see the next row |
-| **ARR REC keeps Track Launch**: a pass with a borrowed lane is CAPTUREd into the first free slot of the bank without switching, and the entry names it (`LAUNCH IN A05`); the same mix in a row shares the slot; no slot or too many locks: the playing pattern alone (`LAUNCH NOT KEPT`) | Unreleased | ○ (W76), E (scenario_arrlaunch.sh) | Parts replay from the slot's step 1 (a NOW or grid launch replays shifted). A slot a queued change or launch is about to land on is never taken. ARR UNDO empties the captured slots (not one edited since or playing), and such a take cannot be redone (W82) |
+| **Song sections**: a chain entry's SCN, MRP (SNAP, RIDE, BACK, SNAP A), NRG, BPM, TRN and MUT CAP, applied as it starts; the SECTION view (push A on CHAIN) with quick fill (hold OK); saved in PROJECT.BIN section 10 | v0.6.0 | ○ (W71), E (scenario_sections.sh) | BPM is skipped under an outside clock. Quick fill writes SNAP or SNAP A, whichever side the morph is nearer. TRN (W82) is byte 7, which older builds ignore: they play the entry untransposed. No kit per section |
+| **ARR REC**: a jam written into the chain a pass at a time (a repeat when nothing changed, a new section entry with MUT CAP, SCN, MRP SNAP/SNAP A, NRG, TRN, BPM when something did; X16 split; 64 entries); ARR UNDO swaps the chain from before back in, one level | v0.6.0 | ○ (W74), E (scenario_arrrec.sh) | A pass is what played at its start (12 ticks of grace); a cut pass counts from half. No BPM under an outside clock. Track Launch: see the next row |
+| **ARR REC keeps Track Launch**: a pass with a borrowed lane is CAPTUREd into the first free slot of the bank without switching, and the entry names it (`LAUNCH IN A05`); the same mix in a row shares the slot; no slot or too many locks: the playing pattern alone (`LAUNCH NOT KEPT`) | v0.6.0 | ○ (W76), E (scenario_arrlaunch.sh) | Parts replay from the slot's step 1 (a NOW or grid launch replays shifted). A slot a queued change or launch is about to land on is never taken. ARR UNDO empties the captured slots (not one edited since or playing), and such a take cannot be redone (W82) |
 | Restart (FUNC+PLAY) and stop-and-reset (FUNC+STOP, also resets the chain) | v0.1.0 | ○ (11) | |
 
 ## Performance
@@ -164,10 +165,10 @@ FM4 and GRAIN machines.
 | The kill EQ's bands learnt by turning on MIXER's EQ page during MACRO LEARN (FUNC + STEP 5-7 retired) | #156 | ○ (W32) | |
 | **LOCK** (FUNC + MUTATE: hold stores, tap jumps, tap again swaps back), one per pattern, RAM only | #149 | ○ (W20c) | Not saved; the kit is shared, so a jump brings that lock's sound to every pattern. Track Launch: the lanes' sources are held apart from the pattern and put back (W78; host-tested, the emulator cannot press pads) |
 | **REL ALL / LEN ALL**: every track's release (FUNC + A) and every note's length (FUNC + B) in PERFORM | #152 | ○ (W29) | Live only; LEN ALL leaves gateless notes (drums, arp) alone |
-| **LIVE RND**: FUNC + turn D in PERFORM shuffles every armed track in blocks of 1-16 steps, FUNC + lower pad arms that track, the kick out at start; OFF is the grid at once | #166, Unreleased | ○ (W36, W77) | Live only, in a LOCK; the pattern is never written |
-| **ENERGY**: FUNC + turn C in PERFORM thins every track in tier order down to a breakdown, or adds ghosts and lifts probabilities up to the peak | #224, Unreleased | ○ (W62, W79, W81) | Live only, in a LOCK; the pattern is never written. A turn of A-D keeps its layer until the knob rests 250 ms, so FUNC let go mid-turn moves no macro. Ghosts copy only trigs that play every pass; 0 after a project load or NEW |
-| **TRANSPOSE**: FUNC + SEL< / SEL> on every screen moves the melodic tracks (VAs, WAVEs, FM4, GRAIN, unsliced SAMPLE) a scale step, -12..+12, staying in the key; the FUNC menu's row makes it semitones with the key moving; both screen keys back to 0 (pressed together, no step first) | Unreleased | ○ (W75, W82) | Live only, in a LOCK; nothing written. Drums, sliced samples and MID never move. A held key is let go of at its own pitch (scenario_transpose) |
-| **VariSpeed**: FUNC + turn VALUE on every screen moves the tempo and every machine's pitch together, an octave each way in tenths of a semitone; FUNC + tap VALUE snaps back | Unreleased | ○ (W70) | Internal clock only. Not saved, not in a LOCK; the project keeps its tempo. MID notes are not moved. No CPU at rest; at +12 SAMPLE and GRAIN read twice as fast (scenario_varispeed) |
+| **LIVE RND**: FUNC + turn D in PERFORM shuffles every armed track in blocks of 1-16 steps, FUNC + lower pad arms that track, the kick out at start; OFF is the grid at once | #166, v0.6.0 | ○ (W36, W77) | Live only, in a LOCK; the pattern is never written |
+| **ENERGY**: FUNC + turn C in PERFORM thins every track in tier order down to a breakdown, or adds ghosts and lifts probabilities up to the peak | #224, v0.6.0 | ○ (W62, W79, W81) | Live only, in a LOCK; the pattern is never written. A turn of A-D keeps its layer until the knob rests 250 ms, so FUNC let go mid-turn moves no macro. Ghosts copy only trigs that play every pass; 0 after a project load or NEW |
+| **TRANSPOSE**: FUNC + SEL< / SEL> on every screen moves the melodic tracks (VAs, WAVEs, FM4, GRAIN, unsliced SAMPLE) a scale step, -12..+12, staying in the key; the FUNC menu's row makes it semitones with the key moving; both screen keys back to 0 (pressed together, no step first) | v0.6.0 | ○ (W75, W82) | Live only, in a LOCK; nothing written. Drums, sliced samples and MID never move. A held key is let go of at its own pitch (scenario_transpose) |
+| **VariSpeed**: FUNC + turn VALUE on every screen moves the tempo and every machine's pitch together, an octave each way in tenths of a semitone; FUNC + tap VALUE snaps back | v0.6.0 | ○ (W70) | Internal clock only. Not saved, not in a LOCK; the project keeps its tempo. MID notes are not moved. No CPU at rest; at +12 SAMPLE and GRAIN read twice as fast (scenario_varispeed) |
 | Pad pressure bends macro A | v0.1.0 | ○ ("Pad feel") | |
 | THROW to delay or reverb | v0.1.0 | ◐ | |
 | MUTATE (rotate, density, velocity, micro, chance, notes), OK keeps, CLR reverts | v0.1.0 | ○ (10) | |
@@ -197,7 +198,7 @@ FM4 and GRAIN machines.
 | Send B **HALL** mode with shimmer | v0.1.0 | ○ (13j) | As LONG |
 | Delay into reverb (D>R) routing | v0.1.0 | ○ ("The sends, the master and SETUP") | Routing page has one empty slot |
 | Master: DJ filter, glue compressor, limiter, output level | v0.1.0 | ◐ | |
-| Master **kill EQ**: 3 bands at 250 Hz / 2.5 kHz, kill switches (FUNC + push A/B/C, FUNC + push D all three), scene-able, macro-able | v0.1.0, Unreleased | ○ (13d / U6, W77) | |
+| Master **kill EQ**: 3 bands at 250 Hz / 2.5 kHz, kill switches (FUNC + push A/B/C, FUNC + push D all three), scene-able, macro-able | v0.1.0, v0.6.0 | ○ (13d / U6, W77) | |
 | MIXER: 8 faders, 12 pages (3 for the duck since #89) | v0.1.0 | ◐ | |
 
 ## Samples and resampling
@@ -224,15 +225,15 @@ FM4 and GRAIN machines.
 | Feature | Since | Unit | Known limits / notes |
 | --- | --- | --- | --- |
 | Follows the unit's clock: internal, MIDI clock, SYNC IN; refuses tempo/transport under external clock | v0.1.0 | ○ (M7) | STRATA cannot set CLOCK SRC (Enaga has no setter). SYNC polarity not selectable (Enaga) |
-| Tap tempo on VALUE, nudge on FUNC + push VALUE + turn | Unreleased | ○ (W72, W80) | Internal clock only; nothing set until three taps agree within 25%; the nudge is 4% for 250 ms a detent |
-| **Song tempo kept apart from the project's**: a section's BPM plays without becoming the saved tempo; ARR REC writes BPM only where the tempo changed (and the take's start tempo on its first entry); VariSpeed held back near 300 BPM says so and returns at a slower tempo | Unreleased | ○ (W80), E (scenario_sections.sh, scenario_arrrec.sh) | The clock no longer jumps back for a moment after a section BPM, a VALUE turn or a tap |
+| Tap tempo on VALUE, nudge on FUNC + push VALUE + turn | v0.6.0 | ○ (W72, W80) | Internal clock only; nothing set until three taps agree within 25%; the nudge is 4% for 250 ms a detent |
+| **Song tempo kept apart from the project's**: a section's BPM plays without becoming the saved tempo; ARR REC writes BPM only where the tempo changed (and the take's start tempo on its first entry); VariSpeed held back near 300 BPM says so and returns at a slower tempo | v0.6.0 | ○ (W80), E (scenario_sections.sh, scenario_arrrec.sh) | The clock no longer jumps back for a moment after a section BPM, a VALUE turn or a tap |
 | MIDI OUT per track (OFF/1-16): steps, chords, ratchets, arp, note repeat, pads, KEYS, MIDI IN | v0.1.0 | ○ (8d) | **On Enaga 0.2.0 (v0.1.0-v0.3.1):** with USB connected to a computer not reading, DIN out stalls; unplug USB. Fixed in Enaga 0.3.0, which `main` needs |
 | Every note gets its note-off; second STOP sends All Notes Off | v0.1.0 | ○ (8d) | Slide is not sent as legato |
 | MIDI IN notes (ch 1-8 = tracks, others = selected), held to note-off | v0.1.0 | ○ (8d) | No pitch bend or aftertouch |
 | MIDI IN CC 16-31 = track parameters, CC 120/123 release | v0.1.0 | ○ (8d) | |
 | MIDI IN program change queues a pattern | v0.1.0 | ○ (8d) | |
-| MIDI IN song position pointer: chain entry and pass, or the pattern from the top | Unreleased | ○ (W72) | MIDI clock only; Enaga takes an SPP only while stopped |
-| PROG CHG OUT: each pattern change sends a program change on MIDI CH | Unreleased | ○ (W72) | Off by default; saved with the project |
+| MIDI IN song position pointer: chain entry and pass, or the pattern from the top | v0.6.0 | ○ (W72) | MIDI clock only; Enaga takes an SPP only while stopped |
+| PROG CHG OUT: each pattern change sends a program change on MIDI CH | v0.6.0 | ○ (W72) | Off by default; saved with the project |
 | Sending MIDI clock | — | — | Enaga's CLOCK OUT does it, not STRATA |
 
 ## Storage, projects and kits
