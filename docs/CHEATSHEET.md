@@ -225,8 +225,9 @@ ARR REC: OK on, the chain kept for undo and emptied; each pass of the jam is wri
 (the same again: one more repeat; a change of pattern, mutes, scene, morph side, ENERGY or tempo:
 a new entry with MUT CAP, SCN, MRP, NRG, BPM; X16 then a new entry). STOP, OK again or CHAIN ON
 end it (`ARR 23 SECTIONS`; 64 entries: `ARR FULL`); nothing kept gives the old chain back. A
-change in a pass shows from the next one; a pass cut before half is dropped. Strip `ARR7`, the
-REC key blinks. ARR UNDO swaps the chain from before the take back in, and again the take.
+change in a pass shows from the next one; a pass cut before half is dropped. A launched lane is
+kept by writing the mix into a free slot of the bank (`LAUNCH IN A05`; none free: `LAUNCH NOT
+KEPT`). Strip `ARR7`, the REC key blinks. ARR UNDO swaps the chain from before the take back in, and again the take.
 **PROJECTS:** UP/DOWN or A move, LEFT/RIGHT page by 8. OK twice within 2 s opens the project
 under the cursor (AGAIN TO OPEN; it throws away unsaved work and stops the transport).
 FUNC+DOWN (or the menu's SAVE AS) is SAVE AS: A or LEFT/RIGHT move, B, VALUE or UP/DOWN change the character, OK saves
