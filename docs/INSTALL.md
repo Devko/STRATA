@@ -1,17 +1,15 @@
 # Installing STRATA on a SmplTrek
 
-> [!CAUTION]
-> Installing third-party firmware is **at your own risk**. Neither Enaga nor STRATA is made,
-> supported or endorsed by Sonicware, and installing them may affect your warranty. Keep an
-> official update file at hand so you can restore the unit.
+Installing STRATA is an ordinary system update from the SD card, and an official SmplTrek
+update undoes it completely. Neither Enaga nor STRATA touches the bootloader or writes the SPI
+flash, and that is what keeps going back and forth safe: Enaga's developer wrote on Reddit
+(November 2026) that their SmplTrek has been flashed more than most, including many deliberately
+broken firmwares made just to test the bootloader, without ever running into a problem, and that
+flashing is pretty safe as long as the firmware does not tamper with the bootloader.
 
 > [!NOTE]
-> **How safe is flashing?** Enaga's developer wrote on Reddit (November 2026) that their
-> SmplTrek has been flashed more than most, including many deliberately broken firmwares made
-> just to test the bootloader, and that flashing back and forth has never caused them a problem.
-> In their words, it is pretty safe as long as the firmware you flash does not tamper with the
-> bootloader. Neither Enaga nor STRATA touches the bootloader or writes the SPI flash. That is
-> one person's long experience, not a guarantee, so the checks below still apply.
+> Neither Enaga nor STRATA is made, supported or endorsed by Sonicware. Installing third-party
+> firmware may affect your warranty, and you do it at your own risk.
 
 STRATA is an app for [Enaga](https://github.com/seawaffle/enaga), replacement firmware for the
 SmplTrek. Installing it takes two downloads from two places:
@@ -53,15 +51,15 @@ its source is [web/](../web/README.md). The steps below do the same by hand.
 
 ## Before you install
 
-From the safety section of [UNIT_CHECKLIST.md](UNIT_CHECKLIST.md). Do not skip these: a hung
-image leaves the power key dead.
+A minute of checks, so that getting back is always one step away. They come from the safety
+section of [UNIT_CHECKLIST.md](UNIT_CHECKLIST.md).
 
 - [ ] SYSTEM INFO shows **BOOT 1.0.17**. All the recovery evidence is for that bootloader.
 - [ ] A second SD card holds an official `SmplTrek.bin` from Sonicware, so you can restore the
       unit.
 - [ ] Holding **HOME (F4)** while switching on reaches BOOT MODE.
-- [ ] The unit runs on the power adapter **without batteries**, so a hung image can be
-      power-cycled.
+- [ ] The unit runs on the power adapter **without batteries** during the update, so you can
+      always switch it off and on again.
 
 STRATA is made and tested for the SmplTrek. The CyDrums and Lofi-12 XT are the same board: a
 community tester reported on Reddit (November 2026) that STRATA runs on a CyDrums too, while the
@@ -152,6 +150,6 @@ the stock SmplTrek folders. [MANUAL.md](MANUAL.md), "On the card", has the full 
 
 Install an official SmplTrek system update the same way as step 1 (its `SmplTrek.bin` on the
 card's root, HOME held at power-on, SYSTEM UPDATE). Neither Enaga nor STRATA writes the SPI
-flash or touches the bootloader, so that restores the unit completely. Enaga's developer reports
-flashing back and forth many times without a problem (see the note at the top). Projects stay on the card
+flash or touches the bootloader, so that restores the unit completely, and you can install
+STRATA again later the same way. Projects stay on the card
 under `/ENAGA/DATA/`.

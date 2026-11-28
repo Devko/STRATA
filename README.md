@@ -23,10 +23,12 @@ trig conditions, and a performance layer built for long live sets. An
 
 </div>
 
-> [!WARNING]
-> **STRATA is an early beta.** It runs on the SmplTrek, but most features have not been checked
-> on the hardware yet. Install it at your own risk, and read the
-> [safety checks](docs/INSTALL.md#before-you-install) first.
+> [!NOTE]
+> **STRATA is a beta, close to 1.0.** It has run on the SmplTrek since its first release, a
+> community tester reports it running on a CyDrums too, and installing it is an ordinary system
+> update that an official update fully undoes. As with any third-party firmware, you install it
+> at your own risk ([disclaimer](#disclaimer)); the [install guide](docs/INSTALL.md) has a few
+> quick checks to do first.
 
 ## What it is
 
@@ -60,14 +62,13 @@ same Enaga version, tick "STRATA only".
 3. **Copy the app** `SD-CARD/ENAGA/APPS/STRATA/APP.ENA` to `/ENAGA/APPS/STRATA/APP.ENA` on the
    card, and switch on. The factory project plays on PLAY.
 
-Read the [safety checks](docs/INSTALL.md#before-you-install) before step 1. Updating from
+Do the [quick checks](docs/INSTALL.md#before-you-install) before step 1. Updating from
 STRATA 0.4.0 or earlier needs step 1 too (they ran on older Enaga versions); after that, an update is
 step 3 only while the Enaga version stays the same, and your projects stay on the card. An
 official SmplTrek update restores the unit completely, because neither Enaga nor STRATA writes
-the SPI flash or touches the bootloader; Enaga's developer reports that flashing back and forth
+the SPI flash or touches the bootloader. Enaga's developer reports that flashing back and forth
 is pretty safe as long as the bootloader is left alone
-([details](docs/INSTALL.md#installing-strata-on-a-smpltrek)). A community tester reported that
-STRATA also runs on a CyDrums. [docs/INSTALL.md](docs/INSTALL.md) has every step, switching apps and going back.
+([details](docs/INSTALL.md#installing-strata-on-a-smpltrek)). [docs/INSTALL.md](docs/INSTALL.md) has every step, switching apps and going back.
 
 ## Highlights
 
@@ -122,10 +123,10 @@ The full tour, with the factory kit and every effect, is in
 release and the **release candidate for 1.0**, for **Enaga 0.4.0**: GEN and EVOLVE, chord
 recording, choke groups, arp depth and more since 0.4.0. Until 1.0, only fixes, measurements and
 docs land ([docs/PLAN.md](docs/PLAN.md), "Release candidate"); 1.0 is this build with what the
-unit test finds fixed. Nothing new in it has been walked through or measured on the hardware
-yet. On an earlier build the
-default beat loaded the CPU under 30%, and long, heavy play peaked at 84.3% with no dropouts. Most
-of the [unit checklist](docs/UNIT_CHECKLIST.md) is still to be run on the hardware.
+unit test finds fixed. Earlier releases have run on the unit for days: the default beat loads the
+CPU under 30%, and long, heavy play on an earlier build peaked at 84.3% with no dropouts. The
+features new in 0.5 are still being walked through on the hardware
+([unit checklist](docs/UNIT_CHECKLIST.md)).
 [CHANGELOG.md](CHANGELOG.md) lists what changed in each release.
 
 ## Disclaimer
